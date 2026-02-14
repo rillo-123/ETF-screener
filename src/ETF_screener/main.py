@@ -1,7 +1,9 @@
 """Entry point for ETF screener CLI."""
 
 import argparse
+import json
 import sys
+from pathlib import Path
 from typing import Optional
 
 from ETF_screener.data_fetcher import FinnhubFetcher
@@ -166,6 +168,7 @@ def screen_etfs(
     days_to_keep: int = 365,
     api_key: Optional[str] = None,
     format_name: str = "default",
+    data_dir: str = "data",
 ) -> None:
     """
     Screen ETFs by volume criteria. Auto-fetches missing data and prunes stale records.
@@ -178,6 +181,7 @@ def screen_etfs(
         days_to_keep: Number of days to keep in database (prune older)
         api_key: Finnhub API key
         format_name: Output format (default, compact, detailed)
+        data_dir: Directory containing etfs.json file (for auto-fetch)
     """
     try:
         db = ETFDatabase()
@@ -213,6 +217,40 @@ def screen_etfs(
                     for symbol, df in etf_data.items():
                         db.insert_dataframe(df, symbol)
                         print(f"  ✓ {symbol} stored")
+        else:
+            # No specific symbols provided. Check if we need more data from etfs.json
+            etfs_file = Path(data_dir) / "etfs.json"
+            if etfs_file.exists():
+                print(f"Checking database for available ETFs...")
+                try:
+                    with open(etfs_file) as f:
+                        etfs_data = json.load(f)
+                        available_symbols = list(etfs_data.keys())
+                    
+                    # Get symbols not yet in database
+                    missing_symbols = []
+                    for symbol in available_symbols:
+                        if not db.ticker_exists(symbol):
+                            missing_symbols.append(symbol)
+                    
+                    if missing_symbols:
+                        # Fetch up to 50 missing ETFs to expand the dataset
+                        to_fetch = missing_symbols[:50]
+                        print(f"Fetching {len(to_fetch)} ETFs from Yahoo Finance for screening...")
+                        fetcher = YFinanceFetcher()
+                        etf_data = fetcher.fetch_multiple_etfs(to_fetch, days=days_to_keep)
+                        
+                        if etf_data:
+                            print("Calculating indicators...")
+                            for symbol, df in etf_data.items():
+                                etf_data[symbol] = add_indicators(df)
+                            
+                            print("Storing in database...")
+                            for symbol, df in etf_data.items():
+                                db.insert_dataframe(df, symbol)
+                            print(f"  ✓ Stored {len(etf_data)} ETFs")
+                except Exception as e:
+                    print(f"Warning: Could not load ETFs from {etfs_file}: {e}")
         
         screener = ETFScreener(db=db, api_key=api_key)
         print(f"\nScreening ETFs (last {days} days, avg volume >= {min_avg_volume:,})...")
@@ -460,6 +498,11 @@ def main() -> None:
         action="store_true",
         help="Use default output format (shorthand for --format default)",
     )
+    screener_parser.add_argument(
+        "--data-dir",
+        default="data",
+        help="Directory containing etfs.json (default: data)",
+    )
 
     # Discover command
     discover_parser = subparsers.add_parser(
@@ -553,6 +596,7 @@ def main() -> None:
             days_to_keep=args.keep_days,
             api_key=args.api_key,
             format_name=format_name,
+            data_dir=args.data_dir,
         )
     elif args.command == "discover":
         discover_etfs(
