@@ -1,0 +1,155 @@
+{
+  "default": {
+    "description": "Default screener output with volume and technical indicators",
+    "columns": [
+      {
+        "field": "ticker",
+        "header": "Ticker",
+        "width": 8,
+        "format": "str"
+      },
+      {
+        "field": "avg_volume",
+        "header": "Avg Vol",
+        "width": 12,
+        "format": "volume"
+      },
+      {
+        "field": "max_volume",
+        "header": "Max Vol",
+        "width": 12,
+        "format": "volume"
+      },
+      {
+        "field": "open",
+        "header": "Open",
+        "width": 10,
+        "format": "price"
+      },
+      {
+        "field": "close",
+        "header": "Close",
+        "width": 10,
+        "format": "price"
+      },
+      {
+        "field": "latest_price",
+        "header": "Latest",
+        "width": 10,
+        "format": "price"
+      },
+      {
+        "field": "ema_50",
+        "header": "EMA50",
+        "width": 10,
+        "format": "price"
+      },
+      {
+        "field": "supertrend",
+        "header": "Supertrend",
+        "width": 12,
+        "format": "price"
+      },
+      {
+        "field": "days_count",
+        "header": "Days",
+        "width": 6,
+        "format": "int"
+      }
+    ]
+  },
+  "compact": {
+    "description": "Compact view with just ticker and volume",
+    "columns": [
+      {
+        "field": "ticker",
+        "header": "Ticker",
+        "width": 10,
+        "format": "str"
+      },
+      {
+        "field": "avg_volume",
+        "header": "Avg Volume",
+        "width": 15,
+        "format": "volume"
+      },
+      {
+        "field": "max_volume",
+        "header": "Max Volume",
+        "width": 15,
+        "format": "volume"
+      },
+      {
+        "field": "days_count",
+        "header": "Days",
+        "width": 8,
+        "format": "int"
+      }
+    ]
+  },
+  "detailed": {
+    "description": "Detailed view with all available fields",
+    "columns": [
+      {
+        "field": "ticker",
+        "header": "Ticker",
+        "width": 8,
+        "format": "str"
+      },
+      {
+        "field": "avg_volume",
+        "header": "Avg Vol",
+        "width": 12,
+        "format": "volume"
+      },
+      {
+        "field": "max_volume",
+        "header": "Max Vol",
+        "width": 12,
+        "format": "volume"
+      },
+      {
+        "field": "min_volume",
+        "header": "Min Vol",
+        "width": 12,
+        "format": "volume"
+      },
+      {
+        "field": "open",
+        "header": "Open",
+        "width": 10,
+        "format": "price"
+      },
+      {
+        "field": "close",
+        "header": "Close",
+        "width": 10,
+        "format": "price"
+      },
+      {
+        "field": "latest_price",
+        "header": "Latest",
+        "width": 10,
+        "format": "price"
+      },
+      {
+        "field": "ema_50",
+        "header": "EMA50",
+        "width": 10,
+        "format": "price"
+      },
+      {
+        "field": "supertrend",
+        "header": "Supertrend",
+        "width": 12,
+        "format": "price"
+      },
+      {
+        "field": "days_count",
+        "header": "Days",
+        "width": 6,
+        "format": "int"
+      }
+    ]
+  }
+}

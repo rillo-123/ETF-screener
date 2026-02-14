@@ -278,15 +278,20 @@ class ETFDatabase:
 
         query = (
             "SELECT \n"
-            "    ticker,\n"
-            "    AVG(volume) as avg_volume,\n"
-            "    MAX(volume) as max_volume,\n"
-            "    MIN(volume) as min_volume,\n"
-            "    COUNT(*) as days_count\n"
-            "FROM etf_data\n"
-            f"WHERE date >= date('now', '-{int(min_days)} days')\n"  # nosec: safe from SQL injection
-            "GROUP BY ticker\n"
-            "HAVING AVG(volume) >= ?\n"
+            "    d.ticker,\n"
+            "    AVG(d.volume) as avg_volume,\n"
+            "    MAX(d.volume) as max_volume,\n"
+            "    MIN(d.volume) as min_volume,\n"
+            "    COUNT(*) as days_count,\n"
+            "    MAX(CASE WHEN d.date = (SELECT MAX(date) FROM etf_data WHERE ticker = d.ticker) THEN d.open END) as open,\n"
+            "    MAX(CASE WHEN d.date = (SELECT MAX(date) FROM etf_data WHERE ticker = d.ticker) THEN d.close END) as close,\n"
+            "    MAX(CASE WHEN d.date = (SELECT MAX(date) FROM etf_data WHERE ticker = d.ticker) THEN d.close END) as latest_price,\n"
+            "    MAX(CASE WHEN d.date = (SELECT MAX(date) FROM etf_data WHERE ticker = d.ticker) THEN d.ema_50 END) as ema_50,\n"
+            "    MAX(CASE WHEN d.date = (SELECT MAX(date) FROM etf_data WHERE ticker = d.ticker) THEN d.supertrend END) as supertrend\n"
+            "FROM etf_data d\n"
+            f"WHERE d.date >= date('now', '-{int(min_days)} days')\n"  # nosec: safe from SQL injection
+            "GROUP BY d.ticker\n"
+            "HAVING AVG(d.volume) >= ?\n"
             "ORDER BY avg_volume DESC"
         )
 

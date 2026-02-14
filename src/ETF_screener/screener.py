@@ -1,5 +1,7 @@
 """ETF screener for volume-based filtering."""
 
+import json
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -22,6 +24,7 @@ class ETFScreener:
         """
         self.db = db or ETFDatabase()
         self.fetcher = FinnhubFetcher(api_key=api_key) if api_key else None
+        self.formats = self._load_formats()
 
     def screen_by_volume(
         self,
@@ -81,28 +84,89 @@ class ETFScreener:
         else:
             return str(volume)
 
-    def print_results(self, results: pd.DataFrame) -> None:
+    def _load_formats(self) -> dict:
+        """Load output format templates from JSON file."""
+        format_file = Path(__file__).parent.parent.parent / "output_formats.json"
+        if not format_file.exists():
+            return {"default": {"columns": []}}
+        try:
+            with open(format_file) as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load format file: {e}")
+            return {"default": {"columns": []}}
+
+    def format_value(self, value: any, format_type: str) -> str:
         """
-        Pretty print screener results.
+        Format a value based on its type.
+
+        Args:
+            value: Value to format
+            format_type: Format type (volume, price, int, str)
+
+        Returns:
+            Formatted string
+        """
+        if pd.isna(value):
+            return "N/A"
+
+        if format_type == "volume":
+            return self.format_volume(int(value))
+        elif format_type == "price":
+            return f"{float(value):.2f}"
+        elif format_type == "int":
+            return str(int(value))
+        else:
+            return str(value)
+
+    def print_results(
+        self, results: pd.DataFrame, format_name: str = "default"
+    ) -> None:
+        """
+        Pretty print screener results using configured format.
 
         Args:
             results: Results DataFrame from screen_by_volume
+            format_name: Format template name (default, compact, detailed)
         """
         if results.empty:
             print("❌ No ETFs found matching criteria")
             return
 
+        # Get format template
+        format_template = self.formats.get(format_name, self.formats.get("default"))
+        if not format_template or not format_template.get("columns"):
+            print("❌ Invalid format template")
+            return
+
+        columns = format_template["columns"]
+
         print(f"\n✅ Found {len(results)} ETFs:\n")
-        print(f"{'Ticker':<10} {'Avg Volume':<15} {'Max Volume':<15} {'Days':<8}")
-        print("-" * 50)
 
+        # Build header
+        header = "".join(
+            f"{col['header']:<{col['width']}}" for col in columns
+        )
+        print(header)
+        print("-" * len(header))
+
+        # Print rows
         for _, row in results.iterrows():
-            ticker = row["ticker"]
-            avg_vol = self.format_volume(int(row["avg_volume"]))
-            max_vol = self.format_volume(int(row["max_volume"]))
-            days = int(row["days_count"])
+            row_values = []
+            for col in columns:
+                field = col["field"]
+                format_type = col["format"]
+                width = col["width"]
 
-            print(f"{ticker:<10} {avg_vol:<15} {max_vol:<15} {days:<8}")
+                if field not in row:
+                    value_str = "N/A"
+                else:
+                    value = row[field]
+                    value_str = self.format_value(value, format_type)
+
+                row_values.append(f"{value_str:<{width}}")
+
+            print("".join(row_values))
 
     def fetch_and_store(
         self, ticker: str, days: int = 365, recalculate_indicators: bool = True
