@@ -165,6 +165,7 @@ def screen_etfs(
     days: int = 10,
     days_to_keep: int = 365,
     api_key: Optional[str] = None,
+    format_name: str = "default",
 ) -> None:
     """
     Screen ETFs by volume criteria. Auto-fetches missing data and prunes stale records.
@@ -176,6 +177,7 @@ def screen_etfs(
         days: Number of days to look back
         days_to_keep: Number of days to keep in database (prune older)
         api_key: Finnhub API key
+        format_name: Output format (default, compact, detailed)
     """
     try:
         db = ETFDatabase()
@@ -222,7 +224,7 @@ def screen_etfs(
             fetch_missing=False,
         )
 
-        screener.print_results(results)
+        screener.print_results(results, format_name=format_name)
 
         if results.empty:
             if symbols:
@@ -437,6 +439,12 @@ def main() -> None:
         "--api-key",
         help="Finnhub API key (or set FINNHUB_API_KEY env var)",
     )
+    screener_parser.add_argument(
+        "--format",
+        choices=["default", "compact", "detailed"],
+        default="default",
+        help="Output format template (default: default)",
+    )
 
     # Discover command
     discover_parser = subparsers.add_parser(
@@ -520,6 +528,7 @@ def main() -> None:
             days=args.days,
             days_to_keep=args.keep_days,
             api_key=args.api_key,
+            format_name=args.format,
         )
     elif args.command == "discover":
         discover_etfs(
