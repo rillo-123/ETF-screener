@@ -33,7 +33,7 @@ class TestParquetStorage:
 
     def test_storage_initialization(self, temp_storage_dir):
         """Test storage initialization creates directory."""
-        storage = ParquetStorage(data_dir=temp_storage_dir)
+        _ = ParquetStorage(data_dir=temp_storage_dir)
         assert Path(temp_storage_dir).exists()
 
     def test_save_etf_data(self, temp_storage_dir, sample_data):

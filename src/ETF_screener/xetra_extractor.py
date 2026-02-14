@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 from typing import Optional
 
-import requests
 from yfinance import Ticker
 
 
@@ -171,7 +170,7 @@ class XETRETFExtractor:
         self._save_json(self.blacklist, self.blacklist_file)
 
         if verbose:
-            print(f"\n✓ Discovery complete!")
+            print("\n✓ Discovery complete!")
             print(f"  {self.etfs_file}: {len(self.working_etfs)} working ETFs")
             print(f"  {self.blacklist_file}: {len(self.blacklist)} blacklisted")
 

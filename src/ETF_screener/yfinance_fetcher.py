@@ -1,7 +1,6 @@
 """Fetch ETF data from Yahoo Finance API."""
 
 from datetime import datetime, timedelta
-from typing import Optional
 
 import pandas as pd
 import yfinance as yf

@@ -78,10 +78,10 @@ def fetch_and_analyze(
     try:
         # Initialize fetcher based on source
         if source.lower() == "finnhub":
-            print(f"Initializing Finnhub fetcher...")
+            print("Initializing Finnhub fetcher...")
             fetcher = FinnhubFetcher(api_key=api_key)
         else:
-            print(f"Initializing Yahoo Finance fetcher...")
+            print("Initializing Yahoo Finance fetcher...")
             fetcher = YFinanceFetcher()
 
         # Fetch data for all symbols
@@ -99,19 +99,19 @@ def fetch_and_analyze(
 
         # Save to database if enabled
         if use_db:
-            print(f"Storing data in SQLite database...")
+            print("Storing data in SQLite database...")
             db = ETFDatabase()
             for symbol, df in etf_data.items():
                 db.insert_dataframe(df, symbol)
             db.close()
 
         # Save to parquet
-        print(f"Saving data to parquet files...")
+        print("Saving data to parquet files...")
         storage = ParquetStorage(data_dir=data_dir)
         storage.save_multiple_etfs(etf_data)
 
         # Generate plots
-        print(f"Generating analysis plots...")
+        print("Generating analysis plots...")
         plotter = PortfolioPlotter(output_dir=plot_dir)
         plotter.plot_multiple_etfs(etf_data)
 
@@ -203,11 +203,11 @@ def screen_etfs(
                 etf_data = fetcher.fetch_multiple_etfs(missing_symbols, days=days_to_keep)
                 
                 if etf_data:
-                    print(f"Calculating indicators...")
+                    print("Calculating indicators...")
                     for symbol, df in etf_data.items():
                         etf_data[symbol] = add_indicators(df)
                     
-                    print(f"Storing in database...")
+                    print("Storing in database...")
                     for symbol, df in etf_data.items():
                         db.insert_dataframe(df, symbol)
                         print(f"  ✓ {symbol} stored")
@@ -260,17 +260,17 @@ def discover_etfs(
         discovery = ETFDiscovery(etfs_file=etfs_file, blacklist_file=blacklist_file)
         results = discovery.discover(tickers=tickers, verbose=True)
 
-        print(f"\n📊 Discovery Summary:")
+        print("\n📊 Discovery Summary:")
         print(f"  Working: {len(results['working'])} ETFs")
         print(f"  Blacklisted: {len(results['blacklisted'])} ETFs")
         
         if results['working']:
-            print(f"\n✓ Working ETFs:")
+            print("\n✓ Working ETFs:")
             for ticker in sorted(results['working'].keys()):
                 print(f"  • {ticker}")
         
         if results['blacklisted']:
-            print(f"\n✗ Blacklisted ETFs:")
+            print("\n✗ Blacklisted ETFs:")
             for ticker in sorted(results['blacklisted'].keys()):
                 print(f"  • {ticker}")
 
@@ -300,13 +300,13 @@ def extract_xetra_etfs(
         )
         results = extractor.discover_and_validate(verbose=True)
 
-        print(f"\n📊 Extraction Summary:")
+        print("\n📊 Extraction Summary:")
         print(f"  CSV File: {csv_file}")
         print(f"  Working: {len(results['working'])} ETFs")
         print(f"  Blacklisted: {len(results['blacklisted'])} ETFs")
 
         if results['working']:
-            print(f"\n✓ Top 20 Working ETFs:")
+            print("\n✓ Top 20 Working ETFs:")
             for ticker in sorted(results['working'].keys())[:20]:
                 print(f"  • {ticker}")
             if len(results['working']) > 20:
@@ -335,10 +335,10 @@ def discover_all_etfs(
         print("🚀 Starting full XETRA ETF discovery from justETFs...\n")
         results = discovery.discover_parallel(tickers=None, max_workers=max_workers, verbose=True)
 
-        print(f"\n📊 Discovery Complete!")
+        print("\n📊 Discovery Complete!")
         print(f"  ✓ Working: {len(results['working'])} ETFs")
         print(f"  ✗ Blacklisted: {len(results['blacklisted'])} ETFs")
-        print(f"\n  Saved to:")
+        print("\n  Saved to:")
         print(f"    • {etfs_file} (use for screener)")
         print(f"    • {blacklist_file} (review delisted)")
 

@@ -49,7 +49,7 @@ class FinnhubFetcher:
             "token": self.api_key,
         }
 
-        response = requests.get(f"{self.base_url}/stock/candle", params=params)
+        response = requests.get(f"{self.base_url}/stock/candle", params=params, timeout=10)
         response.raise_for_status()
 
         data = response.json()

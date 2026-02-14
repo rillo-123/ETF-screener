@@ -1,6 +1,5 @@
 """Data storage utilities for parquet files."""
 
-import os
 from pathlib import Path
 
 import pandas as pd

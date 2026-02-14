@@ -1,0 +1,253 @@
+Metadata-Version: 2.4
+Name: ETF-screener
+Version: 0.1.0
+Project-URL: Homepage, https://github.com/yourusername/ETF-screener
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+
+# ETF-screener
+
+Technical analysis tool for identifying swing trading opportunities in large XETRA ETFs using Finnhub API.
+
+## Features
+
+- 📊 **Finnhub Integration** - Fetch real-time and historical XETRA exchange data
+- 📈 **Technical Indicators**:
+  - EMA 50 (Exponential Moving Average)
+  - Supertrend Indicator
+  - Automated buy/sell signals
+- 💾 **Parquet Storage** - Efficient data persistence with Apache Arrow
+- 📉 **Visualization** - Professional charts with matplotlib
+- 🔍 **Swing Trading Focus** - Designed for analyzing large-cap ETFs
+- ⚡ **CLI Interface** - Simple command-line tools for data fetching and analysis
+
+## Quick Start
+
+### Setup
+
+```powershell
+.\ensure-venv.ps1
+pip install -r requirements.txt
+```
+
+### Get Finnhub API Key
+
+1. Sign up at [finnhub.io](https://finnhub.io)
+2. Get your free API key
+3. Set environment variable:
+   ```powershell
+   $env:FINNHUB_API_KEY = "your_api_key_here"
+   ```
+
+### Fetch and Analyze ETF Data
+
+```powershell
+# Fetch data for single ETF (1 year history)
+ETF_screener fetch EXS1 --days 365
+
+# Fetch multiple ETFs
+ETF_screener fetch EXS1 EUNG EONS
+
+# Specify custom data and plot directories
+ETF_screener fetch EXS1 EUNG --data-dir "./etf_data" --plot-dir "./etf_charts"
+```
+
+### List Saved ETFs
+
+```powershell
+ETF_screener list
+```
+
+## Output Files
+
+Data and plots are automatically saved:
+
+```
+data/
+├── exs1_data.parquet          # Historical OHLCV + indicators
+├── eung_data.parquet
+└── ...
+
+plots/
+├── exs1_analysis.png          # Full technical analysis chart
+├── eung_analysis.png
+└── ...
+```
+
+## Parquet Data Format
+
+Each parquet file contains:
+
+- **Date** - Trading date
+- **Open** - Opening price
+- **High** - High price
+- **Low** - Low price
+- **Close** - Closing price
+- **Volume** - Trading volume
+- **EMA_50** - 50-period exponential moving average
+- **Supertrend** - Supertrend indicator value
+- **ST_Upper** - Upper band of supertrend
+- **ST_Lower** - Lower band of supertrend
+- **Signal** - Trading signal: 1 (buy), -1 (sell), 0 (neutral)
+
+## Python API Reference
+
+### FinnhubFetcher
+
+```python
+from ETF_screener import FinnhubFetcher
+
+fetcher = FinnhubFetcher(api_key="your_api_key")
+
+# Fetch single ETF
+df = fetcher.fetch_historical_data("EXS1", days=365)
+
+# Fetch multiple ETFs
+data = fetcher.fetch_multiple_etfs(["EXS1", "EUNG", "EONS"], days=365)
+```
+
+### Technical Indicators
+
+```python
+from ETF_screener import add_indicators
+
+# Your DataFrame must have: Date, Open, High, Low, Close, Volume
+df_with_indicators = add_indicators(df)
+
+print(df_with_indicators[["Date", "Close", "EMA_50", "Supertrend", "Signal"]])
+```
+
+### Data Storage
+
+```python
+from ETF_screener import ParquetStorage
+
+storage = ParquetStorage(data_dir="data")
+
+# Save ETF data
+storage.save_etf_data(df, "EXS1")
+
+# Load ETF data
+df = storage.load_etf_data("EXS1")
+
+# List all saved ETFs
+etfs = storage.list_available_etfs()
+```
+
+### Plotting
+
+```python
+from ETF_screener import PortfolioPlotter
+
+plotter = PortfolioPlotter(output_dir="plots")
+
+# Plot single ETF analysis
+plotter.plot_etf_analysis(df_with_indicators, "EXS1")
+
+# Plot multiple ETFs
+etf_data = {"EXS1": df1, "EUNG": df2}
+plotter.plot_multiple_etfs(etf_data)
+```
+
+## Example Workflow
+
+```python
+from ETF_screener import (
+    FinnhubFetcher,
+    add_indicators,
+    ParquetStorage,
+    PortfolioPlotter
+)
+
+# Initialize components
+fetcher = FinnhubFetcher(api_key="your_key")
+storage = ParquetStorage(data_dir="data")
+plotter = PortfolioPlotter(output_dir="plots")
+
+# Fetch data
+symbols = ["EXS1", "EUNG", "EONS"]
+etf_data = fetcher.fetch_multiple_etfs(symbols, days=365)
+
+# Calculate indicators
+for symbol, df in etf_data.items():
+    etf_data[symbol] = add_indicators(df)
+
+# Save and plot
+storage.save_multiple_etfs(etf_data)
+plotter.plot_multiple_etfs(etf_data)
+
+# Analyze signals
+for symbol, df in etf_data.items():
+    buy_signals = (df["Signal"] == 1).sum()
+    sell_signals = (df["Signal"] == -1).sum()
+    print(f"{symbol}: {buy_signals} buy, {sell_signals} sell signals")
+```
+
+## XETRA ETF Examples
+
+Popular large-cap XETRA ETFs for swing trading:
+
+| Symbol | Name | Focus |
+|--------|------|-------|
+| EXS1 | iShares EURO STOXX 50 UCITS ETF | European Large-Cap |
+| EUNG | iShares MSCI World UCITS ETF | Global Broad Market |
+| EONS | Xtrackers Euro Stoxx 50 UCITS ETF | European Blue Chips |
+
+## Testing
+
+```powershell
+.\run_all_tests.ps1
+```
+
+Or run specific tests:
+
+```powershell
+pytest tests/test_indicators.py -v
+pytest tests/test_storage.py -v
+pytest tests/test_data_fetcher.py -v
+pytest tests/test_plotter.py -v
+```
+
+## Development
+
+### Code Quality
+
+```powershell
+black src/ tests/
+isort src/ tests/
+flake8 src/ tests/
+mypy src/
+```
+
+### Tools
+
+- **Code formatter**: black
+- **Import sorter**: isort
+- **Linter**: flake8
+- **Type checker**: mypy
+
+## Module Overview
+
+- **data_fetcher.py** - Finnhub API integration for fetching XETRA data
+- **indicators.py** - Technical analysis calculations (EMA 50, Supertrend, signals)
+- **storage.py** - Parquet file persistence for efficient data storage
+- **plotter.py** - Visualization with matplotlib for technical analysis charts
+- **main.py** - CLI interface for fetching and analyzing ETF data
+
+## Requirements
+
+- Python 3.8+
+- pandas >= 2.0.0
+- matplotlib >= 3.8.0
+- pyarrow >= 14.0.0
+- requests >= 2.32.3
+- numpy >= 1.24.0
+
+## License
+
+MIT
+
+## Disclaimer
+
+This tool is for educational and research purposes. Trading involves significant risk. Always conduct thorough due diligence and consider consulting with a financial advisor before making trading decisions.
+

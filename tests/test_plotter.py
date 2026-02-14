@@ -43,7 +43,7 @@ class TestPortfolioPlotter:
 
     def test_plotter_initialization(self, temp_plot_dir):
         """Test plotter initialization creates directory."""
-        plotter = PortfolioPlotter(output_dir=temp_plot_dir)
+        _ = PortfolioPlotter(output_dir=temp_plot_dir)
         assert Path(temp_plot_dir).exists()
 
     def test_plot_etf_analysis(self, temp_plot_dir, sample_data_with_indicators):

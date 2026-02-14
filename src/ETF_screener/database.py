@@ -1,7 +1,6 @@
 """SQLite database interface for ETF data persistence."""
 
 import sqlite3
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -277,22 +276,22 @@ class ETFDatabase:
         """
         conn = self._get_connection()
 
-        query = f"""
-        SELECT 
-            ticker,
-            AVG(volume) as avg_volume,
-            MAX(volume) as max_volume,
-            MIN(volume) as min_volume,
-            COUNT(*) as days_count
-        FROM etf_data
-        WHERE date >= date('now', '-{min_days} days')
-        GROUP BY ticker
-        HAVING AVG(volume) >= ?
-        ORDER BY avg_volume DESC
-        """
+        query = (
+            "SELECT \n"
+            "    ticker,\n"
+            "    AVG(volume) as avg_volume,\n"
+            "    MAX(volume) as max_volume,\n"
+            "    MIN(volume) as min_volume,\n"
+            "    COUNT(*) as days_count\n"
+            "FROM etf_data\n"
+            f"WHERE date >= date('now', '-{int(min_days)} days')\n"  # nosec: safe from SQL injection
+            "GROUP BY ticker\n"
+            "HAVING AVG(volume) >= ?\n"
+            "ORDER BY avg_volume DESC"
+        )
 
         if limit:
-            query += f" LIMIT {limit}"
+            query += f" LIMIT {int(limit)}"
 
         df = pd.read_sql_query(query, conn, params=[min_volume])
         return df

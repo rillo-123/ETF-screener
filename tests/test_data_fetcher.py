@@ -3,7 +3,6 @@
 import os
 from unittest.mock import patch
 
-import pandas as pd
 import pytest
 
 from ETF_screener.data_fetcher import FinnhubFetcher

@@ -153,7 +153,7 @@ class ETFDiscovery:
         self._save_json(self.blacklist, self.blacklist_file)
 
         if verbose:
-            print(f"\n✓ Results saved:")
+            print("\n✓ Results saved:")
             print(f"  {self.etfs_file}: {len(self.working_etfs)} working ETFs")
             print(f"  {self.blacklist_file}: {len(self.blacklist)} blacklisted")
 
@@ -215,7 +215,7 @@ class ETFDiscovery:
         self._save_json(self.blacklist, self.blacklist_file)
 
         if verbose:
-            print(f"\n✓ Batch validation complete:")
+            print("\n✓ Batch validation complete:")
             print(f"  {self.etfs_file}: {len(self.working_etfs)} total working ETFs")
             print(f"  {self.blacklist_file}: {len(self.blacklist)} total blacklisted")
 
@@ -289,7 +289,7 @@ class ETFDiscovery:
             rows = soup.find_all("tr", class_="etf-row")
             
             if not rows:
-                print(f"  Warning: Could not parse table from justETFs")
+                print("  Warning: Could not parse table from justETFs")
                 return tickers
             
             print(f"  Found {len(rows)} ETFs on page")
