@@ -1,0 +1,149 @@
+{
+  "screener": {
+    "help": "Screen ETFs by volume criteria",
+    "flags": {
+      "symbols": {
+        "type": "positional",
+        "nargs": "*",
+        "help": "ETF symbols to screen (e.g., EXS1.DE EUNG.DE). If empty, screens all in database."
+      },
+      "--nofEtfs": {
+        "type": "int",
+        "default": 10,
+        "help": "Number of top ETFs to return (default: 10)"
+      },
+      "--aVol": {
+        "type": "volume",
+        "default": "10M",
+        "help": "Minimum average volume (default: 10M). Use K for thousands, M for millions (e.g., 100K, 1.5M)"
+      },
+      "--days": {
+        "type": "int",
+        "default": 10,
+        "help": "Number of days to analyze (default: 10)"
+      },
+      "--keep-days": {
+        "type": "int",
+        "default": 365,
+        "help": "Keep data for this many days; prune older (default: 365)"
+      },
+      "--api-key": {
+        "type": "str",
+        "default": null,
+        "help": "Finnhub API key (or set FINNHUB_API_KEY env var)"
+      },
+      "--format": {
+        "type": "choice",
+        "choices": ["default", "compact", "detailed"],
+        "default": "default",
+        "help": "Output format template (default: default)"
+      }
+    }
+  },
+  "discover": {
+    "help": "Discover and validate ETF tickers",
+    "flags": {
+      "symbols": {
+        "type": "positional",
+        "nargs": "*",
+        "help": "ETF symbols to validate. If empty, validates predefined XETRA list."
+      },
+      "--etfs-file": {
+        "type": "str",
+        "default": "data/etfs.json",
+        "help": "JSON file to save validated ETFs (default: data/etfs.json)"
+      },
+      "--blacklist-file": {
+        "type": "str",
+        "default": "data/blacklist.json",
+        "help": "JSON file to save blacklisted/invalid ETFs (default: data/blacklist.json)"
+      }
+    }
+  },
+  "discover-all": {
+    "help": "Discover ALL 2950+ XETRA ETFs from justETFs (this takes time!)",
+    "flags": {
+      "--etfs-file": {
+        "type": "str",
+        "default": "data/etfs.json",
+        "help": "JSON file to save validated ETFs (default: data/etfs.json)"
+      },
+      "--blacklist-file": {
+        "type": "str",
+        "default": "data/blacklist.json",
+        "help": "JSON file to save blacklisted/invalid ETFs (default: data/blacklist.json)"
+      },
+      "--workers": {
+        "type": "int",
+        "default": 5,
+        "help": "Number of parallel workers (default: 5, use 1-10)"
+      }
+    }
+  },
+  "extract": {
+    "help": "Extract XETRA ETFs from Deutsche Börse CSV",
+    "flags": {
+      "--csv-file": {
+        "type": "str",
+        "default": "reference/t7-xetr-allTradableInstruments.csv",
+        "help": "Path to Deutsche Börse CSV file"
+      },
+      "--etfs-file": {
+        "type": "str",
+        "default": "data/etfs.json",
+        "help": "JSON file to save validated ETFs (default: data/etfs.json)"
+      },
+      "--blacklist-file": {
+        "type": "str",
+        "default": "data/blacklist.json",
+        "help": "JSON file to save blacklisted/invalid ETFs (default: data/blacklist.json)"
+      }
+    }
+  },
+  "fetch": {
+    "help": "Fetch and analyze ETF data",
+    "flags": {
+      "symbols": {
+        "type": "positional",
+        "nargs": "+",
+        "help": "ETF symbols to fetch (e.g., EXS1.DE EUNG.DE)"
+      },
+      "--days": {
+        "type": "int",
+        "default": 365,
+        "help": "Number of days of historical data (default: 365)"
+      },
+      "--source": {
+        "type": "choice",
+        "choices": ["yfinance", "finnhub"],
+        "default": "yfinance",
+        "help": "Data source (default: yfinance)"
+      },
+      "--api-key": {
+        "type": "str",
+        "default": null,
+        "help": "Finnhub API key (only for --source finnhub)"
+      },
+      "--data-dir": {
+        "type": "str",
+        "default": "data",
+        "help": "Directory to store parquet files (default: data)"
+      },
+      "--plot-dir": {
+        "type": "str",
+        "default": "plots",
+        "help": "Directory to store plots (default: plots)"
+      }
+    }
+  },
+  "list": {
+    "help": "List saved ETFs",
+    "flags": {
+      "--data-dir": {
+        "type": "str",
+        "default": "data",
+        "help": "Directory containing parquet files (default: data)"
+      }
+    }
+  }
+}
