@@ -1,6 +1,7 @@
 """ETF screener for volume-based filtering."""
 
 import json
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -71,6 +72,10 @@ class ETFScreener:
             results = results.head(max_results)
 
         return results
+
+    def _strip_ansi(self, text: str) -> str:
+        """Remove ANSI color codes from a string."""
+        return re.sub(r"\033\[[0-9;]*m", "", text)
 
     def format_volume(self, volume: int) -> str:
         """
@@ -189,7 +194,10 @@ class ETFScreener:
                     
                     value_str = self.format_value(value, format_type, color)
 
-                row_values.append(f"{value_str:<{width}}")
+                # Calculate visible length (without ANSI codes) for proper padding
+                visible_length = len(self._strip_ansi(value_str))
+                padding_needed = max(0, width - visible_length)
+                row_values.append(f"{value_str}{' ' * padding_needed}")
 
             print("".join(row_values))
 
