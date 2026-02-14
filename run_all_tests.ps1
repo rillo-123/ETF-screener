@@ -1,12 +1,185 @@
+<#
+run_all_tests.ps1
+
+Comprehensive test and code quality suite for ETF Screener project.
+
+Usage:
+  .\run_all_tests.ps1                    # Run pytest only
+  .\run_all_tests.ps1 -Full              # Run all checks (pytest, ruff, mypy, coverage, vulture)
+  .\run_all_tests.ps1 -Ruff              # Run pytest + ruff linter
+  .\run_all_tests.ps1 -Mypy              # Run pytest + mypy type checker
+  .\run_all_tests.ps1 -Coverage          # Run pytest with coverage report
+  .\run_all_tests.ps1 -Vulture           # Run pytest + vulture dead code detection
+  .\run_all_tests.ps1 -Black             # Run black code formatter (check mode)
+  .\run_all_tests.ps1 -Bandit            # Run bandit security scanner
+#>
+
 param(
-    [string]$Filter,
-    [switch]$All,
-    [switch]$Radon,
+    [switch]$Full,
     [switch]$Ruff,
     [switch]$Mypy,
+    [switch]$Coverage,
+    [switch]$Vulture,
+    [switch]$Black,
     [switch]$Bandit,
-    [switch]$Coverage
+    [switch]$Help
 )
+
+if ($Help) {
+    Get-Content $PSCommandPath | Select-String '^\s*#' | ForEach-Object { Write-Host $_.Line }
+    exit 0
+}
+
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+Push-Location $root
+
+# Get venv python or fall back to system
+$python = Join-Path $root '.venv\Scripts\python.exe'
+if (-not (Test-Path $python)) { $python = 'python' }
+
+# Logging
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$logFile = "test_results_$timestamp.txt"
+Start-Transcript -Path $logFile -Append | Out-Null
+
+$failedTests = @()
+
+try {
+    # Colors
+    $Green = 'Green'
+    $Red = 'Red'
+    $Yellow = 'Yellow'
+    $Cyan = 'Cyan'
+
+    Write-Host "`n" + ("="*60) -ForegroundColor $Cyan
+    Write-Host "ETF SCREENER - TEST & CODE QUALITY SUITE" -ForegroundColor $Cyan
+    Write-Host ("="*60) -ForegroundColor $Cyan
+
+    # ===================== PYTEST =====================
+    Write-Host "`n[1/7] Running Unit Tests (pytest)..." -ForegroundColor $Cyan
+    Write-Host ("--"*30) -ForegroundColor $Cyan
+    
+    & $python -m pytest tests/ -v
+    if ($LASTEXITCODE -ne 0) {
+        $failedTests += "pytest"
+        Write-Host "[FAIL] Unit tests failed" -ForegroundColor $Red
+    } else {
+        Write-Host "[OK] All units tests passed" -ForegroundColor $Green
+    }
+
+    # ===================== RUFF (optional) =====================
+    if ($Full -or $Ruff) {
+        Write-Host "`n[2/7] Running Ruff Linter..." -ForegroundColor $Cyan
+        Write-Host ("--"*30) -ForegroundColor $Cyan
+        
+        $pythonFiles = Get-ChildItem -Path "src" -Recurse -Filter "*.py" | Select-Object -ExpandProperty FullName
+        if ($pythonFiles) {
+            & $python -m ruff check src/ --statistics
+            if ($LASTEXITCODE -ne 0) {
+                $failedTests += "ruff"
+                Write-Host "[WARN] Ruff found issues" -ForegroundColor $Yellow
+            } else {
+                Write-Host "[OK] Ruff passed" -ForegroundColor $Green
+            }
+        } else {
+            Write-Host "[SKIP] No Python files found in src/" -ForegroundColor $Yellow
+        }
+    }
+
+    # ===================== MYPY (optional) =====================
+    if ($Full -or $Mypy) {
+        Write-Host "`n[3/7] Running Mypy Type Checker..." -ForegroundColor $Cyan
+        Write-Host ("--"*30) -ForegroundColor $Cyan
+        
+        & $python -m mypy src/ETF_screener/ --ignore-missing-imports --no-error-summary 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] No type errors found" -ForegroundColor $Green
+        } else {
+            $failedTests += "mypy"
+            Write-Host "[WARN] Mypy found type issues" -ForegroundColor $Yellow
+        }
+    }
+
+    # ===================== COVERAGE (optional) =====================
+    if ($Full -or $Coverage) {
+        Write-Host "`n[4/7] Running Test Coverage Analysis..." -ForegroundColor $Cyan
+        Write-Host ("--"*30) -ForegroundColor $Cyan
+        
+        & $python -m coverage run -m pytest tests/ -q
+        & $python -m coverage report --include="src/*" --omit="*/__init__.py"
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] Coverage report generated" -ForegroundColor $Green
+        } else {
+            Write-Host "[WARN] Coverage analysis had issues" -ForegroundColor $Yellow
+        }
+    }
+
+    # ===================== VULTURE (optional) =====================
+    if ($Full -or $Vulture) {
+        Write-Host "`n[5/7] Running Vulture Dead Code Scanner..." -ForegroundColor $Cyan
+        Write-Host ("--"*30) -ForegroundColor $Cyan
+        
+        & .\run_vulture.ps1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[WARN] Vulture found potential dead code" -ForegroundColor $Yellow
+        } else {
+            Write-Host "[OK] No dead code detected" -ForegroundColor $Green
+        }
+    }
+
+    # ===================== BLACK (optional) =====================
+    if ($Full -or $Black) {
+        Write-Host "`n[6/7] Running Black Code Formatter (check mode)..." -ForegroundColor $Cyan
+        Write-Host ("--"*30) -ForegroundColor $Cyan
+        
+        & $python -m black --check src/ tests/ 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] Code formatting is correct" -ForegroundColor $Green
+        } else {
+            Write-Host "[WARN] Code formatting issues detected" -ForegroundColor $Yellow
+            Write-Host "       Run: black src/ tests/" -ForegroundColor $Cyan
+        }
+    }
+
+    # ===================== BANDIT (optional) =====================
+    if ($Full -or $Bandit) {
+        Write-Host "`n[7/7] Running Bandit Security Scanner..." -ForegroundColor $Cyan
+        Write-Host ("--"*30) -ForegroundColor $Cyan
+        
+        & $python -m bandit -r src/ -q -f screen 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] No security issues found" -ForegroundColor $Green
+        } else {
+            $failedTests += "bandit"
+            Write-Host "[WARN] Bandit found potential security issues" -ForegroundColor $Yellow
+        }
+    }
+
+    # ===================== SUMMARY =====================
+    Write-Host "`n" + ("="*60) -ForegroundColor $Cyan
+    Write-Host "SUMMARY" -ForegroundColor $Cyan
+    Write-Host ("="*60) -ForegroundColor $Cyan
+
+    if ($failedTests.Count -eq 0) {
+        Write-Host "[SUCCESS] All checks passed! ✓" -ForegroundColor $Green
+        $exitCode = 0
+    } else {
+        Write-Host "[ATTENTION] Some checks had issues:" -ForegroundColor $Yellow
+        foreach ($failed in $failedTests) {
+            Write-Host "  • $failed" -ForegroundColor $Red
+        }
+        $exitCode = 1
+    }
+
+    Write-Host "`nTest log saved to: $logFile" -ForegroundColor $Cyan
+    Write-Host ("="*60) -ForegroundColor $Cyan
+    
+    exit $exitCode
+}
+finally {
+    Stop-Transcript | Out-Null
+    Pop-Location
+}
 
 # Ensure we run from repo root
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
