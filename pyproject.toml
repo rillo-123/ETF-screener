@@ -3,17 +3,17 @@ requires = ["setuptools>=65.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ETF-screener"
+name = "etfs"
 version = "0.1.0"
-description = ""
+description = "Technical analysis tool for swing trading ETFs using Finnhub API with Supertrend & EMA indicators"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = []
 [project.urls]
-Homepage = "https://github.com/yourusername/ETF-screener"
+Homepage = "https://github.com/carlr/ETF-screener"
 
 [project.scripts]
-ETF_screener = "ETF_screener.main:main"
+etfs = "ETF_screener.main:main"
 
 [tool.setuptools]
 packages = ["ETF_screener"]
