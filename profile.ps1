@@ -17,8 +17,21 @@ function Get-GitBranch {
 function Get-GitDirtyMarker {
     try {
         $status = git status --porcelain 2>$null
-        if ($LASTEXITCODE -eq 0 -and $status -and $status.Trim()) { return '*' }
-        return ''
+        if ($LASTEXITCODE -ne 0 -or -not $status -or -not $status.Trim()) { return '' }
+        
+        $markers = @()
+        
+        # Check for modified/staged files (lines starting with M, A, D, etc.)
+        if ($status | Where-Object { $_ -match '^[MADRC]' }) {
+            $markers += '*'
+        }
+        
+        # Check for untracked files (lines starting with ??)
+        if ($status | Where-Object { $_ -match '^\?\?' }) {
+            $markers += '+'
+        }
+        
+        return $markers -join ''
     } catch {
         return ''
     }
