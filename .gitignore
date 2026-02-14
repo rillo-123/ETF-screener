@@ -41,6 +41,7 @@ htmlcov/
 *.sublime-workspace
 *.swp
 *.swo
+$PROFILE
 
 # -------------------------------------------
 # Operating system cruft
@@ -70,3 +71,7 @@ data/
 # Plot outputs
 plots/
 *.png
+
+# Debug utilities
+debug_db.py
+debug*.py
