@@ -10,6 +10,11 @@ from ETF_screener.data_fetcher import FinnhubFetcher
 from ETF_screener.database import ETFDatabase
 from ETF_screener.indicators import add_indicators
 
+# ANSI color codes
+GREEN = "\033[92m"
+RED = "\033[91m"
+RESET = "\033[0m"
+
 
 class ETFScreener:
     """Screen and filter ETFs based on technical criteria."""
@@ -96,13 +101,14 @@ class ETFScreener:
             print(f"Warning: Could not load format file: {e}")
             return {"default": {"columns": []}}
 
-    def format_value(self, value: any, format_type: str) -> str:
+    def format_value(self, value: any, format_type: str, color: str = "") -> str:
         """
         Format a value based on its type.
 
         Args:
             value: Value to format
             format_type: Format type (volume, price, int, str)
+            color: ANSI color code to apply (e.g., GREEN, RED)
 
         Returns:
             Formatted string
@@ -111,13 +117,19 @@ class ETFScreener:
             return "N/A"
 
         if format_type == "volume":
-            return self.format_volume(int(value))
+            formatted = self.format_volume(int(value))
         elif format_type == "price":
-            return f"{float(value):.2f}"
+            formatted = f"{float(value):.2f}"
         elif format_type == "int":
-            return str(int(value))
+            formatted = str(int(value))
         else:
-            return str(value)
+            formatted = str(value)
+
+        # Apply color if specified
+        if color:
+            formatted = f"{color}{formatted}{RESET}"
+
+        return formatted
 
     def print_results(
         self, results: pd.DataFrame, format_name: str = "default"
@@ -162,7 +174,20 @@ class ETFScreener:
                     value_str = "N/A"
                 else:
                     value = row[field]
-                    value_str = self.format_value(value, format_type)
+                    
+                    # Determine color for supertrend based on price comparison
+                    color = ""
+                    if field == "supertrend" and "latest_price" in row:
+                        price = row["latest_price"]
+                        if not pd.isna(price) and not pd.isna(value):
+                            price = float(price)
+                            supertrend = float(value)
+                            if price > supertrend:
+                                color = GREEN  # Uptrend
+                            else:
+                                color = RED    # Downtrend
+                    
+                    value_str = self.format_value(value, format_type, color)
 
                 row_values.append(f"{value_str:<{width}}")
 
