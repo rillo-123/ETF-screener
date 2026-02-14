@@ -10,7 +10,7 @@ import pandas as pd
 class ETFDatabase:
     """SQLite database for storing and querying ETF data."""
 
-    def __init__(self, db_path: str = "etfs.db"):
+    def __init__(self, db_path: str = "data/etfs.db"):
         """
         Initialize database connection.
 

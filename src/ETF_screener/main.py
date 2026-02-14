@@ -245,8 +245,8 @@ def screen_etfs(
 
 def discover_etfs(
     tickers: Optional[list[str]] = None,
-    etfs_file: str = "etfs.json",
-    blacklist_file: str = "blacklist.json",
+    etfs_file: str = "data/etfs.json",
+    blacklist_file: str = "data/blacklist.json",
 ) -> None:
     """
     Discover and validate ETF tickers on Yahoo Finance.
@@ -281,8 +281,8 @@ def discover_etfs(
 
 def extract_xetra_etfs(
     csv_file: str = "reference/t7-xetr-allTradableInstruments.csv",
-    etfs_file: str = "etfs.json",
-    blacklist_file: str = "blacklist.json",
+    etfs_file: str = "data/etfs.json",
+    blacklist_file: str = "data/blacklist.json",
 ) -> None:
     """
     Extract and validate XETRA ETF tickers from Deutsche Börse CSV.
@@ -318,8 +318,8 @@ def extract_xetra_etfs(
 
 
 def discover_all_etfs(
-    etfs_file: str = "etfs.json",
-    blacklist_file: str = "blacklist.json",
+    etfs_file: str = "data/etfs.json",
+    blacklist_file: str = "data/blacklist.json",
     max_workers: int = 5,
 ) -> None:
     """
@@ -449,13 +449,13 @@ def main() -> None:
     )
     discover_parser.add_argument(
         "--etfs-file",
-        default="etfs.json",
-        help="JSON file to save validated ETFs (default: etfs.json)",
+        default="data/etfs.json",
+        help="JSON file to save validated ETFs (default: data/etfs.json)",
     )
     discover_parser.add_argument(
         "--blacklist-file",
-        default="blacklist.json",
-        help="JSON file to save blacklisted/invalid ETFs (default: blacklist.json)",
+        default="data/blacklist.json",
+        help="JSON file to save blacklisted/invalid ETFs (default: data/blacklist.json)",
     )
 
     # Discover all command
@@ -464,13 +464,13 @@ def main() -> None:
     )
     discover_all_parser.add_argument(
         "--etfs-file",
-        default="etfs.json",
-        help="JSON file to save validated ETFs (default: etfs.json)",
+        default="data/etfs.json",
+        help="JSON file to save validated ETFs (default: data/etfs.json)",
     )
     discover_all_parser.add_argument(
         "--blacklist-file",
-        default="blacklist.json",
-        help="JSON file to save blacklisted/invalid ETFs (default: blacklist.json)",
+        default="data/blacklist.json",
+        help="JSON file to save blacklisted/invalid ETFs (default: data/blacklist.json)",
     )
     discover_all_parser.add_argument(
         "--workers",
@@ -490,13 +490,13 @@ def main() -> None:
     )
     extract_parser.add_argument(
         "--etfs-file",
-        default="etfs.json",
-        help="JSON file to save validated ETFs (default: etfs.json)",
+        default="data/etfs.json",
+        help="JSON file to save validated ETFs (default: data/etfs.json)",
     )
     extract_parser.add_argument(
         "--blacklist-file",
-        default="blacklist.json",
-        help="JSON file to save blacklisted/invalid ETFs (default: blacklist.json)",
+        default="data/blacklist.json",
+        help="JSON file to save blacklisted/invalid ETFs (default: data/blacklist.json)",
     )
 
     args = parser.parse_args()

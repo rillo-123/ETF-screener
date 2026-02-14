@@ -58,3 +58,15 @@ Desktop.ini
 ~*
 *.bak
 vulture_report*.txt
+
+# Generated data files (in data/ directory)
+data/*.json
+data/*.db
+data/*.txt
+data/*.parquet
+data/*.png
+data/
+
+# Plot outputs
+plots/
+*.png

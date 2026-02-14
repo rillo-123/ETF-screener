@@ -39,7 +39,7 @@ if (-not (Test-Path $python)) { $python = 'python' }
 
 # Logging
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$logFile = "test_results_$timestamp.txt"
+$logFile = "data/test_results_$timestamp.txt"
 Start-Transcript -Path $logFile -Append | Out-Null
 
 $failedTests = @()
@@ -187,7 +187,7 @@ Push-Location $root
 
 # Set up logging with timestamp
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$logFile = Join-Path -Path $root -ChildPath "test_results_$timestamp.txt"
+$logFile = Join-Path -Path $root -ChildPath "data/test_results_$timestamp.txt"
 Start-Transcript -Path $logFile -Append | Out-Null
 
 try {
