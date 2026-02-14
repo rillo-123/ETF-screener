@@ -221,36 +221,51 @@ def screen_etfs(
             # No specific symbols provided. Check if we need more data from etfs.json
             etfs_file = Path(data_dir) / "etfs.json"
             if etfs_file.exists():
-                print(f"Checking database for available ETFs...")
-                try:
-                    with open(etfs_file) as f:
-                        etfs_data = json.load(f)
-                        available_symbols = list(etfs_data.keys())
+                # First query what we have in the database
+                screener = ETFScreener(db=db, api_key=api_key)
+                initial_results = screener.screen_by_volume(
+                    min_days=days,
+                    min_avg_volume=min_avg_volume,
+                    max_results=None,
+                    fetch_missing=False,
+                )
+                
+                # Only fetch more if we need more results
+                if len(initial_results) < nof_etfs:
+                    print(f"Database has {len(initial_results)} ETFs matching criteria, need {nof_etfs}...")
                     
-                    # Get symbols not yet in database
-                    missing_symbols = []
-                    for symbol in available_symbols:
-                        if not db.ticker_exists(symbol):
-                            missing_symbols.append(symbol)
-                    
-                    if missing_symbols:
-                        # Fetch up to 50 missing ETFs to expand the dataset
-                        to_fetch = missing_symbols[:50]
-                        print(f"Fetching {len(to_fetch)} ETFs from Yahoo Finance for screening...")
-                        fetcher = YFinanceFetcher()
-                        etf_data = fetcher.fetch_multiple_etfs(to_fetch, days=days_to_keep)
+                    try:
+                        with open(etfs_file) as f:
+                            etfs_data = json.load(f)
+                            available_symbols = list(etfs_data.keys())
                         
-                        if etf_data:
-                            print("Calculating indicators...")
-                            for symbol, df in etf_data.items():
-                                etf_data[symbol] = add_indicators(df)
+                        # Get symbols not yet in database
+                        missing_symbols = []
+                        for symbol in available_symbols:
+                            if not db.ticker_exists(symbol):
+                                missing_symbols.append(symbol)
+                        
+                        if missing_symbols:
+                            # Fetch enough to get nof_etfs results (estimate: fetch 2x what we need)
+                            needed = max(20, (nof_etfs - len(initial_results)) * 2)
+                            to_fetch = missing_symbols[:needed]
+                            print(f"Fetching {len(to_fetch)} new ETFs from Yahoo Finance (need 60+ days for EMA50)...")
                             
-                            print("Storing in database...")
-                            for symbol, df in etf_data.items():
-                                db.insert_dataframe(df, symbol)
-                            print(f"  ✓ Stored {len(etf_data)} ETFs")
-                except Exception as e:
-                    print(f"Warning: Could not load ETFs from {etfs_file}: {e}")
+                            fetcher = YFinanceFetcher()
+                            # Fetch at least 60 days for EMA50 calculation
+                            etf_data = fetcher.fetch_multiple_etfs(to_fetch, days=max(60, days_to_keep))
+                            
+                            if etf_data:
+                                print("Calculating indicators...")
+                                for symbol, df in etf_data.items():
+                                    etf_data[symbol] = add_indicators(df)
+                                
+                                print("Storing in database...")
+                                for symbol, df in etf_data.items():
+                                    db.insert_dataframe(df, symbol)
+                                print(f"  ✓ Stored {len(etf_data)} new ETFs")
+                    except Exception as e:
+                        print(f"Warning: Could not auto-fetch from {etfs_file}: {e}")
         
         screener = ETFScreener(db=db, api_key=api_key)
         print(f"\nScreening ETFs (last {days} days, avg volume >= {min_avg_volume:,})...")
