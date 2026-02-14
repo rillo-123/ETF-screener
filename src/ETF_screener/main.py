@@ -445,6 +445,21 @@ def main() -> None:
         default="default",
         help="Output format template (default: default)",
     )
+    screener_parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Use compact output format (shorthand for --format compact)",
+    )
+    screener_parser.add_argument(
+        "--detailed",
+        action="store_true",
+        help="Use detailed output format (shorthand for --format detailed)",
+    )
+    screener_parser.add_argument(
+        "--default",
+        action="store_true",
+        help="Use default output format (shorthand for --format default)",
+    )
 
     # Discover command
     discover_parser = subparsers.add_parser(
@@ -521,6 +536,15 @@ def main() -> None:
     elif args.command == "list":
         list_saved_etfs(data_dir=args.data_dir)
     elif args.command == "screener":
+        # Determine format from convenience flags or --format argument
+        format_name = args.format
+        if args.compact:
+            format_name = "compact"
+        elif args.detailed:
+            format_name = "detailed"
+        elif args.default:
+            format_name = "default"
+        
         screen_etfs(
             symbols=args.symbols if args.symbols else None,
             nof_etfs=args.nofEtfs,
@@ -528,7 +552,7 @@ def main() -> None:
             days=args.days,
             days_to_keep=args.keep_days,
             api_key=args.api_key,
-            format_name=args.format,
+            format_name=format_name,
         )
     elif args.command == "discover":
         discover_etfs(
