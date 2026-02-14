@@ -1,0 +1,60 @@
+env/
+# -------------------------------------------
+# Python / PyScript build artifacts
+# -------------------------------------------
+__pycache__/
+assets/py/__pycache__/
+*.py[cod]
+*$py.class
+
+# Bytecode cache for tooling or experiments
+.cache/
+*.cache
+
+# -------------------------------------------
+# Virtual environments & tooling metadata
+# -------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+.python-version
+pip-wheel-metadata/
+
+# -------------------------------------------
+# Test, lint, coverage outputs (future-proofing)
+# -------------------------------------------
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+*.pytype/
+.ruff_cache/
+
+# -------------------------------------------
+# Editor & IDE settings
+# -------------------------------------------
+.idea/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# -------------------------------------------
+# Operating system cruft
+# -------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# -------------------------------------------
+# App-specific artifacts & logs
+# -------------------------------------------
+*.log
+*.tmp
+~*
+*.bak
+vulture_report*.txt
