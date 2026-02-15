@@ -84,28 +84,128 @@ def calculate_supertrend(
     return supertrend, final_ub, final_lb
 
 
-def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
+def resample_to_weekly(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Resample daily OHLCV data to weekly.
+
+    Args:
+        df: DataFrame with Date column and OHLCV data
+
+    Returns:
+        Weekly resampled DataFrame
+    """
+    df_copy = df.copy()
+    
+    # Ensure Date is datetime and set as index
+    if 'Date' in df_copy.columns:
+        df_copy['Date'] = pd.to_datetime(df_copy['Date'])
+        df_copy = df_copy.set_index('Date')
+    
+    # Resample to weekly (Sunday close)
+    df_weekly = df_copy.resample('W').agg({
+        'Open': 'first',
+        'High': 'max',
+        'Low': 'min',
+        'Close': 'last',
+        'Volume': 'sum'
+    })
+    
+    # Reset index to Date column
+    df_weekly = df_weekly.reset_index()
+    return df_weekly
+
+
+def calculate_consecutive_streak(df: pd.DataFrame) -> tuple[int, str]:
+    """
+    Calculate consecutive RED/GREEN days from the current bar backwards.
+    
+    Args:
+        df: DataFrame with Close and Supertrend columns
+        
+    Returns:
+        Tuple of (streak_count, streak_direction) where direction is "RED" or "GREEN"
+    """
+    if len(df) == 0 or "Close" not in df.columns or "Supertrend" not in df.columns:
+        return 0, "UNKNOWN"
+    
+    streak = 0
+    # Current status (most recent bar)
+    latest_close = df["Close"].iloc[-1]
+    latest_st = df["Supertrend"].iloc[-1]
+    
+    if pd.isna(latest_st):
+        return 0, "UNKNOWN"
+    
+    # Determine if RED or GREEN
+    current_status = "GREEN" if latest_close > latest_st else "RED"
+    
+    # Count backwards from most recent bar
+    for i in range(len(df) - 1, -1, -1):
+        close = df["Close"].iloc[i]
+        st = df["Supertrend"].iloc[i]
+        
+        if pd.isna(st):
+            break
+        
+        status = "GREEN" if close > st else "RED"
+        
+        if status == current_status:
+            streak += 1
+        else:
+            break
+    
+    return streak, current_status
+
+
+def add_indicators(
+    df: pd.DataFrame, 
+    st_period: int = 10, 
+    st_multiplier: float = 3.0,
+    timeframe: str = "1D"
+) -> pd.DataFrame:
     """
     Add technical indicators to dataframe.
 
     Args:
-        df: DataFrame with OHLCV data
+        df: DataFrame with OHLCV data (Date column required for 1W)
+        st_period: Supertrend ATR period (default 10)
+        st_multiplier: Supertrend multiplier (default 3.0)
+        timeframe: Timeframe for calculation ("1D" or "1W", default "1D")
 
     Returns:
         DataFrame with added indicator columns
     """
     df_copy = df.copy()
+    
+    # Resample to weekly if requested
+    if timeframe.upper() == "1W":
+        df_copy = resample_to_weekly(df_copy)
 
     # EMA 50
     df_copy["EMA_50"] = calculate_ema(df_copy["Close"], period=50)
 
-    # Supertrend
+    # Supertrend with configurable parameters
     st, ub, lb = calculate_supertrend(
-        df_copy["High"], df_copy["Low"], df_copy["Close"], period=10, multiplier=3.0
+        df_copy["High"], df_copy["Low"], df_copy["Close"], 
+        period=st_period, multiplier=st_multiplier
     )
     df_copy["Supertrend"] = st
     df_copy["ST_Upper"] = ub
     df_copy["ST_Lower"] = lb
+
+    # Swing setup detection: price near EMA50 but in uptrend
+    # Look back 10 days for max price to detect pullback
+    lookback = 10
+    df_copy["Recent_High"] = df_copy["Close"].rolling(window=lookback).max()
+    
+    # Pullback percentage: how far below recent high
+    df_copy["Pullback_Pct"] = ((df_copy["Recent_High"] - df_copy["Close"]) / df_copy["Recent_High"] * 100).round(2)
+    
+    # Distance from EMA50 (negative = below, positive = above)
+    df_copy["EMA_Distance_Pct"] = ((df_copy["Close"] - df_copy["EMA_50"]) / df_copy["EMA_50"] * 100).round(2)
+    
+    # In uptrend: price > EMA50 (allows small dips)
+    df_copy["In_Uptrend"] = (df_copy["Close"] > df_copy["EMA_50"]).astype(int)
 
     # Buy/Sell signals based on Supertrend and EMA50
     signals = []

@@ -73,6 +73,93 @@ class ETFScreener:
 
         return results
 
+    def filter_swing_setups(
+        self,
+        results: pd.DataFrame,
+        db: Optional["ETFDatabase"] = None,
+        min_pullback: float = 2.0,
+        max_distance_from_ema: float = 5.0,
+        require_green_supertrend: bool = True,
+        st_period: int = 10,
+        st_multiplier: float = 3.0,
+        timeframe: str = "1D",
+    ) -> pd.DataFrame:
+        """
+        Filter for swing-ready setups: price dipped towards EMA50 but in uptrend.
+
+        Calculates swing metrics from full historical data for each ticker.
+
+        Args:
+            results: DataFrame from screen_by_volume
+            db: Database instance to fetch historical data
+            min_pullback: Minimum pullback % from recent high
+            max_distance_from_ema: Maximum distance % from EMA50 (small dip)
+            require_green_supertrend: Only include if price > supertrend (GREEN)
+            st_period: Supertrend ATR period
+            st_multiplier: Supertrend multiplier
+            timeframe: Timeframe for indicators ("1D" or "1W")
+
+        Returns:
+            DataFrame filtered for swing setups
+        """
+        if results.empty or db is None:
+            return pd.DataFrame()
+
+        swing_results = []
+
+        for _, row in results.iterrows():
+            ticker = row["ticker"]
+            
+            try:
+                # Fetch full historical data for this ticker
+                hist_df = db.get_ticker_data(ticker, days=90)  # Use 90 days for weekly calc
+                
+                if hist_df.empty or len(hist_df) < 10:
+                    continue
+                
+                # Recalculate indicators with requested parameters and timeframe
+                hist_df = add_indicators(hist_df, st_period=st_period, st_multiplier=st_multiplier, timeframe=timeframe)
+                
+                # Get latest row
+                latest = hist_df.iloc[-1]
+                
+                # Skip if price is below Supertrend (RED - downtrend)
+                if require_green_supertrend:
+                    if latest["Close"] <= latest["Supertrend"]:
+                        continue
+                
+                # Calculate swing metrics
+                lookback = 10
+                recent_high = hist_df["Close"].tail(lookback).max()
+                pullback_pct = ((recent_high - latest["Close"]) / recent_high) * 100
+                ema_distance_pct = ((latest["Close"] - latest["EMA_50"]) / latest["EMA_50"]) * 100
+                in_uptrend = 1 if latest["Close"] > latest["EMA_50"] else 0
+                
+                # Apply filters
+                if (pullback_pct >= min_pullback and 
+                    ema_distance_pct >= 0 and 
+                    ema_distance_pct <= max_distance_from_ema and 
+                    in_uptrend == 1):
+                    
+                    # Add swing metrics to row
+                    swing_row = row.copy()
+                    swing_row["Pullback_Pct"] = round(pullback_pct, 2)
+                    swing_row["EMA_Distance_Pct"] = round(ema_distance_pct, 2)
+                    swing_row["Recent_High"] = recent_high
+                    swing_results.append(swing_row)
+            except Exception as e:
+                # Skip tickers with errors
+                continue
+        
+        if not swing_results:
+            return pd.DataFrame()
+        
+        filtered = pd.DataFrame(swing_results)
+        # Sort by pullback strength
+        filtered = filtered.sort_values("Pullback_Pct", ascending=False)
+        
+        return filtered
+
     def _strip_ansi(self, text: str) -> str:
         """Remove ANSI color codes from a string."""
         return re.sub(r"\033\[[0-9;]*m", "", text)
@@ -147,18 +234,18 @@ class ETFScreener:
             format_name: Format template name (default, compact, detailed)
         """
         if results.empty:
-            print("❌ No ETFs found matching criteria")
+            print("[ERROR] No ETFs found matching criteria")
             return
 
         # Get format template
         format_template = self.formats.get(format_name, self.formats.get("default"))
         if not format_template or not format_template.get("columns"):
-            print("❌ Invalid format template")
+            print("[ERROR] Invalid format template")
             return
 
         columns = format_template["columns"]
 
-        print(f"\n✅ Found {len(results)} ETFs:\n")
+        print(f"\n[RESULTS] Found {len(results)} ETFs:\n")
 
         # Build header
         header = "".join(
@@ -222,4 +309,4 @@ class ETFScreener:
             df = add_indicators(df)
 
         self.db.insert_dataframe(df, ticker)
-        print(f"✓ Stored {len(df)} records for {ticker}")
+        print(f"[OK] Stored {len(df)} records for {ticker}")

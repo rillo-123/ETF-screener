@@ -6,10 +6,12 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import pandas as pd
+
 from ETF_screener.data_fetcher import FinnhubFetcher
 from ETF_screener.database import ETFDatabase
 from ETF_screener.etf_discovery import ETFDiscovery
-from ETF_screener.indicators import add_indicators
+from ETF_screener.indicators import add_indicators, calculate_consecutive_streak
 from ETF_screener.plotter import PortfolioPlotter
 from ETF_screener.screener import ETFScreener
 from ETF_screener.storage import ParquetStorage
@@ -54,6 +56,40 @@ def parse_volume(volume_str: str) -> int:
             return int(volume_str)
         except ValueError:
             raise ValueError(f"Invalid volume format: {volume_str}")
+
+
+def evaluate_condition(value: float, operator: str, threshold: float) -> bool:
+    """
+    Evaluate a numeric condition.
+
+    Args:
+        value: Value to check
+        operator: Operator ('gt', 'gte', 'lt', 'lte', 'eq', 'ne')
+        threshold: Threshold value to compare against
+
+    Returns:
+        True if condition is met, False otherwise
+    """
+    if pd.isna(value):
+        return False
+    
+    value = float(value)
+    threshold = float(threshold)
+    
+    if operator == "gt":
+        return value > threshold
+    elif operator == "gte":
+        return value >= threshold
+    elif operator == "lt":
+        return value < threshold
+    elif operator == "lte":
+        return value <= threshold
+    elif operator == "eq":
+        return abs(value - threshold) < 0.0001  # Float equality with tolerance
+    elif operator == "ne":
+        return abs(value - threshold) >= 0.0001
+    else:
+        return False
 
 
 def fetch_and_analyze(
@@ -162,134 +198,251 @@ def list_saved_etfs(data_dir: str = "data") -> None:
 
 def screen_etfs(
     symbols: Optional[list[str]] = None,
-    nof_etfs: int = 10,
+    nof_etfs: Optional[int] = None,
     min_avg_volume: int = 10_000_000,
     days: int = 10,
     days_to_keep: int = 365,
     api_key: Optional[str] = None,
     format_name: str = "default",
     data_dir: str = "data",
+    filter_swing: bool = False,
+    swing_pullback: float = 2.0,
+    supertrend_filter: Optional[str] = None,
+    timeframe: str = "1D",
+    st_period: int = 10,
+    st_multiplier: float = 3.0,
+    red_streak_min: int = 0,
+    conditions: Optional[dict] = None,
 ) -> None:
     """
-    Screen ETFs by volume criteria. Auto-fetches missing data and prunes stale records.
+    Screen ETFs by volume criteria. Fetches from online if not in cache (DB).
+    Stores fetched data in DB as cache for future runs. Returns ALL matching ETFs.
 
     Args:
-        symbols: List of ETF symbols to screen (if None, screens all in database)
-        nof_etfs: Number of ETFs to return
+        symbols: List of ETF symbols to screen (if None, screens all from etfs.json)
+        nof_etfs: Ignored - returns ALL ETFs matching criteria
         min_avg_volume: Minimum average volume in shares
-        days: Number of days to look back
-        days_to_keep: Number of days to keep in database (prune older)
+        days: Number of days to analyze
+        days_to_keep: Unused - data persisted in DB as cache
         api_key: Finnhub API key
-        format_name: Output format (default, compact, detailed)
-        data_dir: Directory containing etfs.json file (for auto-fetch)
+        format_name: Output format (default, compact, detailed, swing)
+        data_dir: Directory containing etfs.json file
+        filter_swing: Filter for swing setups (price dipped to EMA50 in uptrend)
+        swing_pullback: Minimum pullback % for swing filter
+        supertrend_filter: Filter by Supertrend color ('green': price > supertrend, 'red': price < supertrend)
+        timeframe: Timeframe for Supertrend ("1D" or "1W", default "1D")
+        st_period: Supertrend ATR period (default 10)
+        st_multiplier: Supertrend multiplier (default 3.0)
+        red_streak_min: Minimum consecutive RED days to include (0 = all, 10+ = likely reversal)
+        conditions: Dict of conditional filters {field: [(operator, threshold), ...]}
     """
     try:
         db = ETFDatabase()
         
-        # Prune data older than days_to_keep
-        deleted = db.prune_old_data(days_to_keep=days_to_keep)
-        if deleted > 0:
-            print(f"Pruned {deleted} records older than {days_to_keep} days")
-        
-        # If symbols provided, fetch missing ones
         if symbols:
-            print(f"Checking database for {len(symbols)} symbols...")
-            missing_symbols = []
+            # Screen specific symbols
+            print(f"Processing {len(symbols)} symbols (minimum 50 days for accurate EMA50)...\n")
+            to_fetch = []
             
             for symbol in symbols:
                 if not db.ticker_exists(symbol):
-                    missing_symbols.append(symbol)
+                    to_fetch.append(symbol)
                 else:
-                    latest_date = db.get_latest_date(symbol)
-                    print(f"  ✓ {symbol} found (latest: {latest_date})")
+                    print(f"  [OK] {symbol} found in cache")
             
-            if missing_symbols:
-                print(f"Fetching {len(missing_symbols)} missing symbols from Yahoo Finance...")
+            if to_fetch:
+                print(f"\nFetching {len(to_fetch)} missing from Yahoo Finance...")
                 fetcher = YFinanceFetcher()
-                etf_data = fetcher.fetch_multiple_etfs(missing_symbols, days=days_to_keep)
+                etf_data = fetcher.fetch_multiple_etfs(to_fetch, days=max(50, days))
                 
                 if etf_data:
                     print("Calculating indicators...")
                     for symbol, df in etf_data.items():
                         etf_data[symbol] = add_indicators(df)
                     
-                    print("Storing in database...")
+                    print("Storing in cache...")
                     for symbol, df in etf_data.items():
                         db.insert_dataframe(df, symbol)
-                        print(f"  ✓ {symbol} stored")
+                        print(f"  [OK] {symbol} cached")
         else:
-            # No specific symbols provided. Check if we need more data from etfs.json
+            # Load all ETFs from etfs.json
             etfs_file = Path(data_dir) / "etfs.json"
-            if etfs_file.exists():
-                # First query what we have in the database
-                screener = ETFScreener(db=db, api_key=api_key)
-                initial_results = screener.screen_by_volume(
-                    min_days=days,
-                    min_avg_volume=min_avg_volume,
-                    max_results=None,
-                    fetch_missing=False,
-                )
+            if not etfs_file.exists():
+                print(f"Error: {etfs_file} not found. Run 'etfs discover' first.")
+                db.close()
+                return
+            
+            try:
+                with open(etfs_file) as f:
+                    etfs_data = json.load(f)
+                    available_symbols = list(etfs_data.keys())
                 
-                # Only fetch more if we need more results
-                if len(initial_results) < nof_etfs:
-                    print(f"Database has {len(initial_results)} ETFs matching criteria, need {nof_etfs}...")
+                print(f"Scanning {len(available_symbols)} ETFs from etfs.json...")
+                
+                # Check which are already cached
+                to_fetch = []
+                cached_count = 0
+                for symbol in available_symbols:
+                    if not db.ticker_exists(symbol):
+                        to_fetch.append(symbol)
+                    else:
+                        cached_count += 1
+                
+                print(f"  Found in cache: {cached_count}")
+                print(f"  Need to fetch: {len(to_fetch)}")
+                
+                if to_fetch:
+                    print(f"\nFetching {len(to_fetch)} ETFs (minimum 50 days for accurate EMA50)...")
+                    fetcher = YFinanceFetcher()
+                    etf_data = fetcher.fetch_multiple_etfs(to_fetch, days=max(50, days))
                     
-                    try:
-                        with open(etfs_file) as f:
-                            etfs_data = json.load(f)
-                            available_symbols = list(etfs_data.keys())
+                    if etf_data:
+                        print(f"\nCalculating indicators for {len(etf_data)} ETFs...")
+                        for symbol, df in etf_data.items():
+                            etf_data[symbol] = add_indicators(df)
                         
-                        # Get symbols not yet in database
-                        missing_symbols = []
-                        for symbol in available_symbols:
-                            if not db.ticker_exists(symbol):
-                                missing_symbols.append(symbol)
-                        
-                        if missing_symbols:
-                            # Fetch enough to get nof_etfs results (estimate: fetch 2x what we need)
-                            needed = max(20, (nof_etfs - len(initial_results)) * 2)
-                            to_fetch = missing_symbols[:needed]
-                            print(f"Fetching {len(to_fetch)} new ETFs from Yahoo Finance (need 60+ days for EMA50)...")
-                            
-                            fetcher = YFinanceFetcher()
-                            # Fetch at least 60 days for EMA50 calculation
-                            etf_data = fetcher.fetch_multiple_etfs(to_fetch, days=max(60, days_to_keep))
-                            
-                            if etf_data:
-                                print("Calculating indicators...")
-                                for symbol, df in etf_data.items():
-                                    etf_data[symbol] = add_indicators(df)
-                                
-                                print("Storing in database...")
-                                for symbol, df in etf_data.items():
-                                    db.insert_dataframe(df, symbol)
-                                print(f"  ✓ Stored {len(etf_data)} new ETFs")
-                    except Exception as e:
-                        print(f"Warning: Could not auto-fetch from {etfs_file}: {e}")
+                        print("Storing in cache...")
+                        for symbol, df in etf_data.items():
+                            db.insert_dataframe(df, symbol)
+                        print(f"  [OK] Cached {len(etf_data)} new ETFs\n")
+                    
+            except Exception as e:
+                print(f"Error: {e}")
+                db.close()
+                return
         
         screener = ETFScreener(db=db, api_key=api_key)
-        print(f"\nScreening ETFs (last {days} days, avg volume >= {min_avg_volume:,})...")
+        print(f"Screening ALL ETFs (last {days} days, avg volume >= {min_avg_volume:,})...\n")
 
+        # Return ALL results matching criteria (no limit)
         results = screener.screen_by_volume(
             min_days=days,
             min_avg_volume=min_avg_volume,
-            max_results=nof_etfs,
+            max_results=None,
             fetch_missing=False,
         )
+
+        # Apply swing filter if requested
+        if filter_swing and not results.empty:
+            print(f"Filtering for swing setups (pullback >= {swing_pullback}%, price > Supertrend)...\n")
+            results = screener.filter_swing_setups(
+                results,
+                db=db,
+                min_pullback=swing_pullback,
+                max_distance_from_ema=5.0,
+                require_green_supertrend=True,
+                st_period=st_period,
+                st_multiplier=st_multiplier,
+                timeframe=timeframe,
+            )
+
+        # Apply supertrend color filter if requested
+        # NOTE: Must recalculate with new parameters, not use cached DB values
+        if supertrend_filter and not results.empty:
+            filtered_results = []
+            
+            for _, row in results.iterrows():
+                ticker = row["ticker"]
+                try:
+                    # Fetch fresh data and recalculate with requested parameters
+                    hist_df = db.get_ticker_data(ticker, days=90 if timeframe == "1W" else 60)
+                    if hist_df.empty or len(hist_df) < 10:
+                        continue
+                    
+                    # Recalculate with new parameters and timeframe
+                    hist_df = add_indicators(hist_df, st_period=st_period, st_multiplier=st_multiplier, timeframe=timeframe)
+                    latest = hist_df.iloc[-1]
+                    
+                    # Calculate RED/GREEN streak
+                    streak_days, streak_status = calculate_consecutive_streak(hist_df)
+                    
+                    # Apply filter
+                    if supertrend_filter == "green" and latest["Close"] > latest["Supertrend"]:
+                        row_copy = row.copy()
+                        row_copy["streak_days"] = streak_days
+                        row_copy["streak_status"] = streak_status
+                        filtered_results.append(row_copy)
+                    elif supertrend_filter == "red" and latest["Close"] <= latest["Supertrend"]:
+                        row_copy = row.copy()
+                        row_copy["streak_days"] = streak_days
+                        row_copy["streak_status"] = streak_status
+                        # Filter by red streak if specified
+                        if streak_days >= red_streak_min:
+                            filtered_results.append(row_copy)
+                        
+                except Exception:
+                    continue
+            
+            results = pd.DataFrame(filtered_results) if filtered_results else pd.DataFrame()
+            
+            if supertrend_filter == "green":
+                print(f"Filtering for GREEN Supertrend ({timeframe}, mult={st_multiplier})...\n")
+            elif supertrend_filter == "red":
+                if red_streak_min > 0:
+                    print(f"Filtering for RED Supertrend ({timeframe}, mult={st_multiplier}) with RED streak >= {red_streak_min} days...\n")
+                else:
+                    print(f"Filtering for RED Supertrend ({timeframe}, mult={st_multiplier})...\n")
+
+        # Apply conditional filters if specified
+        if conditions and not results.empty:
+            for field, ops_list in conditions.items():
+                if not ops_list:
+                    continue
+                
+                filtered_results = []
+                for _, row in results.iterrows():
+                    # If indicators aren't already in the row (from supertrend filter), fetch them
+                    if field not in row or pd.isna(row[field]):
+                        try:
+                            ticker = row["ticker"]
+                            hist_df = db.get_ticker_data(ticker, days=90)
+                            if hist_df.empty or len(hist_df) < 10:
+                                continue
+                            hist_df = add_indicators(hist_df, st_period=st_period, st_multiplier=st_multiplier, timeframe=timeframe)
+                            latest = hist_df.iloc[-1]
+                            row = row.copy()
+                            row["close"] = latest["Close"]
+                            row["ema"] = latest["EMA_50"]
+                            row["supertrend"] = latest["Supertrend"]
+                            # Check if pullback_pct exists (from swing filter)
+                            if "Pullback_Pct" in latest:
+                                row["pullback"] = latest["Pullback_Pct"]
+                            if "avg_vol" in row or "Avg Vol" in row:
+                                row["volume"] = row.get("avg_vol", row.get("Avg Vol", 0))
+                        except Exception:
+                            continue
+                    
+                    # Apply all conditions for this field
+                    passes_all = True
+                    for operator, threshold in ops_list:
+                        # Map field names to available columns (case-insensitive, with fallbacks)
+                        field_value = None
+                        if field == "close":
+                            field_value = row.get("close") or row.get("Close")
+                        elif field == "ema":
+                            field_value = row.get("ema") or row.get("EMA_50") or row.get("ema_50")
+                        elif field == "pullback":
+                            field_value = row.get("pullback") or row.get("Pullback_Pct")
+                        elif field == "volume":
+                            field_value = row.get("volume") or row.get("Avg Vol") or row.get("avg_vol")
+                        
+                        if field_value is None or not evaluate_condition(field_value, operator, threshold):
+                            passes_all = False
+                            break
+                    
+                    if passes_all:
+                        filtered_results.append(row)
+                
+                results = pd.DataFrame(filtered_results) if filtered_results else pd.DataFrame()
+                
+                # Print what was filtered
+                ops_str = " and ".join([f"{op} {val}" for op, val in ops_list])
+                print(f"Filtering {field} ({ops_str})...\n")
 
         screener.print_results(results, format_name=format_name)
 
         if results.empty:
-            if symbols:
-                print(
-                    f"\n⚠️  No {symbols} matched the volume criteria."
-                    f" Try lower --aVol threshold."
-                )
-            else:
-                print(
-                    "\n💡 Tip: Run with symbols to fetch and analyze:"
-                    "\n  etfs screener EXS1.DE EUNG.DE XESC.DE --aVol 1000 --days 20"
-                )
+            print("\n⚠️  No ETFs matched the criteria. Try lower --aVol threshold.")
 
         db.close()
 
@@ -467,8 +620,8 @@ def main() -> None:
     screener_parser.add_argument(
         "--nofEtfs",
         type=int,
-        default=10,
-        help="Number of top ETFs to return (default: 10)",
+        default=None,
+        help="Number of top ETFs to return (default from output_formats.json config, or 10)",
     )
     screener_parser.add_argument(
         "--aVol",
@@ -514,10 +667,60 @@ def main() -> None:
         help="Use default output format (shorthand for --format default)",
     )
     screener_parser.add_argument(
+        "--swing",
+        action="store_true",
+        help="Filter for swing-ready setups (price dipped to EMA50 in uptrend)",
+    )
+    screener_parser.add_argument(
+        "--swing-pull",
+        type=float,
+        default=2.0,
+        help="Minimum pullback %% from recent high for swing filter (default: 2.0)",
+    )
+    screener_parser.add_argument(
+        "--supt",
+        choices=["green", "red"],
+        help="Filter by Supertrend color (green: price > supertrend, red: price < supertrend)",
+    )
+    screener_parser.add_argument(
         "--data-dir",
         default="data",
         help="Directory containing etfs.json (default: data)",
     )
+    screener_parser.add_argument(
+        "--timeframe",
+        choices=["1D", "1W"],
+        default="1D",
+        help="Timeframe for Supertrend calculation ('1D' daily or '1W' weekly, default: 1D)",
+    )
+    screener_parser.add_argument(
+        "--st-period",
+        type=int,
+        default=10,
+        help="Supertrend ATR period (default: 10)",
+    )
+    screener_parser.add_argument(
+        "--st-multiplier",
+        type=float,
+        default=3.0,
+        help="Supertrend multiplier (default: 3.0, try 2.0-3.5 to adjust sensitivity)",
+    )
+    screener_parser.add_argument(
+        "--red-streak",
+        type=int,
+        default=0,
+        help="Minimum consecutive RED days for reversal candidates (0 = all, 10+ = strong signal, use with --supt red)",
+    )
+    
+    # Conditional operators: close, ema, pullback, volume
+    for field in ["close", "ema", "pullback", "volume"]:
+        for op in ["gt", "gte", "lt", "lte", "eq", "ne"]:
+            arg_name = f"--{field}-{op}"
+            screener_parser.add_argument(
+                arg_name,
+                type=float,
+                help=f"Filter {field} {op} value (e.g., --{field}-{op} 50)",
+            )
 
     # Discover command
     discover_parser = subparsers.add_parser(
@@ -602,6 +805,19 @@ def main() -> None:
             format_name = "detailed"
         elif args.default:
             format_name = "default"
+        elif args.swing:
+            format_name = "swing"
+        
+        # Extract conditional filters from args
+        conditions = {}
+        for field in ["close", "ema", "pullback", "volume"]:
+            field_conditions = []
+            for op in ["gt", "gte", "lt", "lte", "eq", "ne"]:
+                arg_name = f"{field}_{op}"
+                if hasattr(args, arg_name) and getattr(args, arg_name) is not None:
+                    field_conditions.append((op, getattr(args, arg_name)))
+            if field_conditions:
+                conditions[field] = field_conditions
         
         screen_etfs(
             symbols=args.symbols if args.symbols else None,
@@ -612,6 +828,14 @@ def main() -> None:
             api_key=args.api_key,
             format_name=format_name,
             data_dir=args.data_dir,
+            filter_swing=args.swing,
+            swing_pullback=args.swing_pull,
+            supertrend_filter=args.supt,
+            timeframe=args.timeframe,
+            st_period=args.st_period,
+            st_multiplier=args.st_multiplier,
+            red_streak_min=args.red_streak,
+            conditions=conditions if conditions else None,
         )
     elif args.command == "discover":
         discover_etfs(
