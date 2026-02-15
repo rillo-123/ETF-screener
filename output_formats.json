@@ -5,7 +5,7 @@
       {
         "field": "ticker",
         "header": "Ticker",
-        "width": 8,
+        "width": 10,
         "format": "str"
       },
       {
@@ -87,13 +87,60 @@
       }
     ]
   },
+  "swing": {
+    "description": "Swing trading setup: price dipped to EMA50 in uptrend",
+    "columns": [
+      {
+        "field": "ticker",
+        "header": "Ticker",
+        "width": 10,
+        "format": "str"
+      },
+      {
+        "field": "avg_volume",
+        "header": "Avg Vol",
+        "width": 12,
+        "format": "volume"
+      },
+      {
+        "field": "latest_price",
+        "header": "Price",
+        "width": 10,
+        "format": "price"
+      },
+      {
+        "field": "ema_50",
+        "header": "EMA50",
+        "width": 10,
+        "format": "price"
+      },
+      {
+        "field": "EMA_Distance_Pct",
+        "header": "Dist%",
+        "width": 8,
+        "format": "int"
+      },
+      {
+        "field": "Pullback_Pct",
+        "header": "Pullbk%",
+        "width": 8,
+        "format": "int"
+      },
+      {
+        "field": "supertrend",
+        "header": "Supertrend",
+        "width": 12,
+        "format": "price"
+      }
+    ]
+  },
   "detailed": {
     "description": "Detailed view with all available fields",
     "columns": [
       {
         "field": "ticker",
         "header": "Ticker",
-        "width": 8,
+        "width": 10,
         "format": "str"
       },
       {

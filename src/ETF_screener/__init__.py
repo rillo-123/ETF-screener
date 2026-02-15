@@ -8,6 +8,7 @@ from ETF_screener.etf_discovery import ETFDiscovery
 from ETF_screener.indicators import add_indicators, calculate_ema, calculate_supertrend
 from ETF_screener.plotter import PortfolioPlotter
 from ETF_screener.screener import ETFScreener
+from ETF_screener.screener_api import Screener
 from ETF_screener.storage import ParquetStorage
 from ETF_screener.xetra_extractor import XETRETFExtractor
 from ETF_screener.yfinance_fetcher import YFinanceFetcher
@@ -23,6 +24,7 @@ __all__ = [
     "calculate_supertrend",
     "PortfolioPlotter",
     "ETFScreener",
+    "Screener",
     "ParquetStorage",
 ]
 

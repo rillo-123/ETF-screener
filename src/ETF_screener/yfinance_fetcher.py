@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import yfinance as yf
+from tqdm import tqdm
 
 
 class YFinanceFetcher:
@@ -29,7 +30,6 @@ class YFinanceFetcher:
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
 
-        print(f"  Downloading {symbol}...")
         ticker = yf.Ticker(symbol)
         
         # Fetch daily data
@@ -67,9 +67,8 @@ class YFinanceFetcher:
             Dictionary mapping symbol to DataFrame
         """
         results = {}
-        for symbol in symbols:
+        for symbol in tqdm(symbols, desc="Downloading ETFs", unit="ETF"):
             try:
-                print(f"Fetching data for {symbol}...")
                 results[symbol] = self.fetch_historical_data(symbol, days)
             except Exception as e:
                 print(f"Error fetching {symbol}: {str(e)}")

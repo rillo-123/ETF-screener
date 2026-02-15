@@ -51,12 +51,138 @@ ETF_screener fetch EXS1 EUNG EONS
 
 # Specify custom data and plot directories
 ETF_screener fetch EXS1 EUNG --data-dir "./etf_data" --plot-dir "./etf_charts"
+
+# Use different data source (default: yfinance)
+ETF_screener fetch EXS1.DE --source yfinance
 ```
 
 ### List Saved ETFs
 
 ```powershell
 ETF_screener list
+ETF_screener list --data-dir custom_data_dir
+```
+
+## CLI Usage Guide
+
+### Discovery Commands
+
+Discover and validate ETF tickers:
+
+```powershell
+# Discover a few specific tickers
+etfs discover EXS1.DE EUNG.DE XESC.DE
+
+# Discover ALL XETRA ETFs from justETFs (slow but comprehensive ~5-10 min)
+etfs discover-all --workers 5
+
+# Extract ETFs from Deutsche Börse CSV (from reference/ directory)
+etfs extract
+
+# Custom output locations
+etfs discover-all --etfs-file data/my_etfs.json --blacklist-file data/my_blacklist.json
+```
+
+### Screener Commands
+
+Screen ETFs by volume and technical criteria:
+
+```powershell
+# Screen all ETFs in database with default settings (10M min volume, last 10 days)
+etfs screener
+
+# Screen specific ETFs with custom volume threshold
+etfs screener EXS1.DE EUNG.DE XESC.DE --aVol 50000 --days 20
+
+# Use human-friendly volume notation
+etfs screener --aVol 100K --days 20      # 100 thousand shares
+etfs screener --aVol 1.5M --days 20      # 1.5 million shares
+etfs screener --aVol 50000 --days 20     # Raw number
+
+# Get top 20 ETFs instead of default 10
+etfs screener --nofEtfs 20 --aVol 100K
+
+# Output in different formats
+etfs screener --format default             # Full view: volume, prices, EMA50, supertrend
+etfs screener --format compact             # Minimal view: ticker, volume only
+etfs screener --format detailed            # Extended view: min volume + all indicators
+
+# Keep only recent data (prune older records)
+etfs screener --aVol 50K --keep-days 90   # Prune data older than 90 days
+```
+
+### Output Formats
+
+The screener supports multiple output formats via `output_formats.json`:
+
+**Default Format** (comprehensive):
+```
+Ticker   Avg Vol      Max Vol      Open       Close      Latest     EMA50      Supertrend   Days
+EUNL.DE  378.1K       1.2M         123.45     124.56     124.56     120.00     125.00       20
+VDIV.DE  289.4K       950.0K       45.67      46.78      46.78      44.50      47.00        20
+```
+
+**Compact Format** (minimal):
+```
+Ticker     Avg Volume      Max Volume      Days
+EUNL.DE    378.1K          1.2M            20
+VDIV.DE    289.4K          950.0K          20
+```
+
+**Detailed Format** (extended):
+```
+Shows all fields including min volume and all technical indicators
+```
+
+### Volume Notation
+
+The `--aVol` parameter supports friendly notation:
+
+```powershell
+etfs screener --aVol 100       # 100 shares
+etfs screener --aVol 100K      # 100,000 shares
+etfs screener --aVol 1M        # 1,000,000 shares
+etfs screener --aVol 1.5M      # 1,500,000 shares
+```
+
+### Configuration
+
+CLI flags are defined in `commands.json` for easy customization:
+
+```json
+{
+  "screener": {
+    "flags": {
+      "--nofEtfs": {"default": 10},
+      "--aVol": {"default": "10M"},
+      "--days": {"default": 10}
+    }
+  }
+}
+```
+
+Modify defaults without touching Python code!
+
+### Common Scenarios
+
+**Quick volume screening (5-10 seconds):**
+```powershell
+etfs screener --aVol 50K --days 10 --format compact
+```
+
+**Deep analysis with technical indicators:**
+```powershell
+etfs screener EXS1.DE EUNG.DE --aVol 30K --days 30 --format default
+```
+
+**Find high-liquidity ETFs:**
+```powershell
+etfs screener --aVol 500K --nofEtfs 20 --format compact
+```
+
+**Maintenance - clean old data:**
+```powershell
+etfs screener --keep-days 180  # Prune records older than 6 months
 ```
 
 ## Output Files
@@ -67,7 +193,10 @@ Data and plots are automatically saved:
 data/
 ├── exs1_data.parquet          # Historical OHLCV + indicators
 ├── eung_data.parquet
-└── ...
+├── etfs.json                  # Discovered valid ETF tickers
+├── blacklist.json             # Invalid/delisted ETFs
+├── etfs.db                    # SQLite database
+└── test_results_*.txt         # Test logs
 
 plots/
 ├── exs1_analysis.png          # Full technical analysis chart
@@ -93,7 +222,66 @@ Each parquet file contains:
 
 ## Python API Reference
 
-### FinnhubFetcher
+### ETFScreener (Volume Screening)
+
+```python
+from ETF_screener import ETFScreener, ETFDatabase
+
+# Initialize database and screener
+db = ETFDatabase(db_path="data/etfs.db")
+screener = ETFScreener(db=db)
+
+# Screen by volume
+results = screener.screen_by_volume(
+    min_days=10,
+    min_avg_volume=50000,
+    max_results=10
+)
+
+# Print with custom format
+screener.print_results(results, format_name="default")
+```
+
+### ETFDatabase (SQLite)
+
+```python
+from ETF_screener import ETFDatabase
+import pandas as pd
+
+db = ETFDatabase(db_path="data/etfs.db")
+
+# Insert DataFrame with price and indicator data
+df = pd.DataFrame({...})
+db.insert_dataframe(df, ticker="EXS1.DE")
+
+# Query by volume
+high_vol = db.query_by_volume(min_volume=50000, min_days=20)
+
+# Check if ticker exists
+if db.ticker_exists("EXS1.DE"):
+    latest_date = db.get_latest_date("EXS1.DE")
+
+# Prune old data (>365 days)
+deleted = db.prune_old_data(days_to_keep=365)
+
+db.close()
+```
+
+### YFinanceFetcher (Real Data)
+
+```python
+from ETF_screener import YFinanceFetcher
+
+fetcher = YFinanceFetcher()
+
+# Fetch single ETF
+df = fetcher.fetch_historical_data("EXS1.DE", days=365)
+
+# Fetch multiple ETFs
+data = fetcher.fetch_multiple_etfs(["EXS1.DE", "EUNG.DE"], days=365)
+```
+
+### FinnhubFetcher (Legacy)
 
 ```python
 from ETF_screener import FinnhubFetcher

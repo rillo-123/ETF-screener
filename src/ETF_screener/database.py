@@ -257,6 +257,37 @@ class ETFDatabase:
         result = cursor.fetchone()
         return result[0] if result and result[0] else None
 
+    def get_ticker_data(self, ticker: str, days: int = 60) -> pd.DataFrame:
+        """
+        Get historical price data for a ticker (last N days).
+
+        Args:
+            ticker: ETF ticker symbol
+            days: Number of days to fetch
+
+        Returns:
+            DataFrame with OHLCV and indicator data
+        """
+        conn = self._get_connection()
+        
+        query = (
+            "SELECT ticker, date, open, high, low, close, volume, ema_50, supertrend, signal "
+            "FROM etf_data "
+            f"WHERE ticker = ? AND date >= date('now', '-{int(days)} days') "
+            "ORDER BY date ASC"
+        )
+        
+        df = pd.read_sql_query(query, conn, params=(ticker.upper(),))
+        
+        if df.empty:
+            return pd.DataFrame()
+        
+        # Rename columns to match expected format
+        df.columns = ["ticker", "Date", "Open", "High", "Low", "Close", "Volume", "EMA_50", "Supertrend", "Signal"]
+        df["Date"] = pd.to_datetime(df["Date"])
+        
+        return df
+
     def query_by_volume(
         self,
         min_days: int = 10,
