@@ -1,0 +1,6518 @@
+{
+  "BGX.DE": {
+    "status": "active"
+  },
+  "ECDC.DE": {
+    "status": "active"
+  },
+  "CZX.DE": {
+    "status": "active"
+  },
+  "GRX.DE": {
+    "status": "active"
+  },
+  "HUBE.DE": {
+    "status": "active"
+  },
+  "MKK1.DE": {
+    "status": "active"
+  },
+  "PLX.DE": {
+    "status": "active"
+  },
+  "ROX.DE": {
+    "status": "active"
+  },
+  "SK9A.DE": {
+    "status": "active"
+  },
+  "SLQX.DE": {
+    "status": "active"
+  },
+  "ESNB.DE": {
+    "status": "active"
+  },
+  "EL4A.DE": {
+    "status": "active"
+  },
+  "EL4F.DE": {
+    "status": "active"
+  },
+  "EL4X.DE": {
+    "status": "active"
+  },
+  "ELF0.DE": {
+    "status": "active"
+  },
+  "E903.DE": {
+    "status": "active"
+  },
+  "EXSB.DE": {
+    "status": "active"
+  },
+  "EXS1.DE": {
+    "status": "active"
+  },
+  "LYQL.DE": {
+    "status": "active"
+  },
+  "LYY7.DE": {
+    "status": "active"
+  },
+  "LYY8.DE": {
+    "status": "active"
+  },
+  "DBXD.DE": {
+    "status": "active"
+  },
+  "DXSN.DE": {
+    "status": "active"
+  },
+  "DBPD.DE": {
+    "status": "active"
+  },
+  "DBPE.DE": {
+    "status": "active"
+  },
+  "XDDX.DE": {
+    "status": "active"
+  },
+  "VGER.DE": {
+    "status": "active"
+  },
+  "DEL2.DE": {
+    "status": "active"
+  },
+  "DES2.DE": {
+    "status": "active"
+  },
+  "E909.DE": {
+    "status": "active"
+  },
+  "LDAX.DE": {
+    "status": "active"
+  },
+  "LVDX.DE": {
+    "status": "active"
+  },
+  "EXIC.DE": {
+    "status": "active"
+  },
+  "XDDA.DE": {
+    "status": "active"
+  },
+  "AHYK.DE": {
+    "status": "active"
+  },
+  "C003.DE": {
+    "status": "active"
+  },
+  "C001.DE": {
+    "status": "active"
+  },
+  "DYLD.DE": {
+    "status": "active"
+  },
+  "C002.DE": {
+    "status": "active"
+  },
+  "EXHE.DE": {
+    "status": "active"
+  },
+  "EXSH.DE": {
+    "status": "active"
+  },
+  "EXSA.DE": {
+    "status": "active"
+  },
+  "EXS3.DE": {
+    "status": "active"
+  },
+  "EXW3.DE": {
+    "status": "active"
+  },
+  "EXI1.DE": {
+    "status": "active"
+  },
+  "EXS2.DE": {
+    "status": "active"
+  },
+  "EXSC.DE": {
+    "status": "active"
+  },
+  "EXSD.DE": {
+    "status": "active"
+  },
+  "EXX1.DE": {
+    "status": "active"
+  },
+  "EXI2.DE": {
+    "status": "active"
+  },
+  "EXI3.DE": {
+    "status": "active"
+  },
+  "EXHA.DE": {
+    "status": "active"
+  },
+  "EXHB.DE": {
+    "status": "active"
+  },
+  "EXHC.DE": {
+    "status": "active"
+  },
+  "EXHD.DE": {
+    "status": "active"
+  },
+  "EXSI.DE": {
+    "status": "active"
+  },
+  "EXXX.DE": {
+    "status": "active"
+  },
+  "EXX6.DE": {
+    "status": "active"
+  },
+  "EXX5.DE": {
+    "status": "active"
+  },
+  "EXSE.DE": {
+    "status": "active"
+  },
+  "EXXU.DE": {
+    "status": "active"
+  },
+  "EXXT.DE": {
+    "status": "active"
+  },
+  "EXXV.DE": {
+    "status": "active"
+  },
+  "ISPA.DE": {
+    "status": "active"
+  },
+  "EXV1.DE": {
+    "status": "active"
+  },
+  "EXV6.DE": {
+    "status": "active"
+  },
+  "EXXY.DE": {
+    "status": "active"
+  },
+  "EXXW.DE": {
+    "status": "active"
+  },
+  "EXHF.DE": {
+    "status": "active"
+  },
+  "EXX7.DE": {
+    "status": "active"
+  },
+  "EXV7.DE": {
+    "status": "active"
+  },
+  "EXV8.DE": {
+    "status": "active"
+  },
+  "EXH2.DE": {
+    "status": "active"
+  },
+  "EXH3.DE": {
+    "status": "active"
+  },
+  "EXH4.DE": {
+    "status": "active"
+  },
+  "EXH5.DE": {
+    "status": "active"
+  },
+  "EXH6.DE": {
+    "status": "active"
+  },
+  "EXH1.DE": {
+    "status": "active"
+  },
+  "EXH7.DE": {
+    "status": "active"
+  },
+  "EXH8.DE": {
+    "status": "active"
+  },
+  "EXV3.DE": {
+    "status": "active"
+  },
+  "EXV2.DE": {
+    "status": "active"
+  },
+  "EXV9.DE": {
+    "status": "active"
+  },
+  "EXH9.DE": {
+    "status": "active"
+  },
+  "EXV5.DE": {
+    "status": "active"
+  },
+  "EXV4.DE": {
+    "status": "active"
+  },
+  "EXI5.DE": {
+    "status": "active"
+  },
+  "EXIA.DE": {
+    "status": "active"
+  },
+  "4BRZ.DE": {
+    "status": "active"
+  },
+  "EXVM.DE": {
+    "status": "active"
+  },
+  "EXIB.DE": {
+    "status": "active"
+  },
+  "EXID.DE": {
+    "status": "active"
+  },
+  "EXHG.DE": {
+    "status": "active"
+  },
+  "EXIE.DE": {
+    "status": "active"
+  },
+  "EXIF.DE": {
+    "status": "active"
+  },
+  "SGS1.DE": {
+    "status": "active"
+  },
+  "42GI.DE": {
+    "status": "active"
+  },
+  "42G1.DE": {
+    "status": "active"
+  },
+  "F701.DE": {
+    "status": "active"
+  },
+  "F702.DE": {
+    "status": "active"
+  },
+  "F703.DE": {
+    "status": "active"
+  },
+  "E907.DE": {
+    "status": "active"
+  },
+  "E908.DE": {
+    "status": "active"
+  },
+  "E960.DE": {
+    "status": "active"
+  },
+  "EL4C.DE": {
+    "status": "active"
+  },
+  "EL4D.DE": {
+    "status": "active"
+  },
+  "EL4E.DE": {
+    "status": "active"
+  },
+  "EL4I.DE": {
+    "status": "active"
+  },
+  "EL4K.DE": {
+    "status": "active"
+  },
+  "EL4L.DE": {
+    "status": "active"
+  },
+  "EL4M.DE": {
+    "status": "active"
+  },
+  "EL4N.DE": {
+    "status": "active"
+  },
+  "EL4P.DE": {
+    "status": "active"
+  },
+  "EL4Q.DE": {
+    "status": "active"
+  },
+  "EL4R.DE": {
+    "status": "active"
+  },
+  "EL4S.DE": {
+    "status": "active"
+  },
+  "EL4T.DE": {
+    "status": "active"
+  },
+  "EL4U.DE": {
+    "status": "active"
+  },
+  "EL4V.DE": {
+    "status": "active"
+  },
+  "EL4W.DE": {
+    "status": "active"
+  },
+  "EL4Y.DE": {
+    "status": "active"
+  },
+  "EL4Z.DE": {
+    "status": "active"
+  },
+  "EL41.DE": {
+    "status": "active"
+  },
+  "EL42.DE": {
+    "status": "active"
+  },
+  "EL43.DE": {
+    "status": "active"
+  },
+  "EL44.DE": {
+    "status": "active"
+  },
+  "EL45.DE": {
+    "status": "active"
+  },
+  "EL46.DE": {
+    "status": "active"
+  },
+  "EL40.DE": {
+    "status": "active"
+  },
+  "EL48.DE": {
+    "status": "active"
+  },
+  "EL49.DE": {
+    "status": "active"
+  },
+  "EFQ8.DE": {
+    "status": "active"
+  },
+  "ELF1.DE": {
+    "status": "active"
+  },
+  "ELFB.DE": {
+    "status": "active"
+  },
+  "ELFD.DE": {
+    "status": "active"
+  },
+  "ELFW.DE": {
+    "status": "active"
+  },
+  "ELFE.DE": {
+    "status": "active"
+  },
+  "ELFF.DE": {
+    "status": "active"
+  },
+  "D6RT.DE": {
+    "status": "active"
+  },
+  "D6RS.DE": {
+    "status": "active"
+  },
+  "D6RR.DE": {
+    "status": "active"
+  },
+  "D6RQ.DE": {
+    "status": "active"
+  },
+  "D6RP.DE": {
+    "status": "active"
+  },
+  "D6RA.DE": {
+    "status": "active"
+  },
+  "D6RD.DE": {
+    "status": "active"
+  },
+  "D6RE.DE": {
+    "status": "active"
+  },
+  "D6RH.DE": {
+    "status": "active"
+  },
+  "D6RI.DE": {
+    "status": "active"
+  },
+  "D6RJ.DE": {
+    "status": "active"
+  },
+  "EFQA.DE": {
+    "status": "active"
+  },
+  "D6RU.DE": {
+    "status": "active"
+  },
+  "B4NP.DE": {
+    "status": "active"
+  },
+  "B4NS.DE": {
+    "status": "active"
+  },
+  "B4NQ.DE": {
+    "status": "active"
+  },
+  "B4NU.DE": {
+    "status": "active"
+  },
+  "B4NR.DE": {
+    "status": "active"
+  },
+  "BNQN.DE": {
+    "status": "active"
+  },
+  "BNQP.DE": {
+    "status": "active"
+  },
+  "BNQT.DE": {
+    "status": "active"
+  },
+  "BNQV.DE": {
+    "status": "active"
+  },
+  "BNQQ.DE": {
+    "status": "active"
+  },
+  "BNQS.DE": {
+    "status": "active"
+  },
+  "BNQR.DE": {
+    "status": "active"
+  },
+  "B4NT.DE": {
+    "status": "active"
+  },
+  "BNQW.DE": {
+    "status": "active"
+  },
+  "B4NA.DE": {
+    "status": "active"
+  },
+  "B4NB.DE": {
+    "status": "active"
+  },
+  "B4NF.DE": {
+    "status": "active"
+  },
+  "B4NM.DE": {
+    "status": "active"
+  },
+  "B4NC.DE": {
+    "status": "active"
+  },
+  "B4NE.DE": {
+    "status": "active"
+  },
+  "B4NN.DE": {
+    "status": "active"
+  },
+  "B4ND.DE": {
+    "status": "active"
+  },
+  "0GZH.DE": {
+    "status": "active"
+  },
+  "0GZB.DE": {
+    "status": "active"
+  },
+  "B4NX.DE": {
+    "status": "active"
+  },
+  "0GZK.DE": {
+    "status": "active"
+  },
+  "0GZD.DE": {
+    "status": "active"
+  },
+  "0GZC.DE": {
+    "status": "active"
+  },
+  "0GZJ.DE": {
+    "status": "active"
+  },
+  "0GZI.DE": {
+    "status": "active"
+  },
+  "0GZL.DE": {
+    "status": "active"
+  },
+  "B4N2.DE": {
+    "status": "active"
+  },
+  "B4N1.DE": {
+    "status": "active"
+  },
+  "BNQ9.DE": {
+    "status": "active"
+  },
+  "B4N3.DE": {
+    "status": "active"
+  },
+  "BNQC.DE": {
+    "status": "active"
+  },
+  "BNQF.DE": {
+    "status": "active"
+  },
+  "BNQE.DE": {
+    "status": "active"
+  },
+  "BNQH.DE": {
+    "status": "active"
+  },
+  "BNQD.DE": {
+    "status": "active"
+  },
+  "BNQG.DE": {
+    "status": "active"
+  },
+  "BNQU.DE": {
+    "status": "active"
+  },
+  "BNQ7.DE": {
+    "status": "active"
+  },
+  "BNQB.DE": {
+    "status": "active"
+  },
+  "BNQA.DE": {
+    "status": "active"
+  },
+  "B4NI.DE": {
+    "status": "active"
+  },
+  "B4NL.DE": {
+    "status": "active"
+  },
+  "B4NH.DE": {
+    "status": "active"
+  },
+  "B4NK.DE": {
+    "status": "active"
+  },
+  "B4NG.DE": {
+    "status": "active"
+  },
+  "B4NJ.DE": {
+    "status": "active"
+  },
+  "B4NY.DE": {
+    "status": "active"
+  },
+  "0GZA.DE": {
+    "status": "active"
+  },
+  "B4NZ.DE": {
+    "status": "active"
+  },
+  "0GZE.DE": {
+    "status": "active"
+  },
+  "0GZG.DE": {
+    "status": "active"
+  },
+  "0GZF.DE": {
+    "status": "active"
+  },
+  "XMWK.DE": {
+    "status": "active"
+  },
+  "WNRG.DE": {
+    "status": "active"
+  },
+  "OIL2.DE": {
+    "status": "active"
+  },
+  "2SWT.DE": {
+    "status": "active"
+  },
+  "SGS2.DE": {
+    "status": "active"
+  },
+  "SGS3.DE": {
+    "status": "active"
+  },
+  "42GG.DE": {
+    "status": "active"
+  },
+  "42GL.DE": {
+    "status": "active"
+  },
+  "42G3.DE": {
+    "status": "active"
+  },
+  "42G4.DE": {
+    "status": "active"
+  },
+  "NGXS.DE": {
+    "status": "active"
+  },
+  "NGXL.DE": {
+    "status": "active"
+  },
+  "3SOI.DE": {
+    "status": "active"
+  },
+  "EGAS.DE": {
+    "status": "active"
+  },
+  "DJAM.DE": {
+    "status": "active"
+  },
+  "XEYX.DE": {
+    "status": "active"
+  },
+  "LYY4.DE": {
+    "status": "active"
+  },
+  "LYY5.DE": {
+    "status": "active"
+  },
+  "LYYA.DE": {
+    "status": "active"
+  },
+  "L8I7.DE": {
+    "status": "active"
+  },
+  "LYMD.DE": {
+    "status": "active"
+  },
+  "LYMH.DE": {
+    "status": "active"
+  },
+  "LYM7.DE": {
+    "status": "active"
+  },
+  "L8I3.DE": {
+    "status": "active"
+  },
+  "LYM9.DE": {
+    "status": "active"
+  },
+  "LYM8.DE": {
+    "status": "active"
+  },
+  "CG1G.DE": {
+    "status": "active"
+  },
+  "AMES.DE": {
+    "status": "active"
+  },
+  "18M2.DE": {
+    "status": "active"
+  },
+  "18M1.DE": {
+    "status": "active"
+  },
+  "18MF.DE": {
+    "status": "active"
+  },
+  "ACM9.DE": {
+    "status": "active"
+  },
+  "AE50.DE": {
+    "status": "active"
+  },
+  "540H.DE": {
+    "status": "active"
+  },
+  "LYQK.DE": {
+    "status": "active"
+  },
+  "AMEE.DE": {
+    "status": "active"
+  },
+  "JPNH.DE": {
+    "status": "active"
+  },
+  "ESAP.DE": {
+    "status": "active"
+  },
+  "ESEE.DE": {
+    "status": "active"
+  },
+  "ETSZ.DE": {
+    "status": "active"
+  },
+  "ETSA.DE": {
+    "status": "active"
+  },
+  "ESEA.DE": {
+    "status": "active"
+  },
+  "CNAA.DE": {
+    "status": "active"
+  },
+  "MD4X.DE": {
+    "status": "active"
+  },
+  "ESEH.DE": {
+    "status": "active"
+  },
+  "GLDA.DE": {
+    "status": "active"
+  },
+  "MBTC.DE": {
+    "status": "active"
+  },
+  "PABV.DE": {
+    "status": "active"
+  },
+  "FINZ.DE": {
+    "status": "active"
+  },
+  "LVWC.DE": {
+    "status": "active"
+  },
+  "WGES.DE": {
+    "status": "active"
+  },
+  "WGE0.DE": {
+    "status": "active"
+  },
+  "EUEE.DE": {
+    "status": "active"
+  },
+  "XEEE.DE": {
+    "status": "active"
+  },
+  "JREZ.DE": {
+    "status": "active"
+  },
+  "VEGF.DE": {
+    "status": "active"
+  },
+  "JREI.DE": {
+    "status": "active"
+  },
+  "WMGT.DE": {
+    "status": "active"
+  },
+  "IEXA.DE": {
+    "status": "active"
+  },
+  "CEMH.DE": {
+    "status": "active"
+  },
+  "LWCH.DE": {
+    "status": "active"
+  },
+  "JEIA.DE": {
+    "status": "active"
+  },
+  "AIGT.DE": {
+    "status": "active"
+  },
+  "AIGU.DE": {
+    "status": "active"
+  },
+  "C5ME.DE": {
+    "status": "active"
+  },
+  "EUPD.DE": {
+    "status": "active"
+  },
+  "CNIE.DE": {
+    "status": "active"
+  },
+  "JRUE.DE": {
+    "status": "active"
+  },
+  "H41Y.DE": {
+    "status": "active"
+  },
+  "RHYE.DE": {
+    "status": "active"
+  },
+  "LM9D.DE": {
+    "status": "active"
+  },
+  "GEUR.DE": {
+    "status": "active"
+  },
+  "XZME.DE": {
+    "status": "active"
+  },
+  "32XG.DE": {
+    "status": "active"
+  },
+  "FTWD.DE": {
+    "status": "active"
+  },
+  "RSPS.DE": {
+    "status": "active"
+  },
+  "CBU5.DE": {
+    "status": "active"
+  },
+  "JRGE.DE": {
+    "status": "active"
+  },
+  "CBU4.DE": {
+    "status": "active"
+  },
+  "FEIA.DE": {
+    "status": "active"
+  },
+  "IN0A.DE": {
+    "status": "active"
+  },
+  "QAIU.DE": {
+    "status": "active"
+  },
+  "C8PX.DE": {
+    "status": "active"
+  },
+  "WELA.DE": {
+    "status": "active"
+  },
+  "WELB.DE": {
+    "status": "active"
+  },
+  "VITD.DE": {
+    "status": "active"
+  },
+  "LM9A.DE": {
+    "status": "active"
+  },
+  "CBUQ.DE": {
+    "status": "active"
+  },
+  "MWOP.DE": {
+    "status": "active"
+  },
+  "MWOR.DE": {
+    "status": "active"
+  },
+  "WF1E.DE": {
+    "status": "active"
+  },
+  "AICT.DE": {
+    "status": "active"
+  },
+  "AICU.DE": {
+    "status": "active"
+  },
+  "JJEJ.DE": {
+    "status": "active"
+  },
+  "WMMV.DE": {
+    "status": "active"
+  },
+  "WMMX.DE": {
+    "status": "active"
+  },
+  "FUIE.DE": {
+    "status": "active"
+  },
+  "WMSE.DE": {
+    "status": "active"
+  },
+  "WMSF.DE": {
+    "status": "active"
+  },
+  "LWCR.DE": {
+    "status": "active"
+  },
+  "LWCU.DE": {
+    "status": "active"
+  },
+  "REUS.DE": {
+    "status": "active"
+  },
+  "JRWE.DE": {
+    "status": "active"
+  },
+  "XEPA.DE": {
+    "status": "active"
+  },
+  "OBGE.DE": {
+    "status": "active"
+  },
+  "CHIN.DE": {
+    "status": "active"
+  },
+  "FTGD.DE": {
+    "status": "active"
+  },
+  "XUGA.DE": {
+    "status": "active"
+  },
+  "GERD.DE": {
+    "status": "active"
+  },
+  "GB1A.DE": {
+    "status": "active"
+  },
+  "V3ML.DE": {
+    "status": "active"
+  },
+  "FUSE.DE": {
+    "status": "active"
+  },
+  "CD1.DE": {
+    "status": "active"
+  },
+  "ECMA.DE": {
+    "status": "active"
+  },
+  "BATJ.DE": {
+    "status": "active"
+  },
+  "CBUN.DE": {
+    "status": "active"
+  },
+  "IB28.DE": {
+    "status": "active"
+  },
+  "WELT.DE": {
+    "status": "active"
+  },
+  "MWOA.DE": {
+    "status": "active"
+  },
+  "XGUE.DE": {
+    "status": "active"
+  },
+  "JCEU.DE": {
+    "status": "active"
+  },
+  "ESAK.DE": {
+    "status": "active"
+  },
+  "XDEE.DE": {
+    "status": "active"
+  },
+  "ASHE.DE": {
+    "status": "active"
+  },
+  "SPP5.DE": {
+    "status": "active"
+  },
+  "XY7D.DE": {
+    "status": "active"
+  },
+  "VVMX.DE": {
+    "status": "active"
+  },
+  "XEEU.DE": {
+    "status": "active"
+  },
+  "HYCN.DE": {
+    "status": "active"
+  },
+  "CEB3.DE": {
+    "status": "active"
+  },
+  "SICE.DE": {
+    "status": "active"
+  },
+  "JSUD.DE": {
+    "status": "active"
+  },
+  "CEMA.DE": {
+    "status": "active"
+  },
+  "FGLV.DE": {
+    "status": "active"
+  },
+  "EUDF.DE": {
+    "status": "active"
+  },
+  "REM3.DE": {
+    "status": "active"
+  },
+  "XNUS.DE": {
+    "status": "active"
+  },
+  "ESAJ.DE": {
+    "status": "active"
+  },
+  "XDG3.DE": {
+    "status": "active"
+  },
+  "H41T.DE": {
+    "status": "active"
+  },
+  "AAKI.DE": {
+    "status": "active"
+  },
+  "CSYU.DE": {
+    "status": "active"
+  },
+  "WNUC.DE": {
+    "status": "active"
+  },
+  "VGGE.DE": {
+    "status": "active"
+  },
+  "I28X.DE": {
+    "status": "active"
+  },
+  "ABIE.DE": {
+    "status": "active"
+  },
+  "JEGS.DE": {
+    "status": "active"
+  },
+  "JPGD.DE": {
+    "status": "active"
+  },
+  "XWEQ.DE": {
+    "status": "active"
+  },
+  "AVWS.DE": {
+    "status": "active"
+  },
+  "BCFN.DE": {
+    "status": "active"
+  },
+  "JESE.DE": {
+    "status": "active"
+  },
+  "JGPI.DE": {
+    "status": "active"
+  },
+  "XGBU.DE": {
+    "status": "active"
+  },
+  "FOHW.DE": {
+    "status": "active"
+  },
+  "WEBN.DE": {
+    "status": "active"
+  },
+  "WEBQ.DE": {
+    "status": "active"
+  },
+  "4COP.DE": {
+    "status": "active"
+  },
+  "CEB9.DE": {
+    "status": "active"
+  },
+  "ASWG.DE": {
+    "status": "active"
+  },
+  "3DGD.DE": {
+    "status": "active"
+  },
+  "CEMC.DE": {
+    "status": "active"
+  },
+  "XNDQ.DE": {
+    "status": "active"
+  },
+  "XNDU.DE": {
+    "status": "active"
+  },
+  "JEIG.DE": {
+    "status": "active"
+  },
+  "JEAA.DE": {
+    "status": "active"
+  },
+  "MWOS.DE": {
+    "status": "active"
+  },
+  "AFDT.DE": {
+    "status": "active"
+  },
+  "AFDU.DE": {
+    "status": "active"
+  },
+  "ESAB.DE": {
+    "status": "active"
+  },
+  "AEAE.DE": {
+    "status": "active"
+  },
+  "EMGM.DE": {
+    "status": "active"
+  },
+  "IN0B.DE": {
+    "status": "active"
+  },
+  "XQUD.DE": {
+    "status": "active"
+  },
+  "HEUR.DE": {
+    "status": "active"
+  },
+  "CEB5.DE": {
+    "status": "active"
+  },
+  "XZEW.DE": {
+    "status": "active"
+  },
+  "BSE6.DE": {
+    "status": "active"
+  },
+  "MWOU.DE": {
+    "status": "active"
+  },
+  "MTVR.DE": {
+    "status": "active"
+  },
+  "INGE.DE": {
+    "status": "active"
+  },
+  "INGU.DE": {
+    "status": "active"
+  },
+  "FOCT.DE": {
+    "status": "active"
+  },
+  "BCFD.DE": {
+    "status": "active"
+  },
+  "XZEP.DE": {
+    "status": "active"
+  },
+  "IUSZ.DE": {
+    "status": "active"
+  },
+  "XDJU.DE": {
+    "status": "active"
+  },
+  "ESAG.DE": {
+    "status": "active"
+  },
+  "WELQ.DE": {
+    "status": "active"
+  },
+  "MWOI.DE": {
+    "status": "active"
+  },
+  "AIDE.DE": {
+    "status": "active"
+  },
+  "HYDE.DE": {
+    "status": "active"
+  },
+  "SUST.DE": {
+    "status": "active"
+  },
+  "LDGL.DE": {
+    "status": "active"
+  },
+  "VE6I.DE": {
+    "status": "active"
+  },
+  "JPGR.DE": {
+    "status": "active"
+  },
+  "SDG9.DE": {
+    "status": "active"
+  },
+  "MWOT.DE": {
+    "status": "active"
+  },
+  "MWOV.DE": {
+    "status": "active"
+  },
+  "MWOW.DE": {
+    "status": "active"
+  },
+  "JGNR.DE": {
+    "status": "active"
+  },
+  "VYEU.DE": {
+    "status": "active"
+  },
+  "LVLD.DE": {
+    "status": "active"
+  },
+  "JGIE.DE": {
+    "status": "active"
+  },
+  "WELM.DE": {
+    "status": "active"
+  },
+  "WEL4.DE": {
+    "status": "active"
+  },
+  "ONSW.DE": {
+    "status": "active"
+  },
+  "CIB0.DE": {
+    "status": "active"
+  },
+  "U3O8.DE": {
+    "status": "active"
+  },
+  "BPDE.DE": {
+    "status": "active"
+  },
+  "BPDU.DE": {
+    "status": "active"
+  },
+  "WENH.DE": {
+    "status": "active"
+  },
+  "WELC.DE": {
+    "status": "active"
+  },
+  "WEL2.DE": {
+    "status": "active"
+  },
+  "LM9B.DE": {
+    "status": "active"
+  },
+  "CEBS.DE": {
+    "status": "active"
+  },
+  "CSY2.DE": {
+    "status": "active"
+  },
+  "REMD.DE": {
+    "status": "active"
+  },
+  "AQDT.DE": {
+    "status": "active"
+  },
+  "AQDU.DE": {
+    "status": "active"
+  },
+  "JSUE.DE": {
+    "status": "active"
+  },
+  "AIHT.DE": {
+    "status": "active"
+  },
+  "AIHU.DE": {
+    "status": "active"
+  },
+  "GUHY.DE": {
+    "status": "active"
+  },
+  "BCFQ.DE": {
+    "status": "active"
+  },
+  "JQPD.DE": {
+    "status": "active"
+  },
+  "EXCN.DE": {
+    "status": "active"
+  },
+  "FSPU.DE": {
+    "status": "active"
+  },
+  "XCJD.DE": {
+    "status": "active"
+  },
+  "XNNV.DE": {
+    "status": "active"
+  },
+  "JEQE.DE": {
+    "status": "active"
+  },
+  "WELS.DE": {
+    "status": "active"
+  },
+  "WEL9.DE": {
+    "status": "active"
+  },
+  "XZHE.DE": {
+    "status": "active"
+  },
+  "LNXC.DE": {
+    "status": "active"
+  },
+  "JSHE.DE": {
+    "status": "active"
+  },
+  "WEB2.DE": {
+    "status": "active"
+  },
+  "GCOR.DE": {
+    "status": "active"
+  },
+  "FFGE.DE": {
+    "status": "active"
+  },
+  "ECMF.DE": {
+    "status": "active"
+  },
+  "JAGA.DE": {
+    "status": "active"
+  },
+  "BJLB.DE": {
+    "status": "active"
+  },
+  "FFGH.DE": {
+    "status": "active"
+  },
+  "MCTA.DE": {
+    "status": "active"
+  },
+  "FSCE.DE": {
+    "status": "active"
+  },
+  "OP8E.DE": {
+    "status": "active"
+  },
+  "FTMQ.DE": {
+    "status": "active"
+  },
+  "JEEM.DE": {
+    "status": "active"
+  },
+  "HEQD.DE": {
+    "status": "active"
+  },
+  "FWEA.DE": {
+    "status": "active"
+  },
+  "FSPW.DE": {
+    "status": "active"
+  },
+  "EXUS.DE": {
+    "status": "active"
+  },
+  "JEIE.DE": {
+    "status": "active"
+  },
+  "XZHY.DE": {
+    "status": "active"
+  },
+  "FWIA.DE": {
+    "status": "active"
+  },
+  "IVCS.DE": {
+    "status": "active"
+  },
+  "XNJP.DE": {
+    "status": "active"
+  },
+  "U8NJ.DE": {
+    "status": "active"
+  },
+  "UDIV.DE": {
+    "status": "active"
+  },
+  "NTSG.DE": {
+    "status": "active"
+  },
+  "JRZD.DE": {
+    "status": "active"
+  },
+  "BSE8.DE": {
+    "status": "active"
+  },
+  "EGVA.DE": {
+    "status": "active"
+  },
+  "MDEC.DE": {
+    "status": "active"
+  },
+  "TOPB.DE": {
+    "status": "active"
+  },
+  "WMOT.DE": {
+    "status": "active"
+  },
+  "JAUD.DE": {
+    "status": "active"
+  },
+  "FESE.DE": {
+    "status": "active"
+  },
+  "WGRU.DE": {
+    "status": "active"
+  },
+  "H4Z6.DE": {
+    "status": "active"
+  },
+  "LM9C.DE": {
+    "status": "active"
+  },
+  "WENU.DE": {
+    "status": "active"
+  },
+  "XZSP.DE": {
+    "status": "active"
+  },
+  "CBU8.DE": {
+    "status": "active"
+  },
+  "XDG6.DE": {
+    "status": "active"
+  },
+  "3D3D.DE": {
+    "status": "active"
+  },
+  "8GRT.DE": {
+    "status": "active"
+  },
+  "QUTM.DE": {
+    "status": "active"
+  },
+  "ESAD.DE": {
+    "status": "active"
+  },
+  "QQIA.DE": {
+    "status": "active"
+  },
+  "H41X.DE": {
+    "status": "active"
+  },
+  "JEEG.DE": {
+    "status": "active"
+  },
+  "EVSD.DE": {
+    "status": "active"
+  },
+  "EUN1.DE": {
+    "status": "active"
+  },
+  "WEXE.DE": {
+    "status": "active"
+  },
+  "WEXU.DE": {
+    "status": "active"
+  },
+  "A01T.DE": {
+    "status": "active"
+  },
+  "A01U.DE": {
+    "status": "active"
+  },
+  "H417.DE": {
+    "status": "active"
+  },
+  "ASWM.DE": {
+    "status": "active"
+  },
+  "ESAE.DE": {
+    "status": "active"
+  },
+  "ASRW.DE": {
+    "status": "active"
+  },
+  "BCFK.DE": {
+    "status": "active"
+  },
+  "UCLA.DE": {
+    "status": "active"
+  },
+  "DFSV.DE": {
+    "status": "active"
+  },
+  "3DUE.DE": {
+    "status": "active"
+  },
+  "H41Z.DE": {
+    "status": "active"
+  },
+  "ASWN.DE": {
+    "status": "active"
+  },
+  "USMC.DE": {
+    "status": "active"
+  },
+  "JGVE.DE": {
+    "status": "active"
+  },
+  "JGGE.DE": {
+    "status": "active"
+  },
+  "WDEY.DE": {
+    "status": "active"
+  },
+  "EGVD.DE": {
+    "status": "active"
+  },
+  "V3PL.DE": {
+    "status": "active"
+  },
+  "LESU.DE": {
+    "status": "active"
+  },
+  "LESA.DE": {
+    "status": "active"
+  },
+  "IVOA.DE": {
+    "status": "active"
+  },
+  "XWEB.DE": {
+    "status": "active"
+  },
+  "IQSD.DE": {
+    "status": "active"
+  },
+  "FLPE.DE": {
+    "status": "active"
+  },
+  "CEBR.DE": {
+    "status": "active"
+  },
+  "CEBX.DE": {
+    "status": "active"
+  },
+  "WBKN.DE": {
+    "status": "active"
+  },
+  "AEJE.DE": {
+    "status": "active"
+  },
+  "CAUT.DE": {
+    "status": "active"
+  },
+  "XEEW.DE": {
+    "status": "active"
+  },
+  "QRUS.DE": {
+    "status": "active"
+  },
+  "QRUU.DE": {
+    "status": "active"
+  },
+  "EUAI.DE": {
+    "status": "active"
+  },
+  "WEXF.DE": {
+    "status": "active"
+  },
+  "WEXD.DE": {
+    "status": "active"
+  },
+  "5PAB.DE": {
+    "status": "active"
+  },
+  "F50A.DE": {
+    "status": "active"
+  },
+  "F50B.DE": {
+    "status": "active"
+  },
+  "FTMS.DE": {
+    "status": "active"
+  },
+  "GIGE.DE": {
+    "status": "active"
+  },
+  "IQUA.DE": {
+    "status": "active"
+  },
+  "WEBG.DE": {
+    "status": "active"
+  },
+  "WEBK.DE": {
+    "status": "active"
+  },
+  "WEBJ.DE": {
+    "status": "active"
+  },
+  "WELP.DE": {
+    "status": "active"
+  },
+  "WEL6.DE": {
+    "status": "active"
+  },
+  "JPEC.DE": {
+    "status": "active"
+  },
+  "BCFW.DE": {
+    "status": "active"
+  },
+  "USEE.DE": {
+    "status": "active"
+  },
+  "CSY7.DE": {
+    "status": "active"
+  },
+  "H4ZK.DE": {
+    "status": "active"
+  },
+  "BCFG.DE": {
+    "status": "active"
+  },
+  "ESAL.DE": {
+    "status": "active"
+  },
+  "FCRN.DE": {
+    "status": "active"
+  },
+  "ESAN.DE": {
+    "status": "active"
+  },
+  "BS28.DE": {
+    "status": "active"
+  },
+  "3DCH.DE": {
+    "status": "active"
+  },
+  "JRWA.DE": {
+    "status": "active"
+  },
+  "JGLP.DE": {
+    "status": "active"
+  },
+  "FSCI.DE": {
+    "status": "active"
+  },
+  "UQB2.DE": {
+    "status": "active"
+  },
+  "VCAS.DE": {
+    "status": "active"
+  },
+  "JGAD.DE": {
+    "status": "active"
+  },
+  "WDEE.DE": {
+    "status": "active"
+  },
+  "IE3E.DE": {
+    "status": "active"
+  },
+  "ESAF.DE": {
+    "status": "active"
+  },
+  "JOGS.DE": {
+    "status": "active"
+  },
+  "JMES.DE": {
+    "status": "active"
+  },
+  "CEB6.DE": {
+    "status": "active"
+  },
+  "WELR.DE": {
+    "status": "active"
+  },
+  "MWOY.DE": {
+    "status": "active"
+  },
+  "ARXX.DE": {
+    "status": "active"
+  },
+  "JGPD.DE": {
+    "status": "active"
+  },
+  "AEGE.DE": {
+    "status": "active"
+  },
+  "SPFF.DE": {
+    "status": "active"
+  },
+  "FYUI.DE": {
+    "status": "active"
+  },
+  "BPGE.DE": {
+    "status": "active"
+  },
+  "BPGU.DE": {
+    "status": "active"
+  },
+  "CEMI.DE": {
+    "status": "active"
+  },
+  "JESM.DE": {
+    "status": "active"
+  },
+  "CNFY.DE": {
+    "status": "active"
+  },
+  "CEBU.DE": {
+    "status": "active"
+  },
+  "AIUT.DE": {
+    "status": "active"
+  },
+  "AIUU.DE": {
+    "status": "active"
+  },
+  "USIQ.DE": {
+    "status": "active"
+  },
+  "BE26.DE": {
+    "status": "active"
+  },
+  "FLXA.DE": {
+    "status": "active"
+  },
+  "WMMS.DE": {
+    "status": "active"
+  },
+  "WMMT.DE": {
+    "status": "active"
+  },
+  "VGGF.DE": {
+    "status": "active"
+  },
+  "FJPI.DE": {
+    "status": "active"
+  },
+  "CURE.DE": {
+    "status": "active"
+  },
+  "CBUS.DE": {
+    "status": "active"
+  },
+  "MWRD.DE": {
+    "status": "active"
+  },
+  "MWRE.DE": {
+    "status": "active"
+  },
+  "BCFB.DE": {
+    "status": "active"
+  },
+  "ENTR.DE": {
+    "status": "active"
+  },
+  "BS27.DE": {
+    "status": "active"
+  },
+  "SAHE.DE": {
+    "status": "active"
+  },
+  "XMN1.DE": {
+    "status": "active"
+  },
+  "IVDF.DE": {
+    "status": "active"
+  },
+  "JLOD.DE": {
+    "status": "active"
+  },
+  "EUEB.DE": {
+    "status": "active"
+  },
+  "B29D.DE": {
+    "status": "active"
+  },
+  "D26A.DE": {
+    "status": "active"
+  },
+  "AKWA.DE": {
+    "status": "active"
+  },
+  "JGSC.DE": {
+    "status": "active"
+  },
+  "SPFH.DE": {
+    "status": "active"
+  },
+  "JAUH.DE": {
+    "status": "active"
+  },
+  "AGAE.DE": {
+    "status": "active"
+  },
+  "BS29.DE": {
+    "status": "active"
+  },
+  "ULDE.DE": {
+    "status": "active"
+  },
+  "H41G.DE": {
+    "status": "active"
+  },
+  "QOMP.DE": {
+    "status": "active"
+  },
+  "FLXS.DE": {
+    "status": "active"
+  },
+  "ASWJ.DE": {
+    "status": "active"
+  },
+  "BATI.DE": {
+    "status": "active"
+  },
+  "JHES.DE": {
+    "status": "active"
+  },
+  "MXUE.DE": {
+    "status": "active"
+  },
+  "CBUX.DE": {
+    "status": "active"
+  },
+  "PABW.DE": {
+    "status": "active"
+  },
+  "PABX.DE": {
+    "status": "active"
+  },
+  "PABY.DE": {
+    "status": "active"
+  },
+  "FLXT.DE": {
+    "status": "active"
+  },
+  "JUHE.DE": {
+    "status": "active"
+  },
+  "MWOE.DE": {
+    "status": "active"
+  },
+  "MWOF.DE": {
+    "status": "active"
+  },
+  "MJUN.DE": {
+    "status": "active"
+  },
+  "N1ES.DE": {
+    "status": "active"
+  },
+  "ESAQ.DE": {
+    "status": "active"
+  },
+  "JPRY.DE": {
+    "status": "active"
+  },
+  "JPVE.DE": {
+    "status": "active"
+  },
+  "CBU2.DE": {
+    "status": "active"
+  },
+  "CBUD.DE": {
+    "status": "active"
+  },
+  "CBUM.DE": {
+    "status": "active"
+  },
+  "JCPN.DE": {
+    "status": "active"
+  },
+  "DWLD.DE": {
+    "status": "active"
+  },
+  "XBHR.DE": {
+    "status": "active"
+  },
+  "XDED.DE": {
+    "status": "active"
+  },
+  "WDGE.DE": {
+    "status": "active"
+  },
+  "FTGM.DE": {
+    "status": "active"
+  },
+  "JSDM.DE": {
+    "status": "active"
+  },
+  "CMOC.DE": {
+    "status": "active"
+  },
+  "FCEU.DE": {
+    "status": "active"
+  },
+  "FLXJ.DE": {
+    "status": "active"
+  },
+  "VYGL.DE": {
+    "status": "active"
+  },
+  "AZEH.DE": {
+    "status": "active"
+  },
+  "CBUW.DE": {
+    "status": "active"
+  },
+  "WOEE.DE": {
+    "status": "active"
+  },
+  "IG31.DE": {
+    "status": "active"
+  },
+  "SPSA.DE": {
+    "status": "active"
+  },
+  "XEMC.DE": {
+    "status": "active"
+  },
+  "TAEH.DE": {
+    "status": "active"
+  },
+  "MIDS.DE": {
+    "status": "active"
+  },
+  "JRDC.DE": {
+    "status": "active"
+  },
+  "JPVD.DE": {
+    "status": "active"
+  },
+  "XUML.DE": {
+    "status": "active"
+  },
+  "EFRW.DE": {
+    "status": "active"
+  },
+  "GAT1.DE": {
+    "status": "active"
+  },
+  "SHOR.DE": {
+    "status": "active"
+  },
+  "33GI.DE": {
+    "status": "active"
+  },
+  "XBI0.DE": {
+    "status": "active"
+  },
+  "XZWD.DE": {
+    "status": "active"
+  },
+  "ACLE.DE": {
+    "status": "active"
+  },
+  "QSPA.DE": {
+    "status": "active"
+  },
+  "AGYE.DE": {
+    "status": "active"
+  },
+  "WELU.DE": {
+    "status": "active"
+  },
+  "MWOB.DE": {
+    "status": "active"
+  },
+  "MCTD.DE": {
+    "status": "active"
+  },
+  "KROP.DE": {
+    "status": "active"
+  },
+  "FVCH.DE": {
+    "status": "active"
+  },
+  "CEBW.DE": {
+    "status": "active"
+  },
+  "WELX.DE": {
+    "status": "active"
+  },
+  "MWOX.DE": {
+    "status": "active"
+  },
+  "DEGC.DE": {
+    "status": "active"
+  },
+  "CSY9.DE": {
+    "status": "active"
+  },
+  "WELY.DE": {
+    "status": "active"
+  },
+  "WEL8.DE": {
+    "status": "active"
+  },
+  "DBUS.DE": {
+    "status": "active"
+  },
+  "BCFR.DE": {
+    "status": "active"
+  },
+  "SPQH.DE": {
+    "status": "active"
+  },
+  "XZSE.DE": {
+    "status": "active"
+  },
+  "EBXA.DE": {
+    "status": "active"
+  },
+  "XUCA.DE": {
+    "status": "active"
+  },
+  "HYHE.DE": {
+    "status": "active"
+  },
+  "XNDX.DE": {
+    "status": "active"
+  },
+  "XNDD.DE": {
+    "status": "active"
+  },
+  "XFLN.DE": {
+    "status": "active"
+  },
+  "XSWC.DE": {
+    "status": "active"
+  },
+  "V3RF.DE": {
+    "status": "active"
+  },
+  "DRGE.DE": {
+    "status": "active"
+  },
+  "IE1A.DE": {
+    "status": "active"
+  },
+  "VYUS.DE": {
+    "status": "active"
+  },
+  "JMAC.DE": {
+    "status": "active"
+  },
+  "JGNE.DE": {
+    "status": "active"
+  },
+  "WELI.DE": {
+    "status": "active"
+  },
+  "MWOD.DE": {
+    "status": "active"
+  },
+  "XU61.DE": {
+    "status": "active"
+  },
+  "ATEA.DE": {
+    "status": "active"
+  },
+  "UKPH.DE": {
+    "status": "active"
+  },
+  "QUS5.DE": {
+    "status": "active"
+  },
+  "FYUE.DE": {
+    "status": "active"
+  },
+  "XEQL.DE": {
+    "status": "active"
+  },
+  "XEQS.DE": {
+    "status": "active"
+  },
+  "HP8E.DE": {
+    "status": "active"
+  },
+  "XISP.DE": {
+    "status": "active"
+  },
+  "X5UD.DE": {
+    "status": "active"
+  },
+  "XEQW.DE": {
+    "status": "active"
+  },
+  "XEQU.DE": {
+    "status": "active"
+  },
+  "D6AT.DE": {
+    "status": "active"
+  },
+  "K0MR.DE": {
+    "status": "active"
+  },
+  "QSEP.DE": {
+    "status": "active"
+  },
+  "GEVT.DE": {
+    "status": "active"
+  },
+  "WEBH.DE": {
+    "status": "active"
+  },
+  "WEBL.DE": {
+    "status": "active"
+  },
+  "GLBD.DE": {
+    "status": "active"
+  },
+  "T1OD.DE": {
+    "status": "active"
+  },
+  "JGSD.DE": {
+    "status": "active"
+  },
+  "CEMJ.DE": {
+    "status": "active"
+  },
+  "IART.DE": {
+    "status": "active"
+  },
+  "AYEE.DE": {
+    "status": "active"
+  },
+  "FFGC.DE": {
+    "status": "active"
+  },
+  "AXXT.DE": {
+    "status": "active"
+  },
+  "AXXU.DE": {
+    "status": "active"
+  },
+  "H4Z7.DE": {
+    "status": "active"
+  },
+  "US4E.DE": {
+    "status": "active"
+  },
+  "ASCI.DE": {
+    "status": "active"
+  },
+  "ASCH.DE": {
+    "status": "active"
+  },
+  "ARXK.DE": {
+    "status": "active"
+  },
+  "FTGQ.DE": {
+    "status": "active"
+  },
+  "BS30.DE": {
+    "status": "active"
+  },
+  "ADLT.DE": {
+    "status": "active"
+  },
+  "ADLU.DE": {
+    "status": "active"
+  },
+  "ZINS.DE": {
+    "status": "active"
+  },
+  "TRXL.DE": {
+    "status": "active"
+  },
+  "WELL.DE": {
+    "status": "active"
+  },
+  "MWOC.DE": {
+    "status": "active"
+  },
+  "R8T.DE": {
+    "status": "active"
+  },
+  "R8TA.DE": {
+    "status": "active"
+  },
+  "CEB1.DE": {
+    "status": "active"
+  },
+  "AIQT.DE": {
+    "status": "active"
+  },
+  "AIQU.DE": {
+    "status": "active"
+  },
+  "GXPE.DE": {
+    "status": "active"
+  },
+  "V3PA.DE": {
+    "status": "active"
+  },
+  "C71P.DE": {
+    "status": "active"
+  },
+  "VUDY.DE": {
+    "status": "active"
+  },
+  "XEMD.DE": {
+    "status": "active"
+  },
+  "ACPE.DE": {
+    "status": "active"
+  },
+  "XCUD.DE": {
+    "status": "active"
+  },
+  "GAEM.DE": {
+    "status": "active"
+  },
+  "EIGC.DE": {
+    "status": "active"
+  },
+  "CBUI.DE": {
+    "status": "active"
+  },
+  "CBU0.DE": {
+    "status": "active"
+  },
+  "CSYZ.DE": {
+    "status": "active"
+  },
+  "VUDS.DE": {
+    "status": "active"
+  },
+  "CEBD.DE": {
+    "status": "active"
+  },
+  "MWHE.DE": {
+    "status": "active"
+  },
+  "HYPE.DE": {
+    "status": "active"
+  },
+  "VEGE.DE": {
+    "status": "active"
+  },
+  "CEB4.DE": {
+    "status": "active"
+  },
+  "FYEI.DE": {
+    "status": "active"
+  },
+  "ASWK.DE": {
+    "status": "active"
+  },
+  "QJUN.DE": {
+    "status": "active"
+  },
+  "JRGD.DE": {
+    "status": "active"
+  },
+  "5PAH.DE": {
+    "status": "active"
+  },
+  "GACL.DE": {
+    "status": "active"
+  },
+  "XNZN.DE": {
+    "status": "active"
+  },
+  "X500.DE": {
+    "status": "active"
+  },
+  "X50U.DE": {
+    "status": "active"
+  },
+  "GQUS.DE": {
+    "status": "active"
+  },
+  "CEBK.DE": {
+    "status": "active"
+  },
+  "HQ5B.DE": {
+    "status": "active"
+  },
+  "BSE0.DE": {
+    "status": "active"
+  },
+  "31IG.DE": {
+    "status": "active"
+  },
+  "JEUS.DE": {
+    "status": "active"
+  },
+  "IG32.DE": {
+    "status": "active"
+  },
+  "8RMY.DE": {
+    "status": "active"
+  },
+  "JHED.DE": {
+    "status": "active"
+  },
+  "PAUJ.DE": {
+    "status": "active"
+  },
+  "SEC0.DE": {
+    "status": "active"
+  },
+  "XWSC.DE": {
+    "status": "active"
+  },
+  "XWSU.DE": {
+    "status": "active"
+  },
+  "AHYT.DE": {
+    "status": "active"
+  },
+  "AHYU.DE": {
+    "status": "active"
+  },
+  "DFNC.DE": {
+    "status": "active"
+  },
+  "EUGV.DE": {
+    "status": "active"
+  },
+  "XEWE.DE": {
+    "status": "active"
+  },
+  "WEBI.DE": {
+    "status": "active"
+  },
+  "WEBM.DE": {
+    "status": "active"
+  },
+  "JEYH.DE": {
+    "status": "active"
+  },
+  "FFGG.DE": {
+    "status": "active"
+  },
+  "OP7U.DE": {
+    "status": "active"
+  },
+  "29GI.DE": {
+    "status": "active"
+  },
+  "OP7E.DE": {
+    "status": "active"
+  },
+  "MANU.DE": {
+    "status": "active"
+  },
+  "QDEV.DE": {
+    "status": "active"
+  },
+  "FLRA.DE": {
+    "status": "active"
+  },
+  "DVDE.DE": {
+    "status": "active"
+  },
+  "SADH.DE": {
+    "status": "active"
+  },
+  "ASWD.DE": {
+    "status": "active"
+  },
+  "XSWD.DE": {
+    "status": "active"
+  },
+  "SEUA.DE": {
+    "status": "active"
+  },
+  "EUP0.DE": {
+    "status": "active"
+  },
+  "FFLC.DE": {
+    "status": "active"
+  },
+  "CBUP.DE": {
+    "status": "active"
+  },
+  "WELN.DE": {
+    "status": "active"
+  },
+  "WEL5.DE": {
+    "status": "active"
+  },
+  "ACPH.DE": {
+    "status": "active"
+  },
+  "ACPI.DE": {
+    "status": "active"
+  },
+  "EM1A.DE": {
+    "status": "active"
+  },
+  "ARAX.DE": {
+    "status": "active"
+  },
+  "ARAW.DE": {
+    "status": "active"
+  },
+  "GRID.DE": {
+    "status": "active"
+  },
+  "AIPE.DE": {
+    "status": "active"
+  },
+  "4MMR.DE": {
+    "status": "active"
+  },
+  "FBIE.DE": {
+    "status": "active"
+  },
+  "AW1Q.DE": {
+    "status": "active"
+  },
+  "HEQQ.DE": {
+    "status": "active"
+  },
+  "3DCG.DE": {
+    "status": "active"
+  },
+  "YCSH.DE": {
+    "status": "active"
+  },
+  "FUIG.DE": {
+    "status": "active"
+  },
+  "WELG.DE": {
+    "status": "active"
+  },
+  "WELZ.DE": {
+    "status": "active"
+  },
+  "JRWU.DE": {
+    "status": "active"
+  },
+  "E0UA.DE": {
+    "status": "active"
+  },
+  "WNDY.DE": {
+    "status": "active"
+  },
+  "JPSC.DE": {
+    "status": "active"
+  },
+  "CHSB.DE": {
+    "status": "active"
+  },
+  "JGOV.DE": {
+    "status": "active"
+  },
+  "N1EU.DE": {
+    "status": "active"
+  },
+  "PCL0.DE": {
+    "status": "active"
+  },
+  "PCLD.DE": {
+    "status": "active"
+  },
+  "PCLS.DE": {
+    "status": "active"
+  },
+  "PCLF.DE": {
+    "status": "active"
+  },
+  "CBUY.DE": {
+    "status": "active"
+  },
+  "JEUG.DE": {
+    "status": "active"
+  },
+  "H4ZN.DE": {
+    "status": "active"
+  },
+  "XDG7.DE": {
+    "status": "active"
+  },
+  "MWSH.DE": {
+    "status": "active"
+  },
+  "CEMF.DE": {
+    "status": "active"
+  },
+  "HEDL.DE": {
+    "status": "active"
+  },
+  "RDVY.DE": {
+    "status": "active"
+  },
+  "AVEM.DE": {
+    "status": "active"
+  },
+  "C3AE.DE": {
+    "status": "active"
+  },
+  "GDSF.DE": {
+    "status": "active"
+  },
+  "H4Z3.DE": {
+    "status": "active"
+  },
+  "XGEN.DE": {
+    "status": "active"
+  },
+  "W3B3.DE": {
+    "status": "active"
+  },
+  "GQEM.DE": {
+    "status": "active"
+  },
+  "WTEF.DE": {
+    "status": "active"
+  },
+  "RARE.DE": {
+    "status": "active"
+  },
+  "WINC.DE": {
+    "status": "active"
+  },
+  "H415.DE": {
+    "status": "active"
+  },
+  "V3MA.DE": {
+    "status": "active"
+  },
+  "F500.DE": {
+    "status": "active"
+  },
+  "FCHP.DE": {
+    "status": "active"
+  },
+  "WELK.DE": {
+    "status": "active"
+  },
+  "WEL7.DE": {
+    "status": "active"
+  },
+  "GSXG.DE": {
+    "status": "active"
+  },
+  "XDGS.DE": {
+    "status": "active"
+  },
+  "EWQA.DE": {
+    "status": "active"
+  },
+  "SUA0.DE": {
+    "status": "active"
+  },
+  "V3YL.DE": {
+    "status": "active"
+  },
+  "WH2E.DE": {
+    "status": "active"
+  },
+  "CBUH.DE": {
+    "status": "active"
+  },
+  "WELE.DE": {
+    "status": "active"
+  },
+  "WELF.DE": {
+    "status": "active"
+  },
+  "XWEV.DE": {
+    "status": "active"
+  },
+  "BSE7.DE": {
+    "status": "active"
+  },
+  "IVAI.DE": {
+    "status": "active"
+  },
+  "THFE.DE": {
+    "status": "active"
+  },
+  "JAGG.DE": {
+    "status": "active"
+  },
+  "EU03.DE": {
+    "status": "active"
+  },
+  "BE28.DE": {
+    "status": "active"
+  },
+  "XBUZ.DE": {
+    "status": "active"
+  },
+  "SPQB.DE": {
+    "status": "active"
+  },
+  "JPSY.DE": {
+    "status": "active"
+  },
+  "WELH.DE": {
+    "status": "active"
+  },
+  "WEL0.DE": {
+    "status": "active"
+  },
+  "MEEQ.DE": {
+    "status": "active"
+  },
+  "LUXY.DE": {
+    "status": "active"
+  },
+  "LUXX.DE": {
+    "status": "active"
+  },
+  "RHYG.DE": {
+    "status": "active"
+  },
+  "30IG.DE": {
+    "status": "active"
+  },
+  "H41D.DE": {
+    "status": "active"
+  },
+  "26TP.DE": {
+    "status": "active"
+  },
+  "JPUA.DE": {
+    "status": "active"
+  },
+  "GXHY.DE": {
+    "status": "active"
+  },
+  "QRGE.DE": {
+    "status": "active"
+  },
+  "QRGU.DE": {
+    "status": "active"
+  },
+  "ESAR.DE": {
+    "status": "active"
+  },
+  "AXQT.DE": {
+    "status": "active"
+  },
+  "AXQU.DE": {
+    "status": "active"
+  },
+  "VUDP.DE": {
+    "status": "active"
+  },
+  "NUKL.DE": {
+    "status": "active"
+  },
+  "MWOQ.DE": {
+    "status": "active"
+  },
+  "CEBZ.DE": {
+    "status": "active"
+  },
+  "XGBE.DE": {
+    "status": "active"
+  },
+  "FJAN.DE": {
+    "status": "active"
+  },
+  "ENDH.DE": {
+    "status": "active"
+  },
+  "WEBC.DE": {
+    "status": "active"
+  },
+  "FUSV.DE": {
+    "status": "active"
+  },
+  "O4J0.DE": {
+    "status": "active"
+  },
+  "YYYY.DE": {
+    "status": "active"
+  },
+  "WTRE.DE": {
+    "status": "active"
+  },
+  "XEXA.DE": {
+    "status": "active"
+  },
+  "LDGA.DE": {
+    "status": "active"
+  },
+  "SNP1.DE": {
+    "status": "active"
+  },
+  "ECMD.DE": {
+    "status": "active"
+  },
+  "JMAG.DE": {
+    "status": "active"
+  },
+  "JIGS.DE": {
+    "status": "active"
+  },
+  "H41R.DE": {
+    "status": "active"
+  },
+  "BCFL.DE": {
+    "status": "active"
+  },
+  "AIPT.DE": {
+    "status": "active"
+  },
+  "AIPU.DE": {
+    "status": "active"
+  },
+  "CTBA.DE": {
+    "status": "active"
+  },
+  "ASHT.DE": {
+    "status": "active"
+  },
+  "ASHU.DE": {
+    "status": "active"
+  },
+  "LVLC.DE": {
+    "status": "active"
+  },
+  "H41Q.DE": {
+    "status": "active"
+  },
+  "JEQA.DE": {
+    "status": "active"
+  },
+  "CNUB.DE": {
+    "status": "active"
+  },
+  "WEBU.DE": {
+    "status": "active"
+  },
+  "EUPF.DE": {
+    "status": "active"
+  },
+  "XECT.DE": {
+    "status": "active"
+  },
+  "USAH.DE": {
+    "status": "active"
+  },
+  "CEBY.DE": {
+    "status": "active"
+  },
+  "URNU.DE": {
+    "status": "active"
+  },
+  "CBUK.DE": {
+    "status": "active"
+  },
+  "IFLX.DE": {
+    "status": "active"
+  },
+  "WELJ.DE": {
+    "status": "active"
+  },
+  "WEL1.DE": {
+    "status": "active"
+  },
+  "V3DL.DE": {
+    "status": "active"
+  },
+  "XZDW.DE": {
+    "status": "active"
+  },
+  "FTGA.DE": {
+    "status": "active"
+  },
+  "EFRB.DE": {
+    "status": "active"
+  },
+  "H41E.DE": {
+    "status": "active"
+  },
+  "POWR.DE": {
+    "status": "active"
+  },
+  "POWA.DE": {
+    "status": "active"
+  },
+  "V0IH.DE": {
+    "status": "active"
+  },
+  "IG35.DE": {
+    "status": "active"
+  },
+  "AGYT.DE": {
+    "status": "active"
+  },
+  "AGYU.DE": {
+    "status": "active"
+  },
+  "BS26.DE": {
+    "status": "active"
+  },
+  "V3YA.DE": {
+    "status": "active"
+  },
+  "ZPA5.DE": {
+    "status": "active"
+  },
+  "ZPA6.DE": {
+    "status": "active"
+  },
+  "ZPA7.DE": {
+    "status": "active"
+  },
+  "AAKG.DE": {
+    "status": "active"
+  },
+  "GIGA.DE": {
+    "status": "active"
+  },
+  "KBOT.DE": {
+    "status": "active"
+  },
+  "WRNA.DE": {
+    "status": "active"
+  },
+  "T3MP.DE": {
+    "status": "active"
+  },
+  "ASWL.DE": {
+    "status": "active"
+  },
+  "MWEQ.DE": {
+    "status": "active"
+  },
+  "IQGE.DE": {
+    "status": "active"
+  },
+  "FTGN.DE": {
+    "status": "active"
+  },
+  "ASWC.DE": {
+    "status": "active"
+  },
+  "BPUE.DE": {
+    "status": "active"
+  },
+  "MAXS.DE": {
+    "status": "active"
+  },
+  "XWEU.DE": {
+    "status": "active"
+  },
+  "CSY1.DE": {
+    "status": "active"
+  },
+  "NTSZ.DE": {
+    "status": "active"
+  },
+  "EGEE.DE": {
+    "status": "active"
+  },
+  "AVUS.DE": {
+    "status": "active"
+  },
+  "EUP1.DE": {
+    "status": "active"
+  },
+  "ASLT.DE": {
+    "status": "active"
+  },
+  "ASLU.DE": {
+    "status": "active"
+  },
+  "GMAY.DE": {
+    "status": "active"
+  },
+  "GSOV.DE": {
+    "status": "active"
+  },
+  "ASWF.DE": {
+    "status": "active"
+  },
+  "WRNW.DE": {
+    "status": "active"
+  },
+  "XCTW.DE": {
+    "status": "active"
+  },
+  "BSE9.DE": {
+    "status": "active"
+  },
+  "ECMS.DE": {
+    "status": "active"
+  },
+  "CLWD.DE": {
+    "status": "active"
+  },
+  "SADU.DE": {
+    "status": "active"
+  },
+  "PAUM.DE": {
+    "status": "active"
+  },
+  "UCLU.DE": {
+    "status": "active"
+  },
+  "CEMD.DE": {
+    "status": "active"
+  },
+  "WELD.DE": {
+    "status": "active"
+  },
+  "MWOH.DE": {
+    "status": "active"
+  },
+  "FFSM.DE": {
+    "status": "active"
+  },
+  "A0DT.DE": {
+    "status": "active"
+  },
+  "A0DU.DE": {
+    "status": "active"
+  },
+  "LNXB.DE": {
+    "status": "active"
+  },
+  "JAGE.DE": {
+    "status": "active"
+  },
+  "B41J.DE": {
+    "status": "active"
+  },
+  "XDGI.DE": {
+    "status": "active"
+  },
+  "3DCE.DE": {
+    "status": "active"
+  },
+  "BCFM.DE": {
+    "status": "active"
+  },
+  "RIZJ.DE": {
+    "status": "active"
+  },
+  "CEML.DE": {
+    "status": "active"
+  },
+  "JGSV.DE": {
+    "status": "active"
+  },
+  "CEMM.DE": {
+    "status": "active"
+  },
+  "WDTE.DE": {
+    "status": "active"
+  },
+  "28IX.DE": {
+    "status": "active"
+  },
+  "28IY.DE": {
+    "status": "active"
+  },
+  "400X.DE": {
+    "status": "active"
+  },
+  "ESAA.DE": {
+    "status": "active"
+  },
+  "3DGL.DE": {
+    "status": "active"
+  },
+  "EUCL.DE": {
+    "status": "active"
+  },
+  "AIAA.DE": {
+    "status": "active"
+  },
+  "V3RE.DE": {
+    "status": "active"
+  },
+  "ANAU.DE": {
+    "status": "active"
+  },
+  "ANAV.DE": {
+    "status": "active"
+  },
+  "5ESE.DE": {
+    "status": "active"
+  },
+  "JJEH.DE": {
+    "status": "active"
+  },
+  "MWOL.DE": {
+    "status": "active"
+  },
+  "MWOZ.DE": {
+    "status": "active"
+  },
+  "H41S.DE": {
+    "status": "active"
+  },
+  "FVEM.DE": {
+    "status": "active"
+  },
+  "H41H.DE": {
+    "status": "active"
+  },
+  "JSDE.DE": {
+    "status": "active"
+  },
+  "LYYB.DE": {
+    "status": "active"
+  },
+  "LYYC.DE": {
+    "status": "active"
+  },
+  "LYYD.DE": {
+    "status": "active"
+  },
+  "KSAB.DE": {
+    "status": "active"
+  },
+  "RIZD.DE": {
+    "status": "active"
+  },
+  "V3DA.DE": {
+    "status": "active"
+  },
+  "CNUC.DE": {
+    "status": "active"
+  },
+  "XIGB.DE": {
+    "status": "active"
+  },
+  "CEME.DE": {
+    "status": "active"
+  },
+  "3SUS.DE": {
+    "status": "active"
+  },
+  "CEMN.DE": {
+    "status": "active"
+  },
+  "IXUA.DE": {
+    "status": "active"
+  },
+  "UQE2.DE": {
+    "status": "active"
+  },
+  "C4RE.DE": {
+    "status": "active"
+  },
+  "JPEY.DE": {
+    "status": "active"
+  },
+  "ISFX.DE": {
+    "status": "active"
+  },
+  "WEBD.DE": {
+    "status": "active"
+  },
+  "JPUY.DE": {
+    "status": "active"
+  },
+  "ZA30.DE": {
+    "status": "active"
+  },
+  "CBUT.DE": {
+    "status": "active"
+  },
+  "JIPD.DE": {
+    "status": "active"
+  },
+  "ERNX.DE": {
+    "status": "active"
+  },
+  "GQEU.DE": {
+    "status": "active"
+  },
+  "AVWC.DE": {
+    "status": "active"
+  },
+  "PAUS.DE": {
+    "status": "active"
+  },
+  "CIRC.DE": {
+    "status": "active"
+  },
+  "FTGT.DE": {
+    "status": "active"
+  },
+  "CBUV.DE": {
+    "status": "active"
+  },
+  "CEBT.DE": {
+    "status": "active"
+  },
+  "GIGU.DE": {
+    "status": "active"
+  },
+  "JAUS.DE": {
+    "status": "active"
+  },
+  "EQQD.DE": {
+    "status": "active"
+  },
+  "BCFH.DE": {
+    "status": "active"
+  },
+  "JIGG.DE": {
+    "status": "active"
+  },
+  "BCFF.DE": {
+    "status": "active"
+  },
+  "DEGT.DE": {
+    "status": "active"
+  },
+  "QREU.DE": {
+    "status": "active"
+  },
+  "SY7D.DE": {
+    "status": "active"
+  },
+  "BCFP.DE": {
+    "status": "active"
+  },
+  "ABIT.DE": {
+    "status": "active"
+  },
+  "ABIU.DE": {
+    "status": "active"
+  },
+  "34GI.DE": {
+    "status": "active"
+  },
+  "SMTV.DE": {
+    "status": "active"
+  },
+  "FBIH.DE": {
+    "status": "active"
+  },
+  "AVEU.DE": {
+    "status": "active"
+  },
+  "IPAB.DE": {
+    "status": "active"
+  },
+  "W450.DE": {
+    "status": "active"
+  },
+  "RHYH.DE": {
+    "status": "active"
+  },
+  "IB26.DE": {
+    "status": "active"
+  },
+  "QSPD.DE": {
+    "status": "active"
+  },
+  "KNG.DE": {
+    "status": "active"
+  },
+  "IG3A.DE": {
+    "status": "active"
+  },
+  "VCAA.DE": {
+    "status": "active"
+  },
+  "XUDY.DE": {
+    "status": "active"
+  },
+  "ES6Y.DE": {
+    "status": "active"
+  },
+  "619A.DE": {
+    "status": "active"
+  },
+  "UQE1.DE": {
+    "status": "active"
+  },
+  "FVSA.DE": {
+    "status": "active"
+  },
+  "WDSD.DE": {
+    "status": "active"
+  },
+  "AWDT.DE": {
+    "status": "active"
+  },
+  "AWDU.DE": {
+    "status": "active"
+  },
+  "J590.DE": {
+    "status": "active"
+  },
+  "JREW.DE": {
+    "status": "active"
+  },
+  "AVPE.DE": {
+    "status": "active"
+  },
+  "CBUG.DE": {
+    "status": "active"
+  },
+  "NA7Y.DE": {
+    "status": "active"
+  },
+  "VUDE.DE": {
+    "status": "active"
+  },
+  "BCFI.DE": {
+    "status": "active"
+  },
+  "MBSR.DE": {
+    "status": "active"
+  },
+  "JPVA.DE": {
+    "status": "active"
+  },
+  "CSY5.DE": {
+    "status": "active"
+  },
+  "JLOC.DE": {
+    "status": "active"
+  },
+  "GAUG.DE": {
+    "status": "active"
+  },
+  "PAUE.DE": {
+    "status": "active"
+  },
+  "FTGF.DE": {
+    "status": "active"
+  },
+  "XWEM.DE": {
+    "status": "active"
+  },
+  "XRME.DE": {
+    "status": "active"
+  },
+  "AWDE.DE": {
+    "status": "active"
+  },
+  "JMAM.DE": {
+    "status": "active"
+  },
+  "CEB2.DE": {
+    "status": "active"
+  },
+  "FRPG.DE": {
+    "status": "active"
+  },
+  "IQGA.DE": {
+    "status": "active"
+  },
+  "XEMN.DE": {
+    "status": "active"
+  },
+  "MHQA.DE": {
+    "status": "active"
+  },
+  "ECTA.DE": {
+    "status": "active"
+  },
+  "Q8Y0.DE": {
+    "status": "active"
+  },
+  "JEIP.DE": {
+    "status": "active"
+  },
+  "IRFT.DE": {
+    "status": "active"
+  },
+  "CBUC.DE": {
+    "status": "active"
+  },
+  "CLOD.DE": {
+    "status": "active"
+  },
+  "VLDP.DE": {
+    "status": "active"
+  },
+  "JEQP.DE": {
+    "status": "active"
+  },
+  "5J50.DE": {
+    "status": "active"
+  },
+  "XZSW.DE": {
+    "status": "active"
+  },
+  "CSP5.DE": {
+    "status": "active"
+  },
+  "CSP6.DE": {
+    "status": "active"
+  },
+  "UQB1.DE": {
+    "status": "active"
+  },
+  "G0VB.DE": {
+    "status": "active"
+  },
+  "H414.DE": {
+    "status": "active"
+  },
+  "GQWD.DE": {
+    "status": "active"
+  },
+  "B29I.DE": {
+    "status": "active"
+  },
+  "SLVR.DE": {
+    "status": "active"
+  },
+  "XZMD.DE": {
+    "status": "active"
+  },
+  "X5SP.DE": {
+    "status": "active"
+  },
+  "H4ZY.DE": {
+    "status": "active"
+  },
+  "HJAP.DE": {
+    "status": "active"
+  },
+  "C47B.DE": {
+    "status": "active"
+  },
+  "XYPL.DE": {
+    "status": "active"
+  },
+  "VLDS.DE": {
+    "status": "active"
+  },
+  "IG34.DE": {
+    "status": "active"
+  },
+  "US4D.DE": {
+    "status": "active"
+  },
+  "XNZW.DE": {
+    "status": "active"
+  },
+  "JGSE.DE": {
+    "status": "active"
+  },
+  "GAEB.DE": {
+    "status": "active"
+  },
+  "WEBE.DE": {
+    "status": "active"
+  },
+  "WEBP.DE": {
+    "status": "active"
+  },
+  "WMFS.DE": {
+    "status": "active"
+  },
+  "WMFT.DE": {
+    "status": "active"
+  },
+  "JPGH.DE": {
+    "status": "active"
+  },
+  "XZDU.DE": {
+    "status": "active"
+  },
+  "XG11.DE": {
+    "status": "active"
+  },
+  "ODBA.DE": {
+    "status": "active"
+  },
+  "ESAI.DE": {
+    "status": "active"
+  },
+  "BCFJ.DE": {
+    "status": "active"
+  },
+  "BCFS.DE": {
+    "status": "active"
+  },
+  "PAUD.DE": {
+    "status": "active"
+  },
+  "IS20.DE": {
+    "status": "active"
+  },
+  "HEOL.DE": {
+    "status": "active"
+  },
+  "XZDZ.DE": {
+    "status": "active"
+  },
+  "MEWD.DE": {
+    "status": "active"
+  },
+  "RDYN.DE": {
+    "status": "active"
+  },
+  "XDJX.DE": {
+    "status": "active"
+  },
+  "XBEE.DE": {
+    "status": "active"
+  },
+  "MWOJ.DE": {
+    "status": "active"
+  },
+  "MWOK.DE": {
+    "status": "active"
+  },
+  "CEB8.DE": {
+    "status": "active"
+  },
+  "FEIG.DE": {
+    "status": "active"
+  },
+  "CBU1.DE": {
+    "status": "active"
+  },
+  "SPPC.DE": {
+    "status": "active"
+  },
+  "ATE1.DE": {
+    "status": "active"
+  },
+  "XMAE.DE": {
+    "status": "active"
+  },
+  "VITS.DE": {
+    "status": "active"
+  },
+  "H41F.DE": {
+    "status": "active"
+  },
+  "FBIU.DE": {
+    "status": "active"
+  },
+  "CEB0.DE": {
+    "status": "active"
+  },
+  "XCEU.DE": {
+    "status": "active"
+  },
+  "BD30.DE": {
+    "status": "active"
+  },
+  "JUIE.DE": {
+    "status": "active"
+  },
+  "ASRY.DE": {
+    "status": "active"
+  },
+  "WQTM.DE": {
+    "status": "active"
+  },
+  "JPCE.DE": {
+    "status": "active"
+  },
+  "CEBE.DE": {
+    "status": "active"
+  },
+  "JEBE.DE": {
+    "status": "active"
+  },
+  "JRED.DE": {
+    "status": "active"
+  },
+  "INCU.DE": {
+    "status": "active"
+  },
+  "CBUL.DE": {
+    "status": "active"
+  },
+  "3DGE.DE": {
+    "status": "active"
+  },
+  "BCFC.DE": {
+    "status": "active"
+  },
+  "CEBV.DE": {
+    "status": "active"
+  },
+  "35AI.DE": {
+    "status": "active"
+  },
+  "UGOV.DE": {
+    "status": "active"
+  },
+  "WELV.DE": {
+    "status": "active"
+  },
+  "MWOG.DE": {
+    "status": "active"
+  },
+  "A2DT.DE": {
+    "status": "active"
+  },
+  "A2DU.DE": {
+    "status": "active"
+  },
+  "XZDE.DE": {
+    "status": "active"
+  },
+  "ESAC.DE": {
+    "status": "active"
+  },
+  "ED3F.DE": {
+    "status": "active"
+  },
+  "CEMK.DE": {
+    "status": "active"
+  },
+  "FTMA.DE": {
+    "status": "active"
+  },
+  "JEGA.DE": {
+    "status": "active"
+  },
+  "TUCP.DE": {
+    "status": "active"
+  },
+  "AFDE.DE": {
+    "status": "active"
+  },
+  "INQQ.DE": {
+    "status": "active"
+  },
+  "AWST.DE": {
+    "status": "active"
+  },
+  "AWSU.DE": {
+    "status": "active"
+  },
+  "AIFS.DE": {
+    "status": "active"
+  },
+  "PTAM.DE": {
+    "status": "active"
+  },
+  "DGXU.DE": {
+    "status": "active"
+  },
+  "FEBB.DE": {
+    "status": "active"
+  },
+  "WTER.DE": {
+    "status": "active"
+  },
+  "BLCH.DE": {
+    "status": "active"
+  },
+  "H41V.DE": {
+    "status": "active"
+  },
+  "RA7Z.DE": {
+    "status": "active"
+  },
+  "3DUS.DE": {
+    "status": "active"
+  },
+  "HP2A.DE": {
+    "status": "active"
+  },
+  "CEMB.DE": {
+    "status": "active"
+  },
+  "CSY8.DE": {
+    "status": "active"
+  },
+  "GB1E.DE": {
+    "status": "active"
+  },
+  "HGGA.DE": {
+    "status": "active"
+  },
+  "LVLE.DE": {
+    "status": "active"
+  },
+  "CBSM.DE": {
+    "status": "active"
+  },
+  "XMGA.DE": {
+    "status": "active"
+  },
+  "XMGU.DE": {
+    "status": "active"
+  },
+  "MWON.DE": {
+    "status": "active"
+  },
+  "WSDG.DE": {
+    "status": "active"
+  },
+  "XNGI.DE": {
+    "status": "active"
+  },
+  "BE27.DE": {
+    "status": "active"
+  },
+  "SPYL.DE": {
+    "status": "active"
+  },
+  "MAXD.DE": {
+    "status": "active"
+  },
+  "CLOA.DE": {
+    "status": "active"
+  },
+  "ESAM.DE": {
+    "status": "active"
+  },
+  "JGBL.DE": {
+    "status": "active"
+  },
+  "AXQE.DE": {
+    "status": "active"
+  },
+  "XNZE.DE": {
+    "status": "active"
+  },
+  "XG12.DE": {
+    "status": "active"
+  },
+  "XAMB.DE": {
+    "status": "active"
+  },
+  "XAM0.DE": {
+    "status": "active"
+  },
+  "QGRG.DE": {
+    "status": "active"
+  },
+  "WEBA.DE": {
+    "status": "active"
+  },
+  "WEBB.DE": {
+    "status": "active"
+  },
+  "LM9E.DE": {
+    "status": "active"
+  },
+  "LM9F.DE": {
+    "status": "active"
+  },
+  "AIME.DE": {
+    "status": "active"
+  },
+  "MEGA.DE": {
+    "status": "active"
+  },
+  "MEGU.DE": {
+    "status": "active"
+  },
+  "BCFV.DE": {
+    "status": "active"
+  },
+  "3SUU.DE": {
+    "status": "active"
+  },
+  "XFNT.DE": {
+    "status": "active"
+  },
+  "SNPE.DE": {
+    "status": "active"
+  },
+  "QGRW.DE": {
+    "status": "active"
+  },
+  "SP3C.DE": {
+    "status": "active"
+  },
+  "FJUL.DE": {
+    "status": "active"
+  },
+  "JYEH.DE": {
+    "status": "active"
+  },
+  "XBHE.DE": {
+    "status": "active"
+  },
+  "IQHE.DE": {
+    "status": "active"
+  },
+  "RONS.DE": {
+    "status": "active"
+  },
+  "ODUS.DE": {
+    "status": "active"
+  },
+  "ODUT.DE": {
+    "status": "active"
+  },
+  "JEYE.DE": {
+    "status": "active"
+  },
+  "TIGA.DE": {
+    "status": "active"
+  },
+  "JEDI.DE": {
+    "status": "active"
+  },
+  "KARS.DE": {
+    "status": "active"
+  },
+  "FGEA.DE": {
+    "status": "active"
+  },
+  "H41U.DE": {
+    "status": "active"
+  },
+  "DFEN.DE": {
+    "status": "active"
+  },
+  "FLCV.DE": {
+    "status": "active"
+  },
+  "EXU1.DE": {
+    "status": "active"
+  },
+  "CEB7.DE": {
+    "status": "active"
+  },
+  "UDVD.DE": {
+    "status": "active"
+  },
+  "DTNE.DE": {
+    "status": "active"
+  },
+  "HX60.DE": {
+    "status": "active"
+  },
+  "ACLT.DE": {
+    "status": "active"
+  },
+  "ACLU.DE": {
+    "status": "active"
+  },
+  "CTUT.DE": {
+    "status": "active"
+  },
+  "CTUS.DE": {
+    "status": "active"
+  },
+  "XDPU.DE": {
+    "status": "active"
+  },
+  "BATF.DE": {
+    "status": "active"
+  },
+  "JRIN.DE": {
+    "status": "active"
+  },
+  "IG33.DE": {
+    "status": "active"
+  },
+  "BE29.DE": {
+    "status": "active"
+  },
+  "WELW.DE": {
+    "status": "active"
+  },
+  "WEL3.DE": {
+    "status": "active"
+  },
+  "ESAH.DE": {
+    "status": "active"
+  },
+  "IB27.DE": {
+    "status": "active"
+  },
+  "FOFD.DE": {
+    "status": "active"
+  },
+  "ECTD.DE": {
+    "status": "active"
+  },
+  "H416.DE": {
+    "status": "active"
+  },
+  "GQJY.DE": {
+    "status": "active"
+  },
+  "GB1D.DE": {
+    "status": "active"
+  },
+  "CBUJ.DE": {
+    "status": "active"
+  },
+  "DVDG.DE": {
+    "status": "active"
+  },
+  "IUSA.DE": {
+    "status": "active"
+  },
+  "EQQQ.DE": {
+    "status": "active"
+  },
+  "IBCS.DE": {
+    "status": "active"
+  },
+  "IBCD.DE": {
+    "status": "active"
+  },
+  "IQQJ.DE": {
+    "status": "active"
+  },
+  "IQQC.DE": {
+    "status": "active"
+  },
+  "IQQM.DE": {
+    "status": "active"
+  },
+  "IQQS.DE": {
+    "status": "active"
+  },
+  "IQQW.DE": {
+    "status": "active"
+  },
+  "IQQG.DE": {
+    "status": "active"
+  },
+  "IBCI.DE": {
+    "status": "active"
+  },
+  "IQQD.DE": {
+    "status": "active"
+  },
+  "IQQE.DE": {
+    "status": "active"
+  },
+  "IQQP.DE": {
+    "status": "active"
+  },
+  "IQQK.DE": {
+    "status": "active"
+  },
+  "IQQB.DE": {
+    "status": "active"
+  },
+  "IQQT.DE": {
+    "status": "active"
+  },
+  "IQQF.DE": {
+    "status": "active"
+  },
+  "IQQN.DE": {
+    "status": "active"
+  },
+  "IQQU.DE": {
+    "status": "active"
+  },
+  "IBCA.DE": {
+    "status": "active"
+  },
+  "IUSU.DE": {
+    "status": "active"
+  },
+  "IQQX.DE": {
+    "status": "active"
+  },
+  "IQQ4.DE": {
+    "status": "active"
+  },
+  "IQQ6.DE": {
+    "status": "active"
+  },
+  "IQQI.DE": {
+    "status": "active"
+  },
+  "IQQ5.DE": {
+    "status": "active"
+  },
+  "IBCN.DE": {
+    "status": "active"
+  },
+  "IUSM.DE": {
+    "status": "active"
+  },
+  "IBCM.DE": {
+    "status": "active"
+  },
+  "IBCL.DE": {
+    "status": "active"
+  },
+  "IUST.DE": {
+    "status": "active"
+  },
+  "IQQ7.DE": {
+    "status": "active"
+  },
+  "IQQL.DE": {
+    "status": "active"
+  },
+  "IQQQ.DE": {
+    "status": "active"
+  },
+  "IQQ9.DE": {
+    "status": "active"
+  },
+  "IQQH.DE": {
+    "status": "active"
+  },
+  "IQQY.DE": {
+    "status": "active"
+  },
+  "6PSA.DE": {
+    "status": "active"
+  },
+  "6PSC.DE": {
+    "status": "active"
+  },
+  "6PSK.DE": {
+    "status": "active"
+  },
+  "PSWD.DE": {
+    "status": "active"
+  },
+  "IUSB.DE": {
+    "status": "active"
+  },
+  "IUSC.DE": {
+    "status": "active"
+  },
+  "IUSD.DE": {
+    "status": "active"
+  },
+  "IUS7.DE": {
+    "status": "active"
+  },
+  "IUS3.DE": {
+    "status": "active"
+  },
+  "IUS4.DE": {
+    "status": "active"
+  },
+  "IUS5.DE": {
+    "status": "active"
+  },
+  "IUS6.DE": {
+    "status": "active"
+  },
+  "PJEU.DE": {
+    "status": "active"
+  },
+  "ETLX.DE": {
+    "status": "active"
+  },
+  "ETLZ.DE": {
+    "status": "active"
+  },
+  "EUN4.DE": {
+    "status": "active"
+  },
+  "EMSM.DE": {
+    "status": "active"
+  },
+  "EUNU.DE": {
+    "status": "active"
+  },
+  "EUNI.DE": {
+    "status": "active"
+  },
+  "EUN3.DE": {
+    "status": "active"
+  },
+  "EUN5.DE": {
+    "status": "active"
+  },
+  "EUN6.DE": {
+    "status": "active"
+  },
+  "S7XE.DE": {
+    "status": "active"
+  },
+  "VGWL.DE": {
+    "status": "active"
+  },
+  "SYBB.DE": {
+    "status": "active"
+  },
+  "SYBC.DE": {
+    "status": "active"
+  },
+  "SXRP.DE": {
+    "status": "active"
+  },
+  "SXRQ.DE": {
+    "status": "active"
+  },
+  "VFEM.DE": {
+    "status": "active"
+  },
+  "SXRD.DE": {
+    "status": "active"
+  },
+  "SXRG.DE": {
+    "status": "active"
+  },
+  "SXRJ.DE": {
+    "status": "active"
+  },
+  "SXRL.DE": {
+    "status": "active"
+  },
+  "SXRM.DE": {
+    "status": "active"
+  },
+  "SYBG.DE": {
+    "status": "active"
+  },
+  "QDVE.DE": {
+    "status": "active"
+  },
+  "VUSA.DE": {
+    "status": "active"
+  },
+  "XS7W.DE": {
+    "status": "active"
+  },
+  "P500.DE": {
+    "status": "active"
+  },
+  "SPYI.DE": {
+    "status": "active"
+  },
+  "IBCF.DE": {
+    "status": "active"
+  },
+  "2B7D.DE": {
+    "status": "active"
+  },
+  "SYBA.DE": {
+    "status": "active"
+  },
+  "IS0P.DE": {
+    "status": "active"
+  },
+  "QDVF.DE": {
+    "status": "active"
+  },
+  "VGOV.DE": {
+    "status": "active"
+  },
+  "IBCG.DE": {
+    "status": "active"
+  },
+  "QDVG.DE": {
+    "status": "active"
+  },
+  "SYBZ.DE": {
+    "status": "active"
+  },
+  "IBCH.DE": {
+    "status": "active"
+  },
+  "EUNX.DE": {
+    "status": "active"
+  },
+  "SYBT.DE": {
+    "status": "active"
+  },
+  "H4ZP.DE": {
+    "status": "active"
+  },
+  "SPYY.DE": {
+    "status": "active"
+  },
+  "SYBU.DE": {
+    "status": "active"
+  },
+  "SYBM.DE": {
+    "status": "active"
+  },
+  "SPYA.DE": {
+    "status": "active"
+  },
+  "SYBS.DE": {
+    "status": "active"
+  },
+  "SPYM.DE": {
+    "status": "active"
+  },
+  "H4ZT.DE": {
+    "status": "active"
+  },
+  "SPYX.DE": {
+    "status": "active"
+  },
+  "QDVH.DE": {
+    "status": "active"
+  },
+  "EUNK.DE": {
+    "status": "active"
+  },
+  "2B7A.DE": {
+    "status": "active"
+  },
+  "EUNL.DE": {
+    "status": "active"
+  },
+  "EUNM.DE": {
+    "status": "active"
+  },
+  "EUNN.DE": {
+    "status": "active"
+  },
+  "EUNR.DE": {
+    "status": "active"
+  },
+  "EUNS.DE": {
+    "status": "active"
+  },
+  "EUNT.DE": {
+    "status": "active"
+  },
+  "2B7C.DE": {
+    "status": "active"
+  },
+  "IBCJ.DE": {
+    "status": "active"
+  },
+  "QDVK.DE": {
+    "status": "active"
+  },
+  "2B7B.DE": {
+    "status": "active"
+  },
+  "PEML.DE": {
+    "status": "active"
+  },
+  "IS0R.DE": {
+    "status": "active"
+  },
+  "ETL2.DE": {
+    "status": "active"
+  },
+  "EUNJ.DE": {
+    "status": "active"
+  },
+  "EUN9.DE": {
+    "status": "active"
+  },
+  "EUN8.DE": {
+    "status": "active"
+  },
+  "EUNH.DE": {
+    "status": "active"
+  },
+  "H4ZJ.DE": {
+    "status": "active"
+  },
+  "SPY4.DE": {
+    "status": "active"
+  },
+  "UEQ3.DE": {
+    "status": "active"
+  },
+  "SXRZ.DE": {
+    "status": "active"
+  },
+  "SXR1.DE": {
+    "status": "active"
+  },
+  "SXR2.DE": {
+    "status": "active"
+  },
+  "SXR4.DE": {
+    "status": "active"
+  },
+  "IUSK.DE": {
+    "status": "active"
+  },
+  "IBC4.DE": {
+    "status": "active"
+  },
+  "IBC6.DE": {
+    "status": "active"
+  },
+  "UIQK.DE": {
+    "status": "active"
+  },
+  "SXRW.DE": {
+    "status": "active"
+  },
+  "SXRU.DE": {
+    "status": "active"
+  },
+  "SXRY.DE": {
+    "status": "active"
+  },
+  "SXR5.DE": {
+    "status": "active"
+  },
+  "SXR7.DE": {
+    "status": "active"
+  },
+  "SXRV.DE": {
+    "status": "active"
+  },
+  "IUSL.DE": {
+    "status": "active"
+  },
+  "H4ZE.DE": {
+    "status": "active"
+  },
+  "SXR8.DE": {
+    "status": "active"
+  },
+  "H4ZF.DE": {
+    "status": "active"
+  },
+  "H4ZL.DE": {
+    "status": "active"
+  },
+  "CEBL.DE": {
+    "status": "active"
+  },
+  "SPYW.DE": {
+    "status": "active"
+  },
+  "IUSP.DE": {
+    "status": "active"
+  },
+  "SC0Q.DE": {
+    "status": "active"
+  },
+  "SC0R.DE": {
+    "status": "active"
+  },
+  "SC0S.DE": {
+    "status": "active"
+  },
+  "SC0T.DE": {
+    "status": "active"
+  },
+  "SC0U.DE": {
+    "status": "active"
+  },
+  "SC0V.DE": {
+    "status": "active"
+  },
+  "SC0W.DE": {
+    "status": "active"
+  },
+  "SC0X.DE": {
+    "status": "active"
+  },
+  "SC0Y.DE": {
+    "status": "active"
+  },
+  "SC0Z.DE": {
+    "status": "active"
+  },
+  "SC00.DE": {
+    "status": "active"
+  },
+  "SC01.DE": {
+    "status": "active"
+  },
+  "SC02.DE": {
+    "status": "active"
+  },
+  "SC03.DE": {
+    "status": "active"
+  },
+  "SC06.DE": {
+    "status": "active"
+  },
+  "SC04.DE": {
+    "status": "active"
+  },
+  "SC05.DE": {
+    "status": "active"
+  },
+  "SC0P.DE": {
+    "status": "active"
+  },
+  "H410.DE": {
+    "status": "active"
+  },
+  "IS0L.DE": {
+    "status": "active"
+  },
+  "CEBG.DE": {
+    "status": "active"
+  },
+  "PJS1.DE": {
+    "status": "active"
+  },
+  "SC0C.DE": {
+    "status": "active"
+  },
+  "SC0E.DE": {
+    "status": "active"
+  },
+  "SC0H.DE": {
+    "status": "active"
+  },
+  "SC0I.DE": {
+    "status": "active"
+  },
+  "SC0J.DE": {
+    "status": "active"
+  },
+  "SC0K.DE": {
+    "status": "active"
+  },
+  "EUNY.DE": {
+    "status": "active"
+  },
+  "EUNW.DE": {
+    "status": "active"
+  },
+  "IS0S.DE": {
+    "status": "active"
+  },
+  "IS0D.DE": {
+    "status": "active"
+  },
+  "IS0E.DE": {
+    "status": "active"
+  },
+  "IUSQ.DE": {
+    "status": "active"
+  },
+  "SPYG.DE": {
+    "status": "active"
+  },
+  "IBCK.DE": {
+    "status": "active"
+  },
+  "IS0Q.DE": {
+    "status": "active"
+  },
+  "IS0Y.DE": {
+    "status": "active"
+  },
+  "SPYV.DE": {
+    "status": "active"
+  },
+  "SPY5.DE": {
+    "status": "active"
+  },
+  "SPYD.DE": {
+    "status": "active"
+  },
+  "SYB3.DE": {
+    "status": "active"
+  },
+  "SPPS.DE": {
+    "status": "active"
+  },
+  "SYB5.DE": {
+    "status": "active"
+  },
+  "SYBL.DE": {
+    "status": "active"
+  },
+  "SYBJ.DE": {
+    "status": "active"
+  },
+  "SPYF.DE": {
+    "status": "active"
+  },
+  "IBC9.DE": {
+    "status": "active"
+  },
+  "UBU3.DE": {
+    "status": "active"
+  },
+  "UBU5.DE": {
+    "status": "active"
+  },
+  "IS0X.DE": {
+    "status": "active"
+  },
+  "UBU9.DE": {
+    "status": "active"
+  },
+  "UBUD.DE": {
+    "status": "active"
+  },
+  "UBU7.DE": {
+    "status": "active"
+  },
+  "IS0M.DE": {
+    "status": "active"
+  },
+  "UIQI.DE": {
+    "status": "active"
+  },
+  "SPY1.DE": {
+    "status": "active"
+  },
+  "VUKE.DE": {
+    "status": "active"
+  },
+  "EUN0.DE": {
+    "status": "active"
+  },
+  "IS0Z.DE": {
+    "status": "active"
+  },
+  "IS3B.DE": {
+    "status": "active"
+  },
+  "SMLD.DE": {
+    "status": "active"
+  },
+  "IQQ0.DE": {
+    "status": "active"
+  },
+  "SPYJ.DE": {
+    "status": "active"
+  },
+  "VGWD.DE": {
+    "status": "active"
+  },
+  "EUNZ.DE": {
+    "status": "active"
+  },
+  "FTGU.DE": {
+    "status": "active"
+  },
+  "FTGE.DE": {
+    "status": "active"
+  },
+  "ZPRE.DE": {
+    "status": "active"
+  },
+  "VGEU.DE": {
+    "status": "active"
+  },
+  "SMLP.DE": {
+    "status": "active"
+  },
+  "VJPN.DE": {
+    "status": "active"
+  },
+  "SPPD.DE": {
+    "status": "active"
+  },
+  "SYBK.DE": {
+    "status": "active"
+  },
+  "ZPRG.DE": {
+    "status": "active"
+  },
+  "VGEJ.DE": {
+    "status": "active"
+  },
+  "ZPRA.DE": {
+    "status": "active"
+  },
+  "IS3C.DE": {
+    "status": "active"
+  },
+  "IBCQ.DE": {
+    "status": "active"
+  },
+  "XDN0.DE": {
+    "status": "active"
+  },
+  "XDGM.DE": {
+    "status": "active"
+  },
+  "H411.DE": {
+    "status": "active"
+  },
+  "SYBW.DE": {
+    "status": "active"
+  },
+  "SYBD.DE": {
+    "status": "active"
+  },
+  "SYBF.DE": {
+    "status": "active"
+  },
+  "SYBQ.DE": {
+    "status": "active"
+  },
+  "ZPRS.DE": {
+    "status": "active"
+  },
+  "XDWY.DE": {
+    "status": "active"
+  },
+  "XUEN.DE": {
+    "status": "active"
+  },
+  "XUFN.DE": {
+    "status": "active"
+  },
+  "XUIN.DE": {
+    "status": "active"
+  },
+  "XUHC.DE": {
+    "status": "active"
+  },
+  "IS3F.DE": {
+    "status": "active"
+  },
+  "IS3H.DE": {
+    "status": "active"
+  },
+  "IS3G.DE": {
+    "status": "active"
+  },
+  "IS3J.DE": {
+    "status": "active"
+  },
+  "IS3K.DE": {
+    "status": "active"
+  },
+  "IS3L.DE": {
+    "status": "active"
+  },
+  "IS3M.DE": {
+    "status": "active"
+  },
+  "OPEN.DE": {
+    "status": "active"
+  },
+  "FAHY.DE": {
+    "status": "active"
+  },
+  "QDVC.DE": {
+    "status": "active"
+  },
+  "QDVB.DE": {
+    "status": "active"
+  },
+  "QDVI.DE": {
+    "status": "active"
+  },
+  "QDVA.DE": {
+    "status": "active"
+  },
+  "UEQD.DE": {
+    "status": "active"
+  },
+  "OM3X.DE": {
+    "status": "active"
+  },
+  "IUS2.DE": {
+    "status": "active"
+  },
+  "IBC3.DE": {
+    "status": "active"
+  },
+  "XQUA.DE": {
+    "status": "active"
+  },
+  "XQUE.DE": {
+    "status": "active"
+  },
+  "4UBB.DE": {
+    "status": "active"
+  },
+  "UETW.DE": {
+    "status": "active"
+  },
+  "BCFT.DE": {
+    "status": "active"
+  },
+  "UBUJ.DE": {
+    "status": "active"
+  },
+  "ZPRD.DE": {
+    "status": "active"
+  },
+  "FXEU.DE": {
+    "status": "active"
+  },
+  "FTGI.DE": {
+    "status": "active"
+  },
+  "WTD9.DE": {
+    "status": "active"
+  },
+  "WTDY.DE": {
+    "status": "active"
+  },
+  "EUHA.DE": {
+    "status": "active"
+  },
+  "EUHI.DE": {
+    "status": "active"
+  },
+  "IUSV.DE": {
+    "status": "active"
+  },
+  "JA13.DE": {
+    "status": "active"
+  },
+  "JEST.DE": {
+    "status": "active"
+  },
+  "EUNA.DE": {
+    "status": "active"
+  },
+  "QCLN.DE": {
+    "status": "active"
+  },
+  "VUSC.DE": {
+    "status": "active"
+  },
+  "VGCE.DE": {
+    "status": "active"
+  },
+  "36B1.DE": {
+    "status": "active"
+  },
+  "JMBE.DE": {
+    "status": "active"
+  },
+  "IU5C.DE": {
+    "status": "active"
+  },
+  "T3KE.DE": {
+    "status": "active"
+  },
+  "WTD8.DE": {
+    "status": "active"
+  },
+  "WTD7.DE": {
+    "status": "active"
+  },
+  "WMIN.DE": {
+    "status": "active"
+  },
+  "JPBM.DE": {
+    "status": "active"
+  },
+  "JPPS.DE": {
+    "status": "active"
+  },
+  "2B7S.DE": {
+    "status": "active"
+  },
+  "SXRS.DE": {
+    "status": "active"
+  },
+  "XMVE.DE": {
+    "status": "active"
+  },
+  "USUE.DE": {
+    "status": "active"
+  },
+  "SXRH.DE": {
+    "status": "active"
+  },
+  "SXRF.DE": {
+    "status": "active"
+  },
+  "AW1P.DE": {
+    "status": "active"
+  },
+  "AW1R.DE": {
+    "status": "active"
+  },
+  "GGUE.DE": {
+    "status": "active"
+  },
+  "XUHY.DE": {
+    "status": "active"
+  },
+  "EM1C.DE": {
+    "status": "active"
+  },
+  "SPF1.DE": {
+    "status": "active"
+  },
+  "SPF2.DE": {
+    "status": "active"
+  },
+  "PDSE.DE": {
+    "status": "active"
+  },
+  "WTI2.DE": {
+    "status": "active"
+  },
+  "WAXG.DE": {
+    "status": "active"
+  },
+  "EXAG.DE": {
+    "status": "active"
+  },
+  "QVMP.DE": {
+    "status": "active"
+  },
+  "IBC5.DE": {
+    "status": "active"
+  },
+  "2B7J.DE": {
+    "status": "active"
+  },
+  "ETLF.DE": {
+    "status": "active"
+  },
+  "ETLI.DE": {
+    "status": "active"
+  },
+  "BATE.DE": {
+    "status": "active"
+  },
+  "ETLH.DE": {
+    "status": "active"
+  },
+  "SXRR.DE": {
+    "status": "active"
+  },
+  "CBRS.DE": {
+    "status": "active"
+  },
+  "SPP2.DE": {
+    "status": "active"
+  },
+  "SPP1.DE": {
+    "status": "active"
+  },
+  "SPFU.DE": {
+    "status": "active"
+  },
+  "SPFB.DE": {
+    "status": "active"
+  },
+  "SPFE.DE": {
+    "status": "active"
+  },
+  "FLXE.DE": {
+    "status": "active"
+  },
+  "FLXD.DE": {
+    "status": "active"
+  },
+  "FLXX.DE": {
+    "status": "active"
+  },
+  "FLXU.DE": {
+    "status": "active"
+  },
+  "TRDX.DE": {
+    "status": "active"
+  },
+  "TRXA.DE": {
+    "status": "active"
+  },
+  "TRDE.DE": {
+    "status": "active"
+  },
+  "TRD3.DE": {
+    "status": "active"
+  },
+  "TRX3.DE": {
+    "status": "active"
+  },
+  "T3RE.DE": {
+    "status": "active"
+  },
+  "TRD7.DE": {
+    "status": "active"
+  },
+  "TR7A.DE": {
+    "status": "active"
+  },
+  "T7EU.DE": {
+    "status": "active"
+  },
+  "TRDS.DE": {
+    "status": "active"
+  },
+  "TRFE.DE": {
+    "status": "active"
+  },
+  "IBC2.DE": {
+    "status": "active"
+  },
+  "IBC7.DE": {
+    "status": "active"
+  },
+  "JREG.DE": {
+    "status": "active"
+  },
+  "JREM.DE": {
+    "status": "active"
+  },
+  "JREU.DE": {
+    "status": "active"
+  },
+  "JREE.DE": {
+    "status": "active"
+  },
+  "CMOE.DE": {
+    "status": "active"
+  },
+  "H41K.DE": {
+    "status": "active"
+  },
+  "IUSN.DE": {
+    "status": "active"
+  },
+  "XMWJ.DE": {
+    "status": "active"
+  },
+  "PUIG.DE": {
+    "status": "active"
+  },
+  "EMSB.DE": {
+    "status": "active"
+  },
+  "PSFE.DE": {
+    "status": "active"
+  },
+  "GFEA.DE": {
+    "status": "active"
+  },
+  "HY3M.DE": {
+    "status": "active"
+  },
+  "JRUB.DE": {
+    "status": "active"
+  },
+  "JER5.DE": {
+    "status": "active"
+  },
+  "JREB.DE": {
+    "status": "active"
+  },
+  "BLOK.DE": {
+    "status": "active"
+  },
+  "EFRN.DE": {
+    "status": "active"
+  },
+  "COVR.DE": {
+    "status": "active"
+  },
+  "XYLD.DE": {
+    "status": "active"
+  },
+  "DPGA.DE": {
+    "status": "active"
+  },
+  "5HED.DE": {
+    "status": "active"
+  },
+  "5HEE.DE": {
+    "status": "active"
+  },
+  "SKYE.DE": {
+    "status": "active"
+  },
+  "XYLE.DE": {
+    "status": "active"
+  },
+  "XDCC.DE": {
+    "status": "active"
+  },
+  "XZEU.DE": {
+    "status": "active"
+  },
+  "XZMU.DE": {
+    "status": "active"
+  },
+  "VMIG.DE": {
+    "status": "active"
+  },
+  "VUAA.DE": {
+    "status": "active"
+  },
+  "VUKG.DE": {
+    "status": "active"
+  },
+  "VJPA.DE": {
+    "status": "active"
+  },
+  "VJPE.DE": {
+    "status": "active"
+  },
+  "SLMA.DE": {
+    "status": "active"
+  },
+  "SLMB.DE": {
+    "status": "active"
+  },
+  "SLMC.DE": {
+    "status": "active"
+  },
+  "SLMD.DE": {
+    "status": "active"
+  },
+  "SGAS.DE": {
+    "status": "active"
+  },
+  "SLUS.DE": {
+    "status": "active"
+  },
+  "SNAW.DE": {
+    "status": "active"
+  },
+  "S6DW.DE": {
+    "status": "active"
+  },
+  "SGAJ.DE": {
+    "status": "active"
+  },
+  "SODJ.DE": {
+    "status": "active"
+  },
+  "OM3Y.DE": {
+    "status": "active"
+  },
+  "AYEM.DE": {
+    "status": "active"
+  },
+  "WTEB.DE": {
+    "status": "active"
+  },
+  "ZPRL.DE": {
+    "status": "active"
+  },
+  "ZPDK.DE": {
+    "status": "active"
+  },
+  "SPFA.DE": {
+    "status": "active"
+  },
+  "FVSJ.DE": {
+    "status": "active"
+  },
+  "FVUI.DE": {
+    "status": "active"
+  },
+  "FVSH.DE": {
+    "status": "active"
+  },
+  "ETLS.DE": {
+    "status": "active"
+  },
+  "XML4.DE": {
+    "status": "active"
+  },
+  "ETLQ.DE": {
+    "status": "active"
+  },
+  "ETLR.DE": {
+    "status": "active"
+  },
+  "ETLN.DE": {
+    "status": "active"
+  },
+  "ETLK.DE": {
+    "status": "active"
+  },
+  "EN4C.DE": {
+    "status": "active"
+  },
+  "KWBE.DE": {
+    "status": "active"
+  },
+  "OM3M.DE": {
+    "status": "active"
+  },
+  "SPPW.DE": {
+    "status": "active"
+  },
+  "EMQQ.DE": {
+    "status": "active"
+  },
+  "XAT1.DE": {
+    "status": "active"
+  },
+  "EQQB.DE": {
+    "status": "active"
+  },
+  "XUHE.DE": {
+    "status": "active"
+  },
+  "XD9E.DE": {
+    "status": "active"
+  },
+  "IS4S.DE": {
+    "status": "active"
+  },
+  "UDHY.DE": {
+    "status": "active"
+  },
+  "EH1Y.DE": {
+    "status": "active"
+  },
+  "L0CK.DE": {
+    "status": "active"
+  },
+  "ICFP.DE": {
+    "status": "active"
+  },
+  "5MVL.DE": {
+    "status": "active"
+  },
+  "EMND.DE": {
+    "status": "active"
+  },
+  "XZMJ.DE": {
+    "status": "active"
+  },
+  "XZEM.DE": {
+    "status": "active"
+  },
+  "VAGE.DE": {
+    "status": "active"
+  },
+  "VAGF.DE": {
+    "status": "active"
+  },
+  "IU0E.DE": {
+    "status": "active"
+  },
+  "WTEH.DE": {
+    "status": "active"
+  },
+  "JPPA.DE": {
+    "status": "active"
+  },
+  "BNXG.DE": {
+    "status": "active"
+  },
+  "AYEP.DE": {
+    "status": "active"
+  },
+  "36B3.DE": {
+    "status": "active"
+  },
+  "IPRE.DE": {
+    "status": "active"
+  },
+  "36B5.DE": {
+    "status": "active"
+  },
+  "36B4.DE": {
+    "status": "active"
+  },
+  "XMAW.DE": {
+    "status": "active"
+  },
+  "EIB7.DE": {
+    "status": "active"
+  },
+  "EIB5.DE": {
+    "status": "active"
+  },
+  "EIBX.DE": {
+    "status": "active"
+  },
+  "EIBB.DE": {
+    "status": "active"
+  },
+  "EIB3.DE": {
+    "status": "active"
+  },
+  "XDPD.DE": {
+    "status": "active"
+  },
+  "IEVD.DE": {
+    "status": "active"
+  },
+  "CBUE.DE": {
+    "status": "active"
+  },
+  "IBB1.DE": {
+    "status": "active"
+  },
+  "XUCS.DE": {
+    "status": "active"
+  },
+  "XUCD.DE": {
+    "status": "active"
+  },
+  "XUTC.DE": {
+    "status": "active"
+  },
+  "IBCC.DE": {
+    "status": "active"
+  },
+  "XUEK.DE": {
+    "status": "active"
+  },
+  "XAIX.DE": {
+    "status": "active"
+  },
+  "XMOV.DE": {
+    "status": "active"
+  },
+  "VAGG.DE": {
+    "status": "active"
+  },
+  "VUCE.DE": {
+    "status": "active"
+  },
+  "VDCE.DE": {
+    "status": "active"
+  },
+  "VAGT.DE": {
+    "status": "active"
+  },
+  "VAGY.DE": {
+    "status": "active"
+  },
+  "VCDE.DE": {
+    "status": "active"
+  },
+  "VECA.DE": {
+    "status": "active"
+  },
+  "VGCF.DE": {
+    "status": "active"
+  },
+  "VGEA.DE": {
+    "status": "active"
+  },
+  "VX6F.DE": {
+    "status": "active"
+  },
+  "XDND.DE": {
+    "status": "active"
+  },
+  "SMLK.DE": {
+    "status": "active"
+  },
+  "36BA.DE": {
+    "status": "active"
+  },
+  "SPPY.DE": {
+    "status": "active"
+  },
+  "SPY2.DE": {
+    "status": "active"
+  },
+  "DEAM.DE": {
+    "status": "active"
+  },
+  "S5SD.DE": {
+    "status": "active"
+  },
+  "4UBQ.DE": {
+    "status": "active"
+  },
+  "S5SG.DE": {
+    "status": "active"
+  },
+  "EMNE.DE": {
+    "status": "active"
+  },
+  "EDM4.DE": {
+    "status": "active"
+  },
+  "EDM2.DE": {
+    "status": "active"
+  },
+  "EMNJ.DE": {
+    "status": "active"
+  },
+  "EDMJ.DE": {
+    "status": "active"
+  },
+  "EDMW.DE": {
+    "status": "active"
+  },
+  "EMNU.DE": {
+    "status": "active"
+  },
+  "EDM6.DE": {
+    "status": "active"
+  },
+  "OM3L.DE": {
+    "status": "active"
+  },
+  "EDMU.DE": {
+    "status": "active"
+  },
+  "FLXB.DE": {
+    "status": "active"
+  },
+  "FLXI.DE": {
+    "status": "active"
+  },
+  "FLXK.DE": {
+    "status": "active"
+  },
+  "FLXC.DE": {
+    "status": "active"
+  },
+  "FLRG.DE": {
+    "status": "active"
+  },
+  "JRUD.DE": {
+    "status": "active"
+  },
+  "JMBA.DE": {
+    "status": "active"
+  },
+  "XDWD.DE": {
+    "status": "active"
+  },
+  "XD9U.DE": {
+    "status": "active"
+  },
+  "ZPRR.DE": {
+    "status": "active"
+  },
+  "GACB.DE": {
+    "status": "active"
+  },
+  "GACA.DE": {
+    "status": "active"
+  },
+  "AYEW.DE": {
+    "status": "active"
+  },
+  "CBUF.DE": {
+    "status": "active"
+  },
+  "5MVW.DE": {
+    "status": "active"
+  },
+  "36BB.DE": {
+    "status": "active"
+  },
+  "3SUE.DE": {
+    "status": "active"
+  },
+  "ICGA.DE": {
+    "status": "active"
+  },
+  "3SUD.DE": {
+    "status": "active"
+  },
+  "IUSW.DE": {
+    "status": "active"
+  },
+  "WTEJ.DE": {
+    "status": "active"
+  },
+  "BBLL.DE": {
+    "status": "active"
+  },
+  "AYE2.DE": {
+    "status": "active"
+  },
+  "BBUS.DE": {
+    "status": "active"
+  },
+  "BBEG.DE": {
+    "status": "active"
+  },
+  "BBTR.DE": {
+    "status": "active"
+  },
+  "ZPR6.DE": {
+    "status": "active"
+  },
+  "EUED.DE": {
+    "status": "active"
+  },
+  "ESGW.DE": {
+    "status": "active"
+  },
+  "ESGE.DE": {
+    "status": "active"
+  },
+  "ESGU.DE": {
+    "status": "active"
+  },
+  "IQSA.DE": {
+    "status": "active"
+  },
+  "IQSE.DE": {
+    "status": "active"
+  },
+  "W311.DE": {
+    "status": "active"
+  },
+  "JPGL.DE": {
+    "status": "active"
+  },
+  "GASF.DE": {
+    "status": "active"
+  },
+  "36B7.DE": {
+    "status": "active"
+  },
+  "HYLE.DE": {
+    "status": "active"
+  },
+  "ZPR1.DE": {
+    "status": "active"
+  },
+  "ZPRM.DE": {
+    "status": "active"
+  },
+  "RCRS.DE": {
+    "status": "active"
+  },
+  "4UBK.DE": {
+    "status": "active"
+  },
+  "4UBI.DE": {
+    "status": "active"
+  },
+  "4UBD.DE": {
+    "status": "active"
+  },
+  "XRSM.DE": {
+    "status": "active"
+  },
+  "XRS2.DE": {
+    "status": "active"
+  },
+  "XD9D.DE": {
+    "status": "active"
+  },
+  "XDWL.DE": {
+    "status": "active"
+  },
+  "36BE.DE": {
+    "status": "active"
+  },
+  "XMLH.DE": {
+    "status": "active"
+  },
+  "XMLC.DE": {
+    "status": "active"
+  },
+  "XMLD.DE": {
+    "status": "active"
+  },
+  "RENW.DE": {
+    "status": "active"
+  },
+  "VWCE.DE": {
+    "status": "active"
+  },
+  "VGVF.DE": {
+    "status": "active"
+  },
+  "VNRA.DE": {
+    "status": "active"
+  },
+  "VWCG.DE": {
+    "status": "active"
+  },
+  "VERE.DE": {
+    "status": "active"
+  },
+  "VGEK.DE": {
+    "status": "active"
+  },
+  "VGWE.DE": {
+    "status": "active"
+  },
+  "VFEA.DE": {
+    "status": "active"
+  },
+  "ZPDX.DE": {
+    "status": "active"
+  },
+  "6PSE.DE": {
+    "status": "active"
+  },
+  "4UB9.DE": {
+    "status": "active"
+  },
+  "4UBH.DE": {
+    "status": "active"
+  },
+  "4UB1.DE": {
+    "status": "active"
+  },
+  "MCHN.DE": {
+    "status": "active"
+  },
+  "SPFD.DE": {
+    "status": "active"
+  },
+  "SNA2.DE": {
+    "status": "active"
+  },
+  "IWLE.DE": {
+    "status": "active"
+  },
+  "SPFV.DE": {
+    "status": "active"
+  },
+  "CNUA.DE": {
+    "status": "active"
+  },
+  "UEQC.DE": {
+    "status": "active"
+  },
+  "JGHY.DE": {
+    "status": "active"
+  },
+  "5UOA.DE": {
+    "status": "active"
+  },
+  "W1TA.DE": {
+    "status": "active"
+  },
+  "DELF.DE": {
+    "status": "active"
+  },
+  "DELG.DE": {
+    "status": "active"
+  },
+  "IS3N.DE": {
+    "status": "active"
+  },
+  "CEMG.DE": {
+    "status": "active"
+  },
+  "QDVD.DE": {
+    "status": "active"
+  },
+  "SLMG.DE": {
+    "status": "active"
+  },
+  "KSRE.DE": {
+    "status": "active"
+  },
+  "FTGS.DE": {
+    "status": "active"
+  },
+  "IS3V.DE": {
+    "status": "active"
+  },
+  "JMLP.DE": {
+    "status": "active"
+  },
+  "36BD.DE": {
+    "status": "active"
+  },
+  "FTGB.DE": {
+    "status": "active"
+  },
+  "5ESG.DE": {
+    "status": "active"
+  },
+  "FUSR.DE": {
+    "status": "active"
+  },
+  "FEUR.DE": {
+    "status": "active"
+  },
+  "FGLR.DE": {
+    "status": "active"
+  },
+  "UIMS.DE": {
+    "status": "active"
+  },
+  "SNAZ.DE": {
+    "status": "active"
+  },
+  "AYEV.DE": {
+    "status": "active"
+  },
+  "AYEU.DE": {
+    "status": "active"
+  },
+  "FVD.DE": {
+    "status": "active"
+  },
+  "MVEA.DE": {
+    "status": "active"
+  },
+  "MVEW.DE": {
+    "status": "active"
+  },
+  "MVEE.DE": {
+    "status": "active"
+  },
+  "TRDL.DE": {
+    "status": "active"
+  },
+  "EHBD.DE": {
+    "status": "active"
+  },
+  "EHBA.DE": {
+    "status": "active"
+  },
+  "TRD1.DE": {
+    "status": "active"
+  },
+  "SPYR.DE": {
+    "status": "active"
+  },
+  "SPYC.DE": {
+    "status": "active"
+  },
+  "SPYN.DE": {
+    "status": "active"
+  },
+  "SPYZ.DE": {
+    "status": "active"
+  },
+  "SPYH.DE": {
+    "status": "active"
+  },
+  "SPYQ.DE": {
+    "status": "active"
+  },
+  "SPYK.DE": {
+    "status": "active"
+  },
+  "SPYP.DE": {
+    "status": "active"
+  },
+  "SPYT.DE": {
+    "status": "active"
+  },
+  "SPYU.DE": {
+    "status": "active"
+  },
+  "SPYE.DE": {
+    "status": "active"
+  },
+  "VMID.DE": {
+    "status": "active"
+  },
+  "VNRT.DE": {
+    "status": "active"
+  },
+  "VERX.DE": {
+    "status": "active"
+  },
+  "VGVE.DE": {
+    "status": "active"
+  },
+  "TABI.DE": {
+    "status": "active"
+  },
+  "H412.DE": {
+    "status": "active"
+  },
+  "PCOM.DE": {
+    "status": "active"
+  },
+  "XU8Z.DE": {
+    "status": "active"
+  },
+  "H4Z2.DE": {
+    "status": "active"
+  },
+  "H4Z1.DE": {
+    "status": "active"
+  },
+  "H41C.DE": {
+    "status": "active"
+  },
+  "VVGM.DE": {
+    "status": "active"
+  },
+  "XDEQ.DE": {
+    "status": "active"
+  },
+  "XDEV.DE": {
+    "status": "active"
+  },
+  "XDEB.DE": {
+    "status": "active"
+  },
+  "XDEM.DE": {
+    "status": "active"
+  },
+  "XZBU.DE": {
+    "status": "active"
+  },
+  "XZBE.DE": {
+    "status": "active"
+  },
+  "ROE.DE": {
+    "status": "active"
+  },
+  "TIGR.DE": {
+    "status": "active"
+  },
+  "CBUA.DE": {
+    "status": "active"
+  },
+  "T1EU.DE": {
+    "status": "active"
+  },
+  "94VE.DE": {
+    "status": "active"
+  },
+  "XB0T.DE": {
+    "status": "active"
+  },
+  "R4RU.DE": {
+    "status": "active"
+  },
+  "LI7U.DE": {
+    "status": "active"
+  },
+  "SN5R.DE": {
+    "status": "active"
+  },
+  "XFIN.DE": {
+    "status": "active"
+  },
+  "SECD.DE": {
+    "status": "active"
+  },
+  "SECA.DE": {
+    "status": "active"
+  },
+  "UIQ4.DE": {
+    "status": "active"
+  },
+  "SPPU.DE": {
+    "status": "active"
+  },
+  "MAGR.DE": {
+    "status": "active"
+  },
+  "MODR.DE": {
+    "status": "active"
+  },
+  "XDEW.DE": {
+    "status": "active"
+  },
+  "MACV.DE": {
+    "status": "active"
+  },
+  "W1TB.DE": {
+    "status": "active"
+  },
+  "H3R0.DE": {
+    "status": "active"
+  },
+  "DDOC.DE": {
+    "status": "active"
+  },
+  "G1CD.DE": {
+    "status": "active"
+  },
+  "G1CE.DE": {
+    "status": "active"
+  },
+  "FYER.DE": {
+    "status": "active"
+  },
+  "VUCF.DE": {
+    "status": "active"
+  },
+  "RIZF.DE": {
+    "status": "active"
+  },
+  "DRGN.DE": {
+    "status": "active"
+  },
+  "EMA5.DE": {
+    "status": "active"
+  },
+  "USAB.DE": {
+    "status": "active"
+  },
+  "EMAB.DE": {
+    "status": "active"
+  },
+  "WRLD.DE": {
+    "status": "active"
+  },
+  "AW1C.DE": {
+    "status": "active"
+  },
+  "AW1B.DE": {
+    "status": "active"
+  },
+  "BBCK.DE": {
+    "status": "active"
+  },
+  "XDEX.DE": {
+    "status": "active"
+  },
+  "XDWH.DE": {
+    "status": "active"
+  },
+  "XDWF.DE": {
+    "status": "active"
+  },
+  "XDW0.DE": {
+    "status": "active"
+  },
+  "XDWS.DE": {
+    "status": "active"
+  },
+  "XDWC.DE": {
+    "status": "active"
+  },
+  "XDWU.DE": {
+    "status": "active"
+  },
+  "XWTS.DE": {
+    "status": "active"
+  },
+  "XDWM.DE": {
+    "status": "active"
+  },
+  "XDWT.DE": {
+    "status": "active"
+  },
+  "XDWI.DE": {
+    "status": "active"
+  },
+  "XDPE.DE": {
+    "status": "active"
+  },
+  "SP2D.DE": {
+    "status": "active"
+  },
+  "S0LR.DE": {
+    "status": "active"
+  },
+  "ICNT.DE": {
+    "status": "active"
+  },
+  "QYLE.DE": {
+    "status": "active"
+  },
+  "GN0M.DE": {
+    "status": "active"
+  },
+  "XT01.DE": {
+    "status": "active"
+  },
+  "FSCM.DE": {
+    "status": "active"
+  },
+  "FESD.DE": {
+    "status": "active"
+  },
+  "XSOE.DE": {
+    "status": "active"
+  },
+  "VVSM.DE": {
+    "status": "active"
+  },
+  "UEQV.DE": {
+    "status": "active"
+  },
+  "UEEG.DE": {
+    "status": "active"
+  },
+  "UEEH.DE": {
+    "status": "active"
+  },
+  "EQQJ.DE": {
+    "status": "active"
+  },
+  "APJX.DE": {
+    "status": "active"
+  },
+  "GRON.DE": {
+    "status": "active"
+  },
+  "ESGP.DE": {
+    "status": "active"
+  },
+  "ESGJ.DE": {
+    "status": "active"
+  },
+  "ESGX.DE": {
+    "status": "active"
+  },
+  "ESGM.DE": {
+    "status": "active"
+  },
+  "UEEF.DE": {
+    "status": "active"
+  },
+  "HDR0.DE": {
+    "status": "active"
+  },
+  "DAVV.DE": {
+    "status": "active"
+  },
+  "FLXP.DE": {
+    "status": "active"
+  },
+  "FLX5.DE": {
+    "status": "active"
+  },
+  "JREA.DE": {
+    "status": "active"
+  },
+  "JREC.DE": {
+    "status": "active"
+  },
+  "JPCT.DE": {
+    "status": "active"
+  },
+  "XNAS.DE": {
+    "status": "active"
+  },
+  "7RIP.DE": {
+    "status": "active"
+  },
+  "84X0.DE": {
+    "status": "active"
+  },
+  "E61Z.DE": {
+    "status": "active"
+  },
+  "V9N.DE": {
+    "status": "active"
+  },
+  "BUG.DE": {
+    "status": "active"
+  },
+  "CL0U.DE": {
+    "status": "active"
+  },
+  "CT3C.DE": {
+    "status": "active"
+  },
+  "DR7E.DE": {
+    "status": "active"
+  },
+  "UBUM.DE": {
+    "status": "active"
+  },
+  "TCRS.DE": {
+    "status": "active"
+  },
+  "I500.DE": {
+    "status": "active"
+  },
+  "V20A.DE": {
+    "status": "active"
+  },
+  "V20D.DE": {
+    "status": "active"
+  },
+  "V40A.DE": {
+    "status": "active"
+  },
+  "V40D.DE": {
+    "status": "active"
+  },
+  "V60A.DE": {
+    "status": "active"
+  },
+  "V60D.DE": {
+    "status": "active"
+  },
+  "V80A.DE": {
+    "status": "active"
+  },
+  "V80D.DE": {
+    "status": "active"
+  },
+  "IROB.DE": {
+    "status": "active"
+  },
+  "ESIS.DE": {
+    "status": "active"
+  },
+  "ESIH.DE": {
+    "status": "active"
+  },
+  "ESIC.DE": {
+    "status": "active"
+  },
+  "ESIF.DE": {
+    "status": "active"
+  },
+  "ESIT.DE": {
+    "status": "active"
+  },
+  "ESIN.DE": {
+    "status": "active"
+  },
+  "ESIE.DE": {
+    "status": "active"
+  },
+  "H4ZX.DE": {
+    "status": "active"
+  },
+  "VGUE.DE": {
+    "status": "active"
+  },
+  "VDTE.DE": {
+    "status": "active"
+  },
+  "U5MD.DE": {
+    "status": "active"
+  },
+  "UQAB.DE": {
+    "status": "active"
+  },
+  "WPAB.DE": {
+    "status": "active"
+  },
+  "XZWE.DE": {
+    "status": "active"
+  },
+  "HTMW.DE": {
+    "status": "active"
+  },
+  "BAT3.DE": {
+    "status": "active"
+  },
+  "LGGE.DE": {
+    "status": "active"
+  },
+  "LGGA.DE": {
+    "status": "active"
+  },
+  "LGGM.DE": {
+    "status": "active"
+  },
+  "ASWE.DE": {
+    "status": "active"
+  },
+  "UEEA.DE": {
+    "status": "active"
+  },
+  "XDRE.DE": {
+    "status": "active"
+  },
+  "TABC.DE": {
+    "status": "active"
+  },
+  "AW11.DE": {
+    "status": "active"
+  },
+  "AW10.DE": {
+    "status": "active"
+  },
+  "AW16.DE": {
+    "status": "active"
+  },
+  "AW13.DE": {
+    "status": "active"
+  },
+  "AW1Z.DE": {
+    "status": "active"
+  },
+  "AW14.DE": {
+    "status": "active"
+  },
+  "AW15.DE": {
+    "status": "active"
+  },
+  "AW12.DE": {
+    "status": "active"
+  },
+  "UBF6.DE": {
+    "status": "active"
+  },
+  "UBF7.DE": {
+    "status": "active"
+  },
+  "AW1F.DE": {
+    "status": "active"
+  },
+  "AW1H.DE": {
+    "status": "active"
+  },
+  "AW1I.DE": {
+    "status": "active"
+  },
+  "AW1J.DE": {
+    "status": "active"
+  },
+  "ECLM.DE": {
+    "status": "active"
+  },
+  "XZEZ.DE": {
+    "status": "active"
+  },
+  "XUCM.DE": {
+    "status": "active"
+  },
+  "V3GF.DE": {
+    "status": "active"
+  },
+  "V3GE.DE": {
+    "status": "active"
+  },
+  "V3AA.DE": {
+    "status": "active"
+  },
+  "V3AL.DE": {
+    "status": "active"
+  },
+  "FJPR.DE": {
+    "status": "active"
+  },
+  "FEPX.DE": {
+    "status": "active"
+  },
+  "SP2Q.DE": {
+    "status": "active"
+  },
+  "ZPRC.DE": {
+    "status": "active"
+  },
+  "XZEC.DE": {
+    "status": "active"
+  },
+  "EQQX.DE": {
+    "status": "active"
+  },
+  "ZSG0.DE": {
+    "status": "active"
+  },
+  "HPAE.DE": {
+    "status": "active"
+  },
+  "HPAU.DE": {
+    "status": "active"
+  },
+  "HPAW.DE": {
+    "status": "active"
+  },
+  "JREJ.DE": {
+    "status": "active"
+  },
+  "IS3Q.DE": {
+    "status": "active"
+  },
+  "IS3R.DE": {
+    "status": "active"
+  },
+  "IS3S.DE": {
+    "status": "active"
+  },
+  "IS3T.DE": {
+    "status": "active"
+  },
+  "IS3U.DE": {
+    "status": "active"
+  },
+  "ZPR5.DE": {
+    "status": "active"
+  },
+  "XREA.DE": {
+    "status": "active"
+  },
+  "LDCE.DE": {
+    "status": "active"
+  },
+  "SMLN.DE": {
+    "status": "active"
+  },
+  "XDNY.DE": {
+    "status": "active"
+  },
+  "NBTK.DE": {
+    "status": "active"
+  },
+  "CEMQ.DE": {
+    "status": "active"
+  },
+  "CEMR.DE": {
+    "status": "active"
+  },
+  "CEMS.DE": {
+    "status": "active"
+  },
+  "WTEI.DE": {
+    "status": "active"
+  },
+  "G2X.DE": {
+    "status": "active"
+  },
+  "G2XJ.DE": {
+    "status": "active"
+  },
+  "GMVM.DE": {
+    "status": "active"
+  },
+  "36BZ.DE": {
+    "status": "active"
+  },
+  "ZPRI.DE": {
+    "status": "active"
+  },
+  "XGLF.DE": {
+    "status": "active"
+  },
+  "WTED.DE": {
+    "status": "active"
+  },
+  "WTEU.DE": {
+    "status": "active"
+  },
+  "WTEE.DE": {
+    "status": "active"
+  },
+  "WTES.DE": {
+    "status": "active"
+  },
+  "XDNE.DE": {
+    "status": "active"
+  },
+  "E500.DE": {
+    "status": "active"
+  },
+  "SYB4.DE": {
+    "status": "active"
+  },
+  "ZPRP.DE": {
+    "status": "active"
+  },
+  "IS05.DE": {
+    "status": "active"
+  },
+  "IS04.DE": {
+    "status": "active"
+  },
+  "IS06.DE": {
+    "status": "active"
+  },
+  "ZPRX.DE": {
+    "status": "active"
+  },
+  "ZPRW.DE": {
+    "status": "active"
+  },
+  "ZPRV.DE": {
+    "status": "active"
+  },
+  "ZPRU.DE": {
+    "status": "active"
+  },
+  "XMME.DE": {
+    "status": "active"
+  },
+  "NS4E.DE": {
+    "status": "active"
+  },
+  "WTDH.DE": {
+    "status": "active"
+  },
+  "WTDX.DE": {
+    "status": "active"
+  },
+  "PJSR.DE": {
+    "status": "active"
+  },
+  "ZPDD.DE": {
+    "status": "active"
+  },
+  "ZPDS.DE": {
+    "status": "active"
+  },
+  "ZPDE.DE": {
+    "status": "active"
+  },
+  "ZPDF.DE": {
+    "status": "active"
+  },
+  "ZPDH.DE": {
+    "status": "active"
+  },
+  "ZPDI.DE": {
+    "status": "active"
+  },
+  "ZPDM.DE": {
+    "status": "active"
+  },
+  "ZPDT.DE": {
+    "status": "active"
+  },
+  "ZPDU.DE": {
+    "status": "active"
+  },
+  "UBUV.DE": {
+    "status": "active"
+  },
+  "UBUW.DE": {
+    "status": "active"
+  },
+  "UBUX.DE": {
+    "status": "active"
+  },
+  "HDLV.DE": {
+    "status": "active"
+  },
+  "FTGG.DE": {
+    "status": "active"
+  },
+  "CEBP.DE": {
+    "status": "active"
+  },
+  "UBUR.DE": {
+    "status": "active"
+  },
+  "UBUS.DE": {
+    "status": "active"
+  },
+  "UBUT.DE": {
+    "status": "active"
+  },
+  "QDVQ.DE": {
+    "status": "active"
+  },
+  "D500.DE": {
+    "status": "active"
+  },
+  "WTIC.DE": {
+    "status": "active"
+  },
+  "KFTK.DE": {
+    "status": "active"
+  },
+  "ICGB.DE": {
+    "status": "active"
+  },
+  "XDEP.DE": {
+    "status": "active"
+  },
+  "USPY.DE": {
+    "status": "active"
+  },
+  "WTIF.DE": {
+    "status": "active"
+  },
+  "WTIZ.DE": {
+    "status": "active"
+  },
+  "WTDF.DE": {
+    "status": "active"
+  },
+  "FEUI.DE": {
+    "status": "active"
+  },
+  "FEUQ.DE": {
+    "status": "active"
+  },
+  "FYEQ.DE": {
+    "status": "active"
+  },
+  "FYEM.DE": {
+    "status": "active"
+  },
+  "SPP3.DE": {
+    "status": "active"
+  },
+  "SPP7.DE": {
+    "status": "active"
+  },
+  "SPPX.DE": {
+    "status": "active"
+  },
+  "SYBV.DE": {
+    "status": "active"
+  },
+  "UIQ1.DE": {
+    "status": "active"
+  },
+  "SPPQ.DE": {
+    "status": "active"
+  },
+  "ZPD6.DE": {
+    "status": "active"
+  },
+  "ZPD3.DE": {
+    "status": "active"
+  },
+  "ZPD9.DE": {
+    "status": "active"
+  },
+  "SPFS.DE": {
+    "status": "active"
+  },
+  "SPFT.DE": {
+    "status": "active"
+  },
+  "SYBR.DE": {
+    "status": "active"
+  },
+  "FUSU.DE": {
+    "status": "active"
+  },
+  "FGEU.DE": {
+    "status": "active"
+  },
+  "QDVS.DE": {
+    "status": "active"
+  },
+  "QDVR.DE": {
+    "status": "active"
+  },
+  "NQSE.DE": {
+    "status": "active"
+  },
+  "EQEU.DE": {
+    "status": "active"
+  },
+  "FAEU.DE": {
+    "status": "active"
+  },
+  "JE13.DE": {
+    "status": "active"
+  },
+  "ESP0.DE": {
+    "status": "active"
+  },
+  "2B7F.DE": {
+    "status": "active"
+  },
+  "2B7K.DE": {
+    "status": "active"
+  },
+  "MXUK.DE": {
+    "status": "active"
+  },
+  "SXR6.DE": {
+    "status": "active"
+  },
+  "IS31.DE": {
+    "status": "active"
+  },
+  "2B70.DE": {
+    "status": "active"
+  },
+  "IS07.DE": {
+    "status": "active"
+  },
+  "SXR0.DE": {
+    "status": "active"
+  },
+  "FUSD.DE": {
+    "status": "active"
+  },
+  "FUSA.DE": {
+    "status": "active"
+  },
+  "FGEQ.DE": {
+    "status": "active"
+  },
+  "XAAG.DE": {
+    "status": "active"
+  },
+  "IS02.DE": {
+    "status": "active"
+  },
+  "QDVX.DE": {
+    "status": "active"
+  },
+  "QDVW.DE": {
+    "status": "active"
+  },
+  "BCFU.DE": {
+    "status": "active"
+  },
+  "BCFE.DE": {
+    "status": "active"
+  },
+  "IUSS.DE": {
+    "status": "active"
+  },
+  "SPPE.DE": {
+    "status": "active"
+  },
+  "EHDL.DE": {
+    "status": "active"
+  },
+  "2B76.DE": {
+    "status": "active"
+  },
+  "2B77.DE": {
+    "status": "active"
+  },
+  "2B78.DE": {
+    "status": "active"
+  },
+  "2B79.DE": {
+    "status": "active"
+  },
+  "XIFE.DE": {
+    "status": "active"
+  },
+  "OM3F.DE": {
+    "status": "active"
+  },
+  "QDVL.DE": {
+    "status": "active"
+  },
+  "XZW0.DE": {
+    "status": "active"
+  },
+  "XDGU.DE": {
+    "status": "active"
+  },
+  "XDGE.DE": {
+    "status": "active"
+  },
+  "QDVY.DE": {
+    "status": "active"
+  },
+  "SNAV.DE": {
+    "status": "active"
+  },
+  "SYBN.DE": {
+    "status": "active"
+  },
+  "SYBY.DE": {
+    "status": "active"
+  },
+  "ZPDJ.DE": {
+    "status": "active"
+  },
+  "ZPDW.DE": {
+    "status": "active"
+  },
+  "IBCZ.DE": {
+    "status": "active"
+  },
+  "IBC0.DE": {
+    "status": "active"
+  },
+  "WTDI.DE": {
+    "status": "active"
+  },
+  "WTIG.DE": {
+    "status": "active"
+  },
+  "VECP.DE": {
+    "status": "active"
+  },
+  "VGEB.DE": {
+    "status": "active"
+  },
+  "VUCP.DE": {
+    "status": "active"
+  },
+  "VGEM.DE": {
+    "status": "active"
+  },
+  "VGTY.DE": {
+    "status": "active"
+  },
+  "36B6.DE": {
+    "status": "active"
+  },
+  "3SUR.DE": {
+    "status": "active"
+  },
+  "UEQU.DE": {
+    "status": "active"
+  },
+  "WTDM.DE": {
+    "status": "active"
+  },
+  "WTEQ.DE": {
+    "status": "active"
+  },
+  "WTEM.DE": {
+    "status": "active"
+  },
+  "WTIM.DE": {
+    "status": "active"
+  },
+  "SLVR.MI": {
+    "status": "active"
+  },
+  "SLVR.L": {
+    "status": "active"
+  },
+  "SLVRG.DE": {
+    "status": "active"
+  },
+  "SLV.DE": {
+    "status": "active"
+  },
+  "IEO": {
+    "status": "active"
+  },
+  "IEO.DE": {
+    "status": "active"
+  },
+  "IEO.L": {
+    "status": "active"
+  },
+  "IEO.MI": {
+    "status": "active"
+  },
+  "IEO.AS": {
+    "status": "active"
+  },
+  "FSG.DE": {
+    "status": "active"
+  }
+}

@@ -179,6 +179,20 @@ class XETRETFExtractor:
             "blacklisted": self.blacklist,
         }
 
+    def add_to_blacklist(self, ticker: str, reason: str = "no data found") -> None:
+        """
+        Add a ticker to the local blacklist and save to JSON.
+
+        Args:
+            ticker: Ticker symbol (e.g., EXS1.DE)
+            reason: Reason for blacklisting
+        """
+        ticker = ticker.upper()
+        if ticker not in self.blacklist:
+            self.blacklist[ticker] = {"status": "invalid", "reason": reason}
+            self._save_json(self.blacklist, self.blacklist_file)
+            print(f"[BLACKLIST] Added {ticker} to blacklist (Reason: {reason})")
+
     def get_working_tickers(self) -> list[str]:
         """Get list of validated working ticker symbols."""
         return sorted(list(self.working_etfs.keys()))

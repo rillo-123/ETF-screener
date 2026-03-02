@@ -183,7 +183,13 @@ class ETFScreener:
 
     def _load_formats(self) -> dict:
         """Load output format templates from JSON file."""
-        format_file = Path(__file__).parent.parent.parent / "output_formats.json"
+        # Check config/ folder in workspace root
+        format_file = Path(__file__).parent.parent.parent / "config" / "output_formats.json"
+        
+        if not format_file.exists():
+            # Try path relative to CWD as fallback
+            format_file = Path("config/output_formats.json")
+            
         if not format_file.exists():
             return {"default": {"columns": []}}
         try:

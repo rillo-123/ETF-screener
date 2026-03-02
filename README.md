@@ -71,8 +71,8 @@ etfs discover-all --workers 5
 # Extract ETFs from Deutsche Börse CSV (from reference/ directory)
 etfs extract
 
-# Custom output locations
-etfs discover-all --etfs-file data/my_etfs.json --blacklist-file data/my_blacklist.json
+# Custom output locations (stored in config/ by default)
+etfs discover-all --etfs-file config/etfs.json --blacklist-file config/blacklist.json
 ```
 
 ### Screener Commands
@@ -83,10 +83,21 @@ Screen ETFs by volume and technical criteria:
 # Screen all ETFs in database with default settings (10M min volume, last 10 days)
 etfs screener
 
-# Screen specific ETFs with custom volume threshold
-etfs screener EXS1.DE EUNG.DE XESC.DE --aVol 50000 --days 20
+# Screen for specific technical setups
+etfs screener --supt green                 # Only GREEN Supertrend (price > supertrend)
+etfs screener --supt red                   # Only RED Supertrend (price < supertrend)
+etfs screener --supt red --red-streak 10   # Reversal scanner (10+ consecutive RED days)
+etfs screener --swing                      # Pullback scanner (price dipped to EMA50 in uptrend)
 
-# Use human-friendly volume notation
+# Use conditional volume filters (supports K/M notation)
+etfs screener --volume-gte 500k            # Volume greater than or equal to 500,000
+etfs screener --volume-lt 1M               # Volume less than 1 million
+etfs screener --close-gt 100               # Price greater than 100
+
+# Screen specific ETFs with custom volume threshold
+etfs screener EXS1.DE EUNG.DE XESC.DE --aVol 50k --days 20
+
+# Use human-friendly volume notation everywhere
 etfs screener --aVol 100K --days 20      # 100 thousand shares
 etfs screener --aVol 1.5M --days 20      # 1.5 million shares
 etfs screener --aVol 50000 --days 20     # Raw number
@@ -98,6 +109,7 @@ etfs screener --nofEtfs 20 --aVol 100K
 etfs screener --format default             # Full view: volume, prices, EMA50, supertrend
 etfs screener --format compact             # Minimal view: ticker, volume only
 etfs screener --format detailed            # Extended view: min volume + all indicators
+etfs screener --format swing               # Special view for pullback setups
 
 # Keep only recent data (prune older records)
 etfs screener --aVol 50K --keep-days 90   # Prune data older than 90 days
@@ -177,6 +189,241 @@ etfs screener --aVol 500K --nofEtfs 20 --format compact
 etfs screener --keep-days 180  # Prune records older than 6 months
 ```
 
+### Database Refresh & Management
+
+The `refresh` command incrementally fills/extends your SQLite database from the CSV file.
+
+**Implicit vs Explicit Refresh:**
+- **Explicit:** Use `etfs refresh --depth 365` for batch operations and bulk data loading
+- **Implicit:** Snippets automatically fetch missing data on-demand (lazy-loading)
+
+Choose based on your workflow:
+
+- Use `refresh` for daily/bulk maintenance and ETF discovery workflows
+- Use snippets for exploratory analysis without setup overhead
+
+### Automated Refresh
+
+The project includes an auto-refresh system designed to run at logon (via Task Scheduler).
+
+- **`auto-refresh.ps1`**: The main PowerShell script that runs a shallow refresh (last 30 days) and generates a swing trading hotlist.
+- **`auto-refresh.bat`**: A launcher for the PowerShell script.
+- **Progress Tracking**: The script displays a live progress bar in a terminal window and logs detailed output to `logs/auto-refresh.log`.
+
+**Key concept**: `--depth` specifies how many days of history to keep, counting *back from today*.
+- `--depth 365` = fetch/maintain data from 365 days ago until today
+- `--depth 90` = fetch/maintain data from 90 days ago until today
+
+**Smart incremental updates:**
+- **New tickers**: Fetches full depth from scratch (365 days ago → today)
+- **Existing with partial data**: Extends history to reach target depth
+- **Already complete**: Skips (no duplicate fetches)
+- **Blacklisted**: Skipped by default (optional override)
+
+```powershell
+# Standard refresh - maintains 1 year of data (only fills gaps before oldest)
+etfs refresh --depth 365
+
+# Light refresh - maintains last 90 days
+etfs refresh --depth 90
+
+# Deep history - maintains 2 years of data
+etfs refresh --depth 730
+
+# Re-validate blacklisted tickers (e.g., if some were delisted but now active)
+etfs refresh --depth 365 --include-blacklist
+
+# Force full re-fetch of everything (slow, useful for maintenance)
+etfs refresh --depth 365 --force
+
+# From custom CSV location
+etfs refresh --depth 365 --csv-file path/to/your/etfs.csv
+
+# Using specific validated ETF list
+etfs refresh --depth 365 --etfs-file data/my_etfs.json
+```
+
+**Example workflow (incremental daily updates):**
+```powershell
+# Day 1: Initial load - fetch data from 365 days ago to today
+etfs refresh --depth 365
+# Result: Tickers fetched with data spanning 365 days
+
+# Day 2: Quick update (only adds 1 new day of data)
+etfs refresh --depth 365
+# Result: For each ticker, checks if it has 365 days. If oldest is >365 days ago, extends back.
+# ✓ New: 2000
+# ↻ Extended: 0
+# ✗ Failed: 5
+# ⊘ Skipped: 100
+# 📊 Total: 2105/2105
+
+# Day 3+: Regular updates (most tickers already at full depth)
+etfs refresh --depth 365
+# Result: Only tickers that don't span full 365 days are updated
+# ✓ New: 0
+# ↻ Extended: 0
+# ✗ Failed: 5
+# ⊘ Skipped: 2100 (already have 365 days)
+# 📊 Total: 2105/2105
+```
+
+### Swing Trading Workflows
+
+**Find swing-ready setups (price near EMA50 in uptrend):**
+```powershell
+etfs screener --swing --aVol 100K --days 30
+
+# With tighter pullback requirement (2% from high)
+etfs screener --swing --swing-pull 2.0 --aVol 100K
+
+# Looser pullback (5% from high)
+etfs screener --swing --swing-pull 5.0 --aVol 100K
+```
+
+**Filter by Supertrend color:**
+```powershell
+# Only GREEN Supertrend (price > supertrend = uptrend)
+etfs screener --supt green --days 20 --aVol 50K
+
+# Only RED Supertrend (price < supertrend = downtrend)
+etfs screener --supt red --days 20 --aVol 50K
+
+# RED Supertrend with minimum reversal signal (10+ RED days)
+etfs screener --supt red --red-streak 10 --days 20 --aVol 50K
+```
+
+**Weekly Supertrend analysis (longer-term trend):**
+```powershell
+etfs screener --supt green --timeframe 1W --days 30
+
+# Adjust sensitivity with st-multiplier (default 3.0)
+etfs screener --supt green --timeframe 1W --st-multiplier 2.5 --days 30
+```
+
+**Conditional filtering:**
+```powershell
+# Price greater than 100
+etfs screener --close-gt 100 --aVol 50K
+
+# EMA value less than 50
+etfs screener --ema-lt 50 --aVol 50K
+
+# Volume greater than 500K shares
+etfs screener --volume-gte 500000 --days 10
+
+# Multiple conditions (AND logic)
+etfs screener --close-gte 50 --close-lte 150 --ema-gt 40 --aVol 100K
+```
+
+**Detailed swing analysis:**
+```powershell
+etfs screener --swing --swing-pull 2.0 --format detailed --aVol 100K --st-multiplier 3.0
+```
+
+### Discovery & Validation Workflows
+
+**Initial setup - discover and validate all XETRA ETFs:**
+```powershell
+# Extract from Deutsche Börse CSV
+etfs extract
+
+# Or discover from complete list (slower, ~5-10 minutes)
+etfs discover-all --workers 10
+
+# Custom ETF validation
+etfs discover EXS1.DE EUNG.DE EONS.DE --etfs-file data/my_etfs.json
+```
+
+**Update discovery to new output location:**
+```powershell
+etfs discover-all --etfs-file data/new_etfs.json --blacklist-file data/new_blacklist.json --workers 5
+```
+
+### End-to-End Workflows
+
+**Complete fresh start:**
+```powershell
+# 1. Extract and validate all ETFs from CSV
+etfs extract
+
+# 2. Refresh database with 1 year of history
+etfs refresh --depth 365
+
+# 3. Screen for high-volume ETFs
+etfs screener --aVol 100K --days 20 --format compact
+
+# 4. Analyze swing setups with detailed output
+etfs screener --swing --aVol 50K --format detailed
+```
+
+**Daily trading preparation:**
+```powershell
+# 1. Quick refresh (last 30 days only - fast)
+etfs refresh --depth 30
+
+# 2. Find current swing opportunities
+etfs screener --swing --aVol 50K --swing-pull 2.0 --days 20
+
+# 3. Check uptrend confirmation (GREEN Supertrend)
+etfs screener --supt green --aVol 50K --format detailed
+
+# 4. Weekly perspective
+etfs screener --supt green --timeframe 1W --aVol 50K
+```
+
+**Weekly analysis (find strong trends):**
+```powershell
+# 1. Full data refresh
+etfs refresh --depth 365
+
+# 2. Screen high-liquidity ETFs
+etfs screener --aVol 500K --format compact --days 20
+
+# 3. Find GREEN weekly trends
+etfs screener --supt green --timeframe 1W --aVol 100K --format detailed
+
+# 4. Identify reversal candidates (RED 10+ days)
+etfs screener --supt red --red-streak 10 --aVol 50K --format default
+```
+
+**Maintenance - prune old data and refresh:**
+```powershell
+# Keep only last 6 months
+etfs screener --keep-days 180
+
+# Refresh with current data
+etfs refresh --depth 180
+
+# Screen with pruned data
+etfs screener --aVol 50K --format compact
+```
+
+### Performance Tips
+
+**Fast screening (existing data only):**
+```powershell
+# Use pre-cached data, no fetching
+etfs screener --aVol 50K --days 10 --format compact
+# Takes <5 seconds
+```
+
+**Faster refresh (shallow history):**
+```powershell
+# Fetch only 30 days instead of 365
+etfs refresh --depth 30
+# Takes ~2-3 minutes for 2000+ ETFs
+```
+
+**Parallel worker optimization:**
+```powershell
+# More workers = faster but higher API load
+etfs discover-all --workers 10  # Fast but aggressive
+
+# Conservative, lower load
+etfs discover-all --workers 3   # Slower but gentler
+```
+
 ## Output Files
 
 Data and plots are automatically saved:
@@ -211,6 +458,95 @@ Each parquet file contains:
 - **ST_Upper** - Upper band of supertrend
 - **ST_Lower** - Lower band of supertrend
 - **Signal** - Trading signal: 1 (buy), -1 (sell), 0 (neutral)
+
+## Python Snippets
+
+Quick analysis scripts for ad-hoc database exploration without needing CLI commands or notebook setup.
+
+These are standalone Python scripts you can run directly or use as templates for your own analysis.
+
+**Key feature:** Snippets automatically fetch missing data from yfinance on-demand, calculate indicators, and cache it. No need to run `etfs refresh` first!
+
+### Quick Start
+
+```powershell
+# Find all overbought ETFs (RSI > 70)
+python snippets/example_overbought.py
+
+# Find all oversold ETFs (RSI < 30)
+python snippets/example_oversold.py
+
+# Find overbought ETFs still in uptrend (RSI > 70 AND Price > EMA50)
+python snippets/example_rsi_ema.py
+
+# Find tickers that were oversold in last 30 days
+python snippets/example_oversold_period.py
+
+# Demo auto-fetch behavior
+python snippets/example_auto_fetch.py
+```
+
+**No refresh needed!** Snippets handle data fetching automatically.
+
+### Available Examples
+
+**`snippets/example_overbought.py`** - Find overbought conditions
+```python
+from ETF_screener.snippets import Snippet
+
+with Snippet() as snippet:
+    overbought = snippet.filter_overbought(rsi_threshold=70)
+    for ticker, rsi in overbought:
+        print(f"{ticker}: RSI={rsi:.1f}")
+```
+
+**`snippets/example_oversold.py`** - Find oversold conditions
+```python
+with Snippet() as snippet:
+    oversold = snippet.filter_oversold(rsi_threshold=30)
+    for ticker, rsi in oversold:
+        print(f"{ticker}: RSI={rsi:.1f}")
+```
+
+**`snippets/example_rsi_ema.py`** - Combine multiple filters
+```python
+with Snippet() as snippet:
+    # RSI > 70 AND Price > EMA50 (strong uptrend)
+    for ticker in snippet.iterate_tickers():
+        df = snippet.get_data(ticker)
+        latest = df.iloc[-1]
+        if latest['RSI'] > 70 and latest['Close'] > latest['EMA_50']:
+            print(f"{ticker}: RSI={latest['RSI']:.1f}")
+```
+
+### Snippet Helper Class
+
+The `Snippet` class provides convenient methods for database iteration and filtering:
+
+- `iterate_tickers()` - Iterator over all database tickers
+- `get_data(ticker, days=60)` - Fetch latest N days with indicators pre-calculated
+- `filter_overbought(rsi_threshold=70)` - Find RSI > threshold
+- `filter_oversold(rsi_threshold=30)` - Find RSI < threshold
+- `filter_by_ema(above_ema=True)` - Filter by price vs EMA50
+- `filter_by_supertrend(color="green")` - Filter by trend direction
+- `find_oversold_in_period()` - Find tickers that were oversold at any point in period
+- `find_overbought_in_period()` - Find tickers that were overbought at any point in period
+
+**Auto-fetch feature:** By default, `get_data()` automatically fetches from yfinance if data is missing or insufficient:
+
+```python
+from ETF_screener.snippets import Snippet
+
+with Snippet() as snippet:
+    # First call: fetches from yfinance, caches it
+    df = snippet.get_data("EXS1.DE")
+    
+    # Disable auto-fetch if you only want cached data
+    with Snippet(auto_fetch=False) as snippet_cached:
+        df = snippet_cached.get_data("EXS1.DE")  # Returns cached only
+```
+
+See [snippets/README.md](snippets/README.md) for full API and pattern examples.
 
 ## Python API Reference
 

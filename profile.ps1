@@ -2,6 +2,9 @@
 # This file loads automatically when PowerShell starts
 # Copy this file to your PowerShell profile directory or run it manually with: . .\profile.ps1
 
+# Disable venv automatic prompt so we handle it in our custom prompt function
+$env:VIRTUAL_ENV_DISABLE_PROMPT = $true
+
 # Git branch and dirty marker helpers for prompt
 
 function Get-GitBranch {

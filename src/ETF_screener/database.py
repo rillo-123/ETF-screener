@@ -140,35 +140,37 @@ class ETFDatabase:
         conn = self._get_connection()
         cursor = conn.cursor()
 
+        data_to_insert = []
         for _, row in df.iterrows():
             date_str = (
                 row["Date"].strftime("%Y-%m-%d")
                 if hasattr(row["Date"], "strftime")
                 else str(row["Date"])
             )
+            data_to_insert.append((
+                ticker.upper(),
+                date_str,
+                row.get("Open"),
+                row.get("High"),
+                row.get("Low"),
+                row.get("Close"),
+                row.get("Volume", 0),
+                row.get("EMA_50"),
+                row.get("Supertrend"),
+                row.get("ST_Upper"),
+                row.get("ST_Lower"),
+                row.get("Signal", 0),
+            ))
 
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO etf_data 
-                (ticker, date, open, high, low, close, volume, ema_50, supertrend, 
-                 st_upper, st_lower, signal)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    ticker.upper(),
-                    date_str,
-                    row.get("Open"),
-                    row.get("High"),
-                    row.get("Low"),
-                    row.get("Close"),
-                    row.get("Volume", 0),
-                    row.get("EMA_50"),
-                    row.get("Supertrend"),
-                    row.get("ST_Upper"),
-                    row.get("ST_Lower"),
-                    row.get("Signal", 0),
-                ),
-            )
+        cursor.executemany(
+            """
+            INSERT OR REPLACE INTO etf_data 
+            (ticker, date, open, high, low, close, volume, ema_50, supertrend, 
+             st_upper, st_lower, signal)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            data_to_insert
+        )
 
         conn.commit()
 
@@ -271,7 +273,7 @@ class ETFDatabase:
         conn = self._get_connection()
         
         query = (
-            "SELECT ticker, date, open, high, low, close, volume, ema_50, supertrend, signal "
+            "SELECT ticker, date, open, high, low, close, volume, ema_50, supertrend, st_upper, st_lower, signal "
             "FROM etf_data "
             f"WHERE ticker = ? AND date >= date('now', '-{int(days)} days') "
             "ORDER BY date ASC"
@@ -283,10 +285,29 @@ class ETFDatabase:
             return pd.DataFrame()
         
         # Rename columns to match expected format
-        df.columns = ["ticker", "Date", "Open", "High", "Low", "Close", "Volume", "EMA_50", "Supertrend", "Signal"]
+        df.columns = ["ticker", "Date", "Open", "High", "Low", "Close", "Volume", "EMA_50", "Supertrend", "ST_Upper", "ST_Lower", "Signal"]
         df["Date"] = pd.to_datetime(df["Date"])
         
         return df
+
+    def get_oldest_date(self, ticker: str) -> Optional[str]:
+        """
+        Get oldest date for a ticker in database.
+
+        Args:
+            ticker: ETF ticker symbol
+
+        Returns:
+            Oldest date (YYYY-MM-DD) or None if no data
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT MIN(date) FROM etf_data WHERE ticker = ?", (ticker.upper(),)
+        )
+        result = cursor.fetchone()
+        return result[0] if result and result[0] else None
 
     def query_by_volume(
         self,

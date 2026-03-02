@@ -3,6 +3,39 @@
 import pandas as pd
 
 
+def calculate_rsi(data: pd.Series, period: int = 14) -> pd.Series:
+    """
+    Calculate Relative Strength Index (RSI).
+
+    Args:
+        data: Series of prices (usually close prices)
+        period: RSI period (default 14)
+
+    Returns:
+        Series with RSI values (0-100)
+    """
+    # Calculate price changes
+    delta = data.diff()
+    
+    # Separate gains and losses
+    gains = delta.copy()
+    losses = delta.copy()
+    
+    gains[gains < 0] = 0
+    losses[losses > 0] = 0
+    losses = losses.abs()
+    
+    # Calculate average gains and losses
+    avg_gains = gains.rolling(window=period).mean()
+    avg_losses = losses.rolling(window=period).mean()
+    
+    # Calculate RS and RSI
+    rs = avg_gains / avg_losses
+    rsi = 100 - (100 / (1 + rs))
+    
+    return rsi
+
+
 def calculate_ema(data: pd.Series, period: int = 50) -> pd.Series:
     """
     Calculate Exponential Moving Average.
@@ -183,6 +216,9 @@ def add_indicators(
 
     # EMA 50
     df_copy["EMA_50"] = calculate_ema(df_copy["Close"], period=50)
+
+    # RSI 14
+    df_copy["RSI"] = calculate_rsi(df_copy["Close"], period=14)
 
     # Supertrend with configurable parameters
     st, ub, lb = calculate_supertrend(

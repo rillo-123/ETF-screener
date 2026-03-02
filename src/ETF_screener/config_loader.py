@@ -5,20 +5,17 @@ from pathlib import Path
 from typing import Any, Dict
 
 
-def load_command_config(config_file: str = "commands.json") -> Dict[str, Any]:
+def load_command_config(config_file: str = "config/commands.json") -> Dict[str, Any]:
     """
     Load command configuration from JSON file.
 
     Args:
         config_file: Path to commands.json configuration file
-
-    Returns:
-        Dictionary with command configurations
     """
     config_path = Path(config_file)
     if not config_path.exists():
         # Try relative to package root
-        config_path = Path(__file__).parent.parent / config_file
+        config_path = Path(__file__).parent.parent.parent / config_file
 
     if config_path.exists():
         with open(config_path) as f:
