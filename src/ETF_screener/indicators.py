@@ -1,21 +1,28 @@
 """Technical indicators for swing trading analysis."""
 
 import pandas as pd
+from typing import Any, Union, Tuple, List, Optional
 
 
-def calculate_rsi(data: pd.Series, period: int = 14) -> pd.Series:
+def calculate_rsi(data: Any, period: int = 14) -> pd.Series:
     """
     Calculate Relative Strength Index (RSI).
 
     Args:
-        data: Series of prices (usually close prices)
+        data: Series of prices (usually close prices) or DataFrame
         period: RSI period (default 14)
 
     Returns:
         Series with RSI values (0-100)
     """
+    if isinstance(data, pd.DataFrame):
+        price_col = 'Close' if 'Close' in data.columns else 'close'
+        series = data[price_col]
+    else:
+        series = data
+
     # Calculate price changes
-    delta = data.diff()
+    delta = series.diff()
     
     # Separate gains and losses
     gains = delta.copy()
@@ -36,85 +43,174 @@ def calculate_rsi(data: pd.Series, period: int = 14) -> pd.Series:
     return rsi
 
 
-def calculate_ema(data: pd.Series, period: int = 50) -> pd.Series:
+def calculate_adx(high: Any, low: Any = None, close: Any = None, period: int = 14) -> pd.Series:
+    """
+    Calculate Average Directional Index (ADX) - Trend Strength.
+    Values 0-100: > 25 = Strong Trend, < 20 = Weak Trend.
+    """
+    if isinstance(high, pd.DataFrame):
+        df = high
+        h = df['High'] if 'High' in df.columns else df['high']
+        l = df['Low'] if 'Low' in df.columns else df['low']
+        c = df['Close'] if 'Close' in df.columns else df['close']
+    else:
+        h, l, c = high, low, close
+
+    tr1 = h - l
+    tr2 = (h - c.shift()).abs()
+    tr3 = (l - c.shift()).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    
+    # Simple TR smoothing for ADX approximation
+    atr = tr.rolling(window=period).mean()
+    
+    up_move = h - h.shift()
+    down_move = l.shift() - l
+    
+    plus_dm = pd.Series(0.0, index=h.index)
+    plus_dm[(up_move > down_move) & (up_move > 0)] = up_move
+    
+    minus_dm = pd.Series(0.0, index=l.index)
+    minus_dm[(down_move > up_move) & (down_move > 0)] = down_move
+    
+    plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
+    minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
+    
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
+    adx = dx.rolling(window=period).mean()
+    
+    return adx
+
+
+def calculate_ema(data: Any, period: int = 50) -> pd.Series:
     """
     Calculate Exponential Moving Average.
-
-    Args:
-        data: Series of prices
-        period: EMA period (default 50)
-
-    Returns:
-        Series with EMA values
     """
-    return data.ewm(span=period, adjust=False).mean()
+    if isinstance(data, pd.DataFrame):
+        price_col = 'Close' if 'Close' in data.columns else 'close'
+        series = data[price_col]
+    else:
+        series = data
+        
+    return series.ewm(span=period, adjust=False).mean()
+
+
+def calculate_macd(data: Any, fast: int = 12, slow: int = 26, signal: int = 9) -> Tuple[pd.Series, pd.Series, pd.Series]:
+    """
+    Calculate MACD, Signal Line, and Histogram.
+    """
+    if isinstance(data, pd.DataFrame):
+        price_col = 'Close' if 'Close' in data.columns else 'close'
+        series = data[price_col]
+    else:
+        series = data
+        
+    fast_ema = series.ewm(span=fast, adjust=False).mean()
+    slow_ema = series.ewm(span=slow, adjust=False).mean()
+    macd_line = fast_ema - slow_ema
+    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+    histogram = macd_line - signal_line
+    
+    return macd_line, signal_line, histogram
+
+
+def calculate_stochastic(high: Any, low: Any = None, close: Any = None, k_period: int = 14, d_period: int = 3) -> Tuple[pd.Series, pd.Series]:
+    """
+    Calculate Stochastic Oscillator (%K and %D).
+    """
+    if isinstance(high, pd.DataFrame):
+        df = high
+        h = df['High'] if 'High' in df.columns else df['high']
+        l = df['Low'] if 'Low' in df.columns else df['low']
+        c = df['Close'] if 'Close' in df.columns else df['close']
+    else:
+        h, l = high, low
+        c = close
+
+    low_min = l.rolling(window=k_period).min()
+    high_max = h.rolling(window=k_period).max()
+    
+    k_line = 100 * (c - low_min) / (high_max - low_min)
+    d_line = k_line.rolling(window=d_period).mean()
+    
+    return k_line, d_line
 
 
 def calculate_supertrend(
-    high: pd.Series, low: pd.Series, close: pd.Series, period: int = 10, multiplier: float = 3.0
-) -> tuple[pd.Series, pd.Series, pd.Series]:
+    high: Any, low: Any = None, close: Any = None, period: int = 10, multiplier: float = 3.0
+) -> Union[Tuple[pd.Series, pd.Series, pd.Series], pd.Series]:
     """
     Calculate Supertrend indicator.
-
-    Args:
-        high: High prices
-        low: Low prices
-        close: Close prices
-        period: ATR period (default 10)
-        multiplier: ATR multiplier for bands (default 3.0)
-
-    Returns:
-        Tuple of (supertrend, upperband, lowerband)
+    Accepts (high, low, close) as individual Series OR a single DataFrame.
     """
+    if isinstance(high, pd.DataFrame):
+        df = high
+        h = df['High'] if 'High' in df.columns else df['high']
+        l = df['Low'] if 'Low' in df.columns else df['low']
+        c = df['Close'] if 'Close' in df.columns else df['close']
+    else:
+        h, l, c = high, low, close
+
     # Calculate ATR (Average True Range)
-    tr1 = high - low
-    tr2 = (high - close.shift()).abs()
-    tr3 = (low - close.shift()).abs()
+    tr1 = h - l
+    tr2 = (h - c.shift()).abs()
+    tr3 = (l - c.shift()).abs()
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
     atr = tr.rolling(period).mean()
 
     # Calculate HL2 (High-Low Average)
-    hl2 = (high + low) / 2
+    hl2 = (h + l) / 2
 
     # Calculate basic bands
     basic_ub = hl2 + multiplier * atr
     basic_lb = hl2 - multiplier * atr
 
-    # Calculate final bands
+    # Calculate final bands and supertrend direction
     final_ub = basic_ub.copy()
     final_lb = basic_lb.copy()
+    
+    supertrend = pd.Series(index=c.index, dtype=float)
+    supertrend_direction = pd.Series(index=c.index, dtype=int)
+    
+    # Wait for ATR to be available
+    start_idx = period
+    if start_idx >= len(c):
+        return supertrend if not isinstance(high, pd.DataFrame) else (supertrend, final_ub, final_lb)
 
-    for i in range(1, len(final_ub)):
-        if pd.notna(basic_ub.iloc[i]) and pd.notna(final_ub.iloc[i - 1]):
-            final_ub.iloc[i] = min(basic_ub.iloc[i], final_ub.iloc[i - 1]) if close.iloc[i - 1] > final_ub.iloc[i - 1] else basic_ub.iloc[i]
-        if pd.notna(basic_lb.iloc[i]) and pd.notna(final_lb.iloc[i - 1]):
-            final_lb.iloc[i] = max(basic_lb.iloc[i], final_lb.iloc[i - 1]) if close.iloc[i - 1] < final_lb.iloc[i - 1] else basic_lb.iloc[i]
+    # Initialize first valid bar
+    supertrend_direction.iloc[start_idx] = 1 # Initial guess
+    supertrend.iloc[start_idx] = basic_ub.iloc[start_idx]
 
-    # Determine supertrend
-    supertrend = pd.Series(index=close.index, dtype=float)
-    supertrend_direction = pd.Series(index=close.index, dtype=int)
-
-    for i in range(len(close)):
-        if i == 0:
-            supertrend.iloc[i] = final_ub.iloc[i] if pd.notna(final_ub.iloc[i]) else close.iloc[i]
-            supertrend_direction.iloc[i] = -1
+    for i in range(start_idx + 1, len(c)):
+        # Final Upper Band
+        if basic_ub.iloc[i] < final_ub.iloc[i-1] or c.iloc[i-1] > final_ub.iloc[i-1]:
+            final_ub.iloc[i] = basic_ub.iloc[i]
         else:
-            if supertrend_direction.iloc[i - 1] == 1:
-                if pd.notna(final_lb.iloc[i]) and close.iloc[i] <= final_lb.iloc[i]:
-                    supertrend.iloc[i] = final_ub.iloc[i]
-                    supertrend_direction.iloc[i] = -1
-                else:
-                    supertrend.iloc[i] = final_lb.iloc[i] if pd.notna(final_lb.iloc[i]) else close.iloc[i]
-                    supertrend_direction.iloc[i] = 1
+            final_ub.iloc[i] = final_ub.iloc[i-1]
+            
+        # Final Lower Band
+        if basic_lb.iloc[i] > final_lb.iloc[i-1] or c.iloc[i-1] < final_lb.iloc[i-1]:
+            final_lb.iloc[i] = basic_lb.iloc[i]
+        else:
+            final_lb.iloc[i] = final_lb.iloc[i-1]
+            
+        # Strategy Direction logic
+        if supertrend_direction.iloc[i-1] == 1:
+            if c.iloc[i] > final_ub.iloc[i]:
+                supertrend_direction.iloc[i] = 1
+                supertrend.iloc[i] = final_lb.iloc[i]
             else:
-                if pd.notna(final_ub.iloc[i]) and close.iloc[i] >= final_ub.iloc[i]:
-                    supertrend.iloc[i] = final_lb.iloc[i]
-                    supertrend_direction.iloc[i] = 1
-                else:
-                    supertrend.iloc[i] = final_ub.iloc[i] if pd.notna(final_ub.iloc[i]) else close.iloc[i]
-                    supertrend_direction.iloc[i] = -1
+                supertrend_direction.iloc[i] = -1
+                supertrend.iloc[i] = final_ub.iloc[i]
+        else:
+            if c.iloc[i] < final_lb.iloc[i]:
+                supertrend_direction.iloc[i] = -1
+                supertrend.iloc[i] = final_ub.iloc[i]
+            else:
+                supertrend_direction.iloc[i] = 1
+                supertrend.iloc[i] = final_lb.iloc[i]
 
-    return supertrend, final_ub, final_lb
+    return supertrend if not isinstance(high, pd.DataFrame) else (supertrend, final_ub, final_lb)
 
 
 def resample_to_weekly(df: pd.DataFrame) -> pd.DataFrame:

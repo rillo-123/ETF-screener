@@ -106,7 +106,7 @@ class ETFDatabase:
 
         cursor.execute(
             """
-            INSERT OR REPLACE INTO etf_data 
+            INSERT OR IGNORE INTO etf_data 
             (ticker, date, open, high, low, close, volume, ema_50, supertrend, 
              st_upper, st_lower, signal)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -142,11 +142,16 @@ class ETFDatabase:
 
         data_to_insert = []
         for _, row in df.iterrows():
-            date_str = (
-                row["Date"].strftime("%Y-%m-%d")
-                if hasattr(row["Date"], "strftime")
-                else str(row["Date"])
-            )
+            # Standardize date to YYYY-MM-DD
+            if hasattr(row["Date"], "strftime"):
+                date_str = row["Date"].strftime("%Y-%m-%d")
+            else:
+                # Try parsing if it's a string, or just use as is
+                try:
+                    date_str = pd.to_datetime(row["Date"]).strftime("%Y-%m-%d")
+                except:
+                    date_str = str(row["Date"]).split(" ")[0]  # Remove time component if present
+
             data_to_insert.append((
                 ticker.upper(),
                 date_str,
@@ -164,7 +169,7 @@ class ETFDatabase:
 
         cursor.executemany(
             """
-            INSERT OR REPLACE INTO etf_data 
+            INSERT OR IGNORE INTO etf_data 
             (ticker, date, open, high, low, close, volume, ema_50, supertrend, 
              st_upper, st_lower, signal)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
