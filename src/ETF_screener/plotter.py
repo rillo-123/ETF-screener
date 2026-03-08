@@ -37,24 +37,22 @@ class PortfolioPlotter:
         Returns:
             Path to saved plot
         """
+        # Ensure Case-Insensitive Column Access
+        df.columns = [c.capitalize() if c.lower() in ['date', 'open', 'high', 'low', 'close', 'volume', 'signal'] else c for c in df.columns]
+        
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize, sharex=True)
 
         # Plot 1: Price with indicators
         ax1.plot(
             df["Date"], df["Close"], label="Close Price", color="black", linewidth=2
         )
-        ax1.plot(df["Date"], df["EMA_50"], label="EMA 50", color="blue", linewidth=1)
-        ax1.fill_between(
-            df["Date"],
-            df["ST_Upper"],
-            df["ST_Lower"],
-            alpha=0.2,
-            color="gray",
-            label="Supertrend Band",
-        )
-        ax1.plot(
-            df["Date"], df["Supertrend"], label="Supertrend", color="red", linewidth=1
-        )
+        
+        # Plot indicators recursively
+        for col in df.columns:
+            if col in ["Date", "Open", "High", "Low", "Close", "Volume", "Signal", "signal"]: continue
+            # Only plot numeric columns with enough data
+            if pd.api.types.is_numeric_dtype(df[col]) and df[col].notna().sum() > 0:
+                ax1.plot(df["Date"], df[col], label=col, alpha=0.7)
 
         # Buy signals
         buy_signals = df[df["Signal"] == 1]

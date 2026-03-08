@@ -1,8 +1,12 @@
 import pytest
 import pandas as pd
 import numpy as np
-from ETF_screener.backtester import Backtester, rsi_strategy, ema_cross_strategy, scripted_strategy
+from ETF_screener.backtester import Backtester, rsi_strategy, ema_cross_strategy
 from ETF_screener.indicators import calculate_ema, calculate_rsi
+
+@pytest.fixture
+def bt():
+    return Backtester()
 
 @pytest.fixture
 def sample_data():
@@ -28,33 +32,35 @@ def sample_data():
 
 class TestBacktester:
     def test_ema_cross_strategy(self, sample_data):
-        df = ema_cross_strategy(sample_data, fast=10, slow=30)
+        df = ema_cross_strategy(sample_data, f=10, s=30)
         assert "signal" in df.columns or "Signal" in df.columns
         # Should have signals
         sig_col = "signal" if "signal" in df.columns else "Signal"
         assert set(df[sig_col].unique()).issubset({0, 1, -1})
 
     def test_rsi_strategy(self, sample_data):
-        df = rsi_strategy(sample_data, rsi_period=14, oversold=30, overbought=70)
+        df = rsi_strategy(sample_data, p=14, os=30)
         assert "signal" in df.columns or "Signal" in df.columns
         assert len(df) == len(sample_data)
 
-    def test_scripted_strategy_dsl(self, sample_data):
+    def test_scripted_strategy_dsl(self, bt, sample_data):
         entry = "(ema_30 > ema_50)"
-        exit_rule = "close < Supertrend"
-        df = scripted_strategy(sample_data, entry, exit_rule)
+        exit_rule = "st < close"
+        df = bt.scripted_strategy(sample_data, "TEST", entry, exit_rule)
         assert "signal" in df.columns or "Signal" in df.columns
         
-    def test_scripted_strategy_operators(self, sample_data):
+    def test_scripted_strategy_operators(self, bt, sample_data):
         entry = "(ema_30 -gt ema_50)"
-        exit_rule = "close -lt Supertrend"
-        df = scripted_strategy(sample_data, entry, exit_rule)
+        exit_rule = "st -lt close"
+        df = bt.scripted_strategy(sample_data, "TEST", entry, exit_rule)
         sig_col = "signal" if "signal" in df.columns else "Signal"
         assert 1 in df[sig_col].values
 
     def test_backtester_run(self, monkeypatch):
         # Mock database and data fetcher
         class MockDB:
+            def __init__(self, db_path="data/etfs.db"):
+                self.db_path = db_path
             def get_ticker_data(self, ticker, days):
                 dates = pd.date_range("2023-01-01", periods=10)
                 return pd.DataFrame({

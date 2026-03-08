@@ -1,5 +1,6 @@
 from ETF_screener.backtester import Backtester, rsi_strategy, ema_cross_strategy, ema_supertrend_strategy
 from ETF_screener.indicators import calculate_ema, calculate_rsi, calculate_supertrend, calculate_adx
+from ETF_screener.plotter import PortfolioPlotter
 from tqdm import tqdm
 import pandas as pd
 import os
@@ -15,8 +16,9 @@ def load_dsl_file(file_path):
     exit_ = re.search(r'EXIT:\s*(.*)', content)
     return entry.group(1).strip() if entry else None, exit_.group(1).strip() if exit_ else None
 
-def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: str = None, strategy_path: str = None):
+def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: str = None, strategy_path: str = None, plot_top: int = 5):
     backtester = Backtester()
+    plotter = PortfolioPlotter()
     # Get all tickers from DB
     conn = backtester.db._get_connection()
     query = "SELECT DISTINCT ticker FROM etf_data"
@@ -71,7 +73,8 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
                     "Win Rate (%)": res['win_rate_pct'],
                     "Profit Factor": res['profit_factor'],
                     "Sharpe": res.get('sharpe_ratio', 0),
-                    "Trades": res.get('num_trades', 0)
+                    "Trades": res.get('num_trades', 0),
+                    "df": res.get('df')
                 })
     
     # Convert to DataFrame and sort by best performance
@@ -90,6 +93,17 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
         # Display with 2 decimals
         print(summary_df.head(10).to_string(index=False, float_format=lambda x: "{:.2f}".format(x)))
         
+        # Plot top performers
+        print(f"\nPlotting top {plot_top} performers...")
+        for i in range(min(plot_top, len(summary_df))):
+            row = summary_df.iloc[i]
+            ticker = row['Ticker']
+            # Find the original result to get the DF
+            for res in all_results:
+                if res['Ticker'] == ticker and res['Strategy'] == row['Strategy'] and 'df' in res:
+                    plotter.plot_etf_analysis(res['df'], f"{ticker}_{row['Strategy']}")
+                    break
+        
         # Save to CSV with 2 decimal precision (keeps full precision in memory/code)
         output_name = "data/multi_strategy_results.csv"
         summary_df.to_csv(output_name, index=False, float_format="%.2f")
@@ -106,7 +120,8 @@ if __name__ == "__main__":
     parser.add_argument("--exit", type=str, help="Exit condition (DSL)")
     parser.add_argument("--filter", type=str, help="Ticker filter")
     parser.add_argument("--strat_path", type=str, help="Path to .dsl file or directory")
+    parser.add_argument("--plot", type=int, default=5, help="Number of top performers to plot")
     args = parser.parse_args()
     
-    churn_db(entry_script=args.entry, exit_script=args.exit, ticker_filter=args.filter, strategy_path=args.strat_path)
+    churn_db(entry_script=args.entry, exit_script=args.exit, ticker_filter=args.filter, strategy_path=args.strat_path, plot_top=args.plot)
 

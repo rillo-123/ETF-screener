@@ -22,6 +22,7 @@ src/etfs.egg-info/SOURCES.txt
 src/etfs.egg-info/dependency_links.txt
 src/etfs.egg-info/entry_points.txt
 src/etfs.egg-info/top_level.txt
+tests/test_backtester.py
 tests/test_data_fetcher.py
 tests/test_database.py
 tests/test_indicators.py

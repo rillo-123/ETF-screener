@@ -325,10 +325,15 @@ def add_indicators(
     df_copy["RSI"] = calculate_rsi(df_copy["Close"], period=14)
 
     # Supertrend with configurable parameters
-    st, ub, lb = calculate_supertrend(
-        df_copy["High"], df_copy["Low"], df_copy["Close"], 
+    st_res = calculate_supertrend(
+        df_copy, 
         period=st_period, multiplier=st_multiplier
     )
+    if isinstance(st_res, tuple):
+        st, ub, lb = st_res
+    else:
+        st = st_res; ub = lb = None
+        
     df_copy["Supertrend"] = st
     df_copy["ST_Upper"] = ub
     df_copy["ST_Lower"] = lb

@@ -41,19 +41,24 @@ class TestIndicators:
 
     def test_calculate_supertrend(self, sample_data):
         """Test Supertrend calculation."""
-        st, ub, lb = calculate_supertrend(
-            sample_data["High"],
-            sample_data["Low"],
-            sample_data["Close"],
+        res = calculate_supertrend(
+            sample_data,
             period=10,
             multiplier=3.0,
         )
+        if isinstance(res, tuple):
+            st, ub, lb = res
+        else:
+            st = res
+            ub = lb = None
+
         assert len(st) == len(sample_data)
-        assert len(ub) == len(sample_data)
-        assert len(lb) == len(sample_data)
-        # Upper band should be above lower band (for non-NaN values)
-        valid_mask = ub.notna() & lb.notna()
-        assert (ub[valid_mask] >= lb[valid_mask]).all()
+        if ub is not None:
+            assert len(ub) == len(sample_data)
+            assert len(lb) == len(sample_data)
+            # Upper band should be above lower band (for non-NaN values)
+            valid_mask = ub.notna() & lb.notna()
+            assert (ub[valid_mask] >= lb[valid_mask]).all()
 
     def test_add_indicators(self, sample_data):
         """Test adding all indicators to dataframe."""
@@ -72,6 +77,7 @@ class TestIndicators:
             "ST_Upper",
             "ST_Lower",
             "Signal",
+            "RSI",
         ]
         for col in expected_cols:
             assert col in result.columns

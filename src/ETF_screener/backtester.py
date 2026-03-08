@@ -29,13 +29,21 @@ class Backtester:
         """Lazy loader for database to avoid pickling issues in parallel mode."""
         return ETFDatabase(self.db_path)
 
+    @db.setter
+    def db(self, value):
+        """Setter for testing/mocking."""
+        if hasattr(value, 'db_path'):
+            self.db_path = value.db_path
+        # We don't store the connection object itself to maintain pickling compatibility
+
     def run_strategy(self, ticker, strategy_func, days=365, indicators_setup=None, strategy_kwargs=None):
-        db = ETFDatabase(self.db_path)
+        db = self.db
         manager = CachedStrategyManager(db)
         if indicators_setup:
             df = manager.prepare_data(ticker, indicators_setup, days=days)
         else:
             df = db.get_ticker_data(ticker, days=days)
+        
         if df is None or df.empty: return {"error": f"No data for {ticker}"}
         df['Date'] = pd.to_datetime(df.get('Date', df.get('date')))
         df = df.sort_values('Date').reset_index(drop=True)
@@ -96,7 +104,8 @@ class Backtester:
             'num_trades': len(closed_trades),
             'win_rate_pct': win_rate,
             'profit_factor': profit_factor,
-            'sharpe_ratio': sharpe
+            'sharpe_ratio': sharpe,
+            'df': df
         }
     
     def scripted_strategy(self, df, ticker, entry_script, exit_script):
