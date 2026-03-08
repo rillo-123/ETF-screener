@@ -9,7 +9,8 @@ import pandas as pd
 
 from ETF_screener.data_fetcher import FinnhubFetcher
 from ETF_screener.database import ETFDatabase
-from ETF_screener.indicators import add_indicators
+from ETF_screener.indicators import add_indicators, calculate_ema, calculate_supertrend
+from ETF_screener.strategy_manager import CachedStrategyManager
 
 # ANSI color codes
 GREEN = "\033[92m"
@@ -29,6 +30,7 @@ class ETFScreener:
             api_key: Finnhub API key (optional)
         """
         self.db = db or ETFDatabase()
+        self.manager = CachedStrategyManager(self.db)
         self.fetcher = FinnhubFetcher(api_key=api_key) if api_key else None
         self.formats = self._load_formats()
 
@@ -111,14 +113,17 @@ class ETFScreener:
             ticker = row["ticker"]
             
             try:
-                # Fetch full historical data for this ticker
-                hist_df = db.get_ticker_data(ticker, days=90)  # Use 90 days for weekly calc
+                # Use manager to fetch and attach indicators with caching
+                setup = [
+                    {'name': 'EMA_50', 'func': calculate_ema, 'params': {'period': 50}},
+                    {'name': 'Supertrend', 'func': lambda x: calculate_supertrend(hist_df['High'], hist_df['Low'], x, period=st_period, multiplier=st_multiplier)[0], 'params': {}}
+                ]
+                
+                # Fetch data and indicators via cache
+                hist_df = self.manager.prepare_data(ticker, setup, days=90)
                 
                 if hist_df.empty or len(hist_df) < 10:
                     continue
-                
-                # Recalculate indicators with requested parameters and timeframe
-                hist_df = add_indicators(hist_df, st_period=st_period, st_multiplier=st_multiplier, timeframe=timeframe)
                 
                 # Get latest row
                 latest = hist_df.iloc[-1]

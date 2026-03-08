@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Callable, Optional
 from ETF_screener.database import ETFDatabase
 from ETF_screener.indicators import (
     calculate_rsi, calculate_ema, calculate_supertrend, 
-    calculate_adx, calculate_macd, calculate_stochastic
+    calculate_adx, calculate_macd, calculate_stochastic, calculate_rsi_ema
 )
 from ETF_screener.strategy_manager import CachedStrategyManager
 
@@ -110,6 +110,10 @@ class Backtester:
             if base_c not in df_eval.columns:
                 if re.match(r'ema_\d+', base_c): df_eval[base_c] = manager.get_indicator(df, ticker, calculate_ema, base_c, period=int(base_c.split("_")[1]))
                 elif re.match(r'rsi_\d+', base_c): df_eval[base_c] = manager.get_indicator(df, ticker, calculate_rsi, base_c, period=int(base_c.split("_")[1]))
+                elif re.match(r'rsi_ema_\d+_\d+', base_c): 
+                    # rsi_ema_14_10
+                    parts = base_c.split("_")
+                    df_eval[base_c] = manager.get_indicator(df, ticker, calculate_rsi_ema, base_c, rsi_period=int(parts[2]), ema_period=int(parts[3]))
                 elif base_c=="adx": df_eval[base_c] = manager.get_indicator(df, ticker, calculate_adx, base_c, period=14)
                 elif base_c in set(["st", "supertrend"]): df_eval[base_c] = manager.get_indicator(df, ticker, calculate_supertrend, base_c, period=10, multiplier=3.0)
                 elif base_c in ["macd", "macd_signal", "macd_hist"]:

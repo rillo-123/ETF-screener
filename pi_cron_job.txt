@@ -1,0 +1,4 @@
+# crontab setup for ETF Screener
+# Run 'crontab -e' on your Raspberry Pi and paste the following line:
+
+0 3 * * * cd /home/pi/ETF-screener && ./.venv/bin/python -m ETF_screener.main refresh --depth 730 >> /home/pi/ETF-screener/logs/nightly_refresh.log 2>&1

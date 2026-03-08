@@ -40,13 +40,15 @@ from ETF_screener.database import ETFDatabase
 
 from ETF_screener.etf_discovery import ETFDiscovery
 
-from ETF_screener.indicators import add_indicators, calculate_consecutive_streak
+from ETF_screener.indicators import add_indicators, calculate_consecutive_streak, calculate_ema
 
 from ETF_screener.hotlist import generate_hotlist
 
 from ETF_screener.plotter import PortfolioPlotter
 
 from ETF_screener.screener import ETFScreener
+
+from ETF_screener.strategy_manager import CachedStrategyManager
 
 from ETF_screener.storage import ParquetStorage
 
@@ -490,6 +492,7 @@ def screen_etfs(
     try:
 
         db = ETFDatabase()
+        manager = CachedStrategyManager(db)
 
         
 
@@ -530,8 +533,9 @@ def screen_etfs(
                     print("Calculating indicators...")
 
                     for symbol, df in etf_data.items():
-
-                        etf_data[symbol] = add_indicators(df)
+                        # Use cached manager for heavy calculations
+                        setup = [{'name': 'EMA_50', 'func': calculate_ema, 'params': {'period': 50}}]
+                        etf_data[symbol] = manager.prepare_data(symbol, setup, days=max(50, days))
 
                     
 
@@ -1205,35 +1209,23 @@ def refresh_database(
         
 
         if not tickers:
-
             print("[ERROR] No tickers found in CSV. Exiting.")
-
             return
 
-
-
         # Load blacklist
-
-        blacklist = extractor.blacklist if hasattr(extractor, 'blacklist') else {}
-
+        raw_blacklist = extractor.blacklist if hasattr(extractor, 'blacklist') else {}
+        blacklist = {str(k).upper(): v for k, v in raw_blacklist.items()}
         
-
         # Filter out blacklisted tickers (unless --include-blacklist)
-
         if not include_blacklist:
-
-            tickers = [t for t in tickers if t not in blacklist]
-
-            print(f"[OK] Found {len(tickers)} tickers in CSV (filtered out {len(extractor.extract_etf_tickers()) - len(tickers)} blacklisted)\n")
-
+            original_count = len(tickers)
+            tickers = [t for t in tickers if t.upper() not in blacklist]
+            filtered_count = original_count - len(tickers)
+            print(f"[OK] Found {len(tickers)} tickers in CSV (filtered out {filtered_count} blacklisted)\n")
         else:
-
             print(f"[OK] Found {len(tickers)} tickers in CSV (including blacklisted)\n")
 
-
-
         # Initialize database
-
         db = ETFDatabase()
 
         fetcher = YFinanceFetcher()
@@ -1254,81 +1246,87 @@ def refresh_database(
 
         updated = 0
 
-
-
         for ticker in tqdm(tickers, desc="Processing", ncols=80):
-
             try:
-
                 # Determine action
-
                 ticker_exists = db.ticker_exists(ticker)
-
                 
-
                 if force:
-
                     # Force: re-fetch everything
-
                     action = "refetch"
-
                 elif not ticker_exists:
-
                     # New: fetch from scratch
-
                     action = "new"
-
                 else:
-
                     # Existing: check if we need to extend depth
-
                     oldest_date = db.get_oldest_date(ticker)
-
                     if oldest_date:
-
-                        from datetime import datetime, timedelta
-
-                        oldest = datetime.strptime(oldest_date, "%Y-%m-%d")
-
-                        today = datetime.now()
-
-                        days_in_db = (today - oldest).days
-
-                        
-
-                        if days_in_db < depth:
-
-                            action = "extend"
-
-                        else:
-
-                            action = "skip"
+                        from datetime import datetime, date
+                        try:
+                            # Standardize to naive dates for comparison
+                            # Some datasets might have timestamps 'YYYY-MM-DD HH:MM:SS'
+                            oldest_dt = datetime.strptime(oldest_date.split(" ")[0], "%Y-%m-%d").date()
+                            today_dt = date.today()
+                            days_in_db = (today_dt - oldest_dt).days
+                            
+                            if days_in_db < depth:
+                                # Check if it's already "maxed out" in the blacklist
+                                if ticker.upper() in blacklist and blacklist[ticker.upper()].get("reason") == "Max depth reached":
+                                    action = "skip"
+                                else:
+                                    action = "extend"
+                            else:
+                                action = "skip"
+                        except (ValueError, TypeError) as e:
+                            tqdm.write(f"[WARN] Error parsing date '{oldest_date}' for {ticker}: {e}")
+                            action = "refetch"
 
                     else:
-
-                        action = "skip"
-
+                        action = "new"
                 
-
                 if action == "skip":
-
                     skipped += 1
-
                     continue
-
                 
+                if action == "extend":
+                    tqdm.write(f"DEBUG: {ticker} has {days_in_db} days, need {depth} (Oldest: {oldest_date})")
 
                 # Fetch data
-                df = fetcher.fetch_historical_data(ticker, days=depth)
+                try:
+                    df = fetcher.fetch_historical_data(ticker, days=depth)
+                except ValueError as e:
+                    if "No data found for symbol" in str(e):
+                        tqdm.write(f"[ERROR] No data found for {ticker}")
+                        # Blacklist if it's a new or problematic ticker to speed up future refreshes
+                        extractor.add_to_blacklist(ticker, reason="No data found during refresh")
+                        failed += 1
+                        continue
+                    else:
+                        raise e
 
-                if df.empty:
+                if df is None or df.empty:
                     tqdm.write(f"[ERROR] No data found for {ticker}")
-                    # Blacklist if it's a new or problematic ticker to speed up future refreshes
                     extractor.add_to_blacklist(ticker, reason="No data found during refresh")
                     failed += 1
                     continue
 
-                
+                # Check for "stale" or delisted data (more than 5 days old)
+                from datetime import date
+                latest_date = df["Date"].max().date()
+                if (date.today() - latest_date).days > 5:
+                    tqdm.write(f"[WARN] {ticker} data is stale (Latest date: {latest_date}). Adding to blacklist.")
+                    extractor.add_to_blacklist(ticker, reason="Stale data (likely delisted)")
+                    skipped += 1
+                    continue
+
+                if action == "extend":
+                    # Check if the oldest date moved
+                    new_oldest_dt = df["Date"].min().date() if not df.empty else None
+                    if new_oldest_dt and new_oldest_dt >= oldest_dt:
+                        tqdm.write(f"[INFO] {ticker} already at max available depth ({days_in_db} days).")
+                        extractor.add_to_blacklist(ticker, reason="Max depth reached")
+                        skipped += 1
+                        continue
 
                 # Add indicators
 
@@ -1357,7 +1355,7 @@ def refresh_database(
                     
 
             except Exception as e:
-
+                tqdm.write(f"[PANIC] Unexpected error processing {ticker}: {str(e)}")
                 failed += 1
 
 
@@ -1373,6 +1371,8 @@ def refresh_database(
         print(f"  [OK] New: {successful}")
 
         print(f"   Extended: {updated}")
+
+        print(f"   Skipped: {skipped}")
 
         print(f"  [X] Failed: {failed}")
 

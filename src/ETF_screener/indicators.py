@@ -43,6 +43,14 @@ def calculate_rsi(data: Any, period: int = 14) -> pd.Series:
     return rsi
 
 
+def calculate_rsi_ema(data: Any, rsi_period: int = 14, ema_period: int = 10) -> pd.Series:
+    """
+    Calculate an EMA of the RSI (RSI Signal Line).
+    """
+    rsi = calculate_rsi(data, rsi_period)
+    return rsi.ewm(span=ema_period, adjust=False).mean()
+
+
 def calculate_adx(high: Any, low: Any = None, close: Any = None, period: int = 14) -> pd.Series:
     """
     Calculate Average Directional Index (ADX) - Trend Strength.

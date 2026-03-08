@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 src/ETF_screener/__init__.py
+src/ETF_screener/backtester.py
 src/ETF_screener/config_loader.py
 src/ETF_screener/data_fetcher.py
 src/ETF_screener/database.py
@@ -13,6 +14,7 @@ src/ETF_screener/screener.py
 src/ETF_screener/screener_api.py
 src/ETF_screener/snippets.py
 src/ETF_screener/storage.py
+src/ETF_screener/strategy_manager.py
 src/ETF_screener/xetra_extractor.py
 src/ETF_screener/yfinance_fetcher.py
 src/etfs.egg-info/PKG-INFO

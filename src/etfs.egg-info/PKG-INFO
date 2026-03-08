@@ -79,8 +79,8 @@ etfs discover-all --workers 5
 # Extract ETFs from Deutsche Börse CSV (from reference/ directory)
 etfs extract
 
-# Custom output locations
-etfs discover-all --etfs-file data/my_etfs.json --blacklist-file data/my_blacklist.json
+# Custom output locations (stored in config/ by default)
+etfs discover-all --etfs-file config/etfs.json --blacklist-file config/blacklist.json
 ```
 
 ### Screener Commands
@@ -91,10 +91,21 @@ Screen ETFs by volume and technical criteria:
 # Screen all ETFs in database with default settings (10M min volume, last 10 days)
 etfs screener
 
-# Screen specific ETFs with custom volume threshold
-etfs screener EXS1.DE EUNG.DE XESC.DE --aVol 50000 --days 20
+# Screen for specific technical setups
+etfs screener --supt green                 # Only GREEN Supertrend (price > supertrend)
+etfs screener --supt red                   # Only RED Supertrend (price < supertrend)
+etfs screener --supt red --red-streak 10   # Reversal scanner (10+ consecutive RED days)
+etfs screener --swing                      # Pullback scanner (price dipped to EMA50 in uptrend)
 
-# Use human-friendly volume notation
+# Use conditional volume filters (supports K/M notation)
+etfs screener --volume-gte 500k            # Volume greater than or equal to 500,000
+etfs screener --volume-lt 1M               # Volume less than 1 million
+etfs screener --close-gt 100               # Price greater than 100
+
+# Screen specific ETFs with custom volume threshold
+etfs screener EXS1.DE EUNG.DE XESC.DE --aVol 50k --days 20
+
+# Use human-friendly volume notation everywhere
 etfs screener --aVol 100K --days 20      # 100 thousand shares
 etfs screener --aVol 1.5M --days 20      # 1.5 million shares
 etfs screener --aVol 50000 --days 20     # Raw number
@@ -106,6 +117,7 @@ etfs screener --nofEtfs 20 --aVol 100K
 etfs screener --format default             # Full view: volume, prices, EMA50, supertrend
 etfs screener --format compact             # Minimal view: ticker, volume only
 etfs screener --format detailed            # Extended view: min volume + all indicators
+etfs screener --format swing               # Special view for pullback setups
 
 # Keep only recent data (prune older records)
 etfs screener --aVol 50K --keep-days 90   # Prune data older than 90 days
@@ -194,8 +206,17 @@ The `refresh` command incrementally fills/extends your SQLite database from the 
 - **Implicit:** Snippets automatically fetch missing data on-demand (lazy-loading)
 
 Choose based on your workflow:
+
 - Use `refresh` for daily/bulk maintenance and ETF discovery workflows
 - Use snippets for exploratory analysis without setup overhead
+
+### Automated Refresh
+
+The project includes an auto-refresh system designed to run at logon (via Task Scheduler).
+
+- **`auto-refresh.ps1`**: The main PowerShell script that runs a shallow refresh (last 30 days) and generates a swing trading hotlist.
+- **`auto-refresh.bat`**: A launcher for the PowerShell script.
+- **Progress Tracking**: The script displays a live progress bar in a terminal window and logs detailed output to `logs/auto-refresh.log`.
 
 **Key concept**: `--depth` specifies how many days of history to keep, counting *back from today*.
 - `--depth 365` = fetch/maintain data from 365 days ago until today

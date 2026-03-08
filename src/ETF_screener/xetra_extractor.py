@@ -14,8 +14,8 @@ class XETRETFExtractor:
     def __init__(
         self,
         csv_file: str = "reference/t7-xetr-allTradableInstruments.csv",
-        etfs_file: str = "etfs.json",
-        blacklist_file: str = "blacklist.json",
+        etfs_file: str = "config/etfs.json",
+        blacklist_file: str = "config/blacklist.json",
     ):
         """Initialize extractor."""
         self.csv_file = Path(csv_file)
@@ -34,8 +34,10 @@ class XETRETFExtractor:
 
     def _save_json(self, data: dict, file_path: Path) -> None:
         """Save data to JSON file."""
+        # Ensure we always save with upper-case keys for consistent matching
+        normalized_data = {str(k).upper(): v for k, v in data.items()}
         with open(file_path, "w") as f:
-            json.dump(data, f, indent=2)
+            json.dump(normalized_data, f, indent=2)
 
     def extract_etf_tickers(self) -> list[str]:
         """
@@ -84,10 +86,18 @@ class XETRETFExtractor:
                     mnemonic = row.get("Mnemonic", "").strip()
                     
                     # Look for ETF, ETC (Exchange Traded Commodity), or ETP (Exchange Traded Product)
-                    if mnemonic and any(
-                        etf_type in instr_type 
-                        for etf_type in ["ETF", "ETC", "ETP"]
-                    ):
+                    # Expanded to include Common Stock (CS) but only in main market (Market Segment 003/045)
+                    # and original types: REIT, INVESTMENT, BANK
+                    is_target_type = any(
+                        type_key in instr_type 
+                        for type_key in ["ETF", "ETC", "ETP", "REIT", "INVESTMENT", "BANK"]
+                    )
+                    
+                    # Logic for Common Stock (CS) filtering (avoiding Penny stocks/Open Market)
+                    market_segment = row.get("Market Segment", "").strip()
+                    is_major_stock = (instr_type == "CS" and market_segment in ["003", "045"])
+
+                    if mnemonic and (is_target_type or is_major_stock):
                         # Add .DE suffix for XETRA (yfinance requirement)
                         ticker_with_suffix = f"{mnemonic}.DE"
                         etf_tickers.append(ticker_with_suffix)

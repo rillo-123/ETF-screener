@@ -112,5 +112,4918 @@
   },
   "NGXA.DE": {
     "status": "invalid"
+  },
+  "LYY7.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "C001.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DYLD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "C002.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EXIF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "D6RI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "D6RJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EFQA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "D6RU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "B4NF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "B4N2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "B4N3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BNQ7.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "42GG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3SOI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EGAS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AMES.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESEA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MBTC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FINZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LVWC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WGE0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUEE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEEE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VEGF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEMH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LWCH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEIA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AIGT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AIGU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUPD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "H41Y.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RHYE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LM9D.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GEUR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "32XG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RSPS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FEIA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QAIU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "C8PX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VITD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LM9A.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AICT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AICU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WMMV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WMMX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WMSE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WMSF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JRWE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "OBGE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FTGD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XUGA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FUSE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CD1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JCEU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASHE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SPP5.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEEU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEB3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SICE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEMA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FGLV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUDF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "REM3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XNUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AAKI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSYU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WNUC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VGGE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "I28X.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ABIE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AVWS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JESE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEB9.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASWG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3DGD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEMC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XNDQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XNDU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEIG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEAA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MWOS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AFDT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AFDU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AEAE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EMGM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HEUR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEB5.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BSE6.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MWOU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "INGE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "INGU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FOCT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XZEP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XDJU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AIDE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HYDE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SUST.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LDGL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MWOT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MWOV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MWOW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VYEU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LVLD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JGIE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ONSW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BPDE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BPDU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WENH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LM9B.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSY2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "REMD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AQDT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AQDU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AIHT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AIHU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GUHY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JQPD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EXCN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FSPU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEQE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LNXC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEB2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MCTA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FTMQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEEM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HEQD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FSPW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EXUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEIE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IVCS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XNJP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NTSG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BSE8.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MDEC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FESE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LM9C.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WENU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3D3D.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "8GRT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QUTM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QQIA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "H41X.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEEG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EVSD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUN1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEXE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEXU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A01T.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A01U.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "H417.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASWM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASRW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UCLA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DFSV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3DUE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "H41Z.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASWN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "USMC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JGVE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JGGE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WDEY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AEJE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEEW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QRUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QRUU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUAI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEXF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEXD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "F50A.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "F50B.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FTMS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GIGE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IQUA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JPEC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "USEE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSY7.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "H4ZK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FCRN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BS28.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3DCH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JRWA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JGLP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FSCI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UQB2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VCAS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JGAD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JOGS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JMES.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEB6.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ARXX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JGPD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FYUI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BPGE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BPGU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEMI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JESM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CNFY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AIUU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "USIQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BE26.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FLXA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WMMS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WMMT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VGGF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MWRE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ENTR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BS27.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SAHE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XMN1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IVDF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JLOD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUEB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "B29D.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JAUH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AGAE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BS29.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ULDE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QOMP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FLXS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASWJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BATI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JHES.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MXUE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PABY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MJUN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JPRY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JPVE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CBUD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JCPN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DWLD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XBHR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FTGM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JSDM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FCEU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FLXJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VYGL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AZEH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WOEE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IG31.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SPSA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MIDS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XUML.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EFRW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GAT1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SHOR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "33GI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XZWD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QSPA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AGYE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MCTD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DEGC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSY9.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DBUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XZSE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EBXA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XUCA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HYHE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XNDX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XNDD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XFLN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XSWC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VYUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JMAC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JGNE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ATEA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QUS5.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FYUE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEQL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEQS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XISP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "X5UD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEQW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEQU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QSEP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GEVT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GLBD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEMJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IART.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AYEE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AXXT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AXXU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "US4E.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASCI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASCH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ARXK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FTGQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BS30.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ADLT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ADLU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ZINS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEB1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AIQT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AIQU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GXPE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VUDY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ACPE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GAEM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSYZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VUDS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MWHE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VEGE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEB4.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FYEI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASWK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QJUN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "X500.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "X50U.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GQUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HQ5B.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BSE0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "31IG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IG32.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "8RMY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JHED.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PAUJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XWSC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XWSU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AHYU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DFNC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUGV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEYH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "OP7U.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "29GI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MANU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QDEV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FLRA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DVDE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SADH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XSWD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SEUA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUP0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FFLC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ACPH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ACPI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ARAX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ARAW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "4MMR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FBIE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HEQQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3DCG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "YCSH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JRWU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "E0UA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JGOV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "N1EU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PCL0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PCLD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PCLS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PCLF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEUG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEMF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HEDL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RDVY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AVEM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GDSF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XGEN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GQEM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RARE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WINC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "H415.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FCHP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XDGS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CBUH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BSE7.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IVAI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EU03.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BE28.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JPSY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MEEQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LUXY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LUXX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RHYG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "30IG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "26TP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JPUA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GXHY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QRGE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QRGU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AXQT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AXQU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VUDP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEBZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FJAN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FUSV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "O4J0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "YYYY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEXA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LDGA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SNP1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JMAG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JIGS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CTBA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASHT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASHU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEQA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CNUB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUPF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "USAH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEBY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "URNU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IFLX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FTGA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EFRB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "POWR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "POWA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IG35.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AGYT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AGYU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BS26.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AAKG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GIGA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "KBOT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASWL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MWEQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IQGE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BPUE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MAXS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSY1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NTSZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EGEE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AVUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUP1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASLT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASLU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GMAY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASWF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BSE9.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SADU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PAUM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UCLU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEMD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FFSM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A0DT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A0DU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LNXB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "B41J.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3DCE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEML.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JGSV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEMM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "28IX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "28IY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "400X.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3DGL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUCL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AIAA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MWOL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MWOZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JSDE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "KSAB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CNUC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XIGB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEME.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3SUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEMN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IXUA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UQE2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "C4RE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JPEY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ISFX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JPUY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JIPD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GQEU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AVWC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PAUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GIGU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JIGG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DEGT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QREU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SY7D.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "34GI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FBIH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AVEU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "W450.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RHYH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QSPD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "KNG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IG3A.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VCAA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XUDY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "619A.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UQE1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WDSD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AWDT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AWDU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "J590.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JREW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AVPE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NA7Y.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VUDE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MBSR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSY5.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JLOC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GAUG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PAUE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FTGF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AWDE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JMAM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEB2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FRPG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IQGA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MHQA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ECTA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "Q8Y0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEIP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IRFT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CLOD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VLDP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEQP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "5J50.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XZSW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSP5.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSP6.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UQB1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "G0VB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "H414.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GQWD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "B29I.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "X5SP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "C47B.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VLDS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IG34.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "US4D.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GAEB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WMFS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WMFT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JPGH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ODBA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PAUD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IS20.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HEOL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MEWD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RDYN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XDJX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEB8.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SPPC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ATE1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VITS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FBIU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEB0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BD30.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JUIE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WQTM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEBE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "INCU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3DGE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "35AI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UGOV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A2DT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A2DU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ED3F.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEMK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FTMA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AFDE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AWST.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AWSU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AIFS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PTAM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DGXU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3DUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HP2A.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEMB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSY8.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CBSM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XMGA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XMGU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WSDG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XNGI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BE27.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MAXD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CLOA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JGBL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AXQE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QGRG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WEBB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LM9E.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LM9F.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AIME.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MEGA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MEGU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3SUU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XFNT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SNPE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QGRW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SP3C.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FJUL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XBHE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IQHE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RONS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ODUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ODUT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JEYE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FGEA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EXU1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEB7.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UDVD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DTNE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HX60.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CTUT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CTUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BATF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JRIN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IG33.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BE29.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESAH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ECTD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "H416.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GQJY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DVDG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IBCA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUN6.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SXRL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SXRM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PEML.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SPY4.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SYBW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SYBF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FXEU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VGCE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BLOK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VUAA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XML4.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VGCF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "S5SD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AYE2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FTGB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UIQ4.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AW1B.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XDEX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "APJX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESIS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ESIE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "U5MD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XDRE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AW1J.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SPPQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QDVS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BCFU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XIFE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IBC0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WTIG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "36B6.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UIMT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XBAS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XBAM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EUPC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XRTM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LYP5.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LYOR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "B8TC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VOON.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "USB7.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEU2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A4HC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ASRC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "STXH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LGWT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LGWS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AHYS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "8R80.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AMEX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VOOM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LBNK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LBRE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LCHM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LFOD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LHTC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LIGS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LIRU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LOGS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LTUG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LTCM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LTVL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LUTI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AMEI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEMU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DRUP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GENY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EBUY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ELCR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "INDA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "E6BR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LYX4.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DFOP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EHLT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "INDU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EGV1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "OIGS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSTA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "INDB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "6TVL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LUTL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHST.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NADQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "9W1A.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ACUV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "8OUU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AHYA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AHYB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AHYC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AHYZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BQGE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEZB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LEMA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "C051.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XYP0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XE01.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XG01.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XM27.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XB28.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XM29.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XB30.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XM33.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XB34.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XM31.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XB32.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "C9DY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJLT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJLU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJLR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJLS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DXPJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GCRE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GCRU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AK8E.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AK8F.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AK8G.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LAAA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XCSI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDE0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJLY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJLX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJLZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJLW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJLV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJL0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EAAA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GTIS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GTIL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJL1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJL2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LC30.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LC33.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LC36.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LC39.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CEUH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJL6.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "TAAA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SNTE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SCWX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AMEV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJL7.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GTSB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "USBD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LWGB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XTMT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJL5.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EPAZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JCL0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JCLD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DBMF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AEHY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CBDE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EQSP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EQSU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDED.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJL9.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDES.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDER.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JAAE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "USBG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "0USE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "X2AE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XJ2C.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDET.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UAAA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDFS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MEUR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SHTU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SHTE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BJL8.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XDEF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "INY0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "0EMU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "0SWU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "0SWE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDE2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EEAH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDEM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FJ7E.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "TGAI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MDUC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MDUS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEZ1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEZ3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEZ5.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XEZ7.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XZ10.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XASB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "0G71.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XZEA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XB35.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XB36.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EEAF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CMMF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SOVE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AHYX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AHYW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AHYY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "C027.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "C026.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EEAG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AUMA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EEAB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EEAC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EEAE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EEAD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "YGLD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EWGC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EWGT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "H4ZZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CHSE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EWSD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EWSX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UGHG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SPUT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CRRY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "YSLV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CRRE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "4RTE.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "9GAF.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "9GAK.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "9GAL.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RTR.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RT2.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RT3.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RT4.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RUH.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RUP.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "00XL.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "OOEC.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "00XS.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "00XK.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "00X0.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "00XJ.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RUD.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RUJ.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "OD7D.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "OD7B.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "OD7S.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "OD7J.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "WCCA.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "WCO2.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "PCFN.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "PCFH.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "PCFP.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "PCFG.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "GG9B.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "WGLD.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "VZLA.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "VZLE.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "VZLB.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "VZLC.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "VZLD.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "00XN.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "00XR.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "GZUR.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "00XQ.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "GBSE.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "OD7H.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "OD73.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "OD7N.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RT8.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RUE.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RUM.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "9GA9.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "4RTF.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "WSLV.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "RM3H.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "FCO2.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "XEAL.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "XEAM.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "KRBN.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "RM8U.DE": {
+    "status": "invalid"
+  },
+  "8PSE.DE": {
+    "status": "invalid"
+  },
+  "SSLE.DE": {
+    "status": "invalid"
+  },
+  "STG.DE": {
+    "status": "invalid",
+    "reason": "Stale data (likely delisted)"
+  },
+  "DHE0.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "MTX0.DE": {
+    "status": "invalid",
+    "reason": "Stale data (likely delisted)"
+  },
+  "SGL0.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "DBAA.DE": {
+    "status": "invalid",
+    "reason": "No data found during refresh"
+  },
+  "0LC.DE": {
+    "status": "invalid",
+    "reason": "Stale data (likely delisted)"
+  },
+  "1AST.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "KDB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UNC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GXE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SLYG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ZFIN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NOT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RHO.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ADI1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ABJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "P2H.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "KNIA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LTEC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GBRA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NESR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SQL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "0UB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SIKA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "2U3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "F54.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QS51.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ZX6.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EIF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PSA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ZN2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "KA1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SZ50.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SPC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PTP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FXT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VME.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CECV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AMV0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "OBCK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DOU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "KCO0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SPG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "TKMS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CBGB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GE9.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GNN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DSN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NKT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JYS1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BV3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DS81.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3P7.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "22Z.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NZM2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QJQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "T2V1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WDH1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "R902.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A441.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "472.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BDSB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IDA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "48CA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RE21.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RPL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SMP0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EF3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PU4.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XUP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LRC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IDD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DBV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "2X1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "6IV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DSYA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MCHA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "STD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LGI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PRU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SCT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NPW1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RTO1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LS4C.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IC1H.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "T9G.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "H1W.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GU81.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "0VQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "KRX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A5G.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "TYIA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ME9.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "4BE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ZS3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UCM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "TQI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "7PI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FMNB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AXNA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AEU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UIPN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MOV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BPM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SPEA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MPI0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "1F80.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FU0A.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "TW10.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "OT8.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "KPN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HNK1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ENXB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VNX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PHGN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "37C.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "INX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "1AE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AB2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A16.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3E1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AKU1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "0VD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "R3D.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "8ZQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NW0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "58H.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AFT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AFW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ALS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DUL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AEP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ABG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A4S.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AK1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "XPH.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ANL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "A58.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AUD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ADP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BN9.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LTD0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "1ZB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CH1A.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CGN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MX4A.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CXR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CDS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CSC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CQD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CS1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "C9F.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CXU.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CIE1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CIT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CXX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "COZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EDC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CB1A.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "2X0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "CUM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DDN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DO2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "OYC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "7DB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DSG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "7DG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "DT3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "D2MN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EO5.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EQ6.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "E20.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ECJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "5EA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EMR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ETY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "EFX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AXJ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3E2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PEO.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "E3X1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FAS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UH3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ZGY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FIV.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "F03.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "FO5.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GAP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GLO.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "GWW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HFF.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HI91.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "48Z.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "096.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HU3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IX1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "IC2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "QTS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "KEY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "1KT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "2KD.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "HRS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LAR0.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LCR.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ELAA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LXI.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3LN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "LU2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "M44.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MPN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MSN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MAQ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "9MW.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "4MGN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MWZ.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MTO.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MCP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MTLA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NRA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NTA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "NFS.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "OCN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "4PG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PCG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PNP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PP9.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PMTA.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PAE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PCX.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PSE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RS1.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "PRL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RGO.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RN7.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RWL.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "R35.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "RSO.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SWG.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SE4.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SJ3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "AWM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "JM2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SOT.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SWN.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SYK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "3S9.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "MS51.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "SFE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "TKE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "COY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "TEY.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "BBK.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UNP.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UPAB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "UR3.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "VEE.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WB2.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WDC.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "WMB.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "ZT1A.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
+  },
+  "5ZM.DE": {
+    "status": "invalid",
+    "reason": "Max depth reached"
   }
 }
