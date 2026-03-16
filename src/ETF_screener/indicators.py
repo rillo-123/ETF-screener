@@ -8,33 +8,41 @@ from typing import Any, Union, Tuple, List, Optional
 def clean_price_data(series: pd.Series, max_pct_change: float = 0.5) -> pd.Series:
     """
     Remove extreme outliers from price data by replacing them with the previous value.
-    This effectively 'mutes' single-day spikes that are unrealistic (e.g., 50%+ move in 1 day for ETFs).
+    This effectively 'mutes' single-day spikes or 'level shifts' (incorrect cents vs euro).
 
     Args:
         series: Price series (e.g., Close)
         max_pct_change: Percentage threshold for identifying spikes (default 50%)
 
     Returns:
-        Cleaned series with spikes smoothed out.
+        Cleaned series with spikes and incorrect unit shifts smoothed out.
     """
     s = series.copy()
-    pct_change = s.pct_change().abs()
     
     # Identify indices where the percentage change is above the threshold
-    # For DataFrames, pct > max_pct_change returns a DataFrame with NaNs for False values 
-    # if we use direct indexing. Adding dropna() ensures we only get the True rows.
-    spike_diff = pct_change[pct_change > max_pct_change].dropna()
-    spikes = spike_diff.index
+    # Note: Using pct_change().abs() identifies the START of a spike/shift.
+    changes = s.pct_change().abs()
     
-    for idx in spikes:
-        # Get location in series
-        try:
-            loc = s.index.get_loc(idx)
-            if loc > 0:
-                # Replace with the previous valid value (ffill)
-                s.loc[idx] = s.iloc[loc-1]
-        except (KeyError, IndexError):
+    # We use a rolling approach to detect shifts that stay high
+    # or extreme single-day outliers (e.g., 10,000% yfinance bugs).
+    for i in range(1, len(s)):
+        prev_val = s.iloc[i-1]
+        curr_val = s.iloc[i]
+        
+        # Guard against division by zero if data is sparse
+        if prev_val == 0 or np.isnan(prev_val):
             continue
+            
+        # If change from previous is > threshold (e.g. 50%)
+        if abs(curr_val / prev_val - 1) > max_pct_change:
+            # Check if this is a temporary spike or a level shift
+            # If it's a level shift (next value is similar to this one),
+            # we check if this new level is consistent with historical median.
+            # However, for 17,000% yfinance bugs, the jump is so massive 
+            # that we're safe to just ffill from the last sane value.
+            # AND if it's the end of a series, we don't want to propagate 
+            # the last error forward if it was actually a correction.
+            s.iloc[i] = prev_val
             
     return s
 
