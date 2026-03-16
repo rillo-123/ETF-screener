@@ -284,10 +284,13 @@ class ETFDatabase:
             "ORDER BY date ASC"
         )
         
-        df = pd.read_sql_query(query, conn, params=(ticker.upper(),))
+        df_raw = pd.read_sql_query(query, conn, params=(ticker.upper(),))
         
-        if df.empty:
+        if df_raw.empty:
             return pd.DataFrame()
+        
+        # Ensure we don't have duplicates before renaming
+        df = df_raw.drop_duplicates(subset=['date']).copy()
         
         # Rename columns to match expected format
         df.columns = ["ticker", "Date", "Open", "High", "Low", "Close", "Volume", "EMA_50", "Supertrend", "ST_Upper", "ST_Lower", "Signal"]

@@ -35,12 +35,16 @@ class CachedStrategyManager:
         high_col = 'High' if 'High' in df.columns else 'high'
         low_col = 'Low' if 'Low' in df.columns else 'low'
 
-        if name in ["Supertrend", "ADX"] or func.__name__ in ["calculate_supertrend", "calculate_adx"]:
-            # Some indicators return multiple values
+        if name in ["Supertrend", "ADX", "stoch_all"] or func.__name__ in ["calculate_supertrend", "calculate_adx", "calculate_stochastic"]:
+            # Some indicators return multiple values and require OHLC
             res = func(df[high_col], df[low_col], df[price_col], **kwargs)
             result = res[0] if isinstance(res, tuple) else res
+        elif "series" in kwargs:
+            # For functions like calculate_linreg_slope that take a pre-calculated series
+            series = kwargs.pop("series")
+            result = func(series, **kwargs)
         else:
-            # Standard single-column indicators (EMA, RSI, MACD, Stoch)
+            # Standard single-column indicators (EMA, RSI, MACD)
             res = func(df[price_col], **kwargs)
             # If the result is a tuple (like MACD), we cache the whole thing
             result = res

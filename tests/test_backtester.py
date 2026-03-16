@@ -56,27 +56,30 @@ class TestBacktester:
         sig_col = "signal" if "signal" in df.columns else "Signal"
         assert 1 in df[sig_col].values
 
-    def test_backtester_run(self, monkeypatch):
-        # Mock database and data fetcher
+    def test_backtester_run(self, bt, monkeypatch):
+        # We need to mock the db property specifically on the CLASS or use a different approach
+        # because the @property decorator makes it tricky to monkeypatch on the instance
+        
         class MockDB:
             def __init__(self, db_path="data/etfs.db"):
                 self.db_path = db_path
-            def get_ticker_data(self, ticker, days):
+            def get_ticker_data(self, ticker, days=365):
                 dates = pd.date_range("2023-01-01", periods=10)
                 return pd.DataFrame({
                     'Date': dates, 'close': [100.0]*10, 'high': [101.0]*10, 
                     'low': [99.0]*10, 'open': [100.0]*10, 'volume': [1000.0]*10
                 })
         
-        bt = Backtester()
-        monkeypatch.setattr(bt, 'db', MockDB())
+        # Patch the class property
+        monkeypatch.setattr(Backtester, 'db', property(lambda self: MockDB()))
         
         def dummy_strat(df):
+            df = df.copy()
             df['signal'] = 0
-            df.loc[df.index[2], 'signal'] = 1
-            df.loc[df.index[5], 'signal'] = -1
+            df.loc[2, 'signal'] = 1
+            df.loc[5, 'signal'] = -1
             return df
             
-        res = bt.run_strategy("AAPL", dummy_strat)
+        res = bt.run_strategy("AAPL", dummy_strat, indicators_setup=None)
         assert "num_trades" in res
         assert res["num_trades"] == 1

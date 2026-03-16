@@ -1,45 +1,97 @@
 """Technical indicators for swing trading analysis."""
 
 import pandas as pd
+import numpy as np
 from typing import Any, Union, Tuple, List, Optional
+
+
+def clean_price_data(series: pd.Series, max_pct_change: float = 0.5) -> pd.Series:
+    """
+    Remove extreme outliers from price data by replacing them with the previous value.
+    This effectively 'mutes' single-day spikes that are unrealistic (e.g., 50%+ move in 1 day for ETFs).
+
+    Args:
+        series: Price series (e.g., Close)
+        max_pct_change: Percentage threshold for identifying spikes (default 50%)
+
+    Returns:
+        Cleaned series with spikes smoothed out.
+    """
+    s = series.copy()
+    pct_change = s.pct_change().abs()
+    
+    # Identify indices where the percentage change is above the threshold
+    # For DataFrames, pct > max_pct_change returns a DataFrame with NaNs for False values 
+    # if we use direct indexing. Adding dropna() ensures we only get the True rows.
+    spike_diff = pct_change[pct_change > max_pct_change].dropna()
+    spikes = spike_diff.index
+    
+    for idx in spikes:
+        # Get location in series
+        try:
+            loc = s.index.get_loc(idx)
+            if loc > 0:
+                # Replace with the previous valid value (ffill)
+                s.loc[idx] = s.iloc[loc-1]
+        except (KeyError, IndexError):
+            continue
+            
+    return s
 
 
 def calculate_rsi(data: Any, period: int = 14) -> pd.Series:
     """
     Calculate Relative Strength Index (RSI).
-
-    Args:
-        data: Series of prices (usually close prices) or DataFrame
-        period: RSI period (default 14)
-
-    Returns:
-        Series with RSI values (0-100)
     """
     if isinstance(data, pd.DataFrame):
-        price_col = 'Close' if 'Close' in data.columns else 'close'
-        series = data[price_col]
+        price_col = None
+        for col in ['Close', 'close', 'Adj Close']:
+            if col in data.columns:
+                price_col = col
+                break
+        series = clean_price_data(data[price_col] if price_col else data.iloc[:,0])
     else:
-        series = data
+        series = clean_price_data(data)
+
+    # Convert everything to a clean 1D Series to bypass MultiIndex hell
+    s = series.iloc[:, 0] if hasattr(series, 'iloc') and len(series.shape) > 1 else series
+    s = pd.Series(s.values.flatten(), index=s.index)
 
     # Calculate price changes
-    delta = series.diff()
+    delta = s.diff()
     
     # Separate gains and losses
-    gains = delta.copy()
-    losses = delta.copy()
+    gains = delta.clip(lower=0)
+    losses = delta.clip(upper=0).abs()
     
-    gains[gains < 0] = 0
-    losses[losses > 0] = 0
-    losses = losses.abs()
+    # Use Wilder's EWM for RSI calculation matching TradingView/Investing.com
+    # alpha = 1 / period
+    avg_gains = gains.ewm(alpha=1/period, adjust=False).mean()
+    avg_losses = losses.ewm(alpha=1/period, adjust=False).mean()
     
-    # Calculate average gains and losses
-    avg_gains = gains.rolling(window=period).mean()
-    avg_losses = losses.rolling(window=period).mean()
+    # Case: First valid points for Wilder's (SMA of first 'period' gains)
+    # Most traders expect the first 'period' bars to be SMA then EWM
+    # But for simplicity, EWM with adjust=False is usually standard enough.
     
-    # Calculate RS and RSI
-    rs = avg_gains / avg_losses
+    # RS and RSI
+    rs = avg_gains / avg_losses.replace(0, np.nan)
     rsi = 100 - (100 / (1 + rs))
     
+    # Fix first 'period' bars to be NaN as we don't have enough data
+    rsi.iloc[:period] = np.nan
+    
+    # Fill cases:
+    # 1. Both gains and losses are zero -> neutral (50)
+    # 2. Loss is zero but gain > 0 -> Strong (100)
+    # 3. Rest is calculated
+    rsi = rsi.fillna(50.0)
+    rsi.loc[(avg_losses == 0) & (avg_gains > 0)] = 100.0
+    
+    # If we had a DataFrame/No-MultiIndex input, return a framed RSI for consistency
+    if isinstance(data, pd.DataFrame) and not isinstance(data.columns, pd.MultiIndex):
+        # Result is already a Series with the original Index, just name it
+        return rsi.rename('RSI')
+            
     return rsi
 
 
@@ -95,10 +147,14 @@ def calculate_ema(data: Any, period: int = 50) -> pd.Series:
     Calculate Exponential Moving Average.
     """
     if isinstance(data, pd.DataFrame):
-        price_col = 'Close' if 'Close' in data.columns else 'close'
-        series = data[price_col]
+        price_col = None
+        for col in ['Close', 'close', 'Adj Close']:
+            if col in data.columns:
+                price_col = col
+                break
+        series = clean_price_data(data[price_col] if price_col else data.iloc[:,0])
     else:
-        series = data
+        series = clean_price_data(data)
         
     return series.ewm(span=period, adjust=False).mean()
 
@@ -108,10 +164,14 @@ def calculate_macd(data: Any, fast: int = 12, slow: int = 26, signal: int = 9) -
     Calculate MACD, Signal Line, and Histogram.
     """
     if isinstance(data, pd.DataFrame):
-        price_col = 'Close' if 'Close' in data.columns else 'close'
-        series = data[price_col]
+        price_col = None
+        for col in ['Close', 'close', 'Adj Close']:
+            if col in data.columns:
+                price_col = col
+                break
+        series = clean_price_data(data[price_col] if price_col else data.iloc[:,0])
     else:
-        series = data
+        series = clean_price_data(data)
         
     fast_ema = series.ewm(span=fast, adjust=False).mean()
     slow_ema = series.ewm(span=slow, adjust=False).mean()
@@ -140,6 +200,35 @@ def calculate_stochastic(high: Any, low: Any = None, close: Any = None, k_period
     
     k_line = 100 * (c - low_min) / (high_max - low_min)
     d_line = k_line.rolling(window=d_period).mean()
+    
+    return k_line, d_line
+
+
+def calculate_stoch_rsi(data: Any, rsi_period: int = 14, stoch_period: int = 14, k_period: int = 3, d_period: int = 3) -> Tuple[pd.Series, pd.Series]:
+    """
+    Calculate Stochastic RSI.
+    
+    Returns:
+        Tuple of (StochRSI %K, StochRSI %D)
+    """
+    rsi = calculate_rsi(data, rsi_period)
+    
+    # Calculate StochRSI
+    rsi_min = rsi.rolling(window=stoch_period).min()
+    rsi_max = rsi.rolling(window=stoch_period).max()
+    
+    # Avoid division by zero
+    diff = rsi_max - rsi_min
+    raw_stoch_rsi = 100 * (rsi - rsi_min) / diff
+    
+    # Simple smoothing to get %K and %D
+    # TradingView style: k = SMA(Stoch, 3), d = SMA(K, 3)
+    k_line = raw_stoch_rsi.rolling(window=k_period).mean()
+    d_line = k_line.rolling(window=d_period).mean()
+    
+    # Clip and handle NaNs
+    k_line = k_line.clip(0, 100).fillna(50.0)
+    d_line = d_line.clip(0, 100).fillna(50.0)
     
     return k_line, d_line
 
@@ -250,6 +339,26 @@ def resample_to_weekly(df: pd.DataFrame) -> pd.DataFrame:
     # Reset index to Date column
     df_weekly = df_weekly.reset_index()
     return df_weekly
+
+
+def calculate_linreg_slope(series: pd.Series, period: int = 14) -> pd.Series:
+    """
+    Calculate the slope of a linear regression line over a rolling period.
+    This provides a 'best fit' slope that is much less sensitive to noise than diff().
+    """
+    import numpy as np
+    
+    def get_slope(y):
+        if len(y) < period:
+            return 0.0
+        # Check for NaNs
+        if np.isnan(y).any():
+            return 0.0
+        x = np.arange(len(y))
+        slope, _ = np.polyfit(x, y, 1)
+        return slope
+
+    return series.rolling(window=period).apply(get_slope, raw=True)
 
 
 def calculate_consecutive_streak(df: pd.DataFrame) -> tuple[int, str]:
