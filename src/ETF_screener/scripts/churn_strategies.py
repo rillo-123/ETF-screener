@@ -21,16 +21,16 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
     backtester = Backtester()
     plotter = PortfolioPlotter()
     
-    # Phase 0: Clean plots directory only if force_refresh is True
-    if force_refresh:
-        print("Cleaning plots directory: plots...")
-        for file in Path("plots").glob("*.svg"):
+    # Phase 0: Clean plots directory at the start of every discovery run
+    print("Cleaning previous plots...")
+    for ext in ["*.svg", "*.png"]:
+        for file in Path("plots").glob(ext):
             try:
                 file.unlink()
             except PermissionError:
-                print(f"Skipping locked file: {file}")
+                pass # Skip if open
             except Exception as e:
-                print(f"Error deleting {file}: {e}")
+                print(f"Error deleting {file.name}: {e}")
     
     # Get all tickers from DB
     conn = backtester.db._get_connection()
@@ -55,6 +55,8 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
             strategies.append({"name": path.stem, "func": backtester.scripted_strategy, "kwargs": {"entry_script": entry, "exit_script": exit_}})
         elif path.is_dir():
             for dsl_file in path.glob("*.dsl"):
+                if "strat_cache" in dsl_file.parts:
+                    continue
                 entry, exit_ = load_dsl_file(dsl_file)
                 strategies.append({"name": dsl_file.stem, "func": backtester.scripted_strategy, "kwargs": {"entry_script": entry, "exit_script": exit_}})
     
@@ -205,6 +207,16 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
         
         # Also maintain a symlink-like constant copy for the PS1 script if needed
         clean_df[cols_to_save].to_csv("data/multi_strategy_results.csv", index=False, float_format="%.2f")
+
+        # Keep only the 10 most recent discovery CSV files to save space
+        try:
+            history_files = sorted(Path("data").glob("discovery_results_*.csv"), key=os.path.getmtime, reverse=True)
+            if len(history_files) > 10:
+                for old_file in history_files[10:]:
+                    old_file.unlink()
+                print(f"Cleaned up {len(history_files) - 10} old discovery CSV files.")
+        except Exception as e:
+            print(f"Warning: Could not cleanup old CSVs: {e}")
         
         # Also save to "custom_script_results.csv" for run_custom_backtest.ps1 compatibility
         if not strategy_path:

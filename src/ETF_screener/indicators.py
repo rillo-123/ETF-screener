@@ -19,12 +19,12 @@ def clean_price_data(series: pd.Series, max_pct_change: float = 0.5) -> pd.Serie
     """
     s = series.copy()
     
-    # Identify indices where the percentage change is above the threshold
-    # Note: Using pct_change().abs() identifies the START of a spike/shift.
-    changes = s.pct_change().abs()
-    
-    # We use a rolling approach to detect shifts that stay high
-    # or extreme single-day outliers (e.g., 10,000% yfinance bugs).
+    # Identifies the START of a spike/shift.
+    # If change from previous is > threshold (e.g. 50%)
+    # or if we have a massive immediate divergence from the rolling median.
+    window = 10
+    rolling_median = s.rolling(window=window, center=True).median().fillna(method='bfill').fillna(method='ffill')
+
     for i in range(1, len(s)):
         prev_val = s.iloc[i-1]
         curr_val = s.iloc[i]
@@ -33,15 +33,14 @@ def clean_price_data(series: pd.Series, max_pct_change: float = 0.5) -> pd.Serie
         if prev_val == 0 or np.isnan(prev_val):
             continue
             
-        # If change from previous is > threshold (e.g. 50%)
-        if abs(curr_val / prev_val - 1) > max_pct_change:
-            # Check if this is a temporary spike or a level shift
-            # If it's a level shift (next value is similar to this one),
-            # we check if this new level is consistent with historical median.
-            # However, for 17,000% yfinance bugs, the jump is so massive 
-            # that we're safe to just ffill from the last sane value.
-            # AND if it's the end of a series, we don't want to propagate 
-            # the last error forward if it was actually a correction.
+        # 1. Check for immediate % change (e.g. price jumps from 10 to 1000)
+        pct_change = abs(curr_val / prev_val - 1)
+        
+        # 2. Check for absolute divergence from local median (for "broken" months)
+        median_val = rolling_median.iloc[i]
+        median_div = abs(curr_val / median_val - 1) if median_val != 0 else 0
+
+        if pct_change > max_pct_change or median_div > max_pct_change * 2:
             s.iloc[i] = prev_val
             
     return s
@@ -177,13 +176,19 @@ def calculate_macd(data: Any, fast: int = 12, slow: int = 26, signal: int = 9) -
             if col in data.columns:
                 price_col = col
                 break
-        series = clean_price_data(data[price_col] if price_col else data.iloc[:,0])
+        series = data[price_col] if price_col else data.iloc[:,0]
     else:
-        series = clean_price_data(data)
+        series = data
         
-    fast_ema = series.ewm(span=fast, adjust=False).mean()
-    slow_ema = series.ewm(span=slow, adjust=False).mean()
+    # Ensure we use raw values to avoid Series/Index alignment issues in EWM
+    s = pd.Series(series.values.flatten(), index=series.index)
+    
+    # Standard MACD (12, 26, 9)
+    fast_ema = s.ewm(span=fast, adjust=False).mean()
+    slow_ema = s.ewm(span=slow, adjust=False).mean()
     macd_line = fast_ema - slow_ema
+    
+    # Signal line is 9-day EMA of the MACD line
     signal_line = macd_line.ewm(span=signal, adjust=False).mean()
     histogram = macd_line - signal_line
     

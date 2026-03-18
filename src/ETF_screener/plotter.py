@@ -46,14 +46,29 @@ class PortfolioPlotter:
             # We explicitly keep only the first occurrence for each column name
             df = df.loc[:, ~df.columns.duplicated()].copy()
 
-        # Ensure Case-Insensitive Column Access
+        # ... [Lines 42-43 already copied above]
         cols = []
+        
+        # Diagnostic: Print MACD series range
+        is_oscillator = lambda c: any(x in c.lower() for x in ["rsi", "stoch", "macd", "adx"])
+        
+        macd_cols = [c for c in df.columns if "macd" in c.lower() and "hist" not in c.lower()]
+        if macd_cols:
+            m_s = df[macd_cols[0]].dropna()
+            if not m_s.empty:
+                print(f"DEBUG [{symbol}]: {macd_cols[0]} min={m_s.min():.2f}, max={m_s.max():.2f}, median={m_s.median():.2f}")
+                if m_s.max() > 100 or m_s.min() < -100:
+                    print(f"CRITICAL WARNING: {symbol} has extreme MACD values!")
+
         seen = set()
         for c in df.columns:
             c_str = str(c)
             # Standardize core columns
             if c_str.lower() in ['date', 'open', 'high', 'low', 'close', 'volume', 'signal']:
                 new_col = c_str.capitalize()
+            elif is_oscillator(c_str):
+                # KEEP OSCILLATOR COLUMN NAMES ORIGINAL (no title case)
+                new_col = c_str
             else:
                 new_col = c_str
             
@@ -63,11 +78,12 @@ class PortfolioPlotter:
             cols.append(new_col)
             seen.add(new_col)
         
-        df = df.iloc[:, :len(cols)] # Trim if needed
-        df.columns = cols
+        # Don't trim df.iloc, just reassign columns if they match
+        if len(cols) == len(df.columns):
+            df.columns = cols
         
         # Identify special indicator columns for separate subplots
-        is_oscillator = lambda c: any(x in c.lower() for x in ["rsi", "stoch", "macd", "adx"])
+        # lambda is redefined below but used for clarity
         
         # Calculate robust price limits to handle outliers (like bad data points)
         price_col = "Close" if "Close" in df.columns else "close"
@@ -235,25 +251,15 @@ class PortfolioPlotter:
                 macd_cols = [c for c in cols if (c.lower() == "macd" or ("macd" in c.lower() and "signal" not in c.lower() and "hist" not in c.lower()))]
                 
                 if hist_cols:
-                    h_col = hist_cols[0]
-                    # Create colors for histogram (green for positive, red for negative)
-                    hist_data = df[h_col].fillna(0).values
-                    colors = ['green' if x >= 0 else 'red' for x in hist_data]
-                    # Calculate reasonable bar width based on date spacing (default to 0.8 days)
-                    width = 0.8
-                    if len(df) > 1:
-                        avg_diff = (df["Date"].iloc[-1] - df["Date"].iloc[0]).total_seconds() / (len(df) * 86400)
-                        width = max(0.2, min(0.9, avg_diff * 0.8))
-                    
-                    osc_ax.bar(df["Date"], df[h_col], width=width, color=colors, alpha=0.5, label="Hist")
+                    pass # Histogram disabled per user request to improve curve visibility
                 
                 if macd_cols:
-                    # Map any macd column to charcoal
-                    osc_ax.plot(df["Date"], df[macd_cols[0]], label="MACD", color="#1c1c1c", linewidth=2.0)
+                    # Map any macd column to charcoal with high zorder
+                    osc_ax.plot(df["Date"], df[macd_cols[0]], label="MACD", color="#1c1c1c", linewidth=2.8, zorder=10)
                 
                 if signal_cols:
-                    # Map any signal column to deep red
-                    osc_ax.plot(df["Date"], df[signal_cols[0]], label="Signal", color="#d62728", linewidth=1.5)
+                    # Map any signal column to deep red with high zorder
+                    osc_ax.plot(df["Date"], df[signal_cols[0]], label="Signal", color="#d62728", linewidth=2.2, zorder=11)
                 
                 # If we missed any other MACD related columns
                 other_cols = [c for c in cols if c not in hist_cols + signal_cols + macd_cols]
@@ -310,18 +316,26 @@ class PortfolioPlotter:
                 else:
                     osc_ax.set_ylim(-5, 105)
             elif name == "MACD" and len(cols) > 0:
-                # Add a zero line for MACD
-                osc_ax.axhline(0, color="black", linestyle="-", alpha=0.2)
+                # Add a zero line
+                osc_ax.axhline(0, color="black", linestyle="-", alpha=0.3, zorder=1)
                 
-                # Robust scaling for MACD to avoid extreme compression
-                m_data = df[cols].values
-                m_min, m_max = np.nanquantile(m_data, [0.01, 0.99])
-                m_range = m_max - m_min
-                if m_range > 0:
-                    osc_ax.set_ylim(m_min - 0.2*m_range, m_max + 0.2*m_range)
-            
-            osc_ax.set_ylabel(name, fontsize=10)
-            osc_ax.grid(True, alpha=0.2)
+                # Dynamic scaling for MACD: Focus on the actual curves
+                # Exclude the histogram which (if buggy) breaks the scale
+                calc_cols = [c for c in cols if "hist" not in c.lower()]
+                if not calc_cols: calc_cols = cols 
+                
+                m_data = df[calc_cols].values.flatten()
+                m_data = m_data[~np.isnan(m_data)]
+                if len(m_data) > 0:
+                    # Clip extreme outliers (at the plotting level) to keep scale readable
+                    m_min, m_max = np.nanquantile(m_data, [0.01, 0.99])
+                    m_range = m_max - m_min
+                    if m_range > 0:
+                        osc_ax.set_ylim(m_min - 0.2*m_range, m_max + 0.2*m_range)
+                    else:
+                        osc_ax.set_ylim(-1, 1) 
+                
+            osc_ax.grid(True, alpha=0.2, zorder=0)
             osc_ax.legend(loc="upper left", fontsize=8)
 
         # Plot Volume
