@@ -45,6 +45,23 @@ if (-not $env:VIRTUAL_ENV) {
     $env:VIRTUAL_ENV_DISABLE_PROMPT = $true
     & $activateScript
 }
+else {
+    # If already active, ensure we don't let Activate.ps1 mangle the prompt 
+    # if it's called again for some reason
+    $env:VIRTUAL_ENV_DISABLE_PROMPT = $true
+}
+
+# Ensure prompt idempotency: if Activate.ps1 already hijacked the prompt,
+# we need to restore the custom prompt from our profile.
+if (Get-Command _OLD_VIRTUAL_PROMPT -ErrorAction SilentlyContinue) {
+    # Activate.ps1 saves the old prompt in _OLD_VIRTUAL_PROMPT.
+    # If we find this, it means Activate.ps1 modified the prompt 
+    # despite our DISABLE_PROMPT attempts or in a previous run.
+    Remove-Item Function:prompt -ErrorAction SilentlyContinue
+    Remove-Item Function:_OLD_VIRTUAL_PROMPT -ErrorAction SilentlyContinue
+    # Re-source profile to restore our clean prompt
+    if (Test-Path $profileScript) { . $profileScript 2>$null | Out-Null }
+}
 
 # Clear the git prompt cache so it updates on next prompt
 if (Get-Variable -Name GitPromptCache -Scope Global -ErrorAction SilentlyContinue) {
@@ -54,6 +71,21 @@ if (Get-Variable -Name GitPromptCache -Scope Global -ErrorAction SilentlyContinu
         Dirty = $null
         Timestamp = [datetime]::MinValue 
     } -Scope Global -Force
+}
+
+# Time-based skip for package checking: skip if checked in the last 60 minutes
+$checkFile = Join-Path $venvDir ".last_pip_check"
+$skipCheck = $false
+if (Test-Path $checkFile) {
+    $lastCheck = Get-Item $checkFile
+    if (((Get-Date) - $lastCheck.LastWriteTime).TotalMinutes -lt 60) {
+        $skipCheck = $true
+    }
+}
+
+if ($skipCheck) {
+    Write-Host "✓ Skipping package check (last check was < 60m ago)" -ForegroundColor Gray
+    return
 }
 
 # Check if pip is available
@@ -128,3 +160,7 @@ try {
 } finally {
     Pop-Location
 }
+
+# Update the timestamp for the next check
+New-Item -Path $checkFile -ItemType File -Force | Out-Null
+Write-Host "✓ Package check complete (next check in 60m)" -ForegroundColor Green

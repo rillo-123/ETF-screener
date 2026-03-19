@@ -17,13 +17,13 @@ def load_dsl_file(file_path):
     exit_ = re.search(r'EXIT:\s*(.*)', content)
     return entry.group(1).strip() if entry else None, exit_.group(1).strip() if exit_ else None
 
-def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: str = None, strategy_path: str = None, plot_top: int = 20, force_refresh: bool = False):
+def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: str = None, strategy_path: str = None, plot_top: int = 20, force_refresh: bool = False, since_days: int = None):
     backtester = Backtester()
     plotter = PortfolioPlotter()
     
     # Phase 0: Clean plots directory at the start of every discovery run
     print("Cleaning previous plots...")
-    for ext in ["*.svg", "*.png"]:
+    for ext in ["*.svg"]:
         for file in Path("plots").glob(ext):
             try:
                 file.unlink()
@@ -85,6 +85,18 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
         )
         for res in results:
             if res and "error" not in res:
+                df = res.get('df')
+                
+                # Fetch recent entry days from the dataframe
+                recent_days = 999
+                if df is not None and 'recent_entry_days' in df.columns:
+                    recent_days = df['recent_entry_days'].iloc[-1]
+                
+                # Apply 'Since Days' filter if requested
+                if since_days is not None:
+                    if recent_days > since_days:
+                        continue
+
                 all_results.append({
                     "Ticker": res['ticker'],
                     "Strategy": strat['name'],
@@ -94,6 +106,7 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
                     "Sharpe": res.get('sharpe_ratio', 0),
                     "Max DD (%)": res.get('max_drawdown_pct', 0),
                     "Trades": res.get('num_trades', 0),
+                    "Days Since Entry": int(recent_days) if not pd.isna(recent_days) else 999,
                     "df": res.get('df')
                 })
     
@@ -106,7 +119,11 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
             (summary_df['Sharpe'] + 1) / 
             ((1 + summary_df['Trades'] / 100.0) * (1 + summary_df['Max DD (%)'] / 10.0))
         )
-        summary_df = summary_df.sort_values(by="Quality Score", ascending=False)
+        # If filtering by since_days, we might want to sort by recency instead of quality
+        if since_days is not None:
+            summary_df = summary_df.sort_values(by=["Days Since Entry", "Quality Score"], ascending=[True, False])
+        else:
+            summary_df = summary_df.sort_values(by="Quality Score", ascending=False)
         
         print("\nTop 10 Strategy/ETF Combinations:")
         # Display with 2 decimals, excluding the bulky 'df' column
@@ -115,7 +132,7 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
         
         # Plot top performers
         if plot_top > 0:
-            print(f"\nPlotting top {plot_top} performers...")
+            print(f"\nPlotting top {plot_top} and bottom {plot_top} performers...")
             # Use a fresh import to avoid any scoping issues inside the loop
             from ETF_screener.plotter import PortfolioPlotter as PFPlot
             p = PFPlot()
@@ -123,7 +140,17 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
             # Prepare rich manifest data for the dashboard
             rich_manifest = []
             
-            for i in range(min(plot_top, len(summary_df))):
+            # Select indices for top and bottom performers
+            top_indices = list(range(min(plot_top, len(summary_df))))
+            # Bottom performers are those with the lowest Quality Score
+            # We skip those that already in top_indices if overlap exists
+            bottom_potential = list(range(max(0, len(summary_df) - plot_top), len(summary_df)))
+            bottom_indices = [idx for idx in bottom_potential if idx not in top_indices]
+            
+            # Combine them but keep track of which is which
+            all_indices = [(idx, "top") for idx in top_indices] + [(idx, "bottom") for idx in bottom_indices]
+            
+            for i, rank_type in all_indices:
                 row = summary_df.iloc[i]
                 ticker = row['Ticker']
                 strategy_name = row['Strategy']
@@ -139,21 +166,23 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
                         
                         # Phase 1: Skip if already exists (unless we want to force refresh)
                         if plot_path.exists() and not force_refresh:
-                            print(f"Skipping {plot_filename} (Already exists)")
+                            # Still add to manifest even if skipped plotting
+                            pass
                         else:
-                            print(f"Generating plot for {ticker} ({strategy_name})...")
+                            print(f"Generating plot for {ticker} ({strategy_name}) [{rank_type}]...")
                             p.plot_etf_analysis(res['df'].copy(), f"{ticker}_{strategy_name}")
                         
                         rich_manifest.append({
                             "file": plot_filename,
                             "ticker": str(ticker),
                             "strategy": str(strategy_name),
-                            "return_pct": float(row['Return (%)']),
-                            "win_rate": float(row['Win Rate (%)']),
-                            "profit_factor": float(row['Profit Factor']),
-                            "sharpe": float(row['Sharpe']),
-                            "max_dd": float(row.get('Max DD (%)', 0)),
-                            "trades": int(row['Trades'])
+                            "rank_type": rank_type,
+                            "return_pct": float(row['Return (%)']) if not pd.isna(row['Return (%)']) else 0.0,
+                            "win_rate": float(row['Win Rate (%)']) if not pd.isna(row['Win Rate (%)']) else 0.0,
+                            "profit_factor": float(row['Profit Factor']) if not pd.isna(row['Profit Factor']) else 0.0,
+                            "sharpe": float(row['Sharpe']) if not pd.isna(row['Sharpe']) else 0.0,
+                            "max_dd": float(row.get('Max DD (%)', 0)) if not pd.isna(row.get('Max DD (%)', 0)) else 0.0,
+                            "trades": int(row['Trades']) if not pd.isna(row['Trades']) else 0
                         })
                         found = True
                         break
@@ -170,17 +199,18 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
                 # Manually trigger the HTML update logic from plotter since we aren't calling plot_multiple_etfs
                 target_ui = Path("plots/index.html")
                 root_ui = Path("browser.html")
+                # If browser.html is missing, try to treat plots/index.html as the template if it exists
                 if root_ui.exists():
                     import shutil
                     import re
                     shutil.copy2(root_ui, target_ui)
-                    
+                
+                import re
                 if target_ui.exists():
                     content = target_ui.read_text(encoding='utf-8')
                     # Use backticks for a multiline template string in JS
                     # This is much safer for JSON injection
-                    pattern = r"const rawManifest = `.*?`;"
-                    # Backslashes and backticks need to be escaped inside the template string
+                    # Escaping the JSON for JS template literal
                     escaped_json = manifest_json.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
                     new_manifest_line = f"const rawManifest = `{escaped_json}`;"
                     
@@ -190,8 +220,12 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
                     
                     target_ui.write_text(content, encoding='utf-8')
                     print(f"Injected {len(rich_manifest)} items into dashboard.")
+                else:
+                    print(f"Warning: Dashboard UI file not found (checked browser.html and {target_ui})")
             except Exception as e:
+                import traceback
                 print(f"Warning: Could not save rich manifest: {e}")
+                traceback.print_exc()
         
         # Save to CSV with 2 decimal precision (keeps full precision in memory/code)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -232,7 +266,16 @@ if __name__ == "__main__":
     parser.add_argument("--strat_path", type=str, help="Path to .dsl file or directory")
     parser.add_argument("--plot", type=int, default=20, help="Number of top performers to plot")
     parser.add_argument("--force", action="store_true", help="Force refresh (cleans plots/ folder)")
+    parser.add_argument("--since", type=int, default=None, help="Only include tickers where an entry occurred within N days")
     args = parser.parse_args()
     
-    churn_db(entry_script=args.entry, exit_script=args.exit, ticker_filter=args.filter, strategy_path=args.strat_path, plot_top=args.plot, force_refresh=args.force)
+    churn_db(
+        entry_script=args.entry, 
+        exit_script=args.exit, 
+        ticker_filter=args.filter, 
+        strategy_path=args.strat_path, 
+        plot_top=args.plot, 
+        force_refresh=args.force,
+        since_days=args.since
+    )
 

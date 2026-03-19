@@ -130,6 +130,17 @@ class PortfolioPlotter:
         # Prepare indicators for plotting
         price_indicators = [c for c in valid_cols if not is_oscillator(c)]
         
+        # DECLUTTER MAIN PLOT: Keep only EMA_50 and core price (others kept if they are oscillators)
+        essential_indicators = ["ema_50", "EMA_50", "EMA 50", "ema 50"]
+        price_indicators = []
+        _seen_ema = False
+        for c in valid_cols:
+            if not is_oscillator(c):
+                if any(x == c or x.lower() == c.lower() for x in essential_indicators):
+                    if not _seen_ema:
+                        price_indicators.append(c)
+                        _seen_ema = True
+        
         # Categorize oscillators for dedicated subplots
         osc_groups = {
             "RSI": [c for c in valid_cols if "rsi" in c.lower() and "stoch" not in c.lower()],
@@ -255,11 +266,11 @@ class PortfolioPlotter:
                 
                 if macd_cols:
                     # Map any macd column to charcoal with high zorder
-                    osc_ax.plot(df["Date"], df[macd_cols[0]], label="MACD", color="#1c1c1c", linewidth=2.8, zorder=10)
+                    osc_ax.plot(df["Date"], df[macd_cols[0]], label="MACD", color="#1c1c1c", linewidth=1.5, zorder=10)
                 
                 if signal_cols:
                     # Map any signal column to deep red with high zorder
-                    osc_ax.plot(df["Date"], df[signal_cols[0]], label="Signal", color="#d62728", linewidth=2.2, zorder=11)
+                    osc_ax.plot(df["Date"], df[signal_cols[0]], label="Signal", color="#d62728", linewidth=1.2, zorder=11)
                 
                 # If we missed any other MACD related columns
                 other_cols = [c for c in cols if c not in hist_cols + signal_cols + macd_cols]
@@ -373,12 +384,10 @@ class PortfolioPlotter:
         # and provide consistent spacing for multiple indicator panels
         plt.subplots_adjust(hspace=0.4, top=0.92, bottom=0.08, left=0.1, right=0.95)
 
-        # Save figure as both SVG (primary) and PNG (backup)
+        # Save figure as SVG (primary)
         output_path_svg = self.output_dir / f"{symbol.lower()}_analysis.svg"
-        output_path_png = self.output_dir / f"{symbol.lower()}_analysis.png"
         
         plt.savefig(output_path_svg, format="svg", bbox_inches="tight")
-        plt.savefig(output_path_png, format="png", dpi=300, bbox_inches="tight")
         
         print(f"Saved SVG plot to {output_path_svg}")
         plt.close()

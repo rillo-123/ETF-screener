@@ -59,11 +59,9 @@ class Backtester:
         if cache_path and cache_path.exists():
             try:
                 df = pd.read_parquet(cache_path)
-                # Verify it has enough data (optional check)
-                if not df.empty:
-                    # Return pre-calculated metrics if they exist in metadata or just rerun the logic
-                    # To keep it simple, we just use the cached DF which includes the 'signal'
-                    pass
+                # Verify it has enough data
+                if df is None or df.empty:
+                    df = None
             except Exception as e:
                 print(f"Warning: Failed to read cache {cache_path}: {e}")
                 df = None
@@ -92,6 +90,8 @@ class Backtester:
                 df = strategy_func(df, ticker=ticker, **kwargs)
             else:
                 df = strategy_func(df, **kwargs)
+                
+            if df is None or df.empty: return {"error": "Empty dataframe after strategy run"}
                 
             # If we calculated signals, save them to parquet for next time
             if cache_path and not df.empty:
@@ -248,13 +248,34 @@ class Backtester:
             
         try:
             b_em = df_eval.eval(e_s); b_r = df_eval.eval(r_s)
-            df['signal'] = 0; df.loc[b_em==True, 'signal'] = 1; df.loc[b_r==True, 'signal'] = -1
+            
+            # Create a copy of df to avoid modifying the original during processing
+            df = df.copy()
+            df['signal'] = 0
+            df.loc[b_em == True, 'signal'] = 1
+            df.loc[b_r == True, 'signal'] = -1
+            
+            # Record last entry bar relative to end of dataframe
+            # This is used for scanning "Recent Entries"
+            recent_entry_days = 999
+            if any(b_em):
+                v = b_em.values if hasattr(b_em, 'values') else b_em
+                entry_indices = np.where(v)[0]
+                if len(entry_indices) > 0:
+                    last_idx = int(entry_indices[-1])
+                    recent_entry_days = len(df) - 1 - last_idx
+            
+            df['recent_entry_days'] = recent_entry_days
             
             # Copy new indicator columns back to original df so plotter can see them
             for col in df_eval.columns:
                 if col not in df.columns:
                     df[col] = df_eval[col]
-        except: df['signal'] = 0
+        except Exception as e:
+            print(f"Error in strategy eval for {ticker}: {e}")
+            df = df.copy()
+            df['signal'] = 0
+            df['recent_entry_days'] = 999
         return df
 
     def run_parallel_backtest(self, tickers, base_strategy, days=365, indicators_setup=None, strategy_kwargs=None, max_workers=None):

@@ -23,7 +23,7 @@ def clean_price_data(series: pd.Series, max_pct_change: float = 0.5) -> pd.Serie
     # If change from previous is > threshold (e.g. 50%)
     # or if we have a massive immediate divergence from the rolling median.
     window = 10
-    rolling_median = s.rolling(window=window, center=True).median().fillna(method='bfill').fillna(method='ffill')
+    rolling_median = s.rolling(window=window, center=True).median().bfill().ffill()
 
     for i in range(1, len(s)):
         prev_val = s.iloc[i-1]

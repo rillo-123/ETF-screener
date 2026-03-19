@@ -1,6 +1,6 @@
-# MACD Momentum Strategy
+# MACD Strategy with EMA Slope Trend Filter - Stay on if EMA 50 Slope is Positive
 # Entry: MACD Signal Cross Up
-# Exit:  MACD Signal Cross Down or RSI Overbought
+# Exit:  (MACD Signal Cross Down AND EMA 50 Slope <= 0) OR (EMA 50 Slope <= 0)
 
-ENTRY: cross_up(macd, macd_signal) and (ema_50_slope -gt 0)
-EXIT:  cross_down(macd, macd_signal) or (rsi_14 -gt 80)
+ENTRY: cross_up(macd, macd_signal) 
+EXIT:  cross_down(macd, macd_signal) OR (ema_50_slope <= 0)
