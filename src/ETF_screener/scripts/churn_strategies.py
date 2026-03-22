@@ -242,13 +242,13 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
         # Also maintain a symlink-like constant copy for the PS1 script if needed
         clean_df[cols_to_save].to_csv("data/multi_strategy_results.csv", index=False, float_format="%.2f")
 
-        # Keep only the 10 most recent discovery CSV files to save space
+        # Keep only the 3 most recent discovery CSV files to save space
         try:
             history_files = sorted(Path("data").glob("discovery_results_*.csv"), key=os.path.getmtime, reverse=True)
-            if len(history_files) > 10:
-                for old_file in history_files[10:]:
+            if len(history_files) > 3:
+                for old_file in history_files[3:]:
                     old_file.unlink()
-                print(f"Cleaned up {len(history_files) - 10} old discovery CSV files.")
+                print(f"Cleaned up {len(history_files) - 3} old discovery CSV files.")
         except Exception as e:
             print(f"Warning: Could not cleanup old CSVs: {e}")
         

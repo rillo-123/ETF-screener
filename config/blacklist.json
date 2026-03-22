@@ -1,4 +1,8 @@
 {
+  "C5ME.DE": {
+    "status": "invalid",
+    "reason": "zombie/low-liquidity"
+  },
   "3BFS.DE": {
     "status": "invalid"
   },
@@ -5025,5 +5029,9 @@
   "5ZM.DE": {
     "status": "invalid",
     "reason": "Max depth reached"
+  },
+  "AXA.DE": {
+    "status": "invalid",
+    "reason": "low trend/disqualified"
   }
 }

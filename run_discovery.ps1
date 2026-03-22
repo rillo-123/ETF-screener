@@ -1,18 +1,18 @@
 param(
-    [string]$Path = "strategies/",
-    [string]$Filter = "",
+    [string]$StrategyPath = "strategies/",
+    [string]$TickerFilter = "",
     [int]$Plot = 0,
-    [int]$Since = -1,
-    [switch]$OpenResult,
+    [int]$Lookback = -1,
+    [switch]$Show,
     [switch]$PlotDash,
-    [switch]$Force
+    [switch]$Clean
 )
 
 Write-Host "--- Strategy Discovery Lab ---" -ForegroundColor Cyan
-Write-Host "Path:   $Path"
-Write-Host "Filter: $(if($Filter){$Filter}else{'None'})"
-Write-Host "Plot:   $Plot"
-Write-Host "Since:  $(if($Since -ge 0){$Since}else{'All Time'})"
+Write-Host "Path:     $StrategyPath"
+Write-Host "Filter:   $(if($TickerFilter){$TickerFilter}else{'None'})"
+Write-Host "Plot:     $Plot"
+Write-Host "Lookback: $(if($Lookback -ge 0){$Lookback}else{'All Time'})"
 Write-Host "Dashboard: $(if($PlotDash){'Yes'}else{'No'})"
 Write-Host "-----------------------------"
 
@@ -20,11 +20,11 @@ Write-Host "-----------------------------"
 if (-not (Test-Path "data")) { New-Item -ItemType Directory -Path "data" }
 
 # Execute the churner
-$cmd = "set PYTHONPATH=src; python src/ETF_screener/scripts/churn_strategies.py --strat_path `"$Path`""
-if ($Filter) { $cmd += " --filter `"$Filter`"" }
+$cmd = "set PYTHONPATH=src; python src/ETF_screener/scripts/churn_strategies.py --strat_path `"$StrategyPath`""
+if ($TickerFilter) { $cmd += " --filter `"$TickerFilter`"" }
 if ($Plot -gt 0) { $cmd += " --plot $Plot" }
-if ($Since -ge 0) { $cmd += " --since $Since" }
-if ($Force) { $cmd += " --force" }
+if ($Lookback -ge 0) { $cmd += " --since $Lookback" }
+if ($Clean) { $cmd += " --force" }
 
 # Run the command
 Write-Host "Running Discovery: $cmd" -ForegroundColor Gray
@@ -44,7 +44,7 @@ if ($PlotDash) {
 $resultFile = "data/multi_strategy_results.csv"
 
 if (Test-Path $resultFile) {
-    if ($OpenResult) {
+    if ($Show) {
         $libreOfficePath = "C:\Program Files\LibreOffice\program\scalc.exe"
         if (Test-Path $libreOfficePath) {
             Write-Host "Opening results in LibreOffice Calc..." -ForegroundColor Green

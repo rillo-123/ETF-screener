@@ -23,24 +23,30 @@ def clean_price_data(series: pd.Series, max_pct_change: float = 0.5) -> pd.Serie
     # If change from previous is > threshold (e.g. 50%)
     # or if we have a massive immediate divergence from the rolling median.
     window = 10
+    # Guard: handle short series
+    if len(s) < window:
+        return s
+        
     rolling_median = s.rolling(window=window, center=True).median().bfill().ffill()
 
     for i in range(1, len(s)):
         prev_val = s.iloc[i-1]
         curr_val = s.iloc[i]
         
-        # Guard against division by zero if data is sparse
-        if prev_val == 0 or np.isnan(prev_val):
+        # Guard against 0 or NaN which can happen in illiquid tickers
+        if prev_val == 0 or np.isnan(prev_val) or curr_val == 0 or np.isnan(curr_val):
             continue
             
-        # 1. Check for immediate % change (e.g. price jumps from 10 to 1000)
+        # 1. Check for immediate % change (e.g. price jumps from 5 to 7.5 = 50%)
+        # For small numbers, even small gaps look like massive spikes
         pct_change = abs(curr_val / prev_val - 1)
         
-        # 2. Check for absolute divergence from local median (for "broken" months)
+        # 2. Check for absolute divergence from local median
         median_val = rolling_median.iloc[i]
         median_div = abs(curr_val / median_val - 1) if median_val != 0 else 0
 
-        if pct_change > max_pct_change or median_div > max_pct_change * 2:
+        # Disqualify if > 40% jump in a single day or > 80% from median
+        if pct_change > 0.40 or median_div > 0.80:
             s.iloc[i] = prev_val
             
     return s
@@ -246,6 +252,39 @@ def calculate_stoch_rsi(data: Any, rsi_period: int = 14, stoch_period: int = 14,
     return k_line, d_line
 
 
+def calculate_tsi(data: Any, long: int = 25, short: int = 13, signal: int = 13) -> Tuple[pd.Series, pd.Series]:
+    """
+    Calculate True Strength Index (TSI).
+    
+    TSI = 100 * (Double Smoothed PC / Double Smoothed Absolute PC)
+    PC = Price Change
+    """
+    if isinstance(data, pd.DataFrame):
+        price_col = None
+        for col in ['Close', 'close', 'Adj Close']:
+            if col in data.columns:
+                price_col = col
+                break
+        series = data[price_col] if price_col else data.iloc[:,0]
+    else:
+        series = data
+
+    # Double smooth price change
+    diff = series.diff()
+    ema1 = diff.ewm(span=long, adjust=False).mean()
+    ema2 = ema1.ewm(span=short, adjust=False).mean()
+
+    # Double smooth absolute price change
+    abs_diff = diff.abs()
+    abs_ema1 = abs_diff.ewm(span=long, adjust=False).mean()
+    abs_ema2 = abs_ema1.ewm(span=short, adjust=False).mean()
+
+    tsi = 100 * (ema2 / abs_ema2)
+    tsi_signal = tsi.ewm(span=signal, adjust=False).mean()
+
+    return tsi, tsi_signal
+
+
 def calculate_supertrend(
     high: Any, low: Any = None, close: Any = None, period: int = 10, multiplier: float = 3.0
 ) -> Union[Tuple[pd.Series, pd.Series, pd.Series], pd.Series]:
@@ -445,6 +484,17 @@ def add_indicators(
 
     # RSI 14
     df_copy["RSI"] = calculate_rsi(df_copy["Close"], period=14)
+
+    # MACD 12, 26, 9
+    macd, macd_signal, macd_hist = calculate_macd(df_copy["Close"])
+    df_copy["MACD"] = macd
+    df_copy["MACD_Signal"] = macd_signal
+    df_copy["MACD_Hist"] = macd_hist
+
+    # TSI 25, 13, 13
+    tsi, tsi_signal = calculate_tsi(df_copy["Close"])
+    df_copy["TSI"] = tsi
+    df_copy["TSI_Signal"] = tsi_signal
 
     # Supertrend with configurable parameters
     st_res = calculate_supertrend(

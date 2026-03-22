@@ -31,7 +31,6 @@ class ParquetStorage:
         """
         file_path = self.data_dir / f"{symbol.lower()}_data.parquet"
         df.to_parquet(file_path, compression="snappy", index=False)
-        print(f"Saved {symbol} data to {file_path}")
         return file_path
 
     def load_etf_data(self, symbol: str) -> pd.DataFrame:
@@ -47,10 +46,8 @@ class ParquetStorage:
         file_path = self.data_dir / f"{symbol.lower()}_data.parquet"
         if file_path.exists():
             df = pd.read_parquet(file_path)
-            print(f"Loaded {symbol} data from {file_path}")
             return df
         else:
-            print(f"No parquet file found for {symbol}")
             return pd.DataFrame()
 
     def save_multiple_etfs(self, etf_dict: dict[str, pd.DataFrame]) -> dict:

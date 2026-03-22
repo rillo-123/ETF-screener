@@ -55,21 +55,23 @@ class YFinanceFetcher:
 
         return df
 
-    def fetch_multiple_etfs(self, symbols: list[str], days: int = 365) -> dict:
+    def fetch_multiple_etfs(self, symbols: list[str], days: int = 365, quiet: bool = False) -> dict:
         """
         Fetch data for multiple ETFs.
 
         Args:
             symbols: List of ETF symbols
             days: Number of days of historical data to fetch
+            quiet: Disable progress bar and error printing
 
         Returns:
             Dictionary mapping symbol to DataFrame
         """
         results = {}
-        for symbol in tqdm(symbols, desc="Downloading ETFs", unit="ETF"):
+        for symbol in tqdm(symbols, desc="Downloading ETFs", unit="ETF", disable=quiet):
             try:
                 results[symbol] = self.fetch_historical_data(symbol, days)
             except Exception as e:
-                print(f"Error fetching {symbol}: {str(e)}")
+                if not quiet:
+                    print(f"Error fetching {symbol}: {str(e)}")
         return results

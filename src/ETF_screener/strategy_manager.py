@@ -18,17 +18,33 @@ class CachedStrategyManager:
 
     def _get_cache_key(self, ticker: str, indicator_name: str, params: Dict[str, Any], df_len: int) -> str:
         """Generate a unique cache key based on ticker, parameters, and data length."""
-        param_str = json.dumps(params, sort_keys=True)
+        # Filter out objects that are not directly JSON-serializable, like Pandas objects
+        serializable_params = {
+            k: v for k, v in params.items() 
+            if not isinstance(v, (pd.Series, pd.DataFrame))
+        }
+        param_str = json.dumps(serializable_params, sort_keys=True)
         return f"{ticker}_{indicator_name}_{param_str}_{df_len}"
 
     def get_indicator(self, df: pd.DataFrame, ticker: str, func: Callable, name: str, **kwargs) -> pd.Series:
         """
-        Get indicator values, using memory cache if available.
+        Get indicator values, using disk and then memory cache if available.
         """
         cache_key = self._get_cache_key(ticker, name, kwargs, len(df))
 
+        # 1. Check Memory Cache
         if cache_key in self._memory_cache:
             return self._memory_cache[cache_key]
+
+        # 2. Check Disk Cache
+        disk_cache_file = self.cache_dir / f"{cache_key}.parquet"
+        if disk_cache_file.exists():
+            try:
+                result = pd.read_parquet(disk_cache_file).iloc[:, 0]
+                self._memory_cache[cache_key] = result
+                return result
+            except Exception:
+                pass # Fallback to calculation if disk read fails
 
         # Standard column names
         price_col = 'Close' if 'Close' in df.columns else 'close'
@@ -49,8 +65,19 @@ class CachedStrategyManager:
             # If the result is a tuple (like MACD), we cache the whole thing
             result = res
         
-        # Save to memory cache
+        # 3. Save to memory and disk cache
         self._memory_cache[cache_key] = result
+        
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            if isinstance(result, pd.Series):
+                pd.DataFrame(result).to_parquet(disk_cache_file)
+            elif isinstance(result, tuple):
+                # For tuples (like MACD), store as multi-column dataframe
+                pd.DataFrame({f"col_{i}": s for i, s in enumerate(result)}).to_parquet(disk_cache_file)
+        except Exception:
+            pass # Continue even if disk write fails
+            
         return result
 
     def prepare_data(self, ticker: str, indicators_setup: List[Dict[str, Any]], days: int = 365) -> pd.DataFrame:

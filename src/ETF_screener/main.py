@@ -207,45 +207,29 @@ def evaluate_condition(value: float, operator: str, threshold: float) -> bool:
 
 
 def fetch_and_analyze(
-
     symbols: list[str],
-
     days: int = 365,
-
     api_key: Optional[str] = None,
-
     data_dir: str = "data",
-
     plot_dir: str = "plots",
-
     use_db: bool = True,
-
     source: str = "yfinance",
-
+    plot_format: str = "svg",
+    quiet: bool = False,
 ) -> None:
-
     """
-
     Fetch ETF data, calculate indicators, save to storage, and generate plots.
 
-
-
     Args:
-
         symbols: List of ETF symbols to fetch
-
         days: Number of days of historical data
-
         api_key: Finnhub API key (only for Finnhub source)
-
         data_dir: Directory to store parquet files
-
         plot_dir: Directory to store plots
-
         use_db: Store data in SQLite database
-
         source: Data source ('yfinance' or 'finnhub')
-
+        plot_format: Output format for plots ('svg' or 'png')
+        quiet: Suppress all output except progress bar
     """
 
     try:
@@ -254,13 +238,15 @@ def fetch_and_analyze(
 
         if source.lower() == "finnhub":
 
-            print("Initializing Finnhub fetcher...")
+            if not quiet:
+                print("Initializing Finnhub fetcher...")
 
             fetcher = FinnhubFetcher(api_key=api_key)
 
         else:
 
-            print("Initializing Yahoo Finance fetcher...")
+            if not quiet:
+                print("Initializing Yahoo Finance fetcher...")
 
             fetcher = YFinanceFetcher()
 
@@ -268,15 +254,17 @@ def fetch_and_analyze(
 
         # Fetch data for all symbols
 
-        print(f"Fetching data for {len(symbols)} ETFs (past {days} days)...")
+        if not quiet:
+            print(f"Fetching data for {len(symbols)} ETFs (past {days} days)...")
 
-        etf_data = fetcher.fetch_multiple_etfs(symbols, days=days)
+        etf_data = fetcher.fetch_multiple_etfs(symbols, days=days, quiet=quiet)
 
 
 
         if not etf_data:
 
-            print("No data fetched. Exiting.")
+            if not quiet:
+                print("No data fetched. Exiting.")
 
             return
 
@@ -284,7 +272,8 @@ def fetch_and_analyze(
 
         # Add indicators
 
-        print("Calculating indicators (EMA 50, Supertrend)...")
+        if not quiet:
+            print("Calculating indicators (EMA 50, Supertrend)...")
 
         for symbol, df in etf_data.items():
 
@@ -296,7 +285,8 @@ def fetch_and_analyze(
 
         if use_db:
 
-            print("Storing data in SQLite database...")
+            if not quiet:
+                print("Storing data in SQLite database...")
 
             db = ETFDatabase()
 
@@ -310,7 +300,8 @@ def fetch_and_analyze(
 
         # Save to parquet
 
-        print("Saving data to parquet files...")
+        if not quiet:
+            print("Saving data to parquet files...")
 
         storage = ParquetStorage(data_dir=data_dir)
 
@@ -319,54 +310,44 @@ def fetch_and_analyze(
 
 
         # Generate plots
-
-        print("Generating analysis plots...")
-
         plotter = PortfolioPlotter(output_dir=plot_dir)
+        plotter.plot_multiple_etfs(etf_data, format=plot_format)
 
-        plotter.plot_multiple_etfs(etf_data)
+        if not quiet:
+            print("\n" + "=" * 121)
+            print(f"{'TICKER':<12} | {'PRICE':<10} | {'EMA 50':<10} | {'MACD':<8} | {'SIGNAL':<8} | {'BUY':<4} | {'SELL':<4} | {'TREND'}")
+            print("-" * 121)
 
+            for symbol, df in etf_data.items():
+                buy_signals = (df["Signal"] == 1).sum()
+                sell_signals = (df["Signal"] == -1).sum()
+                # Use explicit column matching to avoid case issues
+                latest_row = df.iloc[-1]
+                latest_price = latest_row.get("Close", 0.0)
+                latest_ema = latest_row.get("EMA_50", 0.0)
+                
+                # Dynamic matching for MACD columns
+                macd_val = 0.0
+                sig_val = 0.0
+                for col in df.columns:
+                    if col.lower() == "macd": macd_val = latest_row[col]
+                    if col.lower() == "macd_signal": sig_val = latest_row[col]
 
+                # Simple trend indicator (with 2% buffer)
+                trend = "UP" if latest_price > (latest_ema * 1.02) else "DOWN"
+                trend_color = "\033[92m" if trend == "UP" else "\033[91m"
+                reset = "\033[0m"
 
-        print("\n[OK] Analysis complete!")
-
-        print(f"  Data saved to: {data_dir}")
-
-        print(f"  Plots saved to: {plot_dir}")
-
-
-
-        # Print summary
-
-        print("\nSignal Summary:")
-
-        for symbol, df in etf_data.items():
-
-            buy_signals = (df["Signal"] == 1).sum()
-
-            sell_signals = (df["Signal"] == -1).sum()
-
-            latest_price = df["Close"].iloc[-1]
-
-            latest_ema = df["EMA_50"].iloc[-1]
-
-
-
-            print(f"\n{symbol}:")
-
-            print(f"  Latest Price: {latest_price:.2f}")
-
-            print(f"  EMA 50: {latest_ema:.2f}")
-
-            print(f"  Buy Signals: {buy_signals}")
-
-            print(f"  Sell Signals: {sell_signals}")
+                print(f"{symbol:<12} | {latest_price:>10.4f} | {latest_ema:>10.4f} | {macd_val:>8.4f} | {sig_val:>8.4f} | {buy_signals:>4} | {sell_signals:>4} | {trend_color}{trend:<5}{reset}")
+            
+            print("=" * 121 + "\n")
 
 
 
     except Exception as e:
 
-        print(f"Error: {str(e)}", file=sys.stderr)
+        if not quiet:
+            print(f"Error: {str(e)}", file=sys.stderr)
 
         sys.exit(1)
 
@@ -440,9 +421,11 @@ def screen_etfs(
     st_multiplier: float = 3.0,
 
     red_streak_min: int = 0,
-
     conditions: Optional[dict] = None,
-
+    name_filter: Optional[str] = None,
+    plot_results: bool = False,
+    plot_dir: str = "plots",
+    plot_format: str = "svg",
 ) -> None:
 
     """
@@ -482,11 +465,12 @@ def screen_etfs(
         st_period: Supertrend ATR period (default 10)
 
         st_multiplier: Supertrend multiplier (default 3.0)
-
         red_streak_min: Minimum consecutive RED days to include (0 = all, 10+ = likely reversal)
-
         conditions: Dict of conditional filters {field: [(operator, threshold), ...]}
-
+        name_filter: Substring to match against ETF name
+        plot_results: Whether to generate plots for matched ETFs
+        plot_dir: Directory to save plots
+        plot_format: Format for plots (svg or png)
     """
 
     try:
@@ -799,126 +783,141 @@ def screen_etfs(
 
 
         # Apply conditional filters if specified
-
         if conditions and not results.empty:
-
             for field, ops_list in conditions.items():
-
                 if not ops_list:
-
                     continue
-
                 
-
                 filtered_results = []
-
-                for _, row in tqdm(results.iterrows(), total=len(results), desc=f"Filtering {field}"):
-
+                # Single TQDM for the field filtering
+                for _, row in tqdm(results.iterrows(), total=len(results), desc=f"Filtering {field}", leave=False):
                     # If indicators aren't already in the row (from supertrend filter), fetch them
-
                     if field not in row or pd.isna(row[field]):
-
                         try:
-
                             ticker = row["ticker"]
-
                             hist_df = db.get_ticker_data(ticker, days=90)
-
                             if hist_df.empty or len(hist_df) < 10:
-
                                 continue
-
                             hist_df = add_indicators(hist_df, st_period=st_period, st_multiplier=st_multiplier, timeframe=timeframe)
-
                             latest = hist_df.iloc[-1]
-
                             row = row.copy()
-
                             row["close"] = latest["Close"]
-
                             row["ema"] = latest["EMA_50"]
-
+                            row["rsi"] = latest["RSI"]
+                            row["macd"] = latest["MACD"]
+                            row["tsi"] = latest["TSI"]
                             row["supertrend"] = latest["Supertrend"]
 
                             # Check if pullback_pct exists (from swing filter)
-
                             if "Pullback_Pct" in latest:
-
                                 row["pullback"] = latest["Pullback_Pct"]
 
                             if "avg_vol" in row or "Avg Vol" in row:
-
                                 row["volume"] = row.get("avg_vol", row.get("Avg Vol", 0))
-
                         except Exception:
-
                             continue
-
                     
-
                     # Apply all conditions for this field
-
                     passes_all = True
-
                     for operator, threshold in ops_list:
-
                         # Map field names to available columns (case-insensitive, with fallbacks)
-
                         field_value = None
-
                         if field == "close":
-
                             field_value = row.get("close") or row.get("Close")
-
                         elif field == "ema":
-
                             field_value = row.get("ema") or row.get("EMA_50") or row.get("ema_50")
-
                         elif field == "pullback":
-
                             field_value = row.get("pullback") or row.get("Pullback_Pct")
-
                         elif field == "volume":
-
                             field_value = row.get("volume") or row.get("Avg Vol") or row.get("avg_vol") or row.get("avg_volume")
-
-                        
+                        elif field == "rsi":
+                            field_value = row.get("rsi") or row.get("RSI")
+                        elif field == "macd":
+                            field_value = row.get("macd") or row.get("MACD")
+                        elif field == "tsi":
+                            field_value = row.get("tsi") or row.get("TSI")
 
                         if field_value is None or not evaluate_condition(field_value, operator, threshold):
-
                             passes_all = False
-
                             break
-
-                    
-
                     if passes_all:
-
                         filtered_results.append(row)
-
-                
-
                 results = pd.DataFrame(filtered_results) if filtered_results else pd.DataFrame()
-
-                
-
-                # Print what was filtered
-
+                # Simplified status print
                 ops_str = " and ".join([f"{op} {val}" for op, val in ops_list])
-
                 print(f"Filtering {field} ({ops_str})...\n")
 
-
+        # Apply name filter if specified
+        if name_filter and not results.empty:
+            print(f"Filtering for name containing: '{name_filter}'...")
+            
+            # Load etfs.json to get friendly names
+            etfs_file = Path("config/etfs.json")
+            if not etfs_file.exists():
+                etfs_file = Path(data_dir) / "etfs.json"
+            
+            if etfs_file.exists():
+                with open(etfs_file) as f:
+                    etfs_lookup = json.load(f)
+                
+                import re
+                filtered_by_name = []
+                # Support SQL-style % wildcard by converting to regex
+                raw_pattern = name_filter.lower()
+                # Default behavior: wrap in % if no wildcards provided
+                if "%" not in raw_pattern:
+                    raw_pattern = f"%{raw_pattern}%"
+                
+                # IMPORTANT: Convert SQL wildcard % to regex .*
+                # and handle literal dots in tickers
+                # On some Python versions/OSs, re.escape might NOT escape '%'
+                regex_pattern = re.escape(raw_pattern).replace(r"\%", ".*").replace("%", ".*")
+                
+                # Check BOTH 'ticker' and 'ticker.lower()' to be safe
+                for _, row in results.iterrows():
+                    ticker_raw = str(row["ticker"])
+                    ticker_low = ticker_raw.lower()
+                    
+                    # Look up name from etfs_lookup (handling the dict structure)
+                    # Use ticker_raw first, then case-insensitive lookup
+                    etf_info = etfs_lookup.get(ticker_raw)
+                    if not etf_info:
+                        # Case-insensitive lookup (tickers in JSON might be inconsistent)
+                        for k, v in etfs_lookup.items():
+                            if k.lower() == ticker_low:
+                                etf_info = v
+                                break
+                    
+                    name = ""
+                    if isinstance(etf_info, dict):
+                        name = etf_info.get("name", "").lower()
+                    
+                    # Match against name, full ticker (DTE.DE), or ticker prefix (DTE)
+                    ticker_prefix = ticker_low.split(".")[0]
+                    
+                    if (name and re.fullmatch(regex_pattern, name)) or \
+                       re.fullmatch(regex_pattern, ticker_low) or \
+                       re.fullmatch(regex_pattern, ticker_prefix):
+                        filtered_by_name.append(row)
+                
+                results = pd.DataFrame(filtered_by_name) if filtered_by_name else pd.DataFrame()
 
         screener.print_results(results, format_name=format_name)
 
-
-
         if results.empty:
-
-            print("\n[WARNING] No ETFs matched the criteria. Try lower --aVol threshold.")
-
-
+            print("\n[WARNING] No ETFs matched the criteria.")
+        elif plot_results:
+            # Combined progress message
+            storage = ParquetStorage(data_dir=data_dir)
+            plotter = PortfolioPlotter(output_dir=plot_dir)
+            
+            for _, row in tqdm(results.iterrows(), total=len(results), desc="Generating Plots", leave=True):
+                ticker = row["ticker"]
+                df = storage.load_etf_data(ticker)
+                if not df.empty:
+                    df = add_indicators(df)
+                    plotter.plot_multiple_etfs({ticker: df}, format=plot_format)
+            print(f"Done. Plots saved to '{plot_dir}/'")
 
         db.close()
 
@@ -1558,6 +1557,24 @@ def main() -> None:
 
     )
 
+    fetch_parser.add_argument(
+
+        "--plot-format",
+
+        choices=["svg", "png"],
+
+        default="svg",
+
+        help="Format for analysis plots (default: svg)",
+
+    )
+
+    fetch_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress all output except the progress bar",
+    )
+
 
 
     # List command
@@ -1783,21 +1800,43 @@ def main() -> None:
     )
 
     screener_parser.add_argument(
-
         "--red-streak",
-
         type=int,
-
         default=0,
-
         help="Minimum consecutive RED days for reversal candidates (0 = all, 10+ = strong signal, use with --supt red)",
+    )
 
+    screener_parser.add_argument(
+        "--name",
+        type=str,
+        default=None,
+        help="Filter ETFs by name (case-insensitive substring match)",
+    )
+
+    screener_parser.add_argument(
+        "--plot",
+        action="store_true",
+        help="Generate plots for matching ETFs",
+    )
+
+    screener_parser.add_argument(
+        "--plot-dir",
+        type=str,
+        default="plots",
+        help="Directory to save plots (default: plots)",
+    )
+
+    screener_parser.add_argument(
+        "--plot-format",
+        choices=["svg", "png"],
+        default="svg",
+        help="Format for plots (default: svg)",
     )
 
     
 
-    # Conditional operators: close, ema, pullback, volume
-    for field in ["close", "ema", "pullback", "volume"]:
+    # Conditional operators: close, ema, pullback, volume, rsi, macd, tsi
+    for field in ["close", "ema", "pullback", "volume", "rsi", "macd", "tsi"]:
         # Choose type based on field
         data_type = float
         if field == "volume":
@@ -2149,9 +2188,9 @@ def main() -> None:
             data_dir=args.data_dir,
 
             plot_dir=args.plot_dir,
-
             source=args.source,
-
+            plot_format=args.plot_format,
+            quiet=args.quiet,
         )
 
     elif args.command == "list":
@@ -2183,15 +2222,10 @@ def main() -> None:
         
 
         # Extract conditional filters from args
-
         conditions = {}
-
         min_avg_volume = args.aVol
-
-        for field in ["close", "ema", "pullback", "volume"]:
-
+        for field in ["close", "ema", "pullback", "volume", "rsi", "macd", "tsi"]:
             field_conditions = []
-
             for op in ["gt", "gte", "lt", "lte", "eq", "ne"]:
 
                 attr_name = f"{field}_{op}" if field != "pullback" else f"pb_{op}"
@@ -2245,9 +2279,11 @@ def main() -> None:
             st_multiplier=args.st_multiplier,
 
             red_streak_min=args.red_streak,
-
             conditions=conditions if conditions else None,
-
+            name_filter=args.name,
+            plot_results=args.plot,
+            plot_dir=args.plot_dir,
+            plot_format=args.plot_format,
         )
 
     elif args.command == "discover":

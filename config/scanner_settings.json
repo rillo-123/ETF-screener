@@ -1,0 +1,6 @@
+{
+    "scan_path": "strategies/",
+    "scan_days": 50,
+    "warmup_buffer": 20,
+    "default_tickers": "*"
+}

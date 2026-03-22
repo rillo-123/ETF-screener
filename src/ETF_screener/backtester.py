@@ -10,7 +10,7 @@ from ETF_screener.database import ETFDatabase
 from ETF_screener.indicators import (
     calculate_rsi, calculate_ema, calculate_supertrend, 
     calculate_adx, calculate_macd, calculate_stochastic, calculate_rsi_ema,
-    calculate_stoch_rsi, calculate_linreg_slope
+    calculate_stoch_rsi, calculate_linreg_slope, calculate_tsi
 )
 from ETF_screener.strategy_manager import CachedStrategyManager
 
@@ -87,11 +87,20 @@ class Backtester:
                 is_scripted = True
 
             if is_scripted:
-                df = strategy_func(df, ticker=ticker, **kwargs)
+                res = strategy_func(df, ticker=ticker, **kwargs)
             else:
-                df = strategy_func(df, **kwargs)
+                res = strategy_func(df, **kwargs)
                 
-            if df is None or df.empty: return {"error": "Empty dataframe after strategy run"}
+            if res is None: return {"error": "Strategy function returned None"}
+            
+            # If it's a dict (from scripted_strategy), extracting the dataframe
+            if isinstance(res, dict):
+                if "df" not in res or res["df"] is None or res["df"].empty:
+                    return {"error": "Empty dataframe after strategy run"}
+                df = res["df"]
+            else:
+                if res.empty: return {"error": "Empty dataframe after strategy run"}
+                df = res
                 
             # If we calculated signals, save them to parquet for next time
             if cache_path and not df.empty:
@@ -99,6 +108,17 @@ class Backtester:
                     df.to_parquet(cache_path, compression='snappy')
                 except Exception as e:
                     print(f"Warning: Failed to save cache {cache_path}: {e}")
+
+            if isinstance(res, dict):
+                # We already updated df from res['df'], so we can continue with it
+                pass
+            else:
+                res = {"df": df}
+            
+            # Re-assigning res to a local variable to be used at the end of function
+            # but we need to keep 'df' as the working dataframe for backtesting.
+            # Let's just ensure 'df' is set and we'll wrap it later.
+            strategy_result_meta = res if isinstance(res, dict) else {"df": df}
             
         if 'Signal' in df.columns and 'signal' not in df: df['signal'] = df['Signal']
         if 'signal' not in df.columns: return {"error": "No signal col"}
@@ -149,7 +169,7 @@ class Backtester:
             gross_losses = abs(sum([t['profit'] for t in closed_trades if t['profit'] < 0]))
             profit_factor = round(gross_profits / gross_losses, 2) if gross_losses > 0 else (round(gross_profits, 2) if gross_profits > 0 else 0)
             
-        return {
+        results = {
             'ticker': ticker, 
             'final_value': final_val, 
             'total_return_pct': round(((final_val - self.initial_capital) / self.initial_capital) * 100, 2), 
@@ -160,10 +180,20 @@ class Backtester:
             'max_drawdown_pct': round(mdd * 100, 2),
             'df': df
         }
+        
+        # Merge metadata from strategy result if available (like b_em, b_rm)
+        if 'strategy_result_meta' in locals() and isinstance(strategy_result_meta, dict):
+            for k, v in strategy_result_meta.items():
+                if k not in results:
+                    results[k] = v
+                    
+        return results
     
-    def scripted_strategy(self, df, ticker, entry_script, exit_script):
-        db = ETFDatabase(self.db_path)
-        manager = CachedStrategyManager(db)
+    def scripted_strategy(self, df, ticker, entry_script, exit_script, manager=None):
+        if manager is None:
+            db = ETFDatabase(self.db_path)
+            manager = CachedStrategyManager(db)
+        
         df_eval = df.copy(); df_eval.columns = [c.lower() for c in df_eval.columns]
         # Clean the copy to avoid duplicate labels error when we start adding indicators
         df_eval = df_eval.loc[:, ~df_eval.columns.duplicated()]
@@ -195,6 +225,10 @@ class Backtester:
                     res = manager.get_indicator(df, ticker, calculate_stoch_rsi, "stoch_rsi_all", rsi_period=14, stoch_period=14, k_period=3, d_period=3)
                     if isinstance(res, tuple) and len(res) == 2:
                         df_eval["stoch_rsi_k"], df_eval["stoch_rsi_d"] = res[0], res[1]
+                elif base_c in ["tsi", "tsi_signal"]:
+                    res = manager.get_indicator(df, ticker, calculate_tsi, "tsi_all", long=25, short=13, signal=13)
+                    if isinstance(res, tuple) and len(res) == 2:
+                        df_eval["tsi"], df_eval["tsi_signal"] = res[0], res[1]
                 elif "_slope" in base_c:
                     # Capture ema_10_slope, rsi_14_slope, etc.
                     target_ind = base_c.replace("_slope", "")
@@ -205,7 +239,8 @@ class Backtester:
                             # Use 7-day window for "best fit" slope
                             df_eval[base_c] = manager.get_indicator(df, ticker, calculate_linreg_slope, f"{target_ind}_lr_slope", series=df_eval[target_ind], period=7)
                         else:
-                            df_eval[base_c] = df_eval[target_ind].diff()
+                            # Use simple diff for smoother EMAs to be more responsive/accurate to crossing zero
+                            df_eval[base_c] = df_eval[target_ind].diff().fillna(0)
                 elif base_c == "vol_ema_20":
                     # Simple volume smoothing
                     df_eval[base_c] = df_eval['volume'].ewm(span=20, adjust=False).mean()
@@ -271,6 +306,10 @@ class Backtester:
             for col in df_eval.columns:
                 if col not in df.columns:
                     df[col] = df_eval[col]
+            
+            # Store the boolean masks for scanners to verify rules
+            res_df = df
+            return {"df": res_df, "b_em": b_em, "b_r": b_r}
         except Exception as e:
             print(f"Error in strategy eval for {ticker}: {e}")
             df = df.copy()

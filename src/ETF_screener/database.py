@@ -289,6 +289,10 @@ class ETFDatabase:
         if df_raw.empty:
             return pd.DataFrame()
         
+        # Check for "zombie" tickers: return empty if 2+ days have 0 volume (case-sensitive)
+        if (df_raw["volume"] == 0).sum() >= 2:
+            return pd.DataFrame()
+        
         # Ensure we don't have duplicates before renaming
         df = df_raw.drop_duplicates(subset=['date']).copy()
         

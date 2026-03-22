@@ -26,7 +26,7 @@ class PortfolioPlotter:
         self.output_dir.mkdir(exist_ok=True)
 
     def plot_etf_analysis(
-        self, df: pd.DataFrame, symbol: str, figsize: tuple = (14, 8)
+        self, df: pd.DataFrame, symbol: str, figsize: tuple = (14, 8), format: str = "svg"
     ) -> Path:
         """
         Create comprehensive ETF analysis plot.
@@ -35,6 +35,7 @@ class PortfolioPlotter:
             df: DataFrame with OHLCV and indicator data
             symbol: ETF symbol
             figsize: Figure size tuple
+            format: Output format ('svg' or 'png', default 'svg')
 
         Returns:
             Path to saved plot
@@ -56,7 +57,6 @@ class PortfolioPlotter:
         if macd_cols:
             m_s = df[macd_cols[0]].dropna()
             if not m_s.empty:
-                print(f"DEBUG [{symbol}]: {macd_cols[0]} min={m_s.min():.2f}, max={m_s.max():.2f}, median={m_s.median():.2f}")
                 if m_s.max() > 100 or m_s.min() < -100:
                     print(f"CRITICAL WARNING: {symbol} has extreme MACD values!")
 
@@ -145,6 +145,7 @@ class PortfolioPlotter:
         osc_groups = {
             "RSI": [c for c in valid_cols if "rsi" in c.lower() and "stoch" not in c.lower()],
             "MACD": [c for c in valid_cols if "macd" in c.lower()],
+            "TSI": [c for c in valid_cols if "tsi" in c.lower()],
             "StochRSI": [c for c in valid_cols if "stoch" in c.lower() or "srsi" in c.lower() or "stochrsi" in c.lower()],
             "ADX": [c for c in valid_cols if "adx" in c.lower()]
         }
@@ -276,6 +277,21 @@ class PortfolioPlotter:
                 other_cols = [c for c in cols if c not in hist_cols + signal_cols + macd_cols]
                 for col in other_cols:
                     osc_ax.plot(df["Date"], df[col], label=col, alpha=0.7, linewidth=1.5)
+            elif name == "TSI":
+                signal_cols = [c for c in cols if "signal" in c.lower()]
+                tsi_cols = [c for c in cols if "tsi" in c.lower() and "signal" not in c.lower()]
+                
+                if tsi_cols:
+                    # Blue for primary line
+                    osc_ax.plot(df["Date"], df[tsi_cols[0]], label="TSI", color="#1f77b4", linewidth=1.8, zorder=10)
+                
+                if signal_cols:
+                    # Red for signal line
+                    osc_ax.plot(df["Date"], df[signal_cols[0]], label="Signal", color="#d62728", linewidth=1.2, zorder=11)
+                
+                other_cols = [c for c in cols if c not in signal_cols + tsi_cols]
+                for col in other_cols:
+                    osc_ax.plot(df["Date"], df[col], label=col, alpha=0.7, linewidth=1.2)
             else:
                 # Standard plotting for RSI/StochRSI
                 for col in cols:
@@ -384,22 +400,22 @@ class PortfolioPlotter:
         # and provide consistent spacing for multiple indicator panels
         plt.subplots_adjust(hspace=0.4, top=0.92, bottom=0.08, left=0.1, right=0.95)
 
-        # Save figure as SVG (primary)
-        output_path_svg = self.output_dir / f"{symbol.lower()}_analysis.svg"
+        # Save figure as specified format
+        ext = format.lower()
+        output_path = self.output_dir / f"{symbol.lower()}_analysis.{ext}"
         
-        plt.savefig(output_path_svg, format="svg", bbox_inches="tight")
-        
-        print(f"Saved SVG plot to {output_path_svg}")
+        plt.savefig(output_path, format=ext, bbox_inches="tight")
         plt.close()
 
-        return output_path_svg
+        return output_path
 
-    def plot_multiple_etfs(self, etf_dict: dict[str, pd.DataFrame]) -> dict:
+    def plot_multiple_etfs(self, etf_dict: dict[str, pd.DataFrame], format: str = "svg") -> dict:
         """
         Create analysis plots for multiple ETFs.
 
         Args:
             etf_dict: Dictionary mapping symbol to DataFrame
+            format: Output format ('svg' or 'png', default 'svg')
 
         Returns:
             Dictionary mapping symbol to plot path
@@ -407,7 +423,7 @@ class PortfolioPlotter:
         results = {}
         for symbol, df in etf_dict.items():
             try:
-                results[symbol] = self.plot_etf_analysis(df, symbol)
+                results[symbol] = self.plot_etf_analysis(df, symbol, format=format)
             except Exception as e:
                 print(f"Error plotting {symbol}: {str(e)}")
         
@@ -421,7 +437,7 @@ class PortfolioPlotter:
             self.output_dir.mkdir(exist_ok=True)
             
             # 1. Update the JSON manifest file first
-            plots = sorted([f.name for f in self.output_dir.glob("*.svg") or []])
+            plots = sorted([f.name for f in self.output_dir.glob(f"*.{format.lower()}") or []])
             
             # Check if there is already a rich manifest (from churn_strategies.py)
             manifest_file = self.output_dir / "plot_manifest.json"
@@ -458,13 +474,14 @@ class PortfolioPlotter:
             
         return results
 
-    def plot_price_only(self, df: pd.DataFrame, symbol: str) -> Path:
+    def plot_price_only(self, df: pd.DataFrame, symbol: str, format: str = "svg") -> Path:
         """
         Create a simple price plot.
 
         Args:
             df: DataFrame with price data
             symbol: ETF symbol
+            format: Output format ('svg' or 'png', default 'svg')
 
         Returns:
             Path to saved plot
@@ -480,9 +497,10 @@ class PortfolioPlotter:
 
         plt.tight_layout()
 
-        output_path = self.output_dir / f"{symbol.lower()}_price.svg"
-        plt.savefig(output_path, format="svg", bbox_inches="tight")
-        print(f"Saved SVG price plot to {output_path}")
+        ext = format.lower()
+        output_path = self.output_dir / f"{symbol.lower()}_price.{ext}"
+        plt.savefig(output_path, format=ext, bbox_inches="tight")
+        print(f"Saved {ext.upper()} price plot to {output_path}")
         plt.close()
 
         return output_path
