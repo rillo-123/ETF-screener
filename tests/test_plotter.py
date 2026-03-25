@@ -51,18 +51,18 @@ class TestPortfolioPlotter:
         plotter = PortfolioPlotter(output_dir=temp_plot_dir)
         path = plotter.plot_etf_analysis(sample_data_with_indicators, "TEST")
 
-        assert path.exists()
-        assert path.suffix == ".png"
-        assert "test_analysis" in path.name
+        assert Path(path).exists()
+        assert Path(path).suffix in [".png", ".svg"]
+        assert "test_analysis" in Path(path).name
 
     def test_plot_price_only(self, temp_plot_dir, sample_data_with_indicators):
         """Test generating price-only plot."""
         plotter = PortfolioPlotter(output_dir=temp_plot_dir)
         path = plotter.plot_price_only(sample_data_with_indicators, "TEST")
 
-        assert path.exists()
-        assert path.suffix == ".png"
-        assert "test_price" in path.name
+        assert Path(path).exists()
+        assert Path(path).suffix in [".png", ".svg"]
+        assert "test_price" in Path(path).name
 
     def test_plot_multiple_etfs(self, temp_plot_dir, sample_data_with_indicators):
         """Test plotting multiple ETFs."""

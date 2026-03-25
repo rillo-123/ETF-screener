@@ -3,10 +3,18 @@
 This document defines the Domain Specific Language (DSL) used for defining trading strategies in `.dsl` files.
 
 ## File Structure
-A `.dsl` file must contain at least two blocks: `ENTRY:` and `EXIT:`. Comments start with `#`.
+A `.dsl` file can use the legacy `ENTRY:`/`EXIT:` format or the modern `TRIGGER:`/`FILTER:`/`EXIT:` format (recommended for scanners).
 
+### Recommended Format (Modern)
 ```dsl
-# Example Strategy
+# Hardened Trend Strategy
+TRIGGER: cross_up(macd, macd_signal) 
+FILTER:  close > ema_50 AND volume > 100K
+EXIT:    cross_down(macd, macd_signal) OR close < ema_50
+```
+
+### Legacy Format
+```dsl
 ENTRY: cross_up(macd, macd_signal) AND (close > ema_50)
 EXIT:  cross_down(macd, macd_signal) OR (close < ema_50)
 ```

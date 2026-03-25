@@ -10,12 +10,34 @@ import datetime
 from pathlib import Path
 
 def load_dsl_file(file_path):
-    """Parse a .dsl file for ENTRY and EXIT blocks."""
-    with open(file_path, 'r') as f:
+    """Parse a .dsl file for TRIGGER, FILTER, ENTRY, and EXIT blocks."""
+    with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
-    entry = re.search(r'ENTRY:\s*(.*)', content)
-    exit_ = re.search(r'EXIT:\s*(.*)', content)
-    return entry.group(1).strip() if entry else None, exit_.group(1).strip() if exit_ else None
+    
+    # Try to find TRIGGER and FILTER first (New Option A)
+    trigger = re.search(r'TRIGGER:\s*(.*)', content, re.IGNORECASE)
+    filter_ = re.search(r'FILTER:\s*(.*)', content, re.IGNORECASE)
+    
+    # Legacy ENTRY block
+    entry = re.search(r'ENTRY:\s*(.*)', content, re.IGNORECASE)
+    
+    # EXIT block is required for both
+    exit_ = re.search(r'EXIT:\s*(.*)', content, re.IGNORECASE)
+    
+    # If TRIGGER/FILTER provided, combine them into a virtual ENTRY for the backtester
+    # The movie_scanner will use them separately
+    final_entry = ""
+    if trigger and filter_:
+        final_entry = f"({trigger.group(1).strip()}) and ({filter_.group(1).strip()})"
+    elif entry:
+        final_entry = entry.group(1).strip()
+        
+    return {
+        "trigger": trigger.group(1).strip() if trigger else None,
+        "filter": filter_.group(1).strip() if filter_ else None,
+        "entry": final_entry,
+        "exit": exit_.group(1).strip() if exit_ else None
+    }
 
 def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: str = None, strategy_path: str = None, plot_top: int = 20, force_refresh: bool = False, since_days: int = None):
     backtester = Backtester()
@@ -51,14 +73,14 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
     if strategy_path:
         path = Path(strategy_path)
         if path.is_file():
-            entry, exit_ = load_dsl_file(path)
-            strategies.append({"name": path.stem, "func": backtester.scripted_strategy, "kwargs": {"entry_script": entry, "exit_script": exit_}})
+            res = load_dsl_file(path)
+            strategies.append({"name": path.stem, "func": backtester.scripted_strategy, "kwargs": {"entry_script": res["entry"], "exit_script": res["exit"]}})
         elif path.is_dir():
             for dsl_file in path.glob("*.dsl"):
                 if "strat_cache" in dsl_file.parts:
                     continue
-                entry, exit_ = load_dsl_file(dsl_file)
-                strategies.append({"name": dsl_file.stem, "func": backtester.scripted_strategy, "kwargs": {"entry_script": entry, "exit_script": exit_}})
+                res = load_dsl_file(dsl_file)
+                strategies.append({"name": dsl_file.stem, "func": backtester.scripted_strategy, "kwargs": {"entry_script": res["entry"], "exit_script": res["exit"]}})
     
     # Mode 2: Direct CLI strings
     elif entry_script and exit_script:

@@ -1,0 +1,40 @@
+{
+    "ribbons": [
+        {
+            "label": "MACD",
+            "layers": [
+                { "condition": "macd > macd_signal", "color": "blue", "alpha": 0.8 },
+                { "condition": "macd <= macd_signal", "color": "red", "alpha": 0.8 }
+            ]
+        },
+        {
+            "label": "RSI",
+            "layers": [
+                { "condition": "rsi > 70", "color": "red", "alpha": 0.9 },
+                { "condition": "rsi <= 70 and rsi >= 30", "color": "gray", "alpha": 0.6 },
+                { "condition": "rsi < 30", "color": "blue", "alpha": 0.9 }
+            ]
+        },
+        {
+            "label": "TSI",
+            "layers": [
+                { "condition": "tsi > tsi_signal", "color": "blue", "alpha": 0.8 },
+                { "condition": "tsi <= tsi_signal", "color": "red", "alpha": 0.8 }
+            ]
+        },
+        {
+            "label": "Trend",
+            "layers": [
+                { "condition": "close > ema_50", "color": "green", "alpha": 0.7 },
+                { "condition": "close <= ema_50", "color": "red", "alpha": 0.7 }
+            ]
+        },
+        {
+            "label": "Supertrend",
+            "layers": [
+                { "condition": "st > 0", "color": "green", "alpha": 0.8 },
+                { "condition": "st <= 0", "color": "red", "alpha": 0.8 }
+            ]
+        }
+    ]
+}

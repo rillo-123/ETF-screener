@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import pandas as pd
 import numpy as np
+import re
+import json
 
 # Use non-interactive backend to avoid GUI requirements
 matplotlib.use("Agg")
@@ -24,6 +26,21 @@ class PortfolioPlotter:
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
+        
+        # Load ribbon settings
+        self.ribbon_config = self._load_ribbon_settings()
+
+    def _load_ribbon_settings(self) -> dict:
+        """Load ribbon configuration from settings file."""
+        import json
+        config_path = Path("config/ribbon_settings.json")
+        if config_path.exists():
+            try:
+                with open(config_path, "r") as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Warning: Could not load ribbon settings: {e}")
+        return {"ribbons": []}
 
     def plot_etf_analysis(
         self, df: pd.DataFrame, symbol: str, figsize: tuple = (14, 8), format: str = "svg"
@@ -130,90 +147,78 @@ class PortfolioPlotter:
         # Prepare indicators for plotting
         price_indicators = [c for c in valid_cols if not is_oscillator(c)]
         
-        # DECLUTTER MAIN PLOT: Keep only EMA_50 and core price (others kept if they are oscillators)
-        essential_indicators = ["ema_50", "EMA_50", "EMA 50", "ema 50"]
-        price_indicators = []
-        _seen_ema = False
-        for c in valid_cols:
-            if not is_oscillator(c):
-                if any(x == c or x.lower() == c.lower() for x in essential_indicators):
-                    if not _seen_ema:
-                        price_indicators.append(c)
-                        _seen_ema = True
+        # Categorize oscillators (and trend) for dedicated ribbon subplots
+        ribbon_settings = self.ribbon_config.get("ribbons", [])
+        active_ribbons = []
         
-        # Categorize oscillators for dedicated subplots
-        osc_groups = {
-            "RSI": [c for c in valid_cols if "rsi" in c.lower() and "stoch" not in c.lower()],
-            "MACD": [c for c in valid_cols if "macd" in c.lower()],
-            "TSI": [c for c in valid_cols if "tsi" in c.lower()],
-            "StochRSI": [c for c in valid_cols if "stoch" in c.lower() or "srsi" in c.lower() or "stochrsi" in c.lower()],
-            "ADX": [c for c in valid_cols if "adx" in c.lower()]
-        }
+        # Determine which ribbons we should actually plot based on available data
+        # We now use a more robust check that looks at the conditions to see if required columns exist
+        available_cols = [c.lower() for c in df.columns]
+        for rib in ribbon_settings:
+            # Check if any layer's condition can be evaluated with available columns
+            layers = rib.get("layers", [])
+            ribbon_is_possible = False
+            for layer in layers:
+                condition = layer.get("condition", "").lower()
+                # Find all potential column names in the condition string
+                words = re.findall(r'[a-z_][a-z0-9_]*', condition)
+                # If any word in the condition is a column, we assume it's possible to plot it
+                if any(word in available_cols for word in words):
+                    ribbon_is_possible = True
+                    break
+            
+            if ribbon_is_possible:
+                active_ribbons.append(rib)
         
-        # DEBUG: Ensure all stoch columns are identified correctly
-        stoch_cols = [c for c in valid_cols if "stoch" in c.lower() or "srsi" in c.lower() or "stochrsi" in c.lower()]
-        # print(f"DEBUG: Found StochRSI columns: {stoch_cols}")
+        # Total subplots is 2 (Price, Vol) + Ribbons
+        num_subplots = 2 + len(active_ribbons)
         
-        # Only keep groups that have at least one valid column
-        active_groups = {}
-        for k, v in osc_groups.items():
-            valid_group_cols = [c for c in v if c in df.columns]
-            if valid_group_cols:
-                active_groups[k] = valid_group_cols
-        
-        num_subplots = 1 + 1 + len(active_groups)  # Price + Volume + Active Groups (Oscillators)
-        # Order: Price (4), Volume (1), Oscillators (2.2 each)
-        height_ratios = [4, 1] + ([2.2] * len(active_groups))
+        # Order: Price (4), Volume (1), Ribbons (0.3 each)
+        height_ratios = [4, 1] + ([0.3] * len(active_ribbons))
         
         fig, axes = plt.subplots(
             num_subplots, 1, 
-            figsize=(14, 4 + 2 + 2.5 * len(active_groups)), # Adjusted total figure height
+            figsize=(14, 4 + 1.2 + 0.3 * len(active_ribbons)), # Adjusted for tighter fit
             sharex=True, 
-            gridspec_kw={'height_ratios': height_ratios, 'hspace': 0.15} 
+            gridspec_kw={'height_ratios': height_ratios, 'hspace': 0.05} # Even tighter spacing
         )
         
         if num_subplots == 2:
             ax1, ax_vol = axes[0], axes[1]
-            osc_ax_map = {}
+            ribbon_axes = []
         else:
             ax1 = axes[0]
-            ax_vol = axes[1] # Volume moved to index 1 (under Price)
-            # Indicators move to indices 2 and beyond
-            osc_ax_map = {name: axes[i+2] for i, name in enumerate(active_groups.keys())}
+            ax_vol = axes[1]
+            ribbon_axes = axes[2:]
 
-        # Plot 1: Price with indicators (Moving Averages, Supertrend)
+        # Plot 1: Price only (Close)
+        price_col = "Close" if "Close" in df.columns else "close"
         ax1.plot(
-            df["Date"], df["Close"], label="Close Price", color="black", linewidth=2
+            df["Date"], df[price_col], label="Close Price", color="black", linewidth=1.5
         )
         
-        # Explicitly set y-limits to the robust range to fix the "straight line" outlier issue
+        # Explicitly set y-limits to the robust range
         padding = p_range * 0.1 if p_range > 0 else 1.0
         ax1.set_ylim(p_min_robust - padding, p_max_robust + padding)
         
-        # Plot valid price indicators
-        for col in price_indicators:
-            # Skip Supertrend (ST) lines to keep the chart clean, but keep moving averages (MA/EMA)
-            if "st_" in col.lower() or "supertrend" in col.lower():
-                continue
-            ax1.plot(df["Date"], df[col], label=col, alpha=0.7)
-
-        # Buy signals
-        buy_signals = df[df["Signal"] == 1]
+        # Signal markers
+        sig_col = "Signal" if "Signal" in df.columns else "signal"
+        buy_signals = df[df[sig_col] == 1]
         ax1.scatter(
             buy_signals["Date"],
-            buy_signals["Close"],
-            color="green",
+            buy_signals[price_col],
+            color="blue",
             marker="^",
-            s=100,
-            label="Buy Signal",
+            s=80,
+            label="Trigger",
             zorder=5,
         )
 
         # Sell signals
-        sell_signals = df[df["Signal"] == -1]
+        sell_signals = df[df[sig_col] == -1]
         ax1.scatter(
             sell_signals["Date"],
-            sell_signals["Close"],
+            sell_signals[price_col],
             color="red",
             marker="v",
             s=100,
@@ -222,148 +227,122 @@ class PortfolioPlotter:
         )
 
         # Highlight profitable trade regions
-        # Logic: Find a 1, find the next -1. If close at -1 > close at 1, color that region green.
         try:
-            trade_df = df[df["Signal"].isin([1, -1])].copy()
+            trade_df = df[df[sig_col].isin([1, -1])].copy()
             if not trade_df.empty:
                 entry_idx = None
                 for idx, row in trade_df.iterrows():
-                    if row["Signal"] == 1:
+                    if row[sig_col] == 1:
                         entry_idx = idx
-                    elif row["Signal"] == -1 and entry_idx is not None:
+                    elif row[sig_col] == -1 and entry_idx is not None:
                         # Trade completed
                         exit_idx = idx
-                        entry_price = df.loc[entry_idx, "Close"]
-                        exit_price = df.loc[exit_idx, "Close"]
+                        entry_price = df.loc[entry_idx, price_col]
+                        exit_price = df.loc[exit_idx, price_col]
                         
                         color = "green" if exit_price > entry_price else "red"
-                        # Fill between entry/exit dates with enhanced visibility
+                        # Fill between entry/exit dates
                         ax1.axvspan(df.loc[entry_idx, "Date"], df.loc[exit_idx, "Date"], 
-                                   color=color, alpha=0.25, label="_nolegend_")
-                        # Add a vertical line at entry and exit for sharpness
-                        ax1.axvline(df.loc[entry_idx, "Date"], color="gray", linestyle="--", alpha=0.3, linewidth=1)
-                        ax1.axvline(df.loc[exit_idx, "Date"], color="gray", linestyle="--", alpha=0.3, linewidth=1)
+                                   color=color, alpha=0.15, label="_nolegend_")
                         entry_idx = None
         except Exception as e:
             print(f"Warning: Could not highlight trade regions: {e}")
 
-        ax1.set_ylabel("Price", fontsize=12)
-        ax1.set_title(f"{symbol} - Technical Analysis", fontsize=14, fontweight="bold")
-        ax1.legend(loc="upper left")
-        ax1.grid(True, alpha=0.3)
+        ax1.set_ylabel("Price", fontsize=10)
+        ax1.set_title(f"{symbol} - Technical Analysis", fontsize=12, fontweight="bold")
+        ax1.legend(loc="upper left", fontsize=8)
+        ax1.grid(True, alpha=0.2)
 
-        # Plot Oscillator Subplots (RSI, StochRSI, MACD)
-        for name, osc_ax in osc_ax_map.items():
-            cols = active_groups[name]
+        # Plot Volume
+        vol_col = "Volume" if "Volume" in df.columns else "volume"
+        if vol_col in df.columns:
+            ax_vol.bar(df["Date"], df[vol_col], color="gray", alpha=0.3)
+            ax_vol.set_ylabel("Vol", fontsize=8)
+            ax_vol.grid(True, alpha=0.2)
+            # Remove y-ticks for volume to save space if needed
+            ax_vol.get_yaxis().set_major_formatter(matplotlib.ticker.EngFormatter())
+
+        # Plot Ribbon Panels
+        for i, rib in enumerate(active_ribbons):
+            osc_ax = ribbon_axes[i]
+            label = rib.get("label", "Unknown")
             
-            # Special handling for MACD to use histogram and colored lines
-            if name == "MACD":
-                hist_cols = [c for c in cols if "hist" in c.lower()]
-                signal_cols = [c for c in cols if "signal" in c.lower()]
-                macd_cols = [c for c in cols if (c.lower() == "macd" or ("macd" in c.lower() and "signal" not in c.lower() and "hist" not in c.lower()))]
-                
-                if hist_cols:
-                    pass # Histogram disabled per user request to improve curve visibility
-                
-                if macd_cols:
-                    # Map any macd column to charcoal with high zorder
-                    osc_ax.plot(df["Date"], df[macd_cols[0]], label="MACD", color="#1c1c1c", linewidth=1.5, zorder=10)
-                
-                if signal_cols:
-                    # Map any signal column to deep red with high zorder
-                    osc_ax.plot(df["Date"], df[signal_cols[0]], label="Signal", color="#d62728", linewidth=1.2, zorder=11)
-                
-                # If we missed any other MACD related columns
-                other_cols = [c for c in cols if c not in hist_cols + signal_cols + macd_cols]
-                for col in other_cols:
-                    osc_ax.plot(df["Date"], df[col], label=col, alpha=0.7, linewidth=1.5)
-            elif name == "TSI":
-                signal_cols = [c for c in cols if "signal" in c.lower()]
-                tsi_cols = [c for c in cols if "tsi" in c.lower() and "signal" not in c.lower()]
-                
-                if tsi_cols:
-                    # Blue for primary line
-                    osc_ax.plot(df["Date"], df[tsi_cols[0]], label="TSI", color="#1f77b4", linewidth=1.8, zorder=10)
-                
-                if signal_cols:
-                    # Red for signal line
-                    osc_ax.plot(df["Date"], df[signal_cols[0]], label="Signal", color="#d62728", linewidth=1.2, zorder=11)
-                
-                other_cols = [c for c in cols if c not in signal_cols + tsi_cols]
-                for col in other_cols:
-                    osc_ax.plot(df["Date"], df[col], label=col, alpha=0.7, linewidth=1.2)
-            else:
-                # Standard plotting for RSI/StochRSI
-                for col in cols:
-                    # Ensure numeric data for plotting
-                    data_to_plot = pd.to_numeric(df[col], errors='coerce')
+            # Helper to find column case-insensitively
+            def get_col(name):
+                # Check for direct match first
+                if name in df.columns: return name
+                # Check lowercase
+                for c in df.columns:
+                    if str(c).lower() == name.lower():
+                        return c
+                return None
+
+            # Helper to calculate condition mask
+            def evaluate_simple_condition(expr, df_eval):
+                try:
+                    # Map expr to use df_eval columns
+                    processed_expr = expr.lower()
                     
-                    # Custom styling for oscillators
-                    color = None
-                    linewidth = 1.0 
-                    alpha = 1.0 # Increased from 0.95 for maximum visibility
+                    # 1. replace common operators
+                    processed_expr = processed_expr.replace(" and ", " & ").replace(" or ", " | ")
                     
-                    col_lower = col.lower()
-                    zorder = 3 # Default zorder
-                    if name == "StochRSI":
-                        if "stoch_rsi_k" in col_lower or col_lower.endswith("_k") or col_lower.endswith("k"):
-                            color = "#1f77b4" # Strong Blue for %K
-                            linewidth = 2.4 # Increased significantly
-                            zorder = 3
-                        elif "stoch_rsi_d" in col_lower or col_lower.endswith("_d") or col_lower.endswith("d"):
-                            color = "#e41a1c" # Strong Red for %D Signal
-                            linewidth = 2.0 
-                            zorder = 4 # Put Red Signal on TOP of Blue K
-                        alpha = 1.0
-                    elif name == "RSI":
-                        color = "#7b1fa2" # Purple for RSI
-                        linewidth = 2.0
-                        zorder = 3
+                    # 2. find all words and check if they are columns
+                    words = re.findall(r'[a-z_][a-z0-9_]*', processed_expr)
+                    for word in set(words):
+                        actual_col = get_col(word)
+                        if actual_col:
+                            # Use backticks for pandas eval if name has spaces, but our names usually don't
+                            processed_expr = re.sub(rf'\b{word}\b', f"`{actual_col}`", processed_expr)
                     
-                    osc_ax.plot(df["Date"], data_to_plot, label=col, alpha=alpha, linewidth=linewidth, color=color, zorder=zorder)
+                    return df_eval.eval(processed_expr)
+                except Exception as eval_e:
+                    # Very simple fallback for "close > ema_50" or similar
+                    return pd.Series([False] * len(df_eval), index=df_eval.index)
+
+            # Create a local dict for eval that has lowercase keys pointing to actual columns
+            eval_df = pd.DataFrame(index=df.index)
+            for c in df.columns:
+                if pd.api.types.is_numeric_dtype(df[c]):
+                    eval_df[str(c).lower()] = df[c]
             
-            # Add guides for specific indicators
-            if name == "RSI":
-                osc_ax.axhline(70, color="red", linestyle="--", alpha=0.3)
-                osc_ax.axhline(30, color="green", linestyle="--", alpha=0.3)
-                osc_ax.set_ylim(-5, 105) # Extra padding for visibility
-            elif name == "StochRSI":
-                osc_ax.axhline(80, color="red", linestyle="--", alpha=0.3)
-                osc_ax.axhline(20, color="green", linestyle="--", alpha=0.3)
-                # Fill the area between overbought/oversold for StochRSI
-                osc_ax.axhspan(20, 80, color="gray", alpha=0.05)
-                # Check if values are 0-1 or 0-100 to set appropriate limits
-                max_val = df[cols].max().max()
-                if max_val <= 1.1:
-                    osc_ax.set_ylim(-0.05, 1.05)
-                    # Convert guides to 0-1 if data is 0-1
-                    for line in osc_ax.get_lines():
-                        if line.get_ydata()[0] == 80: line.set_ydata([0.8, 0.8])
-                        if line.get_ydata()[0] == 20: line.set_ydata([0.2, 0.2])
-                else:
-                    osc_ax.set_ylim(-5, 105)
-            elif name == "MACD" and len(cols) > 0:
-                # Add a zero line
-                osc_ax.axhline(0, color="black", linestyle="-", alpha=0.3, zorder=1)
+            for layer in rib.get("layers", []):
+                condition = layer.get("condition", "")
+                color = layer.get("color", "gray")
+                alpha = layer.get("alpha", 0.6)
                 
-                # Dynamic scaling for MACD: Focus on the actual curves
-                # Exclude the histogram which (if buggy) breaks the scale
-                calc_cols = [c for c in cols if "hist" not in c.lower()]
-                if not calc_cols: calc_cols = cols 
-                
-                m_data = df[calc_cols].values.flatten()
-                m_data = m_data[~np.isnan(m_data)]
-                if len(m_data) > 0:
-                    # Clip extreme outliers (at the plotting level) to keep scale readable
-                    m_min, m_max = np.nanquantile(m_data, [0.01, 0.99])
-                    m_range = m_max - m_min
-                    if m_range > 0:
-                        osc_ax.set_ylim(m_min - 0.2*m_range, m_max + 0.2*m_range)
-                    else:
-                        osc_ax.set_ylim(-1, 1) 
-                
-            osc_ax.grid(True, alpha=0.2, zorder=0)
-            osc_ax.legend(loc="upper left", fontsize=8)
+                try:
+                    # Replace and/or with bitwise for eval and wrap comparisons
+                    clean_cond = condition.lower()
+                    
+                    # Log what we are trying to evaluate
+                    # print(f"DEBUG EVAL: Trying condition '{clean_cond}' for {label}")
+
+                    # Replace common comparison with bitwise operators safely
+                    clean_cond = clean_cond.replace(" and ", " & ").replace(" or ", " | ")
+                    # Wrap segments to ensure precedence
+                    clean_cond = re.sub(r'([a-z0-9._]+(?:\s*[<>!=]+\s*[a-z0-9._]+)+)', r'(\1)', clean_cond)
+                    
+                    # We use eval_df to ensure column lookup works case-insensitively
+                    mask = eval_df.eval(clean_cond, engine='python')
+                    
+                    if isinstance(mask, (pd.Series, np.ndarray)):
+                        # If it's a series, make it a numpy array for direct masking
+                        mask_vals = getattr(mask, "values", mask)
+                        mask_bool = np.asanyarray(mask_vals).astype(bool)
+                        
+                        if np.any(mask_bool):
+                            # Use step='post' to match the data transitions correctly
+                            osc_ax.fill_between(df["Date"], 0, 1, where=mask_bool, color=color, alpha=alpha, 
+                                               step='post', transform=osc_ax.get_xaxis_transform())
+                except Exception as eval_e:
+                    # print(f"Ribbon eval error for '{condition}' in {label}: {eval_e}")
+                    pass
+
+            osc_ax.set_yticks([]) # No Y axis for ribbons
+            osc_ax.set_ylabel(label, rotation=0, labelpad=30, verticalalignment='center', fontsize=9, fontweight="bold")
+            osc_ax.set_ylim(0, 1)
+            osc_ax.set_facecolor('#f0f0f0') # Light gray background for ribbons to see "missing" data
+            osc_ax.grid(False) # Clean look for ribbons
 
         # Plot Volume
         ax_vol.bar(df["Date"], df["Volume"], color="steelblue", alpha=0.6)
@@ -371,20 +350,15 @@ class PortfolioPlotter:
         ax_vol.grid(True, alpha=0.3)
 
         # Format X-axis Dates (YYYY-MM-DD)
-        all_axes = [ax1] + list(osc_ax_map.values()) + [ax_vol]
+        all_axes = [ax1] + list(ribbon_axes) + [ax_vol]
         
         for ax in all_axes:
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
             ax.xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=12))
-            # Enable auto-formatting and then hide/show specifically
-            ax.tick_params(axis='x', labelbottom=False)
+            # Enable auto-formatting and show labels on ALL axes
+            ax.tick_params(axis='x', labelbottom=True)
+            plt.setp(ax.get_xticklabels(), visible=True, rotation=0, ha='center', fontsize=6)
             
-        # Only show labels on the very last subplot (which is ax_vol)
-        last_ax = all_axes[-1]
-        last_ax.tick_params(axis='x', labelbottom=True)
-        # Use horizontal labels to avoid overlap with panel below
-        plt.setp(last_ax.get_xticklabels(), visible=True, rotation=0, ha='center', fontsize=8)
-
         # Add performance metrics to the plot
         total_return = 0
         if "Signal" in df.columns:

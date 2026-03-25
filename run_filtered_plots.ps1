@@ -4,11 +4,11 @@ param(
     
     [string]$TickerFilter = "",
     [string]$Format = "svg",
-    [int]$Lookback = 30,
-    [int]$MaxTickers = 0,
+    [int]$Lookback = 50,
+    [int]$MaxTickers = 10,
     [switch]$Clean = $true,
     [switch]$MovieScan = $true,
-    [switch]$Quiet = $true
+    [switch]$Quiet = $false
 )
 
 # 1. Clean old plots if requested

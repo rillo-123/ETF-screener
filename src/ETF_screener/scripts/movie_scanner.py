@@ -8,6 +8,7 @@ from datetime import datetime
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from ETF_screener.backtester import Backtester
+from ETF_screener.plotter import PortfolioPlotter
 from ETF_screener.strategy_manager import CachedStrategyManager
 from ETF_screener.scripts.churn_strategies import load_dsl_file
 
@@ -30,8 +31,8 @@ def get_max_lookback(strategies):
     """Deduce the required data lookback from strategy indicators."""
     max_period = 0
     for s in strategies:
-        # Join entry and exit to find all symbols
-        full_script = (s["entry"] + " " + s["exit"]).lower()
+        # Join entry, exit, trigger and filter to find all symbols
+        full_script = f"{s['entry']} {s['exit']} {s.get('trigger') or ''} {s.get('filter') or ''}".lower()
         
         # 1. Special case for standard indicators with known periods
         if "macd" in full_script and max_period < 26: max_period = 26
@@ -51,7 +52,7 @@ def get_max_lookback(strategies):
     # If no indicators found, use 14 as safety baseline
     return max_period if max_period > 0 else 14
 
-def movie_scanner(strat_path: str = None, ticker_filter: str = None, limit_days: int = None, open_result: bool = False):
+def movie_scanner(strat_path: str = None, ticker_filter: str = None, limit_days: int = None, open_result: bool = False, plot_limit: int = 0):
     settings = load_settings()
     blacklist = load_blacklist()
     
@@ -61,18 +62,34 @@ def movie_scanner(strat_path: str = None, ticker_filter: str = None, limit_days:
     
     backtester = Backtester()
     shared_manager = CachedStrategyManager(backtester.db)
+    plotter = PortfolioPlotter() if plot_limit != 0 else None
+    
+    # Track plotting count
+    plotted_count = 0
     
     # 1. Load strategies
     strategies = []
     path = Path(strat_path)
     if path.is_file():
-        entry, exit_ = load_dsl_file(path)
-        strategies.append({"name": path.stem, "entry": entry, "exit": exit_})
+        res = load_dsl_file(path)
+        strategies.append({
+            "name": path.stem, 
+            "entry": res["entry"], 
+            "exit": res["exit"],
+            "trigger": res["trigger"],
+            "filter": res["filter"]
+        })
     elif path.is_dir():
         for dsl_file in path.glob("*.dsl"):
             if "strat_cache" in dsl_file.parts: continue
-            entry, exit_ = load_dsl_file(dsl_file)
-            strategies.append({"name": dsl_file.stem, "entry": entry, "exit": exit_})
+            res = load_dsl_file(dsl_file)
+            strategies.append({
+                "name": dsl_file.stem, 
+                "entry": res["entry"], 
+                "exit": res["exit"],
+                "trigger": res["trigger"],
+                "filter": res["filter"]
+            })
 
     # Deduce the lookback needed for the indicator calculations
     strategy_lookback = get_max_lookback(strategies)
@@ -105,15 +122,38 @@ def movie_scanner(strat_path: str = None, ticker_filter: str = None, limit_days:
     
     def process_ticker(ticker):
         results = []
+        
+        # Load ribbon settings to ensure all indicators used in ribbons are calculated
+        ribbon_indicators = []
+        try:
+            with open("config/ribbon_settings.json", "r") as f:
+                ribbon_data = json.load(f)
+                for ribbon in ribbon_data.get("ribbons", []):
+                    for layer in ribbon.get("layers", []):
+                        cond = layer.get("condition", "").lower()
+                        # Simple regex to find words that look like indicators
+                        for word in re.findall(r'[a-z][a-z_0-9]*', cond):
+                            if word not in ['and', 'or', 'close', 'open', 'high', 'low', 'volume', 'date']:
+                                ribbon_indicators.append(word)
+        except Exception:
+            pass
+            
         for strat in strategies:
+            # Task: Separation of Trigger and Filter.
+            # If a trigger/filter pair exists, use ONLY the trigger for the backtester's entry.
+            # This ensures 'signal == 1' represents the EXACT day of the event.
+            # The 'filter' survival check later handles the trend/validation.
+            active_trigger = strat.get('trigger') if strat.get('trigger') else strat['entry']
+            
             res = backtester.run_strategy(
                 ticker=ticker, 
                 strategy_func=backtester.scripted_strategy,
                 days=total_fetch_days,
                 strategy_kwargs={
-                    "entry_script": strat["entry"], 
+                    "entry_script": active_trigger, 
                     "exit_script": strat["exit"],
-                    "manager": shared_manager
+                    "manager": shared_manager,
+                    "additional_indicators": ribbon_indicators
                 }
             )
             
@@ -157,33 +197,106 @@ def movie_scanner(strat_path: str = None, ticker_filter: str = None, limit_days:
                         # It's harder to re-eval the DSL here, so we look at the 'signal' column.
                         
                         # 3. EXCLUSION: If signal was 1 N days ago, but -1 since then, it's dead.
+                        # However, we only kill it if the exit happens AFTER the window.
                         recent_exits = df.iloc[idx+1:]['signal'].tolist()
                         if -1 in recent_exits:
+                            # If we are looking for historically successful entries, maybe we 
+                            # want to see them even if they eventually failed? No, this is a 
+                            # "movie scanner" for CURRENTLY active signals.
                             continue
                             
-                        # 4. EXCLUSION: The LATEST bar (now) MUST satisfy the DSL's ENTRY-level trend/stability.
+                        # 4. SURVIVAL LOGIC: If the strategy has a FILTER block, it MUST be true 
+                        # for EVERY SINGLE DAY from the trigger (idx) until today.
+                        if strat.get('filter'):
+                            # Prepare a slice of the dataframe from the trigger day until the latest bar
+                            df_slice = df.iloc[idx:].copy()
+                            
+                            try:
+                                # Process the filter string to be pandas-compatible (same as backtester)
+                                def p(s):
+                                    # Handle c_up/down
+                                    s = re.sub(r'cross_up\(([^,]+),\s*([^)]+)\)', r'(\1 > \2 and \1_d1 <= \2_d1)', s)
+                                    s = re.sub(r'cross_down\(([^,]+),\s*([^)]+)\)', r'(\1 < \2 and \1_d1 >= \2_d1)', s)
+                                    
+                                    # Handle d[N]
+                                    def d_sub(m):
+                                        return f"{m.group(1)}_d{m.group(2)}"
+                                    s = re.sub(r'([a-z_][a-z0-9_]*)\.d\[(\d+)\]', d_sub, s)
+                                    
+                                    # Handle was_true
+                                    def shift_cond(m):
+                                        c = m.group(1); n = int(m.group(2))
+                                        shifted = " or ".join([f"{c}_d{i}" for i in range(1, n+1)])
+                                        return f"({shifted})"
+                                    s = re.sub(r'was_true\(([^,]+),\s*(\d+)\)', shift_cond, s)
+                                    
+                                    # Use 'and'/'or' keywords for pandas.eval() to avoid numexpr issues.
+                                    # pandas.eval() expects bitwise (&, |) or it fails with 'BoolOp' error if using engine='python'.
+                                    # Actually, engine='python' should support 'and' if it's a simple python eval, 
+                                    # but usually it's safer to use bitwise or simple string replacement.
+                                    return s.lower().replace(' and ', ' & ').replace(' or ', ' | ').replace('-gt','>').replace('-lt','<').replace('-eq','==').replace('-ge','>=').replace('-le','<=')
+
+                                f_s = p(strat['filter'])
+                                
+                                # Map columns to match the evaluation (lowercase)
+                                df_slice.columns = [c.lower() for c in df_slice.columns]
+                                
+                                # Use engine='python', parser='python' to match backtester improvements
+                                filter_mask = df_slice.eval(f_s, engine='python', parser='python')
+                                
+                                # If the filter was False at any point in the "survival" window, disqualify.
+                                if not filter_mask.all():
+                                    continue
+                            except Exception as e:
+                                # Fallback: if evaluation fails, we keep the ticker but log a warning if needed
+                                pass
+
+                        # 5. EXCLUSION: The LATEST bar (now) MUST satisfy the DSL's ENTRY-level trend/stability.
                         # This prevents tickers that entered validly 3 days ago but are currently DOWN (Price < EMA 50) 
                         # or have lost momentum (MACD < Signal).
                         latest_bar = df.iloc[-1]
                         
                         # Use b_em (entry mask) to verify if entry conditions are currently TRUE.
-                        if 'b_em' in res:
-                            # Verify if Entry script is TRUE at the LATEST bar (index -1)
-                            if not res['b_em'].iloc[-1]:
+                        # CRITICAL: For strategies with crossovers (cross_up), b_em will only be True 
+                        # on the day of the crossover. To allow entry signals from 1-5 days ago,
+                        # we must check if the POSITION is still OPEN and the trend is still UP,
+                        # rather than requiring a NEW crossover today.
+                        
+                        # Is the position currently in an "OPEN" state?
+                        # Since we check -1 since the signal above, we just need to verify 
+                        # that the LATEST bar doesn't violate the EXIT condition.
+                        if 'b_r' in res:
+                            # If the EXIT condition (b_r) is TRUE today, disqualify.
+                            if res['b_r'].iloc[-1]:
                                 continue
-                        else:
-                            # Fallback if b_em isn't in res
-                            price_col = 'Close' if 'Close' in latest_bar else 'close'
-                            # ADDED: 2% safety buffer for EMA 50
-                            if 'ema_50' in df.columns and latest_bar[price_col] < (latest_bar['ema_50'] * 1.02):
+                        
+                        # Also, regardless of the crossover, we firmly enforce the Trend/MACD stability:
+                        price_col = 'Close' if 'Close' in latest_bar else 'close'
+                        
+                        # (A) 2% safety buffer for EMA 50 must still be respected today
+                        # BUT: only if the strategy doesn't already have its own FILTER logic!
+                        # If a strategy defines its own survivability, we trust it.
+                        if not strat.get('filter'):
+                            if 'ema_50' in df.columns:
+                                if latest_bar[price_col] < (latest_bar['ema_50'] * 1.02):
+                                    continue
+                        
+                        # (B) MACD must still be ABOVE the Signal line today (No "Red over Blue")
+                        if 'macd' in df.columns and 'macd_signal' in df.columns:
+                            # Use a tiny buffer to avoid precision issues
+                            if latest_bar['macd'] < (latest_bar['macd_signal'] - 0.00001):
                                 continue
-                            if 'macd' in df.columns and 'macd_signal' in df.columns and latest_bar['macd'] < latest_bar['macd_signal']:
-                                continue
-
+                        
+                        # (C) DEBUG: Extra check to see why tickers might be slipping through
+                        # if ticker == "HYCN.DE":
+                        #     print(f"DEBUG HYCN.DE: macd={latest_bar['macd']}, signal={latest_bar['macd_signal']}")
+                        
+                        # If we passed all rejections, record this hit.
                         date_str = df.iloc[idx]["Date"].strftime("%Y-%m-%d")
                         days_str = "TODAY" if i == 0 else f"{i} days ago"
-                        # Store as tuple (days_ago, ticker, line_text) for easy sorting
-                        results.append((i, ticker, f"{ticker:<10} | {strat['name']:<20} | {days_str:<12} ({date_str})"))
+                        
+                        # Store as tuple (days_ago, ticker, line_text, df) for easy sorting and plotting
+                        results.append((i, ticker, f"{ticker:<10} | {strat['name']:<20} | {days_str:<12} ({date_str})", df))
                         break
         return results
 
@@ -207,15 +320,35 @@ def movie_scanner(strat_path: str = None, ticker_filter: str = None, limit_days:
     # 4. Sort by days ago (ascending) then ticker
     all_hits.sort(key=lambda x: (x[0], x[1]))
     
-    # 5. Output Results
+    # 5. Output Results and Plot
     csv_rows = []
     
-    # Print excerpt (top 10) to terminal
-    for i, (days_ago, ticker, line) in enumerate(all_hits):
+    # NEW: Clean out old plots before generating new ones
+    if plotter and plot_limit != 0:
+        plot_dir = Path("plots")
+        if plot_dir.exists():
+            for f in plot_dir.glob("*.png"):
+                try: f.unlink()
+                except: pass
+            for f in plot_dir.glob("*.svg"):
+                try: f.unlink()
+                except: pass
+            print("Cleaned up old plots.")
+
+    # Print excerpt (top 10) to terminal and handle plotting
+    for i, (days_ago, ticker, line, df_hit) in enumerate(all_hits):
         if i < 10:
             print(line)
         elif i == 10:
             print(f"... and {len(all_hits) - 10} more (see CSV for full results)")
+            
+        # Plotting logic (sequential now that we've found the hits)
+        if plotter and (plot_limit == -1 or i < plot_limit):
+            try:
+                plotter.plot_etf_analysis(df_hit, ticker)
+                plotted_count += 1
+            except Exception as pe:
+                print(f"Error plotting {ticker}: {pe}")
             
         # Prepare CSV data
         date_match = re.search(r"\((\d{4}-\d{2}-\d{2})\)", line)
@@ -230,6 +363,10 @@ def movie_scanner(strat_path: str = None, ticker_filter: str = None, limit_days:
             "DaysAgo": days_ago,
             "Date": date_str
         })
+    
+    if plotter and plotted_count > 0:
+        print(f"\nGenerated {plotted_count} plots.")
+
 
     if csv_rows:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -258,8 +395,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--strat_path", type=str, help="Path to strategy file or directory")
     parser.add_argument("--filter", type=str, help="Ticker filter")
-    parser.add_argument("--days", type=int, help="How many days of data to analyze/lookback")
+    parser.add_argument("--lookback", type=int, help="How many days of data to analyze/lookback")
     parser.add_argument("--open", action="store_true", help="Open the result CSV")
+    parser.add_argument("--plot", type=int, default=0, help="Generate plots for scan hits (number or -1 for all)")
     args = parser.parse_args()
     
-    movie_scanner(args.strat_path, args.filter, args.days, args.open)
+    movie_scanner(args.strat_path, args.filter, args.lookback, args.open, args.plot)

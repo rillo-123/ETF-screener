@@ -42,6 +42,9 @@ class Backtester:
         db = self.db
         manager = CachedStrategyManager(db)
         
+        # This will hold the original metadata from the strategy function (e.g. b_em, b_r)
+        strategy_result_meta = {}
+
         # Determine if we should look for or save to a parquet cache
         # Cache key is based on ticker and strategy name if scripted
         cache_dir = Path("data/cache")
@@ -93,14 +96,16 @@ class Backtester:
                 
             if res is None: return {"error": "Strategy function returned None"}
             
-            # If it's a dict (from scripted_strategy), extracting the dataframe
+            # Store the original result metadata (like b_em, b_r) for later merging
             if isinstance(res, dict):
                 if "df" not in res or res["df"] is None or res["df"].empty:
                     return {"error": "Empty dataframe after strategy run"}
                 df = res["df"]
+                strategy_result_meta = res
             else:
                 if res.empty: return {"error": "Empty dataframe after strategy run"}
                 df = res
+                strategy_result_meta = {"df": df}
                 
             # If we calculated signals, save them to parquet for next time
             if cache_path and not df.empty:
@@ -108,17 +113,6 @@ class Backtester:
                     df.to_parquet(cache_path, compression='snappy')
                 except Exception as e:
                     print(f"Warning: Failed to save cache {cache_path}: {e}")
-
-            if isinstance(res, dict):
-                # We already updated df from res['df'], so we can continue with it
-                pass
-            else:
-                res = {"df": df}
-            
-            # Re-assigning res to a local variable to be used at the end of function
-            # but we need to keep 'df' as the working dataframe for backtesting.
-            # Let's just ensure 'df' is set and we'll wrap it later.
-            strategy_result_meta = res if isinstance(res, dict) else {"df": df}
             
         if 'Signal' in df.columns and 'signal' not in df: df['signal'] = df['Signal']
         if 'signal' not in df.columns: return {"error": "No signal col"}
@@ -170,7 +164,7 @@ class Backtester:
             profit_factor = round(gross_profits / gross_losses, 2) if gross_losses > 0 else (round(gross_profits, 2) if gross_profits > 0 else 0)
             
         results = {
-            'ticker': ticker, 
+            'ticker': ticker,
             'final_value': final_val, 
             'total_return_pct': round(((final_val - self.initial_capital) / self.initial_capital) * 100, 2), 
             'num_trades': len(closed_trades),
@@ -181,15 +175,15 @@ class Backtester:
             'df': df
         }
         
-        # Merge metadata from strategy result if available (like b_em, b_rm)
-        if 'strategy_result_meta' in locals() and isinstance(strategy_result_meta, dict):
+        # Merge metadata from strategy result if available (like b_em, b_r)
+        if isinstance(strategy_result_meta, dict):
             for k, v in strategy_result_meta.items():
-                if k not in results:
+                if k not in ['df']: # Don't overwrite the main df with metadata df
                     results[k] = v
                     
         return results
     
-    def scripted_strategy(self, df, ticker, entry_script, exit_script, manager=None):
+    def scripted_strategy(self, df, ticker, entry_script, exit_script, manager=None, additional_indicators=None):
         if manager is None:
             db = ETFDatabase(self.db_path)
             manager = CachedStrategyManager(db)
@@ -245,11 +239,17 @@ class Backtester:
                     # Simple volume smoothing
                     df_eval[base_c] = df_eval['volume'].ewm(span=20, adjust=False).mean()
             
-            # If it's a delayed primitive (e.g., ema_10_d2), create the shifted column
+            # If it's a delayed primitive (e.g., ema_10_d1), create the shifted column
+            # Special case for cross_up(a, b) and cross_down(a, b) which use _d1
             if c != base_c and c not in df_eval.columns:
                 if base_c in df_eval.columns:
-                    delay = int(c.split("_d")[-1])
-                    df_eval[c] = df_eval[base_c].shift(delay)
+                    delay_match = re.search(r'_d(\d+)$', c)
+                    if delay_match:
+                        delay = int(delay_match.group(1))
+                        df_eval[c] = df_eval[base_c].shift(delay)
+            elif c == base_c and f"{c}_d1" not in df_eval.columns:
+                # Always ensure _d1 exists for cross_up/down support if the base indicator is asked for
+                df_eval[f"{c}_d1"] = df_eval[c].shift(1)
 
         def p(s):
             # 1. cross_up(a, b) -> (a > b and a_d1 <= b_d1)
@@ -273,16 +273,51 @@ class Backtester:
                 return m.group(0)
             s = re.sub(r'(\d+(?:\.\d+)?)([kKmM])(?!\w)', handle_suffixes, s)
             
-            return s.lower().replace('-gt','>').replace('-lt','<').replace('-eq','==').replace('-ge','>=').replace('-le','<=').replace('and','&').replace('or','|')
+            # Use bitwise operators & / | for pandas.eval() 
+            # This is more robust for series evaluation than and/or keywords.
+            s = s.lower()
+            # For robustness, we wrap common comparison segments in parentheses
+            # to avoid precedence issues (since & / | have higher precedence than >, <, etc.)
+            # This regex looks for things like "macd > 0" or "macd < signal"
+            # It's not perfect but handles most common cases.
+            comp_regex = r'([a-z0-9._]+(?:\s*[<>!=]+\s*[a-z0-9._]+)+)'
+            s = re.sub(comp_regex, r'(\1)', s)
+            
+            s = re.sub(r'\band\b', ' & ', s)
+            s = re.sub(r'\bor\b', ' | ', s)
+            s = s.replace('-gt','>').replace('-lt','<').replace('-eq','==').replace('-ge','>=').replace('-le','<=')
+            return s
         
+        # Pre-process scripts to handle cross_up/down and suffixes
         e_s = p(entry_script); r_s = p(exit_script)
         
         # Discover all symbols including those with _d[N] suffixes
-        for c in set(re.findall(r'[a-z_][a-z_0-9]*', e_s + " " + r_s)):
-            if c not in ['and','or','supertrend','close','open','high','low','volume','date']: ensure_indicator(c)
-            
+        symbols_to_ensure = set(re.findall(r'[a-z][a-z_0-9]*', e_s + " " + r_s))
+        
+        # Sort so we calculate base indicators BEFORE their delayed versions
+        for c in sorted(list(symbols_to_ensure), key=lambda x: '_d' in x):
+            if c in ['and','or','supertrend','close','open','high','low','volume','date','st']:
+                continue
+            try:
+                ensure_indicator(c)
+            except KeyError:
+                pass
+        
+        # Also ensure any additional indicators needed (e.g. for ribbons) are calculated.
+        if additional_indicators:
+            for c in additional_indicators:
+                try:
+                    ensure_indicator(c.lower())
+                except KeyError:
+                    pass
+        
         try:
-            b_em = df_eval.eval(e_s); b_r = df_eval.eval(r_s)
+            # We use engine='python' and parser='python' to allow python-style keywords 
+            # and avoid conflicts with ticker symbols that are also pandas/numexpr keywords.
+            # However, we MUST use bitwise operators (&, |) for series logic 
+            # as 'and'/'or' are not supported for Series evaluation in pd.eval().
+            b_em = df_eval.eval(e_s, engine='python', parser='python')
+            b_r = df_eval.eval(r_s, engine='python', parser='python')
             
             # Create a copy of df to avoid modifying the original during processing
             df = df.copy()
@@ -290,19 +325,8 @@ class Backtester:
             df.loc[b_em == True, 'signal'] = 1
             df.loc[b_r == True, 'signal'] = -1
             
-            # Record last entry bar relative to end of dataframe
-            # This is used for scanning "Recent Entries"
-            recent_entry_days = 999
-            if any(b_em):
-                v = b_em.values if hasattr(b_em, 'values') else b_em
-                entry_indices = np.where(v)[0]
-                if len(entry_indices) > 0:
-                    last_idx = int(entry_indices[-1])
-                    recent_entry_days = len(df) - 1 - last_idx
-            
-            df['recent_entry_days'] = recent_entry_days
-            
-            # Copy new indicator columns back to original df so plotter can see them
+            # Re-attach indicators to the main DF if they weren't there
+            # This is crucial for the Ribbon plotter to find them.
             for col in df_eval.columns:
                 if col not in df.columns:
                     df[col] = df_eval[col]
@@ -311,11 +335,13 @@ class Backtester:
             res_df = df
             return {"df": res_df, "b_em": b_em, "b_r": b_r}
         except Exception as e:
-            print(f"Error in strategy eval for {ticker}: {e}")
+            import traceback
+            traceback.print_exc()
+            print(f"Error in strategy eval: {e}")
             df = df.copy()
             df['signal'] = 0
             df['recent_entry_days'] = 999
-        return df
+            return {"df": df}
 
     def run_parallel_backtest(self, tickers, base_strategy, days=365, indicators_setup=None, strategy_kwargs=None, max_workers=None):
         import concurrent.futures
