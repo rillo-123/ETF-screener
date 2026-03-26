@@ -39,18 +39,18 @@ class XETRETFExtractor:
         with open(file_path, "w") as f:
             json.dump(normalized_data, f, indent=2)
 
-    def extract_etf_tickers(self) -> list[str]:
+    def extract_etf_tickers(self) -> dict[str, str]:
         """
-        Extract ETF tickers from Deutsche Börse CSV.
+        Extract ETF tickers and their names from Deutsche Börse CSV.
 
         Returns:
-            List of ETF tickers with .DE suffix for yfinance
+            Dict mapping ticker (.DE) to instrument name
         """
-        etf_tickers = []
+        etfs = {}
 
         if not self.csv_file.exists():
             print(f"CSV file not found: {self.csv_file}")
-            return etf_tickers
+            return etfs
 
         print(f"Parsing {self.csv_file}...")
 
@@ -84,6 +84,7 @@ class XETRETFExtractor:
                     ).strip().upper()
                     
                     mnemonic = row.get("Mnemonic", "").strip()
+                    instrument_name = row.get("Instrument", "").strip()
                     
                     # Look for ETF, ETC (Exchange Traded Commodity), or ETP (Exchange Traded Product)
                     # Expanded to include Common Stock (CS) but only in main market (Market Segment 003/045)
@@ -100,13 +101,13 @@ class XETRETFExtractor:
                     if mnemonic and (is_target_type or is_major_stock):
                         # Add .DE suffix for XETRA (yfinance requirement)
                         ticker_with_suffix = f"{mnemonic}.DE"
-                        etf_tickers.append(ticker_with_suffix)
+                        etfs[ticker_with_suffix] = instrument_name
 
         except Exception as e:
             print(f"Error parsing CSV: {e}")
 
-        print(f"Found {len(etf_tickers)} ETF tickers in CSV")
-        return etf_tickers
+        print(f"Found {len(etfs)} potential tickers in CSV")
+        return etfs
 
     def validate_ticker(self, ticker: str) -> bool:
         """
@@ -141,7 +142,8 @@ class XETRETFExtractor:
             Dict with 'working' and 'blacklisted' keys
         """
         # Extract tickers from CSV
-        tickers = self.extract_etf_tickers()
+        potential_etfs = self.extract_etf_tickers()
+        tickers = list(potential_etfs.keys())
 
         if verbose:
             print(f"\nValidating {len(tickers)} ETF tickers on Yahoo Finance...\n")
@@ -150,8 +152,13 @@ class XETRETFExtractor:
         blacklisted_count = 0
 
         for i, ticker in enumerate(tickers, 1):
-            # Skip if already processed
-            if ticker in self.working_etfs or ticker in self.blacklist:
+            # Skip if already processed, but update name if missing
+            if ticker in self.working_etfs:
+                if "name" not in self.working_etfs[ticker] and ticker in potential_etfs:
+                    self.working_etfs[ticker]["name"] = potential_etfs[ticker]
+                continue
+                
+            if ticker in self.blacklist:
                 continue
 
             if verbose:
@@ -160,7 +167,10 @@ class XETRETFExtractor:
             if self.validate_ticker(ticker):
                 if verbose:
                     print("✓")
-                self.working_etfs[ticker] = {"status": "active"}
+                self.working_etfs[ticker] = {
+                    "status": "active",
+                    "name": potential_etfs.get(ticker, "")
+                }
                 validated_count += 1
             else:
                 if verbose:

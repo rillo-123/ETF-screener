@@ -327,8 +327,9 @@ def calculate_supertrend(
         return supertrend if not isinstance(high, pd.DataFrame) else (supertrend, final_ub, final_lb)
 
     # Initialize first valid bar
-    supertrend_direction.iloc[start_idx] = 1 # Initial guess
-    supertrend.iloc[start_idx] = basic_ub.iloc[start_idx]
+    # Use -1 (down) as initial guess if price is below high-low average
+    supertrend_direction.iloc[start_idx] = 1 if c.iloc[start_idx] > hl2.iloc[start_idx] else -1
+    supertrend.iloc[start_idx] = final_lb.iloc[start_idx] if supertrend_direction.iloc[start_idx] == 1 else final_ub.iloc[start_idx]
 
     for i in range(start_idx + 1, len(c)):
         # Final Upper Band
@@ -345,19 +346,19 @@ def calculate_supertrend(
             
         # Strategy Direction logic
         if supertrend_direction.iloc[i-1] == 1:
-            if c.iloc[i] > final_ub.iloc[i]:
-                supertrend_direction.iloc[i] = 1
-                supertrend.iloc[i] = final_lb.iloc[i]
-            else:
-                supertrend_direction.iloc[i] = -1
-                supertrend.iloc[i] = final_ub.iloc[i]
-        else:
             if c.iloc[i] < final_lb.iloc[i]:
                 supertrend_direction.iloc[i] = -1
                 supertrend.iloc[i] = final_ub.iloc[i]
             else:
                 supertrend_direction.iloc[i] = 1
                 supertrend.iloc[i] = final_lb.iloc[i]
+        else:
+            if c.iloc[i] > final_ub.iloc[i]:
+                supertrend_direction.iloc[i] = 1
+                supertrend.iloc[i] = final_lb.iloc[i]
+            else:
+                supertrend_direction.iloc[i] = -1
+                supertrend.iloc[i] = final_ub.iloc[i]
 
     return supertrend if not isinstance(high, pd.DataFrame) else (supertrend, final_ub, final_lb)
 

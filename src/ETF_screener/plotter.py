@@ -57,6 +57,30 @@ class PortfolioPlotter:
         Returns:
             Path to saved plot
         """
+        # Try to find a friendly name for the ticker from etfs.json
+        full_name = ""
+        try:
+            etfs_file = Path("config/etfs.json")
+            if etfs_file.exists():
+                with open(etfs_file, "r") as f:
+                    etf_data = json.load(f)
+                    # Support case-insensitive lookup
+                    symbol_upper = symbol.upper()
+                    if symbol_upper in etf_data:
+                        info = etf_data[symbol_upper]
+                        if isinstance(info, dict):
+                            full_name = info.get("name", "")
+                    else:
+                        for k, v in etf_data.items():
+                            if k.upper() == symbol_upper:
+                                if isinstance(v, dict):
+                                    full_name = v.get("name", "")
+                                break
+        except Exception:
+            pass
+        
+        display_title = f"{symbol} ({full_name})" if full_name else symbol
+
         # Resolve duplicate labels BEFORE any other operations
         df = df.copy()
         if df.columns.duplicated().any():
@@ -249,7 +273,7 @@ class PortfolioPlotter:
             print(f"Warning: Could not highlight trade regions: {e}")
 
         ax1.set_ylabel("Price", fontsize=10)
-        ax1.set_title(f"{symbol} - Technical Analysis", fontsize=12, fontweight="bold")
+        ax1.set_title(f"{display_title} - Technical Analysis", fontsize=12, fontweight="bold")
         ax1.legend(loc="upper left", fontsize=8)
         ax1.grid(True, alpha=0.2)
 

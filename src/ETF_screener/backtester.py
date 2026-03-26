@@ -202,8 +202,13 @@ class Backtester:
                     # rsi_ema_14_10
                     parts = base_c.split("_")
                     df_eval[base_c] = manager.get_indicator(df, ticker, calculate_rsi_ema, base_c, rsi_period=int(parts[2]), ema_period=int(parts[3]))
+                elif re.match(r'supertrend_\d+_\d+', base_c) or re.match(r'st_\d+_\d+', base_c):
+                    # st_10_4 or supertrend_10_4
+                    parts = base_c.split("_")
+                    p = int(parts[1]); m = float(parts[2])
+                    df_eval[base_c] = manager.get_indicator(df, ticker, calculate_supertrend, f"supertrend_{p}_{m}", period=p, multiplier=m)
                 elif base_c=="adx": df_eval[base_c] = manager.get_indicator(df, ticker, calculate_adx, base_c, period=14)
-                elif base_c in set(["st", "supertrend"]): df_eval[base_c] = manager.get_indicator(df, ticker, calculate_supertrend, base_c, period=10, multiplier=3.0)
+                elif base_c in set(["st", "supertrend"]): df_eval[base_c] = manager.get_indicator(df, ticker, calculate_supertrend, "supertrend_10_3.0", period=10, multiplier=3.0)
                 elif base_c in ["macd", "macd_signal", "macd_hist"]:
                     res = manager.get_indicator(df, ticker, calculate_macd, "macd_all", fast=12, slow=26, signal=9)
                     if isinstance(res, tuple) and len(res) == 3:
@@ -252,40 +257,67 @@ class Backtester:
                 df_eval[f"{c}_d1"] = df_eval[c].shift(1)
 
         def p(s):
-            # 1. cross_up(a, b) -> (a > b and a_d1 <= b_d1)
-            s = re.sub(r'cross_up\(([^,]+),\s*([^)]+)\)', r'(\1 > \2 and \1_d1 <= \2_d1)', s)
-            # 2. cross_down(a, b) -> (a < b and a_d1 >= b_d1)
-            s = re.sub(r'cross_down\(([^,]+),\s*([^)]+)\)', r'(\1 < \2 and \1_d1 >= \2_d1)', s)
-            # 3. was_true(cond, N) -> suffix all symbols in cond with _dN
-            def shift_cond(m):
-                cond = m.group(1); delay = m.group(2)
-                # Suffix every word that looks like an indicator/price
-                shifted = re.sub(r'([a-z][a-z0-9_]*)', rf'\1_d{delay}', cond)
-                return f"({shifted})"
-            s = re.sub(r'was_true\(([^,]+),\s*(\d+)\)', shift_cond, s)
+            # 1. Expand aliases FIRST
+            def sub_st(st_m): 
+                pv, mv, sv = st_m.group(1), st_m.group(2), st_m.group(3)
+                ind = f"st_{pv}_{mv}"
+                return f" (close > {ind}) " if "green" in sv else f" (close < {ind}) "
             
-            # 4. Handle numeric suffixes (K for 1,000, M for 1,000,000)
-            def handle_suffixes(m):
-                num = float(m.group(1))
-                suffix = m.group(2).lower()
-                if suffix == 'k': return str(num * 1000)
-                if suffix == 'm': return str(num * 1000000)
-                return m.group(0)
-            s = re.sub(r'(\d+(?:\.\d+)?)([kKmM])(?!\w)', handle_suffixes, s)
-            
-            # Use bitwise operators & / | for pandas.eval() 
-            # This is more robust for series evaluation than and/or keywords.
+            s = re.sub(r'\b(?:st|supertrend)_(\d+)_(\d+)_is_(green|red)\b', sub_st, s)
+            s = s.replace('st_is_green', ' (close > supertrend) ').replace('st_is_red', ' (close < supertrend) ')
+
+            # 2. Shifting helper
+            def _shift(expr, delay):
+                def repl(m):
+                    word = m.group(1).lower()
+                    if word in ['and', 'or', 'not', 'true', 'false', 'cross_up', 'cross_down', 'was_true']: return word
+                    if word.isdigit(): return word
+                    return f"{word}_d{delay}"
+                return re.sub(r'([a-z][a-z0-9_]*)\b', repl, expr)
+
+            # 3. Expansion helpers
+            def handle_cross(m):
+                content = m.group(0).split('(', 1)[1].rsplit(')', 1)[0]
+                mode = 'cross_up' if 'cross_up' in m.group(0) else 'cross_down'
+                parts = content.split(',', 1)
+                a, b = parts[0].strip(), (parts[1].strip() if len(parts) > 1 else "0.5")
+                ad, bd = _shift(a, 1), _shift(b, 1)
+                # Boolean logic to avoid pd.eval scalar error (bitwise ops on bools)
+                an, ap = (f"(({a}) >= 1.0)", f"(({ad}) >= 1.0)") if any(c in a for c in '><=') else (a, ad)
+                bn, bp = (f"(({b}) >= 1.0)", f"(({bd}) >= 1.0)") if any(c in b for c in '><=') else (b, bd)
+                if mode == 'cross_up': return f"({an} & ~{ap} & ({bn}=={bn}))"
+                return f"(~{an} & {ap} & ({bn}=={bn}))"
+
+            def handle_wt(m):
+                content = m.group(0).split('(', 1)[1].rsplit(')', 1)[0]
+                parts = content.split(',', 1)
+                e, d = parts[0].strip(), parts[1].strip()
+                return f"({_shift(e, int(d))})"
+
+            s = re.sub(r'\bcross_up\s*\((?:[^()]+|\([^()]*\))+\)', handle_cross, s)
+            s = re.sub(r'\bcross_down\s*\((?:[^()]+|\([^()]*\))+\)', handle_cross, s)
+            s = re.sub(r'\bwas_true\s*\((?:[^()]+|\([^()]*\))+\)', handle_wt, s)
+
+            # 4. Final Cleanup
             s = s.lower()
-            # For robustness, we wrap common comparison segments in parentheses
-            # to avoid precedence issues (since & / | have higher precedence than >, <, etc.)
-            # This regex looks for things like "macd > 0" or "macd < signal"
-            # It's not perfect but handles most common cases.
-            comp_regex = r'([a-z0-9._]+(?:\s*[<>!=]+\s*[a-z0-9._]+)+)'
+            s = s.replace(' and ', ' & ').replace(' or ', ' | ')
+            
+            # Literals
+            s = re.sub(r'\b(\d+(?:\.\d+)?)([km])\b', lambda m: str(int(float(m.group(1)) * (1000 if m.group(2)=='k' else 1000000))), s)
+
+            # Manglings
+            s = re.sub(r'(\d+\.\d+)_d\d+', r'\1', s)
+            s = s.replace('c(lose', 'close').replace('h(igh', 'high').replace('l(ow', 'low').replace('o(pen', 'open')
+            
+            # Standard comparison wrapping (adds parens around simple comparisons)
+            comp_regex = r'\b(?!(?:and|or|not|&|\|)\b)([a-z][a-z0-9._]*\s*(?:[<>!=]+|>=|<=)\s*[0-9.a-z_]+)\b'
             s = re.sub(comp_regex, r'(\1)', s)
             
-            s = re.sub(r'\band\b', ' & ', s)
-            s = re.sub(r'\bor\b', ' | ', s)
-            s = s.replace('-gt','>').replace('-lt','<').replace('-eq','==').replace('-ge','>=').replace('-le','<=')
+            # Balance check / space normalization
+            s = s.replace('  ', ' ').strip()
+            return s
+            
+            s = s.replace('-gt', '>').replace('-lt', '<').replace('-eq', '==').replace('-ge', '>=').replace('-le', '<=')
             return s
         
         # Pre-process scripts to handle cross_up/down and suffixes
@@ -316,32 +348,29 @@ class Backtester:
             # and avoid conflicts with ticker symbols that are also pandas/numexpr keywords.
             # However, we MUST use bitwise operators (&, |) for series logic 
             # as 'and'/'or' are not supported for Series evaluation in pd.eval().
+            print(f"DEBUG_EXPR_ENTRY: {e_s}")
             b_em = df_eval.eval(e_s, engine='python', parser='python')
+            print(f"DEBUG_EXPR_EXIT: {r_s}")
             b_r = df_eval.eval(r_s, engine='python', parser='python')
-            
-            # Create a copy of df to avoid modifying the original during processing
-            df = df.copy()
-            df['signal'] = 0
-            df.loc[b_em == True, 'signal'] = 1
-            df.loc[b_r == True, 'signal'] = -1
-            
-            # Re-attach indicators to the main DF if they weren't there
-            # This is crucial for the Ribbon plotter to find them.
-            for col in df_eval.columns:
-                if col not in df.columns:
-                    df[col] = df_eval[col]
-            
-            # Store the boolean masks for scanners to verify rules
-            res_df = df
-            return {"df": res_df, "b_em": b_em, "b_r": b_r}
         except Exception as e:
+            # Output the transformed scripts to identify EXACTLY which character is failing
+            print(f"ERROR_IN_EVAL: {e}")
+            print(f"TRANSFORMED ENTRY: {e_s}")
+            print(f"TRANSFORMED EXIT:  {r_s}")
             import traceback
             traceback.print_exc()
-            print(f"Error in strategy eval: {e}")
-            df = df.copy()
-            df['signal'] = 0
-            df['recent_entry_days'] = 999
-            return {"df": df}
+            return None
+            
+        # Core alignment
+        df = df.copy()
+        # Transfer all newly calculated indicators from df_eval back to df
+        for col in df_eval.columns:
+            if col not in df.columns:
+                df[col] = df_eval[col]
+        df['signal'] = 0
+        df.loc[b_em == True, 'signal'] = 1
+        df.loc[b_r == True, 'signal'] = -1
+        return {"df": df}
 
     def run_parallel_backtest(self, tickers, base_strategy, days=365, indicators_setup=None, strategy_kwargs=None, max_workers=None):
         import concurrent.futures

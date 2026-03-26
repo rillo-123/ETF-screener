@@ -20,21 +20,22 @@ function Get-GitBranch {
 function Get-GitDirtyMarker {
     try {
         $status = git status --porcelain 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $status -or -not $status.Trim()) { return '' }
+        if ($LASTEXITCODE -ne 0 -or -not $status) { return '' }
         
-        $markers = @()
+        $markers = ""
         
-        # Check for modified/staged files (lines starting with M, A, D, etc.)
-        if ($status | Where-Object { $_ -match '^[MADRC]' }) {
+        # Check for untracked files (lines starting with ??)
+        if ($status -match '^\?\?') {
+            $markers += '+'
+        }
+
+        # Check for modified/deleted/renamed files (lines starting with M, D, R, etc.)
+        # Both staged and unstaged (the regex covers both columns)
+        if ($status -match '^[ MADRC]') {
             $markers += '*'
         }
         
-        # Check for untracked files (lines starting with ??)
-        if ($status | Where-Object { $_ -match '^\?\?' }) {
-            $markers += '+'
-        }
-        
-        return $markers -join ''
+        return $markers
     } catch {
         return ''
     }
@@ -82,12 +83,13 @@ function global:prompt {
         }
 
         # Show git branch + dirty marker (if in a git repo)
-        $branchPartRaw = ""
+        $branchName = ""
+        $branchDirty = ""
         if (Get-Command git -ErrorAction SilentlyContinue) {
             $cache = Update-GitPromptCache -path $path
             if ($cache.Branch) {
-                $marker = $cache.Dirty ? "*" : ""
-                $branchPartRaw = "($($cache.Branch)$marker) "
+                $branchName = $cache.Branch
+                $branchDirty = $cache.Dirty
             }
         }
 
@@ -97,15 +99,29 @@ function global:prompt {
 
         if ($useColor) {
             $esc = "`e"
-            # Cyan for virtualenv, yellow for git branch
+            # Cyan for virtualenv
             $c_venv = ""
-            $c_branch = ""
             if ($venvPart) { $c_venv = "${esc}[36m$venvPart${esc}[0m" }
-            if ($branchPartRaw) { $c_branch = "${esc}[33m$branchPartRaw${esc}[0m" }
-            return "$c_venv$c_branch$path> "
+
+            # Yellow for branch, Red for dirty marker
+            $c_git = ""
+            if ($branchName) {
+                # Format: (branch+*)
+                $c_git = "(${esc}[33m$branchName${esc}[0m"
+                if ($branchDirty) {
+                    $c_git += "${esc}[31m$branchDirty${esc}[0m"
+                }
+                $c_git += ") "
+            }
+            
+            # Green for path
+            $promptString = "$c_venv$c_git${esc}[32m$path${esc}[0m`n> "
+            return $promptString
         } else {
             # Fallback without colors
-            return "$venvPart$branchPartRaw$path> "
+            $fallbackGit = ""
+            if ($branchName) { $fallbackGit = "($branchName$branchDirty) " }
+            return "$venvPart$fallbackGit$path`n> "
         }
     } catch {
         return "PS> "

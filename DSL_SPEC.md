@@ -32,6 +32,8 @@ You can use any of the following base variables. Many support automatic period c
 | `macd`, `macd_signal`, `macd_hist` | MACD components (12, 26, 9) | `macd > 0` |
 | `stoch_k`, `stoch_d` | Full Stochastic (14, 3) | `stoch_k > 80` |
 | `st`, `supertrend` | Supertrend (10, 3.0) | `close > st` |
+| `st_is_green` | Boolean alias for `close > supertrend` | `TRIGGER: st_is_green` |
+| `st_is_red` | Boolean alias for `close < supertrend` | `TRIGGER: st_is_red` |
 | `adx` | Average Directional Index (14) | `adx > 25` |
 
 ### 2. Suffixes & Modifiers

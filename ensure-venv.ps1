@@ -85,6 +85,10 @@ if (Test-Path $checkFile) {
 
 if ($skipCheck) {
     Write-Host "✓ Skipping package check (last check was < 60m ago)" -ForegroundColor Gray
+    # Ensure profile is always re-sourced during activation to keep it idempotent
+    if (Test-Path $profileScript) {
+        . $profileScript 2>$null | Out-Null
+    }
     return
 }
 
