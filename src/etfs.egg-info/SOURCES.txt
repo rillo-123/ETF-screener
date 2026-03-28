@@ -10,6 +10,7 @@ src/ETF_screener/hotlist.py
 src/ETF_screener/indicators.py
 src/ETF_screener/main.py
 src/ETF_screener/plotter.py
+src/ETF_screener/plotter_plotly.py
 src/ETF_screener/screener.py
 src/ETF_screener/screener_api.py
 src/ETF_screener/snippets.py

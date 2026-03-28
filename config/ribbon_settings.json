@@ -32,8 +32,8 @@
         {
             "label": "Supertrend",
             "layers": [
-                { "condition": "st > 0", "color": "green", "alpha": 0.8 },
-                { "condition": "st <= 0", "color": "red", "alpha": 0.8 }
+                { "condition": "st_is_green > 0", "color": "green", "alpha": 0.8 },
+                { "condition": "st_is_green < 1", "color": "red", "alpha": 0.8 }
             ]
         }
     ]

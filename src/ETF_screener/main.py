@@ -43,9 +43,7 @@ from ETF_screener.etf_discovery import ETFDiscovery
 from ETF_screener.indicators import add_indicators, calculate_consecutive_streak, calculate_ema
 
 from ETF_screener.hotlist import generate_hotlist
-
-from ETF_screener.plotter import PortfolioPlotter
-
+from ETF_screener.plotter_plotly import InteractivePlotter
 from ETF_screener.screener import ETFScreener
 
 from ETF_screener.strategy_manager import CachedStrategyManager
@@ -214,8 +212,10 @@ def fetch_and_analyze(
     plot_dir: str = "plots",
     use_db: bool = True,
     source: str = "yfinance",
-    plot_format: str = "svg",
+    plot_format: str = "html",
     quiet: bool = False,
+    clean_plots: bool = True,
+    plot_results: bool = False,
 ) -> None:
     """
     Fetch ETF data, calculate indicators, save to storage, and generate plots.
@@ -228,11 +228,22 @@ def fetch_and_analyze(
         plot_dir: Directory to store plots
         use_db: Store data in SQLite database
         source: Data source ('yfinance' or 'finnhub')
-        plot_format: Output format for plots ('svg' or 'png')
+        plot_format: Output format for plots ('html')
         quiet: Suppress all output except progress bar
+        clean_plots: Wipe the plot directory before starting
+        plot_results: Whether to generate plots
     """
 
     try:
+        # Wipe plots if requested and plot_results is True
+        if clean_plots and plot_results and Path(plot_dir).exists():
+            if not quiet:
+                print(f"Cleaning plots directory: {plot_dir}...")
+            # Keep index.html and plot_manifest.json if they exist, but delete .html files
+            for f in Path(plot_dir).glob("*"):
+                if f.name not in ["index.html", "plot_manifest.json"]:
+                    if f.is_file():
+                        f.unlink()
 
         # Initialize fetcher based on source
 
@@ -310,8 +321,10 @@ def fetch_and_analyze(
 
 
         # Generate plots
-        plotter = PortfolioPlotter(output_dir=plot_dir)
-        plotter.plot_multiple_etfs(etf_data, format=plot_format)
+        if plot_results:
+            plotter = InteractivePlotter(output_dir=plot_dir)
+            for symbol, df in etf_data.items():
+                plotter.plot_etf_analysis(df, symbol)
 
         if not quiet:
             print("\n" + "=" * 121)
@@ -425,7 +438,8 @@ def screen_etfs(
     name_filter: Optional[str] = None,
     plot_results: bool = False,
     plot_dir: str = "plots",
-    plot_format: str = "svg",
+    plot_format: str = "html",
+    clean_plots: bool = False,
 ) -> None:
 
     """
@@ -470,10 +484,19 @@ def screen_etfs(
         name_filter: Substring to match against ETF name
         plot_results: Whether to generate plots for matched ETFs
         plot_dir: Directory to save plots
-        plot_format: Format for plots (svg or png)
+        plot_format: Format for plots (html)
+        clean_plots: Wipe the plot directory before starting
     """
 
     try:
+        # Wipe plots if requested and plot_results is True
+        if clean_plots and plot_results and Path(plot_dir).exists():
+            print(f"Cleaning plots directory: {plot_dir}...")
+            # Keep index.html and plot_manifest.json if they exist
+            for f in Path(plot_dir).glob("*"):
+                if f.name not in ["index.html", "plot_manifest.json"]:
+                    if f.is_file():
+                        f.unlink()
 
         db = ETFDatabase()
         manager = CachedStrategyManager(db)
@@ -907,16 +930,22 @@ def screen_etfs(
         if results.empty:
             print("\n[WARNING] No ETFs matched the criteria.")
         elif plot_results:
+            if clean_plots and Path(plot_dir).exists():
+                print(f"Cleaning plots directory: {plot_dir}...")
+                for f in Path(plot_dir).glob("*"):
+                    if f.name not in ["index.html", "plot_manifest.json"] and f.is_file():
+                        f.unlink()
+
             # Combined progress message
             storage = ParquetStorage(data_dir=data_dir)
-            plotter = PortfolioPlotter(output_dir=plot_dir)
+            plotter = InteractivePlotter(output_dir=plot_dir)
             
             for _, row in tqdm(results.iterrows(), total=len(results), desc="Generating Plots", leave=True):
                 ticker = row["ticker"]
                 df = storage.load_etf_data(ticker)
                 if not df.empty:
                     df = add_indicators(df)
-                    plotter.plot_multiple_etfs({ticker: df}, format=plot_format)
+                    plotter.plot_etf_analysis(df, ticker)
             print(f"Done. Plots saved to '{plot_dir}/'")
 
         db.close()
@@ -1548,7 +1577,12 @@ def main() -> None:
     )
 
     fetch_parser.add_argument(
+        "--plot",
+        action="store_true",
+        help="Generate analysis plots for fetched ETFs",
+    )
 
+    fetch_parser.add_argument(
         "--plot-dir",
 
         default="plots",
@@ -1558,16 +1592,19 @@ def main() -> None:
     )
 
     fetch_parser.add_argument(
-
         "--plot-format",
-
-        choices=["svg", "png"],
-
-        default="svg",
-
-        help="Format for analysis plots (default: svg)",
-
+        choices=["html"],
+        default="html",
+        help="Format for analysis plots (default: html)",
     )
+
+    fetch_parser.add_argument(
+        "--no-plot-clean",
+        action="store_false",
+        dest="plot_clean",
+        help="Do NOT wipe the plot directory before generating new ones",
+    )
+    fetch_parser.set_defaults(plot_clean=True)
 
     fetch_parser.add_argument(
         "--quiet",
@@ -1828,10 +1865,18 @@ def main() -> None:
 
     screener_parser.add_argument(
         "--plot-format",
-        choices=["svg", "png"],
-        default="svg",
-        help="Format for plots (default: svg)",
+        choices=["html"],
+        default="html",
+        help="Format for plots (default: html)",
     )
+
+    screener_parser.add_argument(
+        "--no-plot-clean",
+        action="store_false",
+        dest="plot_clean",
+        help="Do NOT wipe the plot directory before generating new ones",
+    )
+    screener_parser.set_defaults(plot_clean=True)
 
     
 
@@ -2191,6 +2236,8 @@ def main() -> None:
             source=args.source,
             plot_format=args.plot_format,
             quiet=args.quiet,
+            clean_plots=args.plot_clean,
+            plot_results=args.plot,
         )
 
     elif args.command == "list":
@@ -2284,6 +2331,7 @@ def main() -> None:
             plot_results=args.plot,
             plot_dir=args.plot_dir,
             plot_format=args.plot_format,
+            clean_plots=args.plot_clean,
         )
 
     elif args.command == "discover":

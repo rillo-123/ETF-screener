@@ -92,7 +92,7 @@ class PortfolioPlotter:
         cols = []
         
         # Diagnostic: Print MACD series range
-        is_oscillator = lambda c: any(x in c.lower() for x in ["rsi", "stoch", "macd", "adx"])
+        is_oscillator = lambda c: any(x in c.lower() for x in ["rsi", "stoch", "macd", "adx", "st_is_green"])
         
         macd_cols = [c for c in df.columns if "macd" in c.lower() and "hist" not in c.lower()]
         if macd_cols:
@@ -171,10 +171,13 @@ class PortfolioPlotter:
         # Prepare indicators for plotting
         price_indicators = [c for c in valid_cols if not is_oscillator(c)]
         
-        # Categorize oscillators (and trend) for dedicated ribbon subplots
+        # categorise oscillators (and trend) for dedicated ribbon subplots
         ribbon_settings = self.ribbon_config.get("ribbons", [])
         active_ribbons = []
         
+        # DEBUG: print available columns for ribbon match
+        # print(f"DEBUG PLOTTER: Available cols: {available_cols}")
+
         # Determine which ribbons we should actually plot based on available data
         # We now use a more robust check that looks at the conditions to see if required columns exist
         available_cols = [c.lower() for c in df.columns]
@@ -185,12 +188,20 @@ class PortfolioPlotter:
             for layer in layers:
                 condition = layer.get("condition", "").lower()
                 # Find all potential column names in the condition string
+                # We also look for numbers as they are often used in conditions (e.g. st_is_green == 1)
                 words = re.findall(r'[a-z_][a-z0-9_]*', condition)
+                
                 # If any word in the condition is a column, we assume it's possible to plot it
                 if any(word in available_cols for word in words):
                     ribbon_is_possible = True
                     break
             
+            # Special case for Supertrend: if 'st' or 'st_is_green' or 'supertrend' is in the label,
+            # and we have Supertrend columns, keep it even if condition regex fails
+            if not ribbon_is_possible and "supertrend" in rib.get("label", "").lower():
+                if any(x in available_cols for x in ["supertrend", "st", "st_is_green"]):
+                    ribbon_is_possible = True
+
             if ribbon_is_possible:
                 active_ribbons.append(rib)
         
@@ -228,6 +239,20 @@ class PortfolioPlotter:
         # Signal markers
         sig_col = "Signal" if "Signal" in df.columns else "signal"
         buy_signals = df[df[sig_col] == 1]
+        
+        # Supertrend overlay (Price Line)
+        if "ST_Lower" in df.columns and "ST_Upper" in df.columns:
+            st_color = np.where(df["Close"] > df["ST_Lower"], "green", "red")
+            # To plot correctly colored multi-segment lines in MPL is hard, 
+            # so we plot segments manually or just the points
+            for i in range(1, len(df)):
+                color = "green" if df["Close"].iloc[i] > df["ST_Lower"].iloc[i] else "red"
+                val = df["ST_Lower"].iloc[i] if color == "green" else df["ST_Upper"].iloc[i]
+                prev_val = df["ST_Lower"].iloc[i-1] if df["Close"].iloc[i-1] > df["ST_Lower"].iloc[i-1] else df["ST_Upper"].iloc[i-1]
+                
+                # Only connect if direction didn't flip for a cleaner look
+                ax1.plot(df["Date"].iloc[i-1:i+1], [prev_val, val], color=color, linewidth=1, alpha=0.8)
+
         ax1.scatter(
             buy_signals["Date"],
             buy_signals[price_col],
@@ -327,7 +352,8 @@ class PortfolioPlotter:
             eval_df = pd.DataFrame(index=df.index)
             for c in df.columns:
                 if pd.api.types.is_numeric_dtype(df[c]):
-                    eval_df[str(c).lower()] = df[c]
+                    # Interpolate/ffill to remove white gaps in ribbons due to NaN data points
+                    eval_df[str(c).lower()] = df[c].ffill()
             
             for layer in rib.get("layers", []):
                 condition = layer.get("condition", "")
@@ -355,8 +381,12 @@ class PortfolioPlotter:
                         mask_bool = np.asanyarray(mask_vals).astype(bool)
                         
                         if np.any(mask_bool):
+                            # Ensure X-axis alignment by converting dates to numeric for fill_between
+                            x_vals = mdates.date2num(df["Date"])
+                            
                             # Use step='post' to match the data transitions correctly
-                            osc_ax.fill_between(df["Date"], 0, 1, where=mask_bool, color=color, alpha=alpha, 
+                            # Interpolate the gaps by ensuring x_vals are continuous
+                            osc_ax.fill_between(x_vals, 0, 1, where=mask_bool, color=color, alpha=1.0, 
                                                step='post', transform=osc_ax.get_xaxis_transform())
                 except Exception as eval_e:
                     # print(f"Ribbon eval error for '{condition}' in {label}: {eval_e}")
@@ -365,7 +395,7 @@ class PortfolioPlotter:
             osc_ax.set_yticks([]) # No Y axis for ribbons
             osc_ax.set_ylabel(label, rotation=0, labelpad=30, verticalalignment='center', fontsize=9, fontweight="bold")
             osc_ax.set_ylim(0, 1)
-            osc_ax.set_facecolor('#f0f0f0') # Light gray background for ribbons to see "missing" data
+            osc_ax.set_facecolor('white') # Changed from #f0f0f0 to resolve white appearance
             osc_ax.grid(False) # Clean look for ribbons
 
         # Plot Volume

@@ -6,7 +6,7 @@ from ETF_screener.data_fetcher import FinnhubFetcher
 from ETF_screener.database import ETFDatabase
 from ETF_screener.etf_discovery import ETFDiscovery
 from ETF_screener.indicators import add_indicators, calculate_ema, calculate_supertrend
-from ETF_screener.plotter import PortfolioPlotter
+from ETF_screener.plotter_plotly import InteractivePlotter
 from ETF_screener.screener import ETFScreener
 from ETF_screener.screener_api import Screener
 from ETF_screener.storage import ParquetStorage
@@ -22,7 +22,7 @@ __all__ = [
     "add_indicators",
     "calculate_ema",
     "calculate_supertrend",
-    "PortfolioPlotter",
+    "InteractivePlotter",
     "ETFScreener",
     "Screener",
     "ParquetStorage",

@@ -1,6 +1,6 @@
 from ETF_screener.backtester import Backtester, rsi_strategy, ema_cross_strategy, ema_supertrend_strategy
 from ETF_screener.indicators import calculate_ema, calculate_rsi, calculate_supertrend, calculate_adx
-from ETF_screener.plotter import PortfolioPlotter
+from ETF_screener.plotter_plotly import InteractivePlotter
 from tqdm import tqdm
 import pandas as pd
 import os
@@ -41,12 +41,17 @@ def load_dsl_file(file_path):
 
 def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: str = None, strategy_path: str = None, plot_top: int = 20, force_refresh: bool = False, since_days: int = None):
     backtester = Backtester()
-    plotter = PortfolioPlotter()
+    plotter = InteractivePlotter()
     
     # Phase 0: Clean plots directory at the start of every discovery run
     print("Cleaning previous plots...")
-    for ext in ["*.svg"]:
+    manifest_path = Path("plots/plot_manifest.json")
+    if manifest_path.exists():
+        manifest_path.unlink() # Start fresh manifest
+        
+    for ext in ["*.svg", "*.html"]:
         for file in Path("plots").glob(ext):
+            if "index.html" in file.name: continue # Keep the dashboard
             try:
                 file.unlink()
             except PermissionError:
@@ -156,7 +161,7 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
         if plot_top > 0:
             print(f"\nPlotting top {plot_top} and bottom {plot_top} performers...")
             # Use a fresh import to avoid any scoping issues inside the loop
-            from ETF_screener.plotter import PortfolioPlotter as PFPlot
+            from ETF_screener.plotter_plotly import InteractivePlotter as PFPlot
             p = PFPlot()
             
             # Prepare rich manifest data for the dashboard
@@ -181,7 +186,7 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
                 for res in all_results:
                     if res.get('Ticker') == ticker and res.get('Strategy') == strategy_name and 'df' in res:
                         # Define the filename first
-                        plot_filename = f"{ticker}_{strategy_name}_analysis.svg".lower()
+                        plot_filename = f"{ticker}_{strategy_name}_interactive.html".lower()
 
                         # Ensure the directory exists
                         plot_path = Path("plots") / plot_filename
@@ -192,6 +197,7 @@ def churn_db(entry_script: str = None, exit_script: str = None, ticker_filter: s
                             pass
                         else:
                             print(f"Generating plot for {ticker} ({strategy_name}) [{rank_type}]...")
+                            # Use f-string to define the symbol properly for InteractivePlotter
                             p.plot_etf_analysis(res['df'].copy(), f"{ticker}_{strategy_name}")
                         
                         rich_manifest.append({

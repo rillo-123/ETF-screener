@@ -510,6 +510,10 @@ def add_indicators(
     df_copy["Supertrend"] = st
     df_copy["ST_Upper"] = ub
     df_copy["ST_Lower"] = lb
+    
+    # st_is_green is for ribbons and DSL: 1.0 (True) if Close > ST_Lower (indicating uptrend)
+    df_copy["st_is_green"] = (df_copy["Close"] > df_copy["ST_Lower"]).astype(float)
+    df_copy["st"] = df_copy["st_is_green"] # Alias for ribbon config
 
     # Swing setup detection: price near EMA50 but in uptrend
     # Look back 10 days for max price to detect pullback
