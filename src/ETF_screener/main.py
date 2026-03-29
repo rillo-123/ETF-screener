@@ -3,13 +3,10 @@
 
 
 import argparse
-
 import io
-
 import json
-
+import re
 import sys
-
 from pathlib import Path
 
 from typing import Optional
@@ -35,9 +32,8 @@ from tqdm import tqdm
 
 
 from ETF_screener.data_fetcher import FinnhubFetcher
-
 from ETF_screener.database import ETFDatabase
-
+from ETF_screener.backtester import Backtester
 from ETF_screener.etf_discovery import ETFDiscovery
 
 from ETF_screener.indicators import add_indicators, calculate_consecutive_streak, calculate_ema
@@ -416,7 +412,7 @@ def screen_etfs(
     days_to_keep: int = 365,
 
     api_key: Optional[str] = None,
-
+    strategy_path: Optional[str] = None,
     format_name: str = "default",
 
     data_dir: str = "data",
@@ -440,6 +436,7 @@ def screen_etfs(
     plot_dir: str = "plots",
     plot_format: str = "html",
     clean_plots: bool = False,
+    quiet: bool = False,
 ) -> None:
 
     """
@@ -883,7 +880,6 @@ def screen_etfs(
                 with open(etfs_file) as f:
                     etfs_lookup = json.load(f)
                 
-                import re
                 filtered_by_name = []
                 # Support SQL-style % wildcard by converting to regex
                 raw_pattern = name_filter.lower()
@@ -924,6 +920,77 @@ def screen_etfs(
                         filtered_by_name.append(row)
                 
                 results = pd.DataFrame(filtered_by_name) if filtered_by_name else pd.DataFrame()
+
+        # Apply custom DSL strategy if specified
+        if strategy_path and not results.empty:
+            print(f"Applying custom strategy: {strategy_path}...")
+            strat_file = Path(strategy_path)
+            if not strat_file.exists():
+                print(f"[ERROR] Strategy file not found: {strategy_path}")
+            else:
+                with open(strat_file, 'r') as f:
+                    content = f.read()
+                
+                # DSL parsing - improved to filter out comments and extract terms
+                lines = [line.split('#')[0].strip() for line in content.split('\n')]
+                clean_content = "\n".join([l for l in lines if l])
+                
+                entry_script = ""
+                exit_script = ""
+                
+                # Check for explicit sections
+                has_sections = any(re.match(r'^(trigger|filter|entry|exit):', l, re.I) for l in lines)
+                
+                if has_sections:
+                    # Collect all entry-related terms (trigger, filter, entry)
+                    entry_terms = []
+                    for line in lines:
+                        if not line: continue
+                        m = re.match(r'^(trigger|filter|entry):\s*(.*)', line, re.I)
+                        if m:
+                            entry_terms.append(f"({m.group(2).strip()})")
+                        elif re.match(r'^exit:\s*(.*)', line, re.I):
+                            exit_script = re.match(r'^exit:\s*(.*)', line, re.I).group(1).strip()
+                    
+                    if entry_terms:
+                        entry_script = " & ".join(entry_terms)
+                else:
+                    entry_script = clean_content
+                
+                filtered_results = []
+                bt = Backtester(db_path=db.db_path)
+                
+                # Header for live discovery
+                if not quiet:
+                    print(f"\n[STRATEGY] Discovering matches for: {strategy_path}")
+                    print(f"{'TICKER':<12} | {'MATCH':<5} | {'PRICE':<8} | {'EMA 50':<8}")
+                    print("-" * 45)
+
+                for _, row in tqdm(results.iterrows(), total=len(results), desc="Executing Strategy", leave=False):
+                    ticker = row["ticker"]
+                    try:
+                        df = db.get_ticker_data(ticker, days=253)
+                        if df.empty or len(df) < 50:
+                            continue
+                        
+                        res = bt.scripted_strategy(df, ticker, entry_script=entry_script, exit_script=exit_script or "close < ema(50)", manager=manager)
+                        
+                        # Check last signal
+                        if res['df']['signal'].iloc[-1] == 1:
+                            filtered_results.append(row)
+                            if not quiet:
+                                # Live reporting of matches
+                                last_row = df.iloc[-1]
+                                price = last_row.get('Close', 0.0)
+                                ema = last_row.get('EMA_50', 0.0)
+                                print(f"{ticker:<12} | \033[92mYES\033[0m   | {price:>8.2f} | {ema:>8.2f}")
+                    except Exception:
+                        continue
+                
+                if not quiet:
+                    print("-" * 45 + "\n")
+
+                results = pd.DataFrame(filtered_results) if filtered_results else pd.DataFrame()
 
         screener.print_results(results, format_name=format_name)
 
@@ -1709,15 +1776,14 @@ def main() -> None:
     )
 
     screener_parser.add_argument(
-
         "--api-key",
-
         help="Finnhub API key (or set FINNHUB_API_KEY env var)",
-
     )
-
     screener_parser.add_argument(
-
+        "--strategy",
+        help="Path to DSL strategy file (e.g. strategies/loose_trend.dsl)",
+    )
+    screener_parser.add_argument(
         "--format",
 
         choices=["default", "compact", "detailed"],
@@ -1878,7 +1944,11 @@ def main() -> None:
     )
     screener_parser.set_defaults(plot_clean=True)
 
-    
+    screener_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress all output except matches",
+    )
 
     # Conditional operators: close, ema, pullback, volume, rsi, macd, tsi
     for field in ["close", "ema", "pullback", "volume", "rsi", "macd", "tsi"]:
@@ -2304,11 +2374,9 @@ def main() -> None:
             min_avg_volume=min_avg_volume,
 
             days=args.days,
-
             days_to_keep=args.keep_days,
-
             api_key=args.api_key,
-
+            strategy_path=args.strategy,
             format_name=format_name,
 
             data_dir=args.data_dir,
@@ -2332,6 +2400,7 @@ def main() -> None:
             plot_dir=args.plot_dir,
             plot_format=args.plot_format,
             clean_plots=args.plot_clean,
+            quiet=args.quiet,
         )
 
     elif args.command == "discover":

@@ -277,20 +277,35 @@ class ETFDatabase:
         """
         conn = self._get_connection()
         
+        # Modified query to be more resilient to lack of depth
+        # We fetch the last N rows instead of a fixed 1-year lookback
         query = (
             "SELECT ticker, date, open, high, low, close, volume, ema_50, supertrend, st_upper, st_lower, signal "
             "FROM etf_data "
-            f"WHERE ticker = ? AND date >= date('now', '-{int(days)} days') "
-            "ORDER BY date ASC"
+            "WHERE ticker = ? "
+            "ORDER BY date DESC LIMIT ?"
         )
         
-        df_raw = pd.read_sql_query(query, conn, params=(ticker.upper(),))
+        # We need to be careful with pd.read_sql_query when LIMIT is used
+        # SQLite parameters must be clean
+        import sqlite3
+        cursor = conn.cursor()
+        cursor.execute(query, (ticker.upper(), int(days)))
+        rows = cursor.fetchall()
         
-        if df_raw.empty:
+        if not rows:
             return pd.DataFrame()
+            
+        columns = ["ticker", "date", "open", "high", "low", "close", "volume", "ema_50", "supertrend", "st_upper", "st_lower", "signal"]
+        df_raw = pd.DataFrame(rows, columns=columns)
         
-        # Check for "zombie" tickers: return empty if 2+ days have 0 volume (case-sensitive)
-        if (df_raw["volume"] == 0).sum() >= 2:
+        # Sort back to ascending for technical analysis
+        df_raw = df_raw.sort_values("date").reset_index(drop=True)
+        
+        # Check for "zombie" tickers: return empty if 2+ days have 0 volume in the LATEST data
+        # (Only check the last 30 days of data retrieved to avoid penalizing history)
+        df_check = df_raw.tail(30)
+        if (df_check["volume"] == 0).sum() >= 2:
             return pd.DataFrame()
         
         # Ensure we don't have duplicates before renaming

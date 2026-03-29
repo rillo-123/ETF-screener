@@ -243,6 +243,17 @@ class Backtester:
                 elif base_c == "vol_ema_20":
                     # Simple volume smoothing
                     df_eval[base_c] = df_eval['volume'].ewm(span=20, adjust=False).mean()
+                elif base_c == "st_10_4_is_green":
+                    # Hardcoded support for the user's current favorite indicator
+                    res = manager.get_indicator(df, ticker, calculate_supertrend, "supertrend_10_4.0", period=10, multiplier=4.0)
+                    if isinstance(res, tuple):
+                        _, _, lb = res
+                    else:
+                        lb = None
+                    if lb is not None:
+                        df_eval[base_c] = (df_eval['close'] > lb).astype(float)
+                    else:
+                        df_eval[base_c] = 0.0
             
             # If it's a delayed primitive (e.g., ema_10_d1), create the shifted column
             # Special case for cross_up(a, b) and cross_down(a, b) which use _d1
@@ -263,6 +274,7 @@ class Backtester:
                 ind = f"st_{pv}_{mv}"
                 return f" (close > {ind}) " if "green" in sv else f" (close < {ind}) "
             
+            # Record literal aliases before any mangling
             s = re.sub(r'\b(?:st|supertrend)_(\d+)_(\d+)_is_(green|red)\b', sub_st, s)
             s = s.replace('st_is_green', ' (close > supertrend) ').replace('st_is_red', ' (close < supertrend) ')
 
@@ -272,6 +284,8 @@ class Backtester:
                     word = m.group(1).lower()
                     if word in ['and', 'or', 'not', 'true', 'false', 'cross_up', 'cross_down', 'was_true']: return word
                     if word.isdigit(): return word
+                    # Don't double-suffix if it already has one
+                    if f"_d{delay}" in word: return word
                     return f"{word}_d{delay}"
                 return re.sub(r'([a-z][a-z0-9_]*)\b', repl, expr)
 
@@ -285,13 +299,14 @@ class Backtester:
                 # Boolean logic to avoid pd.eval scalar error (bitwise ops on bools)
                 an, ap = (f"(({a}) >= 1.0)", f"(({ad}) >= 1.0)") if any(c in a for c in '><=') else (a, ad)
                 bn, bp = (f"(({b}) >= 1.0)", f"(({bd}) >= 1.0)") if any(c in b for c in '><=') else (b, bd)
-                if mode == 'cross_up': return f"({an} & ~{ap} & ({bn}=={bn}))"
-                return f"(~{an} & {ap} & ({bn}=={bn}))"
+                if mode == 'cross_up': return f"({an} & ~{ap})"
+                return f"(~{an} & {ap})"
 
             def handle_wt(m):
                 content = m.group(0).split('(', 1)[1].rsplit(')', 1)[0]
                 parts = content.split(',', 1)
                 e, d = parts[0].strip(), parts[1].strip()
+                # Check for nested logic or simple name
                 return f"({_shift(e, int(d))})"
 
             s = re.sub(r'\bcross_up\s*\((?:[^()]+|\([^()]*\))+\)', handle_cross, s)
@@ -300,24 +315,39 @@ class Backtester:
 
             # 4. Final Cleanup
             s = s.lower()
-            s = s.replace(' and ', ' & ').replace(' or ', ' | ')
+            # Replace 'and'/'or' with '&'/'|' but only if not part of a symbol
+            s = re.sub(r'\band\b', ' & ', s).replace('  ', ' ')
+            s = re.sub(r'\bor\b', ' | ', s).replace('  ', ' ')
+            
+            # 5. Comparison Normalization
+            # Ensure we wrap comparison expressions in parentheses for bitwise order of operations.
+            # This avoids 'BoolOp' errors in pd.eval engine='python'
+            # Note: We look for [symbol/number] [op] [symbol/number]
+            comp_pat = r'([a-z0-9_][a-z0-9_.]*(?:\s*[<>!=]=?|>=|<=)\s*[a-z0-9._]+)'
+            # But don't wrap if already wrapped
+            def wrap_comp(m):
+                expr = m.group(1).strip()
+                # If it's already got a paren on either side in the full string, skip? 
+                # Better: wrap everything, pd.eval handles nested parens fine.
+                return f"({expr})"
+            
+            s = re.sub(comp_pat, wrap_comp, s)
             
             # Literals
             s = re.sub(r'\b(\d+(?:\.\d+)?)([km])\b', lambda m: str(int(float(m.group(1)) * (1000 if m.group(2)=='k' else 1000000))), s)
 
-            # Manglings
+            # Manglings - BE CAREFUL HERE. We don't want to mangle st_10_4 into st_10_d1
+            # Only mangle [word]_d[N]_d[M] or simple [num]_d[N]
             s = re.sub(r'(\d+\.\d+)_d\d+', r'\1', s)
             s = s.replace('c(lose', 'close').replace('h(igh', 'high').replace('l(ow', 'low').replace('o(pen', 'open')
             
             # Standard comparison wrapping (adds parens around simple comparisons)
-            comp_regex = r'\b(?!(?:and|or|not|&|\|)\b)([a-z][a-z0-9._]*\s*(?:[<>!=]+|>=|<=)\s*[0-9.a-z_]+)\b'
-            s = re.sub(comp_regex, r'(\1)', s)
+            # This is risky for complex DSL names. Let's skip it if we have underscores in both sides
+            # comp_regex = r'\b(?!(?:and|or|not|&|\|)\b)([a-z][a-z0-9._]*\s*(?:[<>!=]+|>=|<=)\s*[0-9.a-z_]+)\b'
+            # s = re.sub(comp_regex, r'(\1)', s)
             
             # Balance check / space normalization
             s = s.replace('  ', ' ').strip()
-            return s
-            
-            s = s.replace('-gt', '>').replace('-lt', '<').replace('-eq', '==').replace('-ge', '>=').replace('-le', '<=')
             return s
         
         # Pre-process scripts to handle cross_up/down and suffixes
@@ -327,6 +357,7 @@ class Backtester:
         symbols_to_ensure = set(re.findall(r'[a-z][a-z_0-9]*', e_s + " " + r_s))
         
         # Sort so we calculate base indicators BEFORE their delayed versions
+        # Ensure we capture st_10_4 if it appeared in the translation
         for c in sorted(list(symbols_to_ensure), key=lambda x: '_d' in x):
             if c in ['and','or','supertrend','close','open','high','low','volume','date','st']:
                 continue
@@ -334,6 +365,11 @@ class Backtester:
                 ensure_indicator(c)
             except KeyError:
                 pass
+        
+        # Double check for common supertrend patterns that might have been expanded
+        for c in list(symbols_to_ensure):
+            if re.match(r'st_\d+_\d+', c) and c not in df_eval.columns:
+                ensure_indicator(c)
         
         # Also ensure any additional indicators needed (e.g. for ribbons) are calculated.
         if additional_indicators:

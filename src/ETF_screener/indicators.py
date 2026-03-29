@@ -482,6 +482,9 @@ def add_indicators(
 
     # EMA 50
     df_copy["EMA_50"] = calculate_ema(df_copy["Close"], period=50)
+    
+    # EMA 5 for "Super Loose" / Short-data strategies
+    df_copy["EMA_5"] = calculate_ema(df_copy["Close"], period=5)
 
     # RSI 14
     df_copy["RSI"] = calculate_rsi(df_copy["Close"], period=14)
@@ -511,8 +514,15 @@ def add_indicators(
     df_copy["ST_Upper"] = ub
     df_copy["ST_Lower"] = lb
     
+    # Supertrend 10/4 for specific breakdown strategies
+    st_10_4_res = calculate_supertrend(df_copy, period=10, multiplier=4.0)
+    if isinstance(st_10_4_res, tuple):
+        st_10_4, _, _ = st_10_4_res
+        df_copy["st_10_4"] = st_10_4
+    
     # st_is_green is for ribbons and DSL: 1.0 (True) if Close > ST_Lower (indicating uptrend)
     df_copy["st_is_green"] = (df_copy["Close"] > df_copy["ST_Lower"]).astype(float)
+    df_copy["st_10_4_is_green"] = (df_copy["Close"] > df_copy["st_10_4"]).astype(float) if "st_10_4" in df_copy.columns else 0.0
     df_copy["st"] = df_copy["st_is_green"] # Alias for ribbon config
 
     # Swing setup detection: price near EMA50 but in uptrend
