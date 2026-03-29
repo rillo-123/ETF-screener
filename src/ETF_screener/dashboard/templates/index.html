@@ -78,6 +78,12 @@
               </svg>
               Modify
             </button>
+            <div id="nav-scan-progress" class="hidden ml-2 flex items-center gap-2 bg-slate-800/80 border border-indigo-500/30 rounded px-2 py-1">
+              <div class="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                <div id="nav-scan-progress-bar" class="h-full bg-emerald-400 transition-all duration-300" style="width: 0%"></div>
+              </div>
+              <span id="nav-scan-progress-text" class="text-[10px] text-emerald-200 font-bold min-w-[30px]">0%</span>
+            </div>
           </div>
           <select
             id="ticker-select"
@@ -232,7 +238,16 @@
                       OVERWRITE
                     </button>
                   </div>
-EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
+              </div>
+
+              <textarea
+                id="strategy-editor"
+                class="w-full flex-1 bg-slate-950 text-indigo-200 font-mono text-xs p-3 rounded border border-indigo-500/20 focus:border-indigo-400 focus:outline-none resize-none"
+                spellcheck="false"
+                placeholder="TRIGGER: close > ema_50
+FILTER:  supertrend < close
+ENTRY:   cross_up(close, ema_50)
+EXIT:    cross_down(close, ema_50)"
               ></textarea>
 
               <div class="mt-4 flex gap-2">
@@ -294,13 +309,6 @@ EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
                   class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"
                 ></div>
               </div>
-              <button
-                id="scan-btn"
-                onclick="runScreen()"
-                class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-2 px-4 rounded-lg transition-all shadow-lg shadow-indigo-200 active:scale-95"
-              >
-                Run Scanner
-              </button>
             </div>
           </div>
           <div
@@ -375,9 +383,19 @@ EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
       }
 
       async function updateEditorContent(strategyName) {
+        const strategyEditor = document.getElementById("strategy-editor");
+        const strategyFilename = document.getElementById("strategy-filename");
+
+        // If the Labs editor is not mounted in this render, avoid throwing and
+        // let the rest of the dashboard (including chart loading) continue.
+        if (!strategyEditor || !strategyFilename) {
+          console.warn("Strategy editor elements not found; skipping editor sync.");
+          return;
+        }
+
         if (!strategyName) {
-          document.getElementById("strategy-editor").value = "";
-          document.getElementById("strategy-filename").value = "";
+          strategyEditor.value = "";
+          strategyFilename.value = "";
           return;
         }
         try {
@@ -386,8 +404,8 @@ EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
             throw new Error("Failed to load strategy content");
           }
           const data = await resp.json();
-          document.getElementById("strategy-editor").value = data.content;
-          document.getElementById("strategy-filename").value = strategyName;
+          strategyEditor.value = data.content;
+          strategyFilename.value = strategyName;
         } catch (err) {
           console.error("Failed to load strategy", err);
         }
@@ -524,16 +542,39 @@ EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
       function resetScanUI() {
         const spinner = document.getElementById("loading-spinner");
         const scanBtn = document.getElementById("scan-btn");
+        const runBtn = document.getElementById("run-btn");
         const list = document.getElementById("ticker-list");
         const progressContainer = document.getElementById("scanner-progress-container");
-        
-        spinner.classList.add("hidden");
-        progressContainer.classList.add("hidden");
-        scanBtn.textContent = "Run Scanner";
-        scanBtn.classList.add("bg-indigo-600");
-        scanBtn.classList.remove("bg-indigo-400");
-        scanBtn.disabled = false;
-        list.style.opacity = "1.0";
+        const navProgress = document.getElementById("nav-scan-progress");
+        const navProgressBar = document.getElementById("nav-scan-progress-bar");
+        const navProgressText = document.getElementById("nav-scan-progress-text");
+
+        if (spinner) spinner.classList.add("hidden");
+        if (progressContainer) progressContainer.classList.add("hidden");
+        if (navProgress) navProgress.classList.add("hidden");
+        if (navProgressBar) navProgressBar.style.width = "0%";
+        if (navProgressText) navProgressText.textContent = "0%";
+
+        if (scanBtn) {
+          scanBtn.textContent = "Run Scanner";
+          scanBtn.classList.add("bg-indigo-600");
+          scanBtn.classList.remove("bg-indigo-400");
+          scanBtn.disabled = false;
+        }
+
+        if (runBtn) {
+          runBtn.innerHTML = `
+            <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M5 3l14 9-14 9V3z"></path>
+            </svg>
+            Run
+          `;
+          runBtn.classList.remove("bg-emerald-500", "cursor-wait");
+          runBtn.classList.add("bg-green-600");
+          runBtn.disabled = false;
+        }
+
+        if (list) list.style.opacity = "1.0";
         scanAbortController = null;
       }
 
@@ -541,34 +582,61 @@ EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
         const list = document.getElementById("ticker-list");
         const spinner = document.getElementById("loading-spinner");
         const scanBtn = document.getElementById("scan-btn");
+        const runBtn = document.getElementById("run-btn");
         const strategySelect = document.getElementById("strategy-select");
         const errorSection = document.getElementById("error-section");
         const errorList = document.getElementById("error-list");
         const progressContainer = document.getElementById("scanner-progress-container");
         const progressBar = document.getElementById("scanner-progress-bar");
         const progressText = document.getElementById("scanner-progress-text");
+        const navProgress = document.getElementById("nav-scan-progress");
+        const navProgressBar = document.getElementById("nav-scan-progress-bar");
+        const navProgressText = document.getElementById("nav-scan-progress-text");
 
         // Set up abortion
         scanAbortController = new AbortController();
 
-        spinner.classList.remove("hidden");
-        progressContainer.classList.remove("hidden");
-        progressBar.style.width = "0%";
-        progressText.textContent = "0%";
-        
-        scanBtn.textContent = "Scanning...";
-        scanBtn.classList.add("bg-indigo-400"); // De-emphasize while running
-        scanBtn.classList.remove("bg-indigo-600");
-        scanBtn.disabled = true;
-        list.style.opacity = "0.5";
+        if (spinner) spinner.classList.remove("hidden");
+        if (progressContainer) progressContainer.classList.remove("hidden");
+        if (navProgress) navProgress.classList.remove("hidden");
+        if (progressBar) progressBar.style.width = "0%";
+        if (progressText) progressText.textContent = "0%";
+        if (navProgressBar) navProgressBar.style.width = "0%";
+        if (navProgressText) navProgressText.textContent = "0%";
+
+        if (scanBtn) {
+          scanBtn.textContent = "Scanning...";
+          scanBtn.classList.add("bg-indigo-400"); // De-emphasize while running
+          scanBtn.classList.remove("bg-indigo-600");
+          scanBtn.disabled = true;
+        }
+
+        if (runBtn) {
+          runBtn.innerHTML = `
+            <svg class="w-3.5 h-3.5 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" stroke-width="2" stroke-opacity="0.3"></circle>
+              <path d="M21 12a9 9 0 00-9-9" stroke-width="2" stroke-linecap="round"></path>
+            </svg>
+            Running
+          `;
+          runBtn.classList.remove("bg-green-600");
+          runBtn.classList.add("bg-emerald-500", "cursor-wait");
+          runBtn.disabled = true;
+        }
+
+        if (list) list.style.opacity = "0.5";
 
         try {
           let url = "/api/screen";
           if (customDsl) {
             url += `?dsl_content=${encodeURIComponent(customDsl)}`;
             strategySelect.value = "";
+            currentStrategy = "";
           } else if (strategySelect.value) {
             url += `?strategy=${strategySelect.value}`;
+            currentStrategy = strategySelect.value;
+          } else {
+            currentStrategy = "";
           }
 
           // Fake progress since we wait for one big JSON result from backend
@@ -577,8 +645,10 @@ EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
           const progInterval = setInterval(() => {
              if (fakeProg < 95) {
                 fakeProg += (95 - fakeProg) * 0.1;
-                progressBar.style.width = `${Math.round(fakeProg)}%`;
-                progressText.textContent = `${Math.round(fakeProg)}%`;
+               if (progressBar) progressBar.style.width = `${Math.round(fakeProg)}%`;
+               if (progressText) progressText.textContent = `${Math.round(fakeProg)}%`;
+               if (navProgressBar) navProgressBar.style.width = `${Math.round(fakeProg)}%`;
+               if (navProgressText) navProgressText.textContent = `${Math.round(fakeProg)}%`;
              }
           }, 400);
 
@@ -589,12 +659,14 @@ EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
           console.log("Scanner complete. Results:", rawData);
 
           // Complete the bar
-          progressBar.style.width = "100%";
-          progressText.textContent = "100%";
+          if (progressBar) progressBar.style.width = "100%";
+          if (progressText) progressText.textContent = "100%";
+          if (navProgressBar) navProgressBar.style.width = "100%";
+          if (navProgressText) navProgressText.textContent = "100%";
           
           // Small delay to let user see 100%
           await new Promise(r => setTimeout(r, 500));
-          progressContainer.classList.add("hidden");
+          if (progressContainer) progressContainer.classList.add("hidden");
           resetScanUI();
 
           // Handle new response format
@@ -696,13 +768,12 @@ EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
           });
         } catch (err) {
           console.error(err);
-          list.innerHTML =
-            '<div class="text-xs text-red-500 p-2">Screen error. Check console.</div>';
+          if (list) {
+            list.innerHTML =
+              '<div class="text-xs text-red-500 p-2">Screen error. Check console.</div>';
+          }
         } finally {
-          spinner.classList.add("hidden");
-          scanBtn.textContent = "Run Scanner";
-          scanBtn.disabled = false;
-          list.style.opacity = "1";
+          resetScanUI();
         }
       }
 
@@ -724,17 +795,43 @@ EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
             `;
 
         try {
-          const url = `/api/chart/${ticker}?days=${currentDays}`;
+          const strategySelect = document.getElementById("strategy-select");
+          const strategyName = (strategySelect && strategySelect.value) ? strategySelect.value : currentStrategy;
+          const strategyPart = strategyName ? `&strategy=${encodeURIComponent(strategyName)}` : "";
+          const url = `/api/chart/${ticker}?days=${currentDays}${strategyPart}`;
+          console.info("loadChart request URL", url);
           const resp = await fetch(url);
           const responseData = await resp.json();
+          console.info("loadChart response status", resp.status);
 
           if (!resp.ok) throw new Error(responseData.detail || "Server error");
 
-          let figData = responseData.figure
-            ? typeof responseData.figure === "string"
-              ? JSON.parse(responseData.figure)
-              : responseData.figure
-            : responseData;
+          let figData = null;
+          if (responseData.figure) {
+            try {
+              figData = typeof responseData.figure === "string"
+                ? JSON.parse(responseData.figure)
+                : responseData.figure;
+            } catch (e) {
+              console.warn("Figure JSON parse failed, falling back to data/layout", e);
+            }
+          }
+          if (!figData || !figData.data || !figData.layout) {
+            figData = {
+              data: responseData.data || [],
+              layout: responseData.layout || {}
+            };
+          }
+
+          console.info("loadChart payload summary", {
+            ticker,
+            traces: (figData.data || []).length,
+            layoutKeys: Object.keys(figData.layout || {}).length,
+          });
+
+          if (!figData.data || figData.data.length === 0) {
+            throw new Error("No chart traces returned by server.");
+          }
 
           // Reset responsive layout
           figData.layout.autosize = true;
@@ -764,6 +861,7 @@ EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
             displaylogo: false,
             scrollZoom: true,
           });
+          console.info("loadChart render complete", ticker);
         } catch (err) {
           console.error("loadChart error:", err);
           chartDiv.innerHTML = `<div class="p-8 text-center text-red-500">${err.message}</div>`;
@@ -785,7 +883,11 @@ EXIT:    cross_down(macd, macd_signal) OR close < ema_50"
         .getElementById("strategy-select")
         .addEventListener("change", (e) => {
           updateEditorContent(e.target.value);
-               runScreen(); // Restore runScreen() on strategy change
+          currentStrategy = e.target.value || "";
+          runScreen(); // Restore runScreen() on strategy change
+          if (currentTicker) {
+            loadChart(currentTicker);
+          }
         });
 
       // Initialize
