@@ -24,9 +24,8 @@ if ($portProcess) {
 
 if (Test-Path $python) {
     Write-Host "Starting server..." -ForegroundColor Gray
-    # Run with uvicorn --reload to handle source changes automatically
-    # Only monitor .py and .html files to avoid unnecessary restarts from log/data files
-    & $python -m uvicorn ETF_screener.dashboard.app_fast:app --host 127.0.0.1 --port 5000 --reload --reload-dir src --reload-include "*.py" --reload-include "*.html"
+    # Use triple quotes for uvicorn options to force literal passing in PowerShell
+    & $python -m uvicorn "ETF_screener.dashboard.app_fast:app" --host 127.0.0.1 --port 5000 --reload --reload-dir src --reload-include '"*.py"' --reload-include '"*.html"'
 } else {
     Write-Error "Could not find Python executable at $python. Please ensure the venv is setup."
 }

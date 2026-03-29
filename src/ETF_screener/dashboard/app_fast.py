@@ -1,10 +1,11 @@
 import json
+import math
 import pandas as pd
 from typing import List, Optional
 from pathlib import Path
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from ETF_screener.database import ETFDatabase
@@ -12,9 +13,39 @@ from ETF_screener.plotter_plotly import InteractivePlotter
 from ETF_screener.yfinance_fetcher import YFinanceFetcher
 from ETF_screener.indicators import add_indicators
 from ETF_screener.backtester import Backtester
+from ETF_screener.logging_setup import setup_logging, get_log_file
 
 app = FastAPI(title="ETF Discovery Lab API")
 fetcher = YFinanceFetcher() # For on-demand fetching
+
+# Initialise logging as early as possible so that all subsequent imports and
+# uvicorn log records are captured in the timestamped debug file.
+logger = setup_logging()
+
+def _safe_float(val, default=None):
+    """Return val as float, or default if it is NaN/inf/None."""
+    try:
+        f = float(val)
+        return default if (math.isnan(f) or math.isinf(f)) else f
+    except (TypeError, ValueError):
+        return default
+
+
+def _format_basic_screen_matches(df: pd.DataFrame) -> list[dict]:
+    """Normalize simple screen rows to the shape the dashboard expects."""
+    matches = []
+    for _, row in df.iterrows():
+        matches.append({
+            "ticker": row.get("ticker", "UNKNOWN"),
+            "close": _safe_float(row.get("close", row.get("Close", 0)), 0.0),
+            "volume": _safe_float(row.get("volume", row.get("Volume", 0)), 0.0),
+            "status": "Trending",
+            "return_pct": 0.0,
+            "change_pct": 0.0,
+            "supertrend": _safe_float(row.get("supertrend", row.get("Supertrend", 0)), 0.0),
+            "st_lower": _safe_float(row.get("st_lower", row.get("ST_Lower", 0)), 0.0),
+        })
+    return matches
 
 # Setup templates and static files
 # We can keep the same template files as Flask (Jinja2 is compatible)
@@ -39,6 +70,12 @@ def load_strategy_content(name):
 # Database access function (FastAPI style)
 def get_db():
     return ETFDatabase(db_path="data/etfs.db")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """Suppress noisy favicon 404s until a real icon is added."""
+    return Response(status_code=204)
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
@@ -125,15 +162,20 @@ async def screen(strategy: Optional[str] = None, dsl_content: Optional[str] = No
             LIMIT 50
         """
         df = pd.read_sql_query(query, conn)
-        matches = df.to_dict(orient='records')
-        return matches
+        matches = _format_basic_screen_matches(df)
+        return {
+            "matches": matches,
+            "errors": [],
+            "total_errors": 0,
+            "total_candidates": len(matches)
+        }
 
     import re
-    # Parse DSL
-    trigger = re.search(r'TRIGGER:\s*(.*)', content, re.IGNORECASE)
-    filter_ = re.search(r'FILTER:\s*(.*)', content, re.IGNORECASE)
-    entry = re.search(r'ENTRY:\s*(.*)', content, re.IGNORECASE)
-    exit_ = re.search(r'EXIT:\s*(.*)', content, re.IGNORECASE)
+    # Parse DSL — use ^ + MULTILINE so comment lines like "# TRIGGER: ..." are skipped
+    trigger = re.search(r'^TRIGGER:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
+    filter_ = re.search(r'^FILTER:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
+    entry = re.search(r'^ENTRY:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
+    exit_ = re.search(r'^EXIT:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
     
     final_entry = ""
     if trigger and filter_:
@@ -212,17 +254,17 @@ async def screen(strategy: Optional[str] = None, dsl_content: Optional[str] = No
             
             if has_latest_entry:
                 # Handle possible column name variations (database vs dataframe)
-                close_val = float(last_row['close']) if 'close' in last_row else float(last_row.get('Close', 0))
-                vol_val = float(last_row['volume']) if 'volume' in last_row else float(last_row.get('Volume', 0))
-                prev_close = float(prev_row['close']) if 'close' in prev_row else float(prev_row.get('Close', 0))
-                change_pct = ((close_val / prev_close) - 1) * 100 if prev_close else 0
-                
+                close_val = _safe_float(last_row['close'] if 'close' in last_row else last_row.get('Close', 0), 0.0)
+                vol_val = _safe_float(last_row['volume'] if 'volume' in last_row else last_row.get('Volume', 0), 0.0)
+                prev_close = _safe_float(prev_row['close'] if 'close' in prev_row else prev_row.get('Close', 0), 0.0)
+                change_pct = _safe_float(((close_val / prev_close) - 1) * 100 if prev_close else 0, 0.0)
+
                 matches.append({
                     "ticker": ticker,
                     "close": close_val,
                     "volume": vol_val,
                     "status": "Entry Signal",
-                    "return_pct": float(res.get('total_return_pct', 0)),
+                    "return_pct": _safe_float(res.get('total_return_pct', 0), 0.0),
                     "change_pct": change_pct
                 })
         except Exception as e:
@@ -253,19 +295,19 @@ async def get_chart(ticker: str, days: int = 365*2):
     # 2. If data is missing or too sparse (less than 100 days for indicators), fetch it!
     # Increased minimum requirement to 100 days to ensure enough lookback for EMA50 and ATR
     if df.empty or len(df) < 100:
-        print(f"Cache miss for {ticker} (or insufficient data, count={len(df)}). Fetching from Yahoo Finance...")
+        logger.info("Cache miss for %s (or insufficient data, count=%d). Fetching from Yahoo Finance...", ticker, len(df))
         try:
             # Fetch fresh data - Updated to use correct method name: fetch_historical_data
             # Force at least 365 days of data for high resolution indicators
             fetched_df = fetcher.fetch_historical_data(ticker, days=max(days, 365))
             if not fetched_df.empty:
-                print(f"Fetched {len(fetched_df)} rows for {ticker}. Processing indicators...")
+                logger.info("Fetched %d rows for %s. Processing indicators...", len(fetched_df), ticker)
                 # Add indicators before storing
                 processed_df = add_indicators(fetched_df)
                 
                 # Check if supertrend was calculated
                 has_st = not processed_df['Supertrend'].isna().all() if 'Supertrend' in processed_df.columns else False
-                print(f"Indicator processing complete. Supertrend calculated: {has_st}")
+                logger.info("Indicator processing complete for %s. Supertrend calculated: %s", ticker, has_st)
                 
                 # Store in DB for next time
                 for _, row in processed_df.iterrows():
@@ -286,8 +328,8 @@ async def get_chart(ticker: str, days: int = 365*2):
                 # Use the new data for the plot
                 df = processed_df.sort_values('Date').tail(days)
         except Exception as e:
-            print(f"Failed to fetch {ticker} on demand: {e}")
-            # Instead of crashing, let's return a specific error that the UI can catch
+            logger.warning("Failed to fetch %s on demand: %s", ticker, e)
+            # Instead of crashing let's return a specific error that the UI can catch
             raise HTTPException(status_code=404, detail=f"Data fetch failed for {ticker}: {str(e)}")
 
     if df.empty:
@@ -309,7 +351,7 @@ async def get_chart(ticker: str, days: int = 365*2):
     missing = [c for c in required if c not in df.columns]
     
     if missing:
-        print(f"Normalizing column names from DB for {ticker}. Missing: {missing}. Available: {df.columns.tolist()}")
+        logger.warning("Normalizing column names from DB for %s. Missing: %s. Available: %s", ticker, missing, df.columns.tolist())
         # Check if we have 'open_price' instead of 'open' (some legacy code used 'open_price')
         if 'open_price' in df.columns and 'Open' not in df.columns:
             df = df.rename(columns={'open_price': 'Open'})
@@ -317,7 +359,7 @@ async def get_chart(ticker: str, days: int = 365*2):
 
     if missing:
         # If still missing, we might have a data integrity issue
-        print(f"CRITICAL: {ticker} is missing required columns {missing} for plotting.")
+        logger.error("CRITICAL: %s is missing required columns %s for plotting.", ticker, missing)
         raise HTTPException(status_code=500, detail=f"Database schema mismatch for {ticker}. Missing {missing}")
     
     plotter = InteractivePlotter()
@@ -337,13 +379,12 @@ async def get_chart(ticker: str, days: int = 365*2):
         }
     except Exception as e:
         import traceback
-        traceback.print_exc()
-        print(f"Plotter failed for {ticker}: {e}")
+        logger.exception("Plotter failed for %s: %s", ticker, e)
         raise HTTPException(status_code=500, detail=f"Plot generation failed: {str(e)}")
 
-@app.get("/api/screen")
-async def screen():
-    """Run a quick dynamic screen based on parameters."""
+@app.get("/api/screen/basic")
+async def screen_basic():
+    """Run the basic trend screen without the DSL/backtester pipeline."""
     db = get_db()
     conn = db._get_connection()
     query = """
@@ -356,9 +397,61 @@ async def screen():
     """
     try:
         df = pd.read_sql_query(query, conn)
-        return df.to_dict(orient='records')
-    except Exception as e:
-        return []
+        matches = _format_basic_screen_matches(df)
+        return {
+            "matches": matches,
+            "errors": [],
+            "total_errors": 0,
+            "total_candidates": len(matches)
+        }
+    except Exception:
+        logger.exception("Basic screen failed")
+        return {
+            "matches": [],
+            "errors": [{"ticker": "SYSTEM", "error": "Basic screen failed"}],
+            "total_errors": 1,
+            "total_candidates": 0
+        }
+
+
+# ---------------------------------------------------------------------------
+# Browser log relay — receives console.log/warn/error calls from the frontend
+# and writes them into the same server-side log file.
+# ---------------------------------------------------------------------------
+
+import logging as _logging_mod
+
+@app.post("/api/log")
+async def browser_log(request: Request):
+    """Accept JSON log records from the browser and write them to the server log."""
+    try:
+        body = await request.json()
+    except Exception:
+        return {"status": "error", "detail": "invalid json"}
+
+    level_map = {
+        "debug":   _logging_mod.DEBUG,
+        "info":    _logging_mod.INFO,
+        "warn":    _logging_mod.WARNING,
+        "warning": _logging_mod.WARNING,
+        "error":   _logging_mod.ERROR,
+    }
+    browser_logger = _logging_mod.getLogger("browser")
+    level = level_map.get(str(body.get("level", "info")).lower(), _logging_mod.INFO)
+    message = str(body.get("message", ""))
+    stack   = body.get("stack")
+    url     = body.get("url", "")
+    line    = body.get("line", "")
+
+    full_msg = message
+    if url or line:
+        full_msg += f"  [{url}:{line}]"
+    if stack:
+        full_msg += f"\n{stack}"
+
+    browser_logger.log(level, full_msg)
+    return {"status": "ok", "log_file": str(get_log_file())}
+
 
 if __name__ == '__main__':
     import uvicorn

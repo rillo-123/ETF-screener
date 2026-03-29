@@ -7,6 +7,9 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import logging
+
+logger = logging.getLogger(__name__)
 
 class InteractivePlotter:
     """Plot ETF data with technical indicators using Plotly for interactivity."""
@@ -23,7 +26,7 @@ class InteractivePlotter:
                 with open(config_path, "r") as f:
                     return json.load(f)
             except Exception as e:
-                print(f"Warning: Could not load ribbon settings: {e}")
+                logger.warning("Could not load ribbon settings: %s", e)
         return {"ribbons": []}
 
     def plot_etf_analysis(self, df: pd.DataFrame, symbol: str) -> Path:

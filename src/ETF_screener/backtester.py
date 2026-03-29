@@ -5,6 +5,9 @@ import re, os
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, Any, List, Callable, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 from ETF_screener.database import ETFDatabase
 from ETF_screener.indicators import (
@@ -66,7 +69,7 @@ class Backtester:
                 if df is None or df.empty:
                     df = None
             except Exception as e:
-                print(f"Warning: Failed to read cache {cache_path}: {e}")
+                logger.warning("Failed to read cache %s: %s", cache_path, e)
                 df = None
         else:
             df = None
@@ -112,7 +115,7 @@ class Backtester:
                 try:
                     df.to_parquet(cache_path, compression='snappy')
                 except Exception as e:
-                    print(f"Warning: Failed to save cache {cache_path}: {e}")
+                    logger.warning("Failed to save cache %s: %s", cache_path, e)
             
         if 'Signal' in df.columns and 'signal' not in df: df['signal'] = df['Signal']
         if 'signal' not in df.columns: return {"error": "No signal col"}
@@ -384,17 +387,16 @@ class Backtester:
             # and avoid conflicts with ticker symbols that are also pandas/numexpr keywords.
             # However, we MUST use bitwise operators (&, |) for series logic 
             # as 'and'/'or' are not supported for Series evaluation in pd.eval().
-            print(f"DEBUG_EXPR_ENTRY: {e_s}")
+            logger.debug("DEBUG_EXPR_ENTRY: %s", e_s)
             b_em = df_eval.eval(e_s, engine='python', parser='python')
-            print(f"DEBUG_EXPR_EXIT: {r_s}")
+            logger.debug("DEBUG_EXPR_EXIT: %s", r_s)
             b_r = df_eval.eval(r_s, engine='python', parser='python')
         except Exception as e:
             # Output the transformed scripts to identify EXACTLY which character is failing
-            print(f"ERROR_IN_EVAL: {e}")
-            print(f"TRANSFORMED ENTRY: {e_s}")
-            print(f"TRANSFORMED EXIT:  {r_s}")
-            import traceback
-            traceback.print_exc()
+            logger.error("ERROR_IN_EVAL: %s", e)
+            logger.debug("TRANSFORMED ENTRY: %s", e_s)
+            logger.debug("TRANSFORMED EXIT:  %s", r_s)
+            logger.exception("Eval traceback:")
             return None
             
         # Core alignment

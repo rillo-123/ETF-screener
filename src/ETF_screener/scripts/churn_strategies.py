@@ -15,14 +15,15 @@ def load_dsl_file(file_path):
         content = f.read()
     
     # Try to find TRIGGER and FILTER first (New Option A)
-    trigger = re.search(r'TRIGGER:\s*(.*)', content, re.IGNORECASE)
-    filter_ = re.search(r'FILTER:\s*(.*)', content, re.IGNORECASE)
+    # ^ + MULTILINE ensures comment lines like "# TRIGGER: ..." are skipped
+    trigger = re.search(r'^TRIGGER:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
+    filter_ = re.search(r'^FILTER:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
     
     # Legacy ENTRY block
-    entry = re.search(r'ENTRY:\s*(.*)', content, re.IGNORECASE)
+    entry = re.search(r'^ENTRY:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
     
     # EXIT block is required for both
-    exit_ = re.search(r'EXIT:\s*(.*)', content, re.IGNORECASE)
+    exit_ = re.search(r'^EXIT:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
     
     # If TRIGGER/FILTER provided, combine them into a virtual ENTRY for the backtester
     # The movie_scanner will use them separately
