@@ -17,11 +17,13 @@ def test_screen_endpoint():
     response = client.get("/api/screen")
     assert response.status_code == 200
     data = response.json()
-    assert isinstance(data, list)
+    assert isinstance(data, dict)
+    assert "matches" in data
+    assert isinstance(data["matches"], list)
     # If the DB has data, we should get some records
-    if len(data) > 0:
-        assert "ticker" in data[0]
-        assert "close" in data[0]
+    if len(data["matches"]) > 0:
+        assert "ticker" in data["matches"][0]
+        assert "close" in data["matches"][0]
 
 def test_get_chart_valid_ticker():
     """Verify we can get chart data and that the figure contains expected visual data."""
