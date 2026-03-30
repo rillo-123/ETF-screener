@@ -1,2 +1,0 @@
-[console_scripts]
-ETF_screener = ETF_screener.main:main
