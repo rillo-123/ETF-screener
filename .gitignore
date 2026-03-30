@@ -59,6 +59,8 @@ Desktop.ini
 ~*
 *.bak
 vulture_report*.txt
+logs/*.txt
+*.egg-info/
 
 # Generated data files (in data/ directory)
 data/*.json
