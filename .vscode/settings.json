@@ -1,0 +1,12 @@
+{
+  "terminal.integrated.profiles.windows": {
+    "pwsh": {
+      "source": "PowerShell",
+      "icon": "terminal-powershell",
+      "args": ["-NoExit", "-Command", ". './profile.ps1'"]
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "pwsh",
+  "powershell.integratedConsole.showOnStartup": false,
+  "powershell.integratedConsole.focusConsoleOnExecute": false
+}
