@@ -5,6 +5,76 @@ This document defines the Domain Specific Language (DSL) used for defining tradi
 ## File Structure
 A `.dsl` file can use the legacy `ENTRY:`/`EXIT:` format or the modern `TRIGGER:`/`FILTER:`/`EXIT:` format (recommended for scanners).
 
+### Layered Block Format (Keyword Blocks, recommended)
+```dsl
+BEGIN CONTEXT_REGIME
+FILTER: close > ema_200
+FILTER: ema_200_slope > 0
+END
+
+BEGIN SETUP_PULLBACK
+FILTER: close > ema_50
+END
+
+BEGIN TRIGGER_EVENT
+TRIGGER: macd > macd_signal AND macd_d1 <= macd_signal_d1
+END
+
+BEGIN RISK_GUARD
+FILTER: volume > 150K
+EXIT: close < ema_50
+END
+```
+
+Keywords currently mapped to visual layers:
+- `CONTEXT*` -> Layer 1
+- `SETUP*` -> Layer 2
+- `TRIGGER*` -> Layer 3
+- `RISK*` -> Layer 4
+
+Identifier style guideline:
+- Prefer uppercase identifiers.
+- Use underscores, no spaces (e.g. `CONTEXT_REGIME`).
+
+Supported aliases:
+- `layer 1`, `layer 2`, `layer 3`, `layer 4`
+- `layer_1`, `layer_2`, `layer_3`, `layer_4`
+- `l1`, `l2`, `l3`, `l4`
+
+Backward compatibility:
+- `LAYER n BEGIN ... END` still works.
+- Optional global `BEGIN ... END` wrappers are still accepted.
+
+### Layered Block Format (Pascal-style, still supported)
+```dsl
+BEGIN
+
+LAYER 1 BEGIN
+FILTER: close > ema_200
+FILTER: ema_200_slope > 0
+END
+
+LAYER 2 BEGIN
+FILTER: close > ema_50
+END
+
+LAYER 3 BEGIN
+TRIGGER: cross_up(macd, macd_signal)
+END
+
+LAYER 4 BEGIN
+FILTER: volume > 150K
+EXIT:   close < ema_50
+END
+
+END
+```
+
+Notes:
+- `BEGIN`/`END` wrappers are optional and currently used for structure/readability.
+- Block keywords assign rules to visual ribbons for Layer 1-4.
+- `TRIGGER`, `FILTER`, `ENTRY`, and `EXIT` semantics remain unchanged.
+
 ### Recommended Format (Modern)
 ```dsl
 # Hardened Trend Strategy

@@ -25,6 +25,8 @@ def get_chart(ticker):
     """Generate and return an interactive chart for a ticker."""
     db = get_db()
     days = request.args.get('days', 365*2, type=int)
+    strategy = request.args.get('strategy', default=None, type=str)
+    dsl_content = request.args.get('dsl_content', default=None, type=str)
     
     # Get data from database
     conn = db._get_connection()
@@ -42,8 +44,16 @@ def get_chart(ticker):
         'supertrend': 'Supertrend', 'st_upper': 'ST_Upper', 'st_lower': 'ST_Lower'
     })
     
+    strategy_content = ""
+    if dsl_content:
+        strategy_content = dsl_content
+    elif strategy:
+        strat_path = Path("strategies") / f"{strategy}.dsl"
+        if strat_path.exists():
+            strategy_content = strat_path.read_text(encoding='utf-8')
+
     plotter = InteractivePlotter()
-    fig = plotter.create_plot(df, ticker.upper())
+    fig = plotter.create_plot(df, ticker.upper(), strategy_content=strategy_content)
     
     # Return figure as JSON for Plotly.js to render
     return fig.to_json()

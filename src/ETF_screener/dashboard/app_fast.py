@@ -67,6 +67,23 @@ def load_strategy_content(name):
         return strat_path.read_text(encoding='utf-8')
     return ""
 
+
+def parse_strategy_scripts(content: str) -> tuple[str, str]:
+    """Parse layered DSL into entry/exit expressions."""
+    import re
+
+    trigger_terms = re.findall(r'^TRIGGER:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
+    filter_terms = re.findall(r'^FILTER:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
+    entry_terms = re.findall(r'^ENTRY:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
+    exit_terms = re.findall(r'^EXIT:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
+
+    entry_parts = [f"({t.strip()})" for t in (trigger_terms + filter_terms + entry_terms) if t.strip()]
+    exit_parts = [f"({t.strip()})" for t in exit_terms if t.strip()]
+
+    final_entry = " and ".join(entry_parts)
+    final_exit = " or ".join(exit_parts) if exit_parts else "False"
+    return final_entry, final_exit
+
 # Database access function (FastAPI style)
 def get_db():
     return ETFDatabase(db_path="data/etfs.db")
@@ -170,20 +187,7 @@ async def screen(strategy: Optional[str] = None, dsl_content: Optional[str] = No
             "total_candidates": len(matches)
         }
 
-    import re
-    # Parse DSL — use ^ + MULTILINE so comment lines like "# TRIGGER: ..." are skipped
-    trigger = re.search(r'^TRIGGER:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
-    filter_ = re.search(r'^FILTER:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
-    entry = re.search(r'^ENTRY:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
-    exit_ = re.search(r'^EXIT:\s*(.*)', content, re.IGNORECASE | re.MULTILINE)
-    
-    final_entry = ""
-    if trigger and filter_:
-        final_entry = f"({trigger.group(1).strip()}) and ({filter_.group(1).strip()})"
-    elif entry:
-        final_entry = entry.group(1).strip()
-    
-    final_exit = exit_.group(1).strip() if exit_ else "False"
+    final_entry, final_exit = parse_strategy_scripts(content)
     
     # Build a cleaner ticker universe so the backtester doesn't waste workers on stale symbols.
     conn = db._get_connection()
@@ -282,7 +286,7 @@ async def screen(strategy: Optional[str] = None, dsl_content: Optional[str] = No
     }
 
 @app.get("/api/chart/{ticker}")
-async def get_chart(ticker: str, days: int = 365*2):
+async def get_chart(ticker: str, days: int = 365*2, strategy: Optional[str] = None, dsl_content: Optional[str] = None):
     """Generate and return an interactive chart for a ticker. Fetches if missing."""
     db = get_db()
     ticker = ticker.upper()
@@ -362,9 +366,31 @@ async def get_chart(ticker: str, days: int = 365*2):
         logger.error("CRITICAL: %s is missing required columns %s for plotting.", ticker, missing)
         raise HTTPException(status_code=500, detail=f"Database schema mismatch for {ticker}. Missing {missing}")
     
+    strategy_content = ""
+    if dsl_content:
+        strategy_content = dsl_content
+    elif strategy:
+        strategy_content = load_strategy_content(strategy)
+
+    if strategy_content:
+        entry_script, exit_script = parse_strategy_scripts(strategy_content)
+        if entry_script:
+            bt = Backtester()
+            try:
+                strat_res = bt.scripted_strategy(
+                    df.copy(),
+                    ticker=ticker,
+                    entry_script=entry_script,
+                    exit_script=exit_script,
+                )
+                if isinstance(strat_res, dict) and strat_res.get('df') is not None and not strat_res['df'].empty:
+                    df = strat_res['df']
+            except Exception:
+                logger.debug("Could not enrich chart data with strategy indicators for %s", ticker)
+
     plotter = InteractivePlotter()
     try:
-        fig = plotter.create_plot(df, ticker)
+        fig = plotter.create_plot(df, ticker, strategy_content=strategy_content)
         # Fastapi JSONResponse or direct dict return will handle this.
         # But we need to ensure it's a DICT, not a JSON string, 
         # because the frontend is now expecting the un-wrapped object.

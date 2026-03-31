@@ -113,7 +113,7 @@ def setup_logging(app_name: str = "ETF_screener") -> logging.Logger:
         sys.stdout = _PrintCapture(print_logger, sys.__stdout__)
 
     logger = logging.getLogger(app_name)
-    logger.info("Logging initialised → %s", _log_file)
+    logger.info("Logging initialised -> %s", _log_file)
     return logger
 
 
