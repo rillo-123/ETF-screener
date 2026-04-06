@@ -243,6 +243,77 @@ EXIT:    cross_down(close, ema_50)"></textarea>
     let sourceStrategyName = ""; // tracks what strategy is being modified
     let scanAbortController = null;
 
+    // --- Console Log Capture System ---
+    const consoleLogs = [];
+    const maxLogsBeforeSend = 50;
+    
+    function setupConsoleCapture() {
+      const originalLog = console.log;
+      const originalError = console.error;
+      const originalWarn = console.warn;
+      const originalInfo = console.info;
+      
+      const captureLog = (level, args) => {
+        const timestamp = new Date().toISOString();
+        const message = args.map(arg => {
+          if (typeof arg === 'object') {
+            try { return JSON.stringify(arg); } catch { return String(arg); }
+          }
+          return String(arg);
+        }).join(' ');
+        
+        consoleLogs.push({ timestamp, level, message });
+        if (consoleLogs.length >= maxLogsBeforeSend) {
+          flushConsoleLogs();
+        }
+      };
+      
+      console.log = function(...args) {
+        originalLog.apply(console, args);
+        captureLog('LOG', args);
+      };
+      
+      console.error = function(...args) {
+        originalError.apply(console, args);
+        captureLog('ERROR', args);
+      };
+      
+      console.warn = function(...args) {
+        originalWarn.apply(console, args);
+        captureLog('WARN', args);
+      };
+      
+      console.info = function(...args) {
+        originalInfo.apply(console, args);
+        captureLog('INFO', args);
+      };
+      
+      // Flush remaining logs on page unload
+      window.addEventListener('beforeunload', flushConsoleLogs);
+      
+      // Flush logs every 30 seconds
+      setInterval(flushConsoleLogs, 30000);
+    }
+    
+    async function flushConsoleLogs() {
+      if (consoleLogs.length === 0) return;
+      const logsToSend = [...consoleLogs];
+      consoleLogs.length = 0;
+      
+      try {
+        await fetch('/api/log/console', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ logs: logsToSend })
+        });
+      } catch (err) {
+        // Silently fail to avoid infinite loops if logging fails
+      }
+    }
+    
+    // Start capturing console logs immediately
+    setupConsoleCapture();
+
     // --- Toast notification ---
     function showToast(msg, isError = false) {
       const t = document.createElement("div");
@@ -526,6 +597,8 @@ EXIT:    cross_down(close, ema_50)"></textarea>
         } else {
           currentStrategy = "";
         }
+        console.log("Screen scan starting with URL:", url);
+        console.log("Current strategy:", currentStrategy);
 
         // Fake progress since we wait for one big JSON result from backend
         // We'll tick it up slowly to give a sense of depth
@@ -539,10 +612,11 @@ EXIT:    cross_down(close, ema_50)"></textarea>
         }, 400);
 
         const resp = await fetch(url, { signal: scanAbortController.signal });
+        console.log("Fetch response status:", resp.status, "URL:", url);
         clearInterval(progInterval);
 
         const rawData = await resp.json();
-        console.log("Scanner complete. Results:", rawData);
+        console.log("JSON parsed successfully. Data keys:", Object.keys(rawData));
 
         // Complete the bar
         if (navProgressBar) navProgressBar.style.width = "100%";
@@ -556,9 +630,16 @@ EXIT:    cross_down(close, ema_50)"></textarea>
         const hasFormat = rawData.matches !== undefined;
         const matches = hasFormat ? rawData.matches : rawData;
         const errors = hasFormat ? rawData.errors : [];
+        console.log("Data format check - hasFormat:", hasFormat, "matches count:", matches?.length, "errors count:", errors?.length);
+
+        if (!Array.isArray(matches)) {
+          console.error("ERROR: matches is not an array!", typeof matches, matches);
+          throw new Error("Expected matches to be an array, got " + typeof matches);
+        }
 
         list.innerHTML = "";
         document.getElementById("match-count").textContent = matches.length;
+        console.log("List cleared, match count updated to:", matches.length);
 
         // Update ticker dropdown options based on screen results
         const tickerSelect = document.getElementById("ticker-select");
@@ -604,30 +685,31 @@ EXIT:    cross_down(close, ema_50)"></textarea>
             '<div class="text-sm text-slate-400 italic p-4 text-center">No matching ETFs found for this strategy...</div>';
         }
 
-        matches.forEach((item) => {
-          const card = document.createElement("div");
-          card.className =
-            "ticker-card p-3 bg-slate-50 border-l-4 border-indigo-500 rounded shadow-sm hover:shadow-md hover:bg-indigo-50 cursor-pointer transition-all";
-          card.onclick = () => loadChart(item.ticker);
-          const statusText = item.status || "TRENDING";
-          const statusColor =
-            item.status === "Entry Signal"
-              ? "text-emerald-500 animate-pulse font-bold"
-              : "text-indigo-600";
+        matches.forEach((item, idx) => {
+          try {
+            const card = document.createElement("div");
+            card.className =
+              "ticker-card p-3 bg-slate-50 border-l-4 border-indigo-500 rounded shadow-sm hover:shadow-md hover:bg-indigo-50 cursor-pointer transition-all";
+            card.onclick = () => loadChart(item.ticker);
+            const statusText = item.status || "TRENDING";
+            const statusColor =
+              item.status === "Entry Signal"
+                ? "text-emerald-500 animate-pulse font-bold"
+                : "text-indigo-600";
 
-          const closeVal = Number(item.close ?? 0);
-          const volumeVal = Number(item.volume ?? 0);
-          const returnPctVal = Number(item.return_pct ?? 0);
-          const changePctVal = Number(item.change_pct ?? 0);
+            const closeVal = Number(item.close ?? 0);
+            const volumeVal = Number(item.volume ?? 0);
+            const returnPctVal = Number(item.return_pct ?? 0);
+            const changePctVal = Number(item.change_pct ?? 0);
 
-          const changeVal = Number.isFinite(changePctVal)
-            ? changePctVal.toFixed(2)
-            : "0.00";
-          const changeColor =
-            parseFloat(changeVal) >= 0 ? "text-emerald-500" : "text-rose-500";
-          const sign = parseFloat(changeVal) >= 0 ? "+" : "";
+            const changeVal = Number.isFinite(changePctVal)
+              ? changePctVal.toFixed(2)
+              : "0.00";
+            const changeColor =
+              parseFloat(changeVal) >= 0 ? "text-emerald-500" : "text-rose-500";
+            const sign = parseFloat(changeVal) >= 0 ? "+" : "";
 
-          card.innerHTML = `
+            card.innerHTML = `
                         <div class="flex justify-between items-start">
                             <div class="flex flex-col">
                                 <span class="font-bold text-slate-800 text-lg leading-none">${item.ticker}</span>
@@ -647,13 +729,24 @@ EXIT:    cross_down(close, ema_50)"></textarea>
                             </div>
                         </div>
                     `;
-          list.appendChild(card);
+            list.appendChild(card);
+            console.log(`Card ${idx} added for ${item.ticker}`);
+          } catch (cardErr) {
+            console.error(`Error processing card at index ${idx}:`, cardErr);
+            console.error("Item data:", item);
+          }
         });
+        console.log("All cards processed successfully");
       } catch (err) {
-        console.error(err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const errStack = err instanceof Error ? err.stack : "No stack trace";
+        console.error("=== SCREEN SCAN ERROR ===");
+        console.error("Message:", errMsg);
+        console.error("Stack:", errStack);
+        console.error("Full Error Object:", err);
         if (list) {
           list.innerHTML =
-            '<div class="text-xs text-red-500 p-2">Screen error. Check console.</div>';
+            `<div class="text-xs text-red-500 p-2">Screen error: ${errMsg}<br/><span class="text-[9px] text-slate-500">Check console for details.</span></div>`;
         }
       } finally {
         resetScanUI();
@@ -720,21 +813,25 @@ EXIT:    cross_down(close, ema_50)"></textarea>
         figData.layout.autosize = true;
         figData.layout.width = undefined;
         figData.layout.height = undefined;
-        figData.layout.margin = { l: 60, r: 20, t: 30, b: 80 };
+        if (!figData.layout.margin) {
+          figData.layout.margin = { l: 60, r: 20, t: 30, b: 80 };
+        }
         figData.layout.paper_bgcolor = "#ffffff";
         figData.layout.plot_bgcolor = "#ffffff";
 
-        // FORCE AXES VISIBILITY
+        // Preserve backend axis label visibility rules (e.g., bottom-only timeline).
+        // Only fill in minimal defaults when not provided.
         Object.keys(figData.layout).forEach((key) => {
           if (key.startsWith("xaxis")) {
-            figData.layout[key].showticklabels = true;
-            figData.layout[key].visible = true;
-            if (key === "xaxis") figData.layout[key].side = "bottom";
-            figData.layout[key].tickfont = {
-              size: 11,
-              color: "#334155",
-              weight: "bold",
-            };
+            if (figData.layout[key].visible === undefined) {
+              figData.layout[key].visible = true;
+            }
+            if (figData.layout[key].tickfont === undefined) {
+              figData.layout[key].tickfont = {
+                size: 11,
+                color: "#334155",
+              };
+            }
           }
         });
 

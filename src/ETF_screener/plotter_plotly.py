@@ -29,6 +29,15 @@ class InteractivePlotter:
                 logger.warning("Could not load ribbon settings: %s", e)
         return {"ribbons": []}
 
+    def _layout_numeric_setting(self, key: str, default: float) -> float:
+        """Read numeric chart layout setting from config/ribbon_settings.json."""
+        layout_cfg = self.ribbon_config.get("layout", {}) if isinstance(self.ribbon_config, dict) else {}
+        raw = layout_cfg.get(key, default)
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return float(default)
+
     def _build_strategy_layer_ribbons(self, strategy_content: str | None) -> list[dict]:
         """Build dynamic ribbon layers from DSL comments/sections."""
         if not strategy_content:
@@ -161,6 +170,26 @@ class InteractivePlotter:
             return []
         periods = {int(m.group(1)) for m in re.finditer(r'\bema_(\d+)\b', strategy_content.lower())}
         return sorted(periods)
+
+    def _compact_ribbon_label(self, label: str) -> str:
+        compact_map = {
+            "Layer 1 Context": "L1 Context",
+            "Layer 2 Setup": "L2 Setup",
+            "Layer 3 Trigger": "L3 Trigger",
+            "Layer 4 Risk": "L4 Risk",
+            "Entry Ready (L1+L2+L3)": "Entry Ready",
+        }
+        return compact_map.get(label, label)
+
+    def _compact_ribbon_label_color(self, label: str) -> str:
+        color_map = {
+            "Layer 1 Context": "#3b82f6",
+            "Layer 2 Setup": "#d97706",
+            "Layer 3 Trigger": "#15803d",
+            "Layer 4 Risk": "#b91c1c",
+            "Entry Ready (L1+L2+L3)": "#0891b2",
+        }
+        return color_map.get(label, "#6b7280")
 
     def _shift_expr_symbols(self, expr: str, delay: int) -> str:
         reserved = {"and", "or", "not", "true", "false", "cross_up", "cross_down", "was_true"}
@@ -297,7 +326,7 @@ class InteractivePlotter:
         # Add EMA 50 if it exists
         if 'EMA_50' in df.columns:
             fig.add_trace(
-                go.Scatter(x=df['Date'], y=df['EMA_50'], name='EMA 50', line=dict(color='orange', width=1, dash='dot')),
+                go.Scatter(x=df['Date'], y=df['EMA_50'], name='EMA 50', line=dict(color='orange', width=1)),
                 row=1, col=1
             )
 
@@ -348,9 +377,8 @@ class InteractivePlotter:
                 try:
                     mask = eval_df.eval(clean_cond, engine='python')
                     if isinstance(mask, pd.Series) and mask.any():
-                        # Fill gaps in the mask itself if they are small (1-2 days)
-                        # but keep it boolean
-                        mask = mask.astype(float).interpolate(limit=2).fillna(0).astype(bool)
+                        # Keep ribbon truth values exact; do not smooth or bridge false gaps.
+                        mask = mask.fillna(False).astype(bool)
 
                         # Use Scatter with fill to create ribbons
                         fig.add_trace(
@@ -360,7 +388,7 @@ class InteractivePlotter:
                                 mode='lines',
                                 line=dict(width=30, color=color),
                                 showlegend=False,
-                                connectgaps=True, # Allow Plotly to bridge small data gaps
+                                connectgaps=False,
                                 name=f"{label} - {color}"
                             ),
                             row=row, col=1
@@ -419,6 +447,10 @@ class InteractivePlotter:
             subplot_titles=[f"{symbol} Analysis", "Volume"] + [""] * num_ribbons
         )
 
+        # Fixed left gutter anchor so legend and ribbon labels are visually justified.
+        # Tunable in config/ribbon_settings.json under layout.left_gutter_x.
+        left_gutter_x = self._layout_numeric_setting("left_gutter_x", -0.22)
+
         # 1. Price Chart (Candlestick or Line)
         fig.add_trace(
             go.Scatter(x=df['Date'], y=df['Close'], name='Close', line=dict(color='black', width=1.5)),
@@ -439,7 +471,7 @@ class InteractivePlotter:
                     x=df['Date'],
                     y=df[ema_col],
                     name=f"EMA {period}",
-                    line=dict(color=ema_colors[idx % len(ema_colors)], width=1.2, dash='dot')
+                    line=dict(color=ema_colors[idx % len(ema_colors)], width=1.2)
                 ),
                 row=1,
                 col=1,
@@ -450,17 +482,10 @@ class InteractivePlotter:
             # Handle mixed case if needed from DB but usually normalized by app_fast now
             signal_col = 'Signal'
             buys = df[df[signal_col] == 1]
-            sells = df[df[signal_col] == -1]
             if not buys.empty and 'Low' in df.columns:
                 fig.add_trace(
                     go.Scatter(x=buys['Date'], y=buys['Low']*0.98, mode='markers', name='Buy Signal',
                                marker=dict(symbol='triangle-up', size=12, color='green')),
-                    row=1, col=1
-                )
-            if not sells.empty and 'High' in df.columns:
-                fig.add_trace(
-                    go.Scatter(x=sells['Date'], y=sells['High']*1.02, mode='markers', name='Sell Signal',
-                               marker=dict(symbol='triangle-down', size=12, color='red')),
                     row=1, col=1
                 )
 
@@ -495,7 +520,8 @@ class InteractivePlotter:
                     mask = eval_df.eval(clean_cond, engine='python')
                     
                     if isinstance(mask, pd.Series) and mask.any():
-                        mask = mask.astype(float).interpolate(limit=2).fillna(0).astype(bool)
+                        # Keep ribbon truth values exact; do not smooth or bridge false gaps.
+                        mask = mask.fillna(False).astype(bool)
                         fig.add_trace(
                             go.Scatter(
                                 x=df['Date'], 
@@ -504,7 +530,7 @@ class InteractivePlotter:
                                 line=dict(width=30, color=color),
                                 opacity=alpha,
                                 showlegend=False,
-                                connectgaps=True,
+                                connectgaps=False,
                                 name=f"{label} - {color}"
                             ),
                             row=row, col=1
@@ -514,27 +540,62 @@ class InteractivePlotter:
             
             fig.update_yaxes(showticklabels=False, range=[0, 1.5], row=row, col=1)
 
+            # Add a horizontal label just left of each ribbon lane.
+            yaxis_name = "yaxis" if row == 1 else f"yaxis{row}"
+            y_domain = fig.layout[yaxis_name].domain
+            y_mid = (y_domain[0] + y_domain[1]) / 2
+            fig.add_annotation(
+                xref="paper",
+                yref="paper",
+                x=left_gutter_x,
+                y=y_mid,
+                xanchor="left",
+                yanchor="middle",
+                xshift=0,
+                text=f"<b>{self._compact_ribbon_label(label)}</b>",
+                showarrow=False,
+                font=dict(size=10, color=self._compact_ribbon_label_color(label)),
+                align="left",
+            )
+
         # 4. Global configurations for all x-axes
         bottom_row = 2 + num_ribbons
         
         # Completely re-write the end of the method with dictionary-level precision
         fig_dict = fig.to_dict()
         layout = fig_dict['layout']
+
+        # Shared x-axis: show date tick labels only on the bottom pane.
+        bottom_axis_key = 'xaxis' if bottom_row == 1 else f'xaxis{bottom_row}'
         
         # Enforce axis visibility and formatting on EVERY possible x-axis key in the layout
         for key in list(layout.keys()):
             if key.startswith('xaxis'):
-                layout[key]['showticklabels'] = True
+                is_bottom = (key == bottom_axis_key)
+                layout[key]['showticklabels'] = is_bottom
                 layout[key]['visible'] = True
                 layout[key]['type'] = 'date'
                 layout[key]['tickformat'] = '%b %Y'
                 layout[key]['gridcolor'] = 'lightgray'
+                layout[key]['ticks'] = 'outside' if is_bottom else ''
+                layout[key]['showline'] = is_bottom
+                layout[key]['zeroline'] = False
 
         # Force professional global layout
         layout['template'] = 'plotly_white'
         layout['xaxis_rangeslider_visible'] = False
         layout['hovermode'] = 'x unified'
-        layout['margin'] = dict(l=60, r=20, t=50, b=80) 
+        # Tunable in config/ribbon_settings.json under layout.left_margin.
+        left_margin = int(self._layout_numeric_setting("left_margin", 300))
+        layout['margin'] = dict(l=left_margin, r=20, t=50, b=80)
+        layout['legend'] = dict(
+            x=left_gutter_x,
+            y=1.0,
+            xanchor='left',
+            yanchor='top',
+            orientation='v',
+            bgcolor='rgba(255,255,255,0.7)',
+        )
         
         return go.Figure(fig_dict)
 

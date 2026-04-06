@@ -194,10 +194,33 @@ class Backtester:
         df_eval = df.copy(); df_eval.columns = [c.lower() for c in df_eval.columns]
         # Clean the copy to avoid duplicate labels error when we start adding indicators
         df_eval = df_eval.loc[:, ~df_eval.columns.duplicated()]
+        # Track indicators we explicitly recompute so stale input columns are overwritten.
+        forced_refresh_cols = set()
         
         def ensure_indicator(c):
             # Strip trailing _d[number] for indicator lookup
             base_c = re.sub(r'_d\d+$', '', c)
+
+            # Slopes are derived values and must be recomputed from the current base series.
+            # This avoids stale persisted columns (e.g. ema_200_slope accidentally matching ema_200).
+            if "_slope" in base_c:
+                target_ind = base_c.replace("_slope", "")
+                ensure_indicator(target_ind)
+                if target_ind in df_eval.columns:
+                    if any(x in target_ind for x in ["rsi", "stoch", "macd", "close"]):
+                        df_eval[base_c] = manager.get_indicator(
+                            df,
+                            ticker,
+                            calculate_linreg_slope,
+                            f"{target_ind}_lr_slope",
+                            series=df_eval[target_ind],
+                            period=7,
+                        )
+                    else:
+                        df_eval[base_c] = df_eval[target_ind].diff().fillna(0)
+                    forced_refresh_cols.add(base_c)
+                return
+
             if base_c not in df_eval.columns:
                 if re.match(r'ema_\d+', base_c): df_eval[base_c] = manager.get_indicator(df, ticker, calculate_ema, base_c, period=int(base_c.split("_")[1]))
                 elif re.match(r'rsi_\d+', base_c): df_eval[base_c] = manager.get_indicator(df, ticker, calculate_rsi, base_c, period=int(base_c.split("_")[1]))
@@ -231,18 +254,6 @@ class Backtester:
                     res = manager.get_indicator(df, ticker, calculate_tsi, "tsi_all", long=25, short=13, signal=13)
                     if isinstance(res, tuple) and len(res) == 2:
                         df_eval["tsi"], df_eval["tsi_signal"] = res[0], res[1]
-                elif "_slope" in base_c:
-                    # Capture ema_10_slope, rsi_14_slope, etc.
-                    target_ind = base_c.replace("_slope", "")
-                    ensure_indicator(target_ind)
-                    if target_ind in df_eval.columns:
-                        # Use LinReg Slope if its a noisy signal, otherwise simple diff
-                        if any(x in target_ind for x in ["rsi", "stoch", "macd", "close"]):
-                            # Use 7-day window for "best fit" slope
-                            df_eval[base_c] = manager.get_indicator(df, ticker, calculate_linreg_slope, f"{target_ind}_lr_slope", series=df_eval[target_ind], period=7)
-                        else:
-                            # Use simple diff for smoother EMAs to be more responsive/accurate to crossing zero
-                            df_eval[base_c] = df_eval[target_ind].diff().fillna(0)
                 elif base_c == "vol_ema_20":
                     # Simple volume smoothing
                     df_eval[base_c] = df_eval['volume'].ewm(span=20, adjust=False).mean()
@@ -402,6 +413,9 @@ class Backtester:
         # Core alignment
         df = df.copy()
         # Transfer all newly calculated indicators from df_eval back to df
+        for col in forced_refresh_cols:
+            if col in df_eval.columns:
+                df[col] = df_eval[col]
         for col in df_eval.columns:
             if col not in df.columns:
                 df[col] = df_eval[col]

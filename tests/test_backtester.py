@@ -65,6 +65,27 @@ class TestBacktester:
         sig_col = "signal" if "signal" in df.columns else "Signal"
         assert sig_col in df.columns
 
+    def test_scripted_strategy_recomputes_stale_slope_columns(self, bt, sample_data):
+        df_in = sample_data.copy()
+        stale_value = -123.456
+        df_in["ema_200_slope"] = stale_value
+
+        entry = "(close > ema_200) and (ema_200_slope > 0)"
+        exit_rule = "close < ema_200"
+
+        res = bt.scripted_strategy(df_in, "TEST", entry, exit_rule)
+        df_out = res["df"] if isinstance(res, dict) else res
+
+        assert df_out is not None
+        assert "ema_200" in df_out.columns
+        assert "ema_200_slope" in df_out.columns
+
+        # Regression guard: stale persisted slope columns must be replaced.
+        assert not np.allclose(df_out["ema_200_slope"].to_numpy(), stale_value)
+
+        expected_slope = df_out["ema_200"].diff().fillna(0)
+        assert np.allclose(df_out["ema_200_slope"].to_numpy(), expected_slope.to_numpy())
+
     def test_backtester_run(self, bt, monkeypatch):
         # We need to mock the db property specifically on the CLASS or use a different approach
         # because the @property decorator makes it tricky to monkeypatch on the instance

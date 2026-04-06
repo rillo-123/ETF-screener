@@ -5,7 +5,7 @@ from typing import List, Optional
 from pathlib import Path
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from ETF_screener.database import ETFDatabase
@@ -158,132 +158,170 @@ async def save_strategy(request: Request):
 @app.get("/api/screen")
 async def screen(strategy: Optional[str] = None, dsl_content: Optional[str] = None):
     """Run a dynamic screen based on selected strategies or provided DSL."""
+    logger.info("=== SCREEN ENDPOINT START ===")
+    logger.info("Params: strategy=%s, dsl_content=%s", strategy, "PROVIDED" if dsl_content else "NONE")
     db = get_db()
-    
-    # Priority: 1. Provided DSL content (from Lab), 2. Named strategy (from dropdown)
-    content = ""
-    if dsl_content:
-        content = dsl_content
-    elif strategy:
-        content = load_strategy_content(strategy)
 
-    if not content:
-        # Fallback to simple trend screen if no strategy found/selected
+    try:
+        # Priority: 1. Provided DSL content (from Lab), 2. Named strategy (from dropdown)
+        content = ""
+        if dsl_content:
+            content = dsl_content
+            logger.info("Using provided DSL, length: %d chars", len(content))
+        elif strategy:
+            content = load_strategy_content(strategy)
+            logger.info("Loaded strategy '%s', length: %d chars", strategy, len(content) if content else 0)
+
+        if not content:
+            logger.info("No strategy/DSL, using fallback basic trend screen")
+            # Fallback to simple trend screen if no strategy found/selected
+            conn = db._get_connection()
+            query = """
+                SELECT ticker, close, volume, supertrend, st_lower
+                FROM etf_data 
+                WHERE date = (SELECT MAX(date) FROM etf_data)
+                AND close > st_lower
+                ORDER BY volume DESC
+                LIMIT 50
+            """
+            df = pd.read_sql_query(query, conn)
+            matches = _format_basic_screen_matches(df)
+            return {
+                "matches": matches,
+                "errors": [],
+                "total_errors": 0,
+                "total_candidates": len(matches)
+            }
+
+        final_entry, final_exit = parse_strategy_scripts(content)
+        logger.info("Strategy parsed. Entry script length: %d, Exit script length: %d", len(final_entry), len(final_exit))
+        
+        # Build a cleaner ticker universe so the backtester doesn't waste workers on stale symbols.
         conn = db._get_connection()
-        query = """
-            SELECT ticker, close, volume, supertrend, st_lower
-            FROM etf_data 
-            WHERE date = (SELECT MAX(date) FROM etf_data)
-            AND close > st_lower
-            ORDER BY volume DESC
-            LIMIT 50
+        universe_query = """
+            WITH ranked AS (
+                SELECT
+                    ticker,
+                    date,
+                    volume,
+                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
+                FROM etf_data
+            ),
+            agg AS (
+                SELECT
+                    ticker,
+                    MAX(date) AS last_date,
+                    COUNT(*) AS total_rows,
+                    SUM(CASE WHEN volume > 0 THEN 1 ELSE 0 END) AS nonzero_volume_rows,
+                    SUM(CASE WHEN rn <= 30 THEN 1 ELSE 0 END) AS recent_rows,
+                    SUM(CASE WHEN rn <= 30 AND volume = 0 THEN 1 ELSE 0 END) AS recent_zero_volume_rows
+                FROM ranked
+                GROUP BY ticker
+            )
+            SELECT ticker
+            FROM agg
+            WHERE total_rows >= 50
+              AND nonzero_volume_rows >= 10
+              AND recent_rows >= 10
+              AND recent_zero_volume_rows < 2
+              AND last_date >= date('now', '-180 day')
         """
-        df = pd.read_sql_query(query, conn)
-        matches = _format_basic_screen_matches(df)
+        universe_df = pd.read_sql_query(universe_query, conn)
+        tickers = universe_df['ticker'].tolist()
+        logger.info("Ticker universe built: %d tickers to screen", len(tickers))
+        # Run backtest for current status
+        bt = Backtester()
+        logger.info("Starting parallel backtest for %d tickers", len(tickers))
+        results = bt.run_parallel_backtest(
+            tickers,
+            bt.scripted_strategy,
+            days=200,
+            strategy_kwargs={"entry_script": final_entry, "exit_script": final_exit}
+        )
+        logger.info("Backtest complete, processing %d results", len(results) if results else 0)
+
+        # Filter for currently active signals (in a position or just triggered)
+        matches = []
+        errors = []
+        for idx, res in enumerate(results):
+            if not res:
+                continue
+
+            ticker = res.get('ticker', 'UNKNOWN')
+            if "error" in res:
+                logger.debug("Backtest error for %s: %s", ticker, res["error"])
+                errors.append({"ticker": ticker, "error": res["error"]})
+                continue
+
+            df = res.get('df')
+            if df is None or df.empty:
+                logger.debug("No data for %s", ticker)
+                errors.append({"ticker": ticker, "error": "No data or empty strategy result"})
+                continue
+
+            # Align with CLI behavior: a match is an active entry signal on the latest bar.
+            try:
+                last_row = df.iloc[-1]
+                latest_signal = last_row.get('signal', last_row.get('Signal', 0))
+                has_latest_entry = latest_signal == 1
+
+                # Additional metadata for the UI
+                prev_row = df.iloc[-2] if len(df) > 1 else last_row
+
+                if has_latest_entry:
+                    # Handle possible column name variations (database vs dataframe)
+                    close_val = _safe_float(last_row['close'] if 'close' in last_row else last_row.get('Close', 0), 0.0)
+                    vol_val = _safe_float(last_row['volume'] if 'volume' in last_row else last_row.get('Volume', 0), 0.0)
+                    prev_close = _safe_float(prev_row['close'] if 'close' in prev_row else prev_row.get('Close', 0), 0.0)
+                    change_pct = _safe_float(((close_val / prev_close) - 1) * 100 if prev_close else 0, 0.0)
+
+                    matches.append({
+                        "ticker": ticker,
+                        "close": close_val,
+                        "volume": vol_val,
+                        "status": "Entry Signal",
+                        "return_pct": _safe_float(res.get('total_return_pct', 0), 0.0),
+                        "change_pct": change_pct
+                    })
+                    logger.info("Match found: %s (signal on latest bar)", ticker)
+            except Exception as e:
+                logger.error("Error processing ticker %s: %s", ticker, str(e), exc_info=True)
+                errors.append({"ticker": ticker, "error": str(e)})
+
+        # Sort by volume
+        matches = sorted(matches, key=lambda x: x['volume'], reverse=True)
+        logger.info("Screen complete. Matches: %d, Errors: %d", len(matches), len(errors))
+
+        # Return matched ETFs along with errors for the UI
         return {
             "matches": matches,
-            "errors": [],
-            "total_errors": 0,
-            "total_candidates": len(matches)
+            "errors": errors[:50],  # Limit errors returned to UI
+            "total_errors": len(errors),
+            "total_candidates": len(tickers)
         }
 
-    final_entry, final_exit = parse_strategy_scripts(content)
-    
-    # Build a cleaner ticker universe so the backtester doesn't waste workers on stale symbols.
-    conn = db._get_connection()
-    universe_query = """
-        WITH ranked AS (
-            SELECT
-                ticker,
-                date,
-                volume,
-                ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
-            FROM etf_data
-        ),
-        agg AS (
-            SELECT
-                ticker,
-                MAX(date) AS last_date,
-                COUNT(*) AS total_rows,
-                SUM(CASE WHEN volume > 0 THEN 1 ELSE 0 END) AS nonzero_volume_rows,
-                SUM(CASE WHEN rn <= 30 THEN 1 ELSE 0 END) AS recent_rows,
-                SUM(CASE WHEN rn <= 30 AND volume = 0 THEN 1 ELSE 0 END) AS recent_zero_volume_rows
-            FROM ranked
-            GROUP BY ticker
+    except KeyboardInterrupt:
+        logger.warning("Screen run interrupted by KeyboardInterrupt", exc_info=True)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "matches": [],
+                "errors": [{"ticker": "SYSTEM", "error": "Screen run interrupted"}],
+                "total_errors": 1,
+                "total_candidates": 0,
+            },
         )
-        SELECT ticker
-        FROM agg
-        WHERE total_rows >= 50
-          AND nonzero_volume_rows >= 10
-          AND recent_rows >= 10
-          AND recent_zero_volume_rows < 2
-          AND last_date >= date('now', '-180 day')
-    """
-    universe_df = pd.read_sql_query(universe_query, conn)
-    tickers = universe_df['ticker'].tolist()
-    
-    # Run backtest for current status
-    bt = Backtester()
-    results = bt.run_parallel_backtest(
-        tickers, 
-        bt.scripted_strategy,
-        days=200, 
-        strategy_kwargs={"entry_script": final_entry, "exit_script": final_exit}
-    )
-    
-    # Filter for currently active signals (in a position or just triggered)
-    matches = []
-    errors = []
-    for res in results:
-        if not res: continue
-        
-        ticker = res.get('ticker', 'UNKNOWN')
-        if "error" in res:
-            errors.append({"ticker": ticker, "error": res["error"]})
-            continue
-        
-        df = res.get('df')
-        if df is None or df.empty:
-            errors.append({"ticker": ticker, "error": "No data or empty strategy result"})
-            continue
-        
-        # Align with CLI behavior: a match is an active entry signal on the latest bar.
-        try:
-            last_row = df.iloc[-1]
-            latest_signal = last_row.get('signal', last_row.get('Signal', 0))
-            has_latest_entry = latest_signal == 1
-            
-            # Additional metadata for the UI
-            prev_row = df.iloc[-2] if len(df) > 1 else last_row
-            
-            if has_latest_entry:
-                # Handle possible column name variations (database vs dataframe)
-                close_val = _safe_float(last_row['close'] if 'close' in last_row else last_row.get('Close', 0), 0.0)
-                vol_val = _safe_float(last_row['volume'] if 'volume' in last_row else last_row.get('Volume', 0), 0.0)
-                prev_close = _safe_float(prev_row['close'] if 'close' in prev_row else prev_row.get('Close', 0), 0.0)
-                change_pct = _safe_float(((close_val / prev_close) - 1) * 100 if prev_close else 0, 0.0)
-
-                matches.append({
-                    "ticker": ticker,
-                    "close": close_val,
-                    "volume": vol_val,
-                    "status": "Entry Signal",
-                    "return_pct": _safe_float(res.get('total_return_pct', 0), 0.0),
-                    "change_pct": change_pct
-                })
-        except Exception as e:
-            errors.append({"ticker": ticker, "error": str(e)})
-            
-    # Sort by volume
-    matches = sorted(matches, key=lambda x: x['volume'], reverse=True)
-    
-    # Return matched ETFs along with errors for the UI
-    return {
-        "matches": matches,
-        "errors": errors[:50],  # Limit errors returned to UI
-        "total_errors": len(errors),
-        "total_candidates": len(tickers)
-    }
+    except Exception as e:
+        logger.error("Screen endpoint failed: %s", str(e), exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "matches": [],
+                "errors": [{"ticker": "SYSTEM", "error": str(e)}],
+                "total_errors": 1,
+                "total_candidates": 0,
+            },
+        )
 
 @app.get("/api/chart/{ticker}")
 async def get_chart(ticker: str, days: int = 365*2, strategy: Optional[str] = None, dsl_content: Optional[str] = None):
@@ -477,6 +515,70 @@ async def browser_log(request: Request):
 
     browser_logger.log(level, full_msg)
     return {"status": "ok", "log_file": str(get_log_file())}
+
+
+@app.post("/api/log/console")
+async def save_console_logs(request: Request):
+    """Receive batched console logs from the browser and save them to a console_TIME.log file."""
+    import datetime
+    from pathlib import Path
+    
+    try:
+        body = await request.json()
+        logs = body.get("logs", [])
+    except Exception as e:
+        logger.error("Failed to parse console logs request: %s", str(e))
+        return {"status": "error", "detail": "invalid json"}
+    
+    if not logs:
+        return {"status": "ok", "count": 0}
+    
+    try:
+        logs_dir = Path("logs")
+        logs_dir.mkdir(exist_ok=True)
+        
+        # Create console log file with timestamp
+        now = datetime.datetime.now()
+        console_log_file = logs_dir / f"console_{now.strftime('%Y%m%d_%H%M%S')}.log"
+        
+        # Write logs
+        with open(console_log_file, 'a', encoding='utf-8') as f:
+            for log_entry in logs:
+                timestamp = log_entry.get('timestamp', '')
+                level = log_entry.get('level', 'LOG')
+                message = log_entry.get('message', '')
+                f.write(f"[{timestamp}] {level}: {message}\n")
+        
+        logger.info("Console logs saved: %d entries to %s", len(logs), console_log_file.name)
+        
+        # Apply retention policy: keep only 3 most recent console logs
+        cleanup_old_logs(logs_dir, "console_", max_keep=3)
+        
+        return {"status": "ok", "count": len(logs), "file": str(console_log_file.name)}
+    except Exception as e:
+        logger.error("Error saving console logs: %s", str(e), exc_info=True)
+        return {"status": "error", "detail": str(e)}
+
+
+def cleanup_old_logs(logs_dir: Path, prefix: str, max_keep: int = 3):
+    """Keep only the max_keep most recent log files with the given prefix."""
+    import os
+    try:
+        log_files = sorted(
+            [f for f in logs_dir.glob(f"{prefix}*.log")],
+            key=lambda x: os.path.getctime(x),
+            reverse=True
+        )
+        
+        # Remove all but the most recent max_keep files
+        for old_file in log_files[max_keep:]:
+            try:
+                old_file.unlink()
+                logger.info("Deleted old log file: %s", old_file.name)
+            except Exception as e:
+                logger.warning("Could not delete %s: %s", old_file.name, str(e))
+    except Exception as e:
+        logger.warning("Error during log cleanup for %s: %s", prefix, str(e))
 
 
 if __name__ == '__main__':

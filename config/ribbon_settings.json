@@ -1,4 +1,8 @@
 {
+    "layout": {
+        "left_gutter_x": -0.22,
+        "left_margin": 300
+    },
     "ribbons": [
         {
             "label": "MACD",
