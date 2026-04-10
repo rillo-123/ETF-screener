@@ -35,9 +35,15 @@ function Write-Info($msg) { Write-Host "[vulture] $msg" -ForegroundColor Cyan }
 function Write-Warn($msg) { Write-Host "[vulture] $msg" -ForegroundColor Yellow }
 function Write-Err($msg) { Write-Host "[vulture] $msg" -ForegroundColor Red }
 
+# Detect the repository root when this script is in a scripts/ folder.
+$projectRoot = $PSScriptRoot
+if ((Split-Path -Leaf $PSScriptRoot) -ieq 'scripts') {
+    $projectRoot = Split-Path -Parent $PSScriptRoot
+}
+
 # Determine python binary to use (prefer venv)
 $venvPython = "";
-$venvPath = Join-Path $PSScriptRoot ".venv"
+$venvPath = Join-Path $projectRoot ".venv"
 $venvPythonCandidate = Join-Path $venvPath "Scripts\python.exe"
 if (Test-Path $venvPythonCandidate) {
     $venvPython = $venvPythonCandidate
@@ -73,13 +79,13 @@ $remainingExtra = $remainingExtra -join ' '
 $excludeFull = @()
 foreach ($ex in $excludeList) {
     if ([string]::IsNullOrWhiteSpace($ex)) { continue }
-    $full = (Resolve-Path -Path (Join-Path $PSScriptRoot $ex) -ErrorAction SilentlyContinue)
-    if ($full) { $excludeFull += $full.Path } else { $excludeFull += (Join-Path $PSScriptRoot $ex) }
+    $full = (Resolve-Path -Path (Join-Path $projectRoot $ex) -ErrorAction SilentlyContinue)
+    if ($full) { $excludeFull += $full.Path } else { $excludeFull += (Join-Path $projectRoot $ex) }
 }
 $excludeFull = $excludeFull | Select-Object -Unique
 
 # Build list of .py files excluding those under any excluded full path
-$pyFiles = Get-ChildItem -Path $PSScriptRoot -Recurse -File -Filter *.py -ErrorAction SilentlyContinue | Where-Object {
+$pyFiles = Get-ChildItem -Path $projectRoot -Recurse -File -Filter *.py -ErrorAction SilentlyContinue | Where-Object {
     $keep = $true
     foreach ($ef in $excludeFull) { if ($_.FullName.StartsWith($ef, [System.StringComparison]::OrdinalIgnoreCase)) { $keep = $false; break } }
     $keep
@@ -122,7 +128,7 @@ if ($RunTests) {
     if ($rc1 -ne 0) { Write-Info "Initial vulture run completed with code $rc1" }
 
     # Run the test script if available
-    $testScript = Join-Path $PSScriptRoot 'run_all_tests.ps1'
+    $testScript = Join-Path $projectRoot 'run_all_tests.ps1'
     if (Test-Path $testScript) {
         Write-Info "Running test suite via $testScript"
         try {

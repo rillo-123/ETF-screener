@@ -25,9 +25,7 @@ class FinnhubFetcher:
             )
         self.base_url = "https://finnhub.io/api/v1"
 
-    def fetch_historical_data(
-        self, symbol: str, days: int = 365
-    ) -> pd.DataFrame:
+    def fetch_historical_data(self, symbol: str, days: int = 365) -> pd.DataFrame:
         """
         Fetch historical OHLCV data for an ETF.
 
@@ -49,7 +47,9 @@ class FinnhubFetcher:
             "token": self.api_key,
         }
 
-        response = requests.get(f"{self.base_url}/stock/candle", params=params, timeout=10)
+        response = requests.get(
+            f"{self.base_url}/stock/candle", params=params, timeout=10  # type: ignore[arg-type]
+        )
         response.raise_for_status()
 
         data = response.json()
@@ -70,7 +70,9 @@ class FinnhubFetcher:
 
         return df.sort_values("Date").reset_index(drop=True)
 
-    def fetch_multiple_etfs(self, symbols: list[str], days: int = 365) -> dict:
+    def fetch_multiple_etfs(
+        self, symbols: list[str], days: int = 365, quiet: bool = False
+    ) -> dict[str, pd.DataFrame]:
         """
         Fetch data for multiple ETFs.
 
@@ -81,11 +83,13 @@ class FinnhubFetcher:
         Returns:
             Dictionary mapping symbol to DataFrame
         """
-        results = {}
+        results: dict[str, pd.DataFrame] = {}
         for symbol in symbols:
             try:
-                print(f"Fetching data for {symbol}...")
+                if not quiet:
+                    print(f"Fetching data for {symbol}...")
                 results[symbol] = self.fetch_historical_data(symbol, days)
             except Exception as e:
-                print(f"Error fetching {symbol}: {str(e)}")
+                if not quiet:
+                    print(f"Error fetching {symbol}: {str(e)}")
         return results

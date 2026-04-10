@@ -26,24 +26,29 @@ class PortfolioPlotter:
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
-        
+
         # Load ribbon settings
         self.ribbon_config = self._load_ribbon_settings()
 
     def _load_ribbon_settings(self) -> dict:
         """Load ribbon configuration from settings file."""
         import json
+
         config_path = Path("config/ribbon_settings.json")
         if config_path.exists():
             try:
                 with open(config_path, "r") as f:
-                    return json.load(f)
+                    return json.load(f)  # type: ignore[no-any-return]
             except Exception as e:
                 print(f"Warning: Could not load ribbon settings: {e}")
         return {"ribbons": []}
 
     def plot_etf_analysis(
-        self, df: pd.DataFrame, symbol: str, figsize: tuple = (14, 8), format: str = "svg"
+        self,
+        df: pd.DataFrame,
+        symbol: str,
+        figsize: tuple = (14, 8),
+        format: str = "svg",
     ) -> Path:
         """
         Create comprehensive ETF analysis plot.
@@ -57,6 +62,7 @@ class PortfolioPlotter:
         Returns:
             Path to saved plot
         """
+        _ = figsize  # Mark figsize as intentionally unused
         # Try to find a friendly name for the ticker from etfs.json
         full_name = ""
         try:
@@ -78,7 +84,7 @@ class PortfolioPlotter:
                                 break
         except Exception:
             pass
-        
+
         display_title = f"{symbol} ({full_name})" if full_name else symbol
 
         # Resolve duplicate labels BEFORE any other operations
@@ -90,11 +96,16 @@ class PortfolioPlotter:
 
         # ... [Lines 42-43 already copied above]
         cols = []
-        
+
         # Diagnostic: Print MACD series range
-        is_oscillator = lambda c: any(x in c.lower() for x in ["rsi", "stoch", "macd", "adx", "st_is_green"])
-        
-        macd_cols = [c for c in df.columns if "macd" in c.lower() and "hist" not in c.lower()]
+        def is_oscillator(c):
+            return any(
+                x in c.lower() for x in ["rsi", "stoch", "macd", "adx", "st_is_green"]
+            )
+
+        macd_cols = [
+            c for c in df.columns if "macd" in c.lower() and "hist" not in c.lower()
+        ]
         if macd_cols:
             m_s = df[macd_cols[0]].dropna()
             if not m_s.empty:
@@ -105,27 +116,35 @@ class PortfolioPlotter:
         for c in df.columns:
             c_str = str(c)
             # Standardize core columns
-            if c_str.lower() in ['date', 'open', 'high', 'low', 'close', 'volume', 'signal']:
+            if c_str.lower() in [
+                "date",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "signal",
+            ]:
                 new_col = c_str.capitalize()
             elif is_oscillator(c_str):
                 # KEEP OSCILLATOR COLUMN NAMES ORIGINAL (no title case)
                 new_col = c_str
             else:
                 new_col = c_str
-            
+
             # Final safety check against duplicates after capitalization
             if new_col in seen:
                 continue
             cols.append(new_col)
             seen.add(new_col)
-        
+
         # Don't trim df.iloc, just reassign columns if they match
         if len(cols) == len(df.columns):
             df.columns = cols
-        
+
         # Identify special indicator columns for separate subplots
         # lambda is redefined below but used for clarity
-        
+
         # Calculate robust price limits to handle outliers (like bad data points)
         price_col = "Close" if "Close" in df.columns else "close"
         # Ensure price_col exists in df
@@ -142,15 +161,24 @@ class PortfolioPlotter:
         price_col = "Close" if "Close" in df.columns else "close"
         if price_col not in df.columns and "Adj Close" in df.columns:
             price_col = "Adj Close"
-            
+
         p_min_robust = df[price_col].quantile(0.01)
         p_max_robust = df[price_col].quantile(0.99)
         p_range = p_max_robust - p_min_robust
-        
+
         # Filter indicators for those with meaningful variance to avoid straight lines ruining the scale
         valid_cols = []
         for c in df.columns:
-            if c in ["Date", "Open", "High", "Low", "Close", "Volume", "Signal", "signal"]:
+            if c in [
+                "Date",
+                "Open",
+                "High",
+                "Low",
+                "Close",
+                "Volume",
+                "Signal",
+                "signal",
+            ]:
                 continue
             # Also skip internal columns like _slope or _dN if they are not explicitly meant for plotting
             if any(x in c.lower() for x in ["_slope", "_lr_"]):
@@ -164,17 +192,17 @@ class PortfolioPlotter:
                     # EXCEPT for oscillators like MACD/RSI that naturally live in a different range (e.g. 0-100 or near 0)
                     if not is_oscillator(c):
                         c_mean = df[c].mean()
-                        if c_mean < p_min_robust - 10 * p_range or c_mean > p_max_robust + 10 * p_range:
+                        if (
+                            c_mean < p_min_robust - 10 * p_range
+                            or c_mean > p_max_robust + 10 * p_range
+                        ):
                             continue
                     valid_cols.append(c)
 
-        # Prepare indicators for plotting
-        price_indicators = [c for c in valid_cols if not is_oscillator(c)]
-        
         # categorise oscillators (and trend) for dedicated ribbon subplots
         ribbon_settings = self.ribbon_config.get("ribbons", [])
         active_ribbons = []
-        
+
         # DEBUG: print available columns for ribbon match
         # print(f"DEBUG PLOTTER: Available cols: {available_cols}")
 
@@ -189,35 +217,44 @@ class PortfolioPlotter:
                 condition = layer.get("condition", "").lower()
                 # Find all potential column names in the condition string
                 # We also look for numbers as they are often used in conditions (e.g. st_is_green == 1)
-                words = re.findall(r'[a-z_][a-z0-9_]*', condition)
-                
+                words = re.findall(r"[a-z_][a-z0-9_]*", condition)
+
                 # If any word in the condition is a column, we assume it's possible to plot it
                 if any(word in available_cols for word in words):
                     ribbon_is_possible = True
                     break
-            
+
             # Special case for Supertrend: if 'st' or 'st_is_green' or 'supertrend' is in the label,
             # and we have Supertrend columns, keep it even if condition regex fails
             if not ribbon_is_possible and "supertrend" in rib.get("label", "").lower():
-                if any(x in available_cols for x in ["supertrend", "st", "st_is_green"]):
+                if any(
+                    x in available_cols for x in ["supertrend", "st", "st_is_green"]
+                ):
                     ribbon_is_possible = True
 
             if ribbon_is_possible:
                 active_ribbons.append(rib)
-        
+
         # Total subplots is 2 (Price, Vol) + Ribbons
         num_subplots = 2 + len(active_ribbons)
-        
+
         # Order: Price (4), Volume (1), Ribbons (0.3 each)
         height_ratios = [4, 1] + ([0.3] * len(active_ribbons))
-        
+
         fig, axes = plt.subplots(
-            num_subplots, 1, 
-            figsize=(14, 4 + 1.2 + 0.3 * len(active_ribbons)), # Adjusted for tighter fit
-            sharex=True, 
-            gridspec_kw={'height_ratios': height_ratios, 'hspace': 0.05} # Even tighter spacing
+            num_subplots,
+            1,
+            figsize=(
+                14,
+                4 + 1.2 + 0.3 * len(active_ribbons),
+            ),  # Adjusted for tighter fit
+            sharex=True,
+            gridspec_kw={
+                "height_ratios": height_ratios,
+                "hspace": 0.05,
+            },  # Even tighter spacing
         )
-        
+
         if num_subplots == 2:
             ax1, ax_vol = axes[0], axes[1]
             ribbon_axes = []
@@ -231,27 +268,42 @@ class PortfolioPlotter:
         ax1.plot(
             df["Date"], df[price_col], label="Close Price", color="black", linewidth=1.5
         )
-        
+
         # Explicitly set y-limits to the robust range
         padding = p_range * 0.1 if p_range > 0 else 1.0
         ax1.set_ylim(p_min_robust - padding, p_max_robust + padding)
-        
+
         # Signal markers
         sig_col = "Signal" if "Signal" in df.columns else "signal"
         buy_signals = df[df[sig_col] == 1]
-        
+
         # Supertrend overlay (Price Line)
         if "ST_Lower" in df.columns and "ST_Upper" in df.columns:
-            st_color = np.where(df["Close"] > df["ST_Lower"], "green", "red")
-            # To plot correctly colored multi-segment lines in MPL is hard, 
+            # To plot correctly colored multi-segment lines in MPL is hard,
             # so we plot segments manually or just the points
             for i in range(1, len(df)):
-                color = "green" if df["Close"].iloc[i] > df["ST_Lower"].iloc[i] else "red"
-                val = df["ST_Lower"].iloc[i] if color == "green" else df["ST_Upper"].iloc[i]
-                prev_val = df["ST_Lower"].iloc[i-1] if df["Close"].iloc[i-1] > df["ST_Lower"].iloc[i-1] else df["ST_Upper"].iloc[i-1]
-                
+                color = (
+                    "green" if df["Close"].iloc[i] > df["ST_Lower"].iloc[i] else "red"
+                )
+                val = (
+                    df["ST_Lower"].iloc[i]
+                    if color == "green"
+                    else df["ST_Upper"].iloc[i]
+                )
+                prev_val = (
+                    df["ST_Lower"].iloc[i - 1]
+                    if df["Close"].iloc[i - 1] > df["ST_Lower"].iloc[i - 1]
+                    else df["ST_Upper"].iloc[i - 1]
+                )
+
                 # Only connect if direction didn't flip for a cleaner look
-                ax1.plot(df["Date"].iloc[i-1:i+1], [prev_val, val], color=color, linewidth=1, alpha=0.8)
+                ax1.plot(
+                    df["Date"].iloc[i - 1 : i + 1],
+                    [prev_val, val],
+                    color=color,
+                    linewidth=1,
+                    alpha=0.8,
+                )
 
         ax1.scatter(
             buy_signals["Date"],
@@ -288,17 +340,24 @@ class PortfolioPlotter:
                         exit_idx = idx
                         entry_price = df.loc[entry_idx, price_col]
                         exit_price = df.loc[exit_idx, price_col]
-                        
+
                         color = "green" if exit_price > entry_price else "red"
                         # Fill between entry/exit dates
-                        ax1.axvspan(df.loc[entry_idx, "Date"], df.loc[exit_idx, "Date"], 
-                                   color=color, alpha=0.15, label="_nolegend_")
+                        ax1.axvspan(
+                            df.loc[entry_idx, "Date"],
+                            df.loc[exit_idx, "Date"],
+                            color=color,
+                            alpha=0.15,
+                            label="_nolegend_",
+                        )
                         entry_idx = None
         except Exception as e:
             print(f"Warning: Could not highlight trade regions: {e}")
 
         ax1.set_ylabel("Price", fontsize=10)
-        ax1.set_title(f"{display_title} - Technical Analysis", fontsize=12, fontweight="bold")
+        ax1.set_title(
+            f"{display_title} - Technical Analysis", fontsize=12, fontweight="bold"
+        )
         ax1.legend(loc="upper left", fontsize=8)
         ax1.grid(True, alpha=0.2)
 
@@ -315,11 +374,12 @@ class PortfolioPlotter:
         for i, rib in enumerate(active_ribbons):
             osc_ax = ribbon_axes[i]
             label = rib.get("label", "Unknown")
-            
+
             # Helper to find column case-insensitively
             def get_col(name):
                 # Check for direct match first
-                if name in df.columns: return name
+                if name in df.columns:
+                    return name
                 # Check lowercase
                 for c in df.columns:
                     if str(c).lower() == name.lower():
@@ -331,20 +391,24 @@ class PortfolioPlotter:
                 try:
                     # Map expr to use df_eval columns
                     processed_expr = expr.lower()
-                    
+
                     # 1. replace common operators
-                    processed_expr = processed_expr.replace(" and ", " & ").replace(" or ", " | ")
-                    
+                    processed_expr = processed_expr.replace(" and ", " & ").replace(
+                        " or ", " | "
+                    )
+
                     # 2. find all words and check if they are columns
-                    words = re.findall(r'[a-z_][a-z0-9_]*', processed_expr)
+                    words = re.findall(r"[a-z_][a-z0-9_]*", processed_expr)
                     for word in set(words):
                         actual_col = get_col(word)
                         if actual_col:
                             # Use backticks for pandas eval if name has spaces, but our names usually don't
-                            processed_expr = re.sub(rf'\b{word}\b', f"`{actual_col}`", processed_expr)
-                    
+                            processed_expr = re.sub(
+                                rf"\b{word}\b", f"`{actual_col}`", processed_expr
+                            )
+
                     return df_eval.eval(processed_expr)
-                except Exception as eval_e:
+                except Exception:
                     # Very simple fallback for "close > ema_50" or similar
                     return pd.Series([False] * len(df_eval), index=df_eval.index)
 
@@ -354,49 +418,71 @@ class PortfolioPlotter:
                 if pd.api.types.is_numeric_dtype(df[c]):
                     # Interpolate/ffill to remove white gaps in ribbons due to NaN data points
                     eval_df[str(c).lower()] = df[c].ffill()
-            
+
             for layer in rib.get("layers", []):
                 condition = layer.get("condition", "")
                 color = layer.get("color", "gray")
-                alpha = layer.get("alpha", 0.6)
-                
+
                 try:
                     # Replace and/or with bitwise for eval and wrap comparisons
                     clean_cond = condition.lower()
-                    
+
                     # Log what we are trying to evaluate
                     # print(f"DEBUG EVAL: Trying condition '{clean_cond}' for {label}")
 
                     # Replace common comparison with bitwise operators safely
-                    clean_cond = clean_cond.replace(" and ", " & ").replace(" or ", " | ")
+                    clean_cond = clean_cond.replace(" and ", " & ").replace(
+                        " or ", " | "
+                    )
                     # Wrap segments to ensure precedence
-                    clean_cond = re.sub(r'([a-z0-9._]+(?:\s*[<>!=]+\s*[a-z0-9._]+)+)', r'(\1)', clean_cond)
-                    
+                    clean_cond = re.sub(
+                        r"([a-z0-9._]+(?:\s*[<>!=]+\s*[a-z0-9._]+)+)",
+                        r"(\1)",
+                        clean_cond,
+                    )
+
                     # We use eval_df to ensure column lookup works case-insensitively
-                    mask = eval_df.eval(clean_cond, engine='python')
-                    
+                    mask = eval_df.eval(clean_cond, engine="python")
+
                     if isinstance(mask, (pd.Series, np.ndarray)):
                         # If it's a series, make it a numpy array for direct masking
                         mask_vals = getattr(mask, "values", mask)
                         mask_bool = np.asanyarray(mask_vals).astype(bool)
-                        
+
                         if np.any(mask_bool):
                             # Ensure X-axis alignment by converting dates to numeric for fill_between
                             x_vals = mdates.date2num(df["Date"])
-                            
+
                             # Use step='post' to match the data transitions correctly
                             # Interpolate the gaps by ensuring x_vals are continuous
-                            osc_ax.fill_between(x_vals, 0, 1, where=mask_bool, color=color, alpha=1.0, 
-                                               step='post', transform=osc_ax.get_xaxis_transform())
-                except Exception as eval_e:
+                            osc_ax.fill_between(
+                                x_vals,
+                                0,
+                                1,
+                                where=mask_bool,
+                                color=color,
+                                alpha=1.0,
+                                step="post",
+                                transform=osc_ax.get_xaxis_transform(),
+                            )
+                except Exception:
                     # print(f"Ribbon eval error for '{condition}' in {label}: {eval_e}")
                     pass
 
-            osc_ax.set_yticks([]) # No Y axis for ribbons
-            osc_ax.set_ylabel(label, rotation=0, labelpad=30, verticalalignment='center', fontsize=9, fontweight="bold")
+            osc_ax.set_yticks([])  # No Y axis for ribbons
+            osc_ax.set_ylabel(
+                label,
+                rotation=0,
+                labelpad=30,
+                verticalalignment="center",
+                fontsize=9,
+                fontweight="bold",
+            )
             osc_ax.set_ylim(0, 1)
-            osc_ax.set_facecolor('white') # Changed from #f0f0f0 to resolve white appearance
-            osc_ax.grid(False) # Clean look for ribbons
+            osc_ax.set_facecolor(
+                "white"
+            )  # Changed from #f0f0f0 to resolve white appearance
+            osc_ax.grid(False)  # Clean look for ribbons
 
         # Plot Volume
         ax_vol.bar(df["Date"], df["Volume"], color="steelblue", alpha=0.6)
@@ -405,24 +491,31 @@ class PortfolioPlotter:
 
         # Format X-axis Dates (YYYY-MM-DD)
         all_axes = [ax1] + list(ribbon_axes) + [ax_vol]
-        
+
         for ax in all_axes:
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
             ax.xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=12))
             # Enable auto-formatting and show labels on ALL axes
-            ax.tick_params(axis='x', labelbottom=True)
-            plt.setp(ax.get_xticklabels(), visible=True, rotation=0, ha='center', fontsize=6)
-            
+            ax.tick_params(axis="x", labelbottom=True)
+            plt.setp(
+                ax.get_xticklabels(), visible=True, rotation=0, ha="center", fontsize=6
+            )
+
         # Add performance metrics to the plot
-        total_return = 0
         if "Signal" in df.columns:
             # Simple check for return if it's available in the dataframe name or similar
             # If we don't have it passed, we can calculate a simple "buy and hold" or similar
             buy_count = (df["Signal"] == 1).sum()
             sell_count = (df["Signal"] == -1).sum()
             stats_text = f"Trades: {buy_count + sell_count}\nBuys: {buy_count}\nSells: {sell_count}"
-            ax1.text(0.02, 0.95, stats_text, transform=ax1.transAxes, 
-                    verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+            ax1.text(
+                0.02,
+                0.95,
+                stats_text,
+                transform=ax1.transAxes,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.5),
+            )
 
         # Use subplots_adjust instead of tight_layout to prevent compatible axes warnings
         # and provide consistent spacing for multiple indicator panels
@@ -431,13 +524,15 @@ class PortfolioPlotter:
         # Save figure as specified format
         ext = format.lower()
         output_path = self.output_dir / f"{symbol.lower()}_analysis.{ext}"
-        
+
         plt.savefig(output_path, format=ext, bbox_inches="tight")
         plt.close()
 
         return output_path
 
-    def plot_multiple_etfs(self, etf_dict: dict[str, pd.DataFrame], format: str = "svg") -> dict:
+    def plot_multiple_etfs(
+        self, etf_dict: dict[str, pd.DataFrame], format: str = "svg"
+    ) -> dict:
         """
         Create analysis plots for multiple ETFs.
 
@@ -454,55 +549,59 @@ class PortfolioPlotter:
                 results[symbol] = self.plot_etf_analysis(df, symbol, format=format)
             except Exception as e:
                 print(f"Error plotting {symbol}: {str(e)}")
-        
+
         # Automatically update the manifest for the dashboard viewer
         try:
             import json
             import shutil
             import re
-            
+
             # Ensure the output directory exists
             self.output_dir.mkdir(exist_ok=True)
-            
+
             # 1. Update the JSON manifest file first
-            plots = sorted([f.name for f in self.output_dir.glob(f"*.{format.lower()}") or []])
-            
+            plots = sorted(
+                [f.name for f in self.output_dir.glob(f"*.{format.lower()}") or []]
+            )
+
             # Check if there is already a rich manifest (from churn_strategies.py)
             manifest_file = self.output_dir / "plot_manifest.json"
             if manifest_file.exists():
-                manifest_json = manifest_file.read_text(encoding='utf-8')
+                manifest_json = manifest_file.read_text(encoding="utf-8")
             else:
                 manifest_json = json.dumps(plots)
-                manifest_file.write_text(manifest_json, encoding='utf-8')
-            
+                manifest_file.write_text(manifest_json, encoding="utf-8")
+
             # 2. Update/Sync index.html
             target_ui = self.output_dir / "index.html"
             root_ui = Path("browser.html")
-            
+
             # Always refresh the HTML template from root if available
             if root_ui.exists():
                 shutil.copy2(root_ui, target_ui)
-                
+
             if target_ui.exists():
                 # Inject the real manifest data directly into the index.html fallback
-                content = target_ui.read_text(encoding='utf-8')
+                content = target_ui.read_text(encoding="utf-8")
                 # Use a more robust regex for the manifest injection
                 pattern = r"const rawManifest = '.*?';"
                 escaped_json = manifest_json.replace("'", "\\'")
                 new_manifest_line = f"const rawManifest = '{escaped_json}';"
-                
+
                 if re.search(pattern, content):
                     updated_content = re.sub(pattern, new_manifest_line, content)
-                    target_ui.write_text(updated_content, encoding='utf-8')
-                
+                    target_ui.write_text(updated_content, encoding="utf-8")
+
             print(f"Updated dashboard manifest with {len(plots)} items.")
         except Exception as e:
             print(f"Warning: Could not update plot manifest: {e}")
             print(f"Warning: Could not update plot manifest: {e}")
-            
+
         return results
 
-    def plot_price_only(self, df: pd.DataFrame, symbol: str, format: str = "svg") -> Path:
+    def plot_price_only(
+        self, df: pd.DataFrame, symbol: str, format: str = "svg"
+    ) -> Path:
         """
         Create a simple price plot.
 

@@ -1,9 +1,9 @@
-"""Parse Deutsche Börse XETRA tradeable assets CSV and extract ETF tickers."""
+"""Parse Deutsche Borse XETRA tradeable assets CSV and extract ETF tickers."""
 
 import csv
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from yfinance import Ticker
 
@@ -21,15 +21,16 @@ class XETRETFExtractor:
         self.csv_file = Path(csv_file)
         self.etfs_file = Path(etfs_file)
         self.blacklist_file = Path(blacklist_file)
-        self.working_etfs = self._load_json(self.etfs_file) or {}
-        self.blacklist = self._load_json(self.blacklist_file) or {}
+        self.working_etfs: dict[str, Any] = self._load_json(self.etfs_file) or {}
+        self.blacklist: dict[str, Any] = self._load_json(self.blacklist_file) or {}
 
     @staticmethod
-    def _load_json(file_path: Path) -> Optional[dict]:
+    def _load_json(file_path: Path) -> Optional[dict[str, Any]]:
         """Load JSON file if it exists."""
         if file_path.exists():
             with open(file_path, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                return data if isinstance(data, dict) else None
         return None
 
     def _save_json(self, data: dict, file_path: Path) -> None:
@@ -46,7 +47,7 @@ class XETRETFExtractor:
         Returns:
             Dict mapping ticker (.DE) to instrument name
         """
-        etfs = {}
+        etfs: dict[str, str] = {}
 
         if not self.csv_file.exists():
             print(f"CSV file not found: {self.csv_file}")
@@ -59,44 +60,58 @@ class XETRETFExtractor:
                 # Skip metadata rows until we find the actual header
                 # The file starts with "Market:;XETR" and "Date Last Update:;..."
                 lines = f.readlines()
-                
+
                 # Find the header row (starts with "Product Status")
                 header_index = 0
                 for i, line in enumerate(lines):
                     if "Product Status" in line:
                         header_index = i
                         break
-                
+
                 # Reset file pointer and skip to header
                 f.seek(0)
                 for _ in range(header_index):
                     f.readline()
-                
+
                 # Now read CSV from the actual header
                 reader = csv.DictReader(f, delimiter=";")
-                
+
                 for row in reader:
                     # Filter by instrument type - looking for "ETF" or "ETC"
                     # Check multiple possible column names for instrument type
                     instr_type = (
-                        row.get("Instrument Type", "")
-                        or row.get("Security Sub Type", "")
-                    ).strip().upper()
-                    
+                        (
+                            row.get("Instrument Type", "")
+                            or row.get("Security Sub Type", "")
+                        )
+                        .strip()
+                        .upper()
+                    )
+
                     mnemonic = row.get("Mnemonic", "").strip()
                     instrument_name = row.get("Instrument", "").strip()
-                    
+
                     # Look for ETF, ETC (Exchange Traded Commodity), or ETP (Exchange Traded Product)
                     # Expanded to include Common Stock (CS) but only in main market (Market Segment 003/045)
                     # and original types: REIT, INVESTMENT, BANK
                     is_target_type = any(
-                        type_key in instr_type 
-                        for type_key in ["ETF", "ETC", "ETP", "REIT", "INVESTMENT", "BANK"]
+                        type_key in instr_type
+                        for type_key in [
+                            "ETF",
+                            "ETC",
+                            "ETP",
+                            "REIT",
+                            "INVESTMENT",
+                            "BANK",
+                        ]
                     )
-                    
+
                     # Logic for Common Stock (CS) filtering (avoiding Penny stocks/Open Market)
                     market_segment = row.get("Market Segment", "").strip()
-                    is_major_stock = (instr_type == "CS" and market_segment in ["003", "045"])
+                    is_major_stock = instr_type == "CS" and market_segment in [
+                        "003",
+                        "045",
+                    ]
 
                     if mnemonic and (is_target_type or is_major_stock):
                         # Add .DE suffix for XETRA (yfinance requirement)
@@ -128,9 +143,7 @@ class XETRETFExtractor:
         except Exception:
             return False
 
-    def discover_and_validate(
-        self, max_workers: int = 5, verbose: bool = True
-    ) -> dict:
+    def discover_and_validate(self, max_workers: int = 5, verbose: bool = True) -> dict:
         """
         Extract ETFs from CSV and validate against Yahoo Finance.
 
@@ -157,7 +170,7 @@ class XETRETFExtractor:
                 if "name" not in self.working_etfs[ticker] and ticker in potential_etfs:
                     self.working_etfs[ticker]["name"] = potential_etfs[ticker]
                 continue
-                
+
             if ticker in self.blacklist:
                 continue
 
@@ -169,7 +182,7 @@ class XETRETFExtractor:
                     print("✓")
                 self.working_etfs[ticker] = {
                     "status": "active",
-                    "name": potential_etfs.get(ticker, "")
+                    "name": potential_etfs.get(ticker, ""),
                 }
                 validated_count += 1
             else:
@@ -183,7 +196,9 @@ class XETRETFExtractor:
                 self._save_json(self.working_etfs, self.etfs_file)
                 self._save_json(self.blacklist, self.blacklist_file)
                 if verbose:
-                    print(f"\n  [Progress saved: {len(self.working_etfs)} working, {len(self.blacklist)} blacklisted]\n")
+                    print(
+                        f"\n  [Progress saved: {len(self.working_etfs)} working, {len(self.blacklist)} blacklisted]\n"
+                    )
 
         # Save final results
         self._save_json(self.working_etfs, self.etfs_file)

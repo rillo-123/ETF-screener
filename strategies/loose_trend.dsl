@@ -4,17 +4,17 @@
 # Layer 3 (Trigger): Enter on fresh momentum reclaim.
 # Layer 4 (Risk/Quality): Keep only liquid continuation and define invalidation.
 
-BEGIN CONTEXT_UPTREND
+BEGIN CONTEXT
 FILTER: close > ema_200
 FILTER: ema_50 > ema_200
 END
 
-BEGIN SETUP_PULLBACK
+BEGIN SETUP
 FILTER: close > ema_50
 FILTER: ema_20 > ema_50
 END
 
-BEGIN TRIGGER_MOMENTUM_RECLAIM
+BEGIN TRIGGER
 TRIGGER: close > ema_20 AND close_d1 <= ema_20_d1
 END
 
