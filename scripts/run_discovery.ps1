@@ -35,12 +35,19 @@ Write-Host "Running Discovery: $python $($cmd_args -join ' ')" -ForegroundColor 
 
 # Open the dashboard if requested
 if ($PlotDash) {
-    if (Test-Path "plots/index.html") {
+    $dashboardUrl = "http://127.0.0.1:5000"
+    $portProcess = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
+
+    if ($portProcess) {
+        Write-Host "Opening Dashboard: $dashboardUrl" -ForegroundColor Green
+        Start-Process $dashboardUrl
+    } elseif (Test-Path "plots/index.html") {
         $dashboard = Resolve-Path "plots/index.html"
-        Write-Host "Opening Dashboard: $dashboard" -ForegroundColor Green
+        Write-Warning "Local dashboard server not running on port 5000. Falling back to static file."
+        Write-Host "Opening Dashboard: $dashboard" -ForegroundColor Yellow
         Start-Process $dashboard
     } else {
-        Write-Warning "Dashboard file not found: plots/index.html"
+        Write-Warning "Dashboard server not running and static dashboard not found: plots/index.html"
     }
 }
 

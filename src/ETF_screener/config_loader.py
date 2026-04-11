@@ -19,11 +19,13 @@ def load_command_config(config_file: str = "config/commands.json") -> Dict[str, 
 
     if config_path.exists():
         with open(config_path) as f:
-            return json.load(f)
+            return json.load(f)  # type: ignore[no-any-return]
     return {}
 
 
-def apply_flag_config(parser: Any, flags_config: Dict[str, Any], parse_volume: Any) -> None:
+def apply_flag_config(
+    parser: Any, flags_config: Dict[str, Any], parse_volume: Any
+) -> None:
     """
     Apply flag configuration to an argparse parser.
 

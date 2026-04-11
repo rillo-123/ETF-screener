@@ -25,7 +25,7 @@ ETF_screener = ["py.typed"]
 [tool.black]
 line-length = 88
 target-version = ["py38", "py39", "py310", "py311"]
-include = '\.pyi?ls'
+include = '\.pyi?$'
 extend-exclude = '''
 /(
   # directories
@@ -50,7 +50,7 @@ extend-ignore = ["E203", "W503"]
 exclude = [".venv", "build", "dist", "*.egg-info"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false

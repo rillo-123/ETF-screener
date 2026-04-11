@@ -1,9 +1,9 @@
 """ETF discovery and validation module."""
 
 import json
-from pathlib import Path
-from typing import Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import Any, Optional
 
 import requests
 from bs4 import BeautifulSoup
@@ -16,72 +16,136 @@ class ETFDiscovery:
     # Expanded list of common XETRA ETFs (curated from major providers)
     INITIAL_XETRA_ETFS = [
         # iShares Core (largest provider on XETRA)
-        "EXS1.DE",  "EUNL.DE",  "EUSA.DE",  "IUSB.DE",  "IUAG.DE",
-        "IDRX.DE",  "IDVX.DE",  "IDVY.DE",  "EUNX.DE",  "IEAU.DE",
-        "IEUD.DE",  "IEPD.DE",  "IEAG.DE",  "IEAP.DE",  "IEVX.DE",
-        "EIUV.DE",  "EUNQ.DE",  "EUNH.DE",  "EURE.DE",  "IAMX.DE",
-        
+        "EXS1.DE",
+        "EUNL.DE",
+        "EUSA.DE",
+        "IUSB.DE",
+        "IUAG.DE",
+        "IDRX.DE",
+        "IDVX.DE",
+        "IDVY.DE",
+        "EUNX.DE",
+        "IEAU.DE",
+        "IEUD.DE",
+        "IEPD.DE",
+        "IEAG.DE",
+        "IEAP.DE",
+        "IEVX.DE",
+        "EIUV.DE",
+        "EUNQ.DE",
+        "EUNH.DE",
+        "EURE.DE",
+        "IAMX.DE",
         # Xtrackers (Deutsche Börse owned)
-        "XDEU.DE",  "XESC.DE",  "XESX.DE",  "XMEU.DE",  "XNEU.DE",
-        "XGLD.DE",  "XBTI.DE",  "XSPU.DE",  "XUUS.DE",  "XXRA.DE",
-        "XCNS.DE",  "XCRA.DE",  "XDIV.DE",  "XDTE.DE",  "XEMD.DE",
-        "XERX.DE",  "XFIN.DE",  "XHYG.DE",  "XMMU.DE",  "XMUS.DE",
-        
+        "XDEU.DE",
+        "XESC.DE",
+        "XESX.DE",
+        "XMEU.DE",
+        "XNEU.DE",
+        "XGLD.DE",
+        "XBTI.DE",
+        "XSPU.DE",
+        "XUUS.DE",
+        "XXRA.DE",
+        "XCNS.DE",
+        "XCRA.DE",
+        "XDIV.DE",
+        "XDTE.DE",
+        "XEMD.DE",
+        "XERX.DE",
+        "XFIN.DE",
+        "XHYG.DE",
+        "XMMU.DE",
+        "XMUS.DE",
         # Vanguard
-        "VWRL.DE",  "VUSA.DE",  "VUSD.DE",  "VEUR.DE",  "VUJP.DE",
-        "VGOV.DE",  "VEVT.DE",  "VANG.DE",  "VDIV.DE",  "VCNS.DE",
-        
+        "VWRL.DE",
+        "VUSA.DE",
+        "VUSD.DE",
+        "VEUR.DE",
+        "VUJP.DE",
+        "VGOV.DE",
+        "VEVT.DE",
+        "VANG.DE",
+        "VDIV.DE",
+        "VCNS.DE",
         # SPDR
-        "XSPU.DE",  "XSPE.DE",  "XSPD.DE",
-        
+        "XSPU.DE",
+        "XSPE.DE",
+        "XSPD.DE",
         # Lyxor/Amundi
-        "EUSA.DE",  "EUDT.DE",  "EUCX.DE",  "EUNX.DE",
-        
+        "EUSA.DE",
+        "EUDT.DE",
+        "EUCX.DE",
+        "EUNX.DE",
         # iShares Bonds & Income
-        "IBCI.DE",  "IBCS.DE",  "IBDE.DE",  "IBGG.DE",  "IBMT.DE",
-        "IBTX.DE",  "IBCX.DE",  "IBEU.DE",  "ICHA.DE",
-        
+        "IBCI.DE",
+        "IBCS.DE",
+        "IBDE.DE",
+        "IBGG.DE",
+        "IBMT.DE",
+        "IBTX.DE",
+        "IBCX.DE",
+        "IBEU.DE",
+        "ICHA.DE",
         # iShares Asia-Pacific & EM
-        "RIEM.DE",  "ASSE.DE",  "ASEM.DE",
-        
+        "RIEM.DE",
+        "ASSE.DE",
+        "ASEM.DE",
         # Dividend & Value Focus
-        "XDIV.DE",  "DHDX.DE",  "IDVX.DE",  "IEMX.DE",
-        
+        "XDIV.DE",
+        "DHDX.DE",
+        "IDVX.DE",
+        "IEMX.DE",
         # Growth & Tech
-        "XCNS.DE",  "XNEU.DE",  "XMUS.DE",  "XMMU.DE",
-        
+        "XCNS.DE",
+        "XNEU.DE",
+        "XMUS.DE",
+        "XMMU.DE",
         # Commodities & Precious Metals
-        "XGLD.DE",  "XSLV.DE",  "XPAT.DE",  "XCOP.DE",  "XOIL.DE",
-        
-        # Crypto & Digital Assets  
-        "XBTI.DE",  "XETH.DE",
-        
+        "XGLD.DE",
+        "XSLV.DE",
+        "XPAT.DE",
+        "XCOP.DE",
+        "XOIL.DE",
+        # Crypto & Digital Assets
+        "XBTI.DE",
+        "XETH.DE",
         # ESG / Sustainability
-        "EIUN.DE",  "EUNX.DE",  "XDXE.DE",
-        
+        "EIUN.DE",
+        "EUNX.DE",
+        "XDXE.DE",
         # Real Estate (REITs)
-        "XREA.DE",  "REIT.DE",  
-        
-        # Emerging Markets 
-        "XMEU.DE",  "XMEA.DE",  "XMAM.DE",
+        "XREA.DE",
+        "REIT.DE",
+        # Emerging Markets
+        "XMEU.DE",
+        "XMEA.DE",
+        "XMAM.DE",
     ]
 
-    def __init__(self, etfs_file: str = "etfs.json", blacklist_file: str = "blacklist.json"):
+    def __init__(
+        self, etfs_file: str = "etfs.json", blacklist_file: str = "blacklist.json"
+    ):
         """Initialize discovery with output files."""
         self.etfs_file = Path(etfs_file)
         self.blacklist_file = Path(blacklist_file)
-        self.working_etfs = self._load_json(self.etfs_file) or {}
-        self.blacklist = self._load_json(self.blacklist_file) or {}
+        self.working_etfs: dict[str, dict[str, Any]] = (
+            self._load_json(self.etfs_file) or {}
+        )
+        self.blacklist: dict[str, dict[str, Any]] = (
+            self._load_json(self.blacklist_file) or {}
+        )
 
     @staticmethod
-    def _load_json(file_path: Path) -> Optional[dict]:
+    def _load_json(file_path: Path) -> Optional[dict[str, Any]]:
         """Load JSON file if it exists."""
         if file_path.exists():
             with open(file_path, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                return data if isinstance(data, dict) else None
         return None
 
-    def _save_json(self, data: dict, file_path: Path) -> None:
+    def _save_json(self, data: dict[str, Any], file_path: Path) -> None:
         """Save data to JSON file."""
         with open(file_path, "w") as f:
             json.dump(data, f, indent=2)
@@ -103,18 +167,20 @@ class ETFDiscovery:
             # Check if we got actual data back (not just empty dict)
             if info and len(info) > 0:
                 return True
-            
+
             # Alternative: try to get historical data
             hist = t.history(period="1d")
             if hist is not None and not hist.empty:
                 return True
-            
+
             return False
         except Exception as e:
             print(f"  Error checking {ticker}: {str(e)}")
             return False
 
-    def discover(self, tickers: Optional[list[str]] = None, verbose: bool = True) -> dict:
+    def discover(
+        self, tickers: Optional[list[str]] = None, verbose: bool = True
+    ) -> dict[str, dict[str, dict[str, Any]]]:
         """
         Discover and validate ETF tickers.
 
@@ -163,8 +229,11 @@ class ETFDiscovery:
         }
 
     def discover_parallel(
-        self, tickers: Optional[list[str]] = None, max_workers: int = 5, verbose: bool = True
-    ) -> dict:
+        self,
+        tickers: Optional[list[str]] = None,
+        max_workers: int = 5,
+        verbose: bool = True,
+    ) -> dict[str, dict[str, dict[str, Any]]]:
         """
         Discover and validate ETF tickers in parallel (faster for large lists).
 
@@ -181,35 +250,44 @@ class ETFDiscovery:
             tickers = self.INITIAL_XETRA_ETFS
             if verbose:
                 print(f"Using curated XETRA ETF list ({len(tickers)} tickers)")
-        
-        tickers = [t for t in tickers if t not in self.working_etfs and t not in self.blacklist]
+
+        tickers = [
+            t for t in tickers if t not in self.working_etfs and t not in self.blacklist
+        ]
 
         if not tickers:
             if verbose:
-                print(f"No new tickers to validate. Already have {len(self.working_etfs)} working and {len(self.blacklist)} blacklisted.")
+                print(
+                    f"No new tickers to validate. Already have {len(self.working_etfs)} working and {len(self.blacklist)} blacklisted."
+                )
             return {"working": self.working_etfs, "blacklisted": self.blacklist}
 
         if verbose:
-            print(f"Validating {len(tickers)} ETF tickers in parallel ({max_workers} workers)...\n")
+            print(
+                f"Validating {len(tickers)} ETF tickers in parallel ({max_workers} workers)...\n"
+            )
 
         tested = 0
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(self.validate_ticker_batch, ticker): ticker for ticker in tickers}
-            
+            futures = {
+                executor.submit(self.validate_ticker_batch, ticker): ticker
+                for ticker in tickers
+            }
+
             for future in as_completed(futures):
                 ticker, is_valid = future.result()
                 tested += 1
-                
+
                 if is_valid:
                     self.working_etfs[ticker] = {"status": "active"}
                     status = "✓"
                 else:
                     self.blacklist[ticker] = {"status": "invalid"}
                     status = "✗"
-                
+
                 if verbose and tested % 10 == 0:  # Print progress every 10 tickers
                     print(f"  Progress: {tested}/{len(tickers)} tested ({status})")
-        
+
         # Save results
         self._save_json(self.working_etfs, self.etfs_file)
         self._save_json(self.blacklist, self.blacklist_file)
@@ -251,12 +329,12 @@ class ETFDiscovery:
         Returns:
             List of XETRA ETF tickers
         """
-        tickers = []
+        tickers: list[str] = []
         base_url = "https://www.justetf.com/de/find-etf.html"
-        
+
         try:
             print("Fetching XETRA ETF list from justETFs...")
-            
+
             # Set parameters for XETRA exchange, all ETFs
             params = {
                 "exchange": "Xetra",
@@ -274,26 +352,28 @@ class ETFDiscovery:
                 "sortOrder": "asc",
                 "pageNumber": 0,
             }
-            
+
             # Make request
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
-            response = requests.get(base_url, params=params, headers=headers, timeout=30)
+            response = requests.get(
+                base_url, params=params, headers=headers, timeout=30  # type: ignore[arg-type]
+            )
             response.raise_for_status()
-            
+
             # Parse HTML
             soup = BeautifulSoup(response.content, "html.parser")
-            
+
             # Find all ETF rows in the table
             rows = soup.find_all("tr", class_="etf-row")
-            
+
             if not rows:
                 print("  Warning: Could not parse table from justETFs")
                 return tickers
-            
+
             print(f"  Found {len(rows)} ETFs on page")
-            
+
             # Extract ticker symbols (ISIN codes and ticker symbols)
             for row in rows:
                 # Try to find ticker in the row
@@ -302,10 +382,10 @@ class ETFDiscovery:
                     ticker = ticker_elem.get_text(strip=True)
                     if ticker and ticker.endswith(".DE"):
                         tickers.append(ticker)
-            
+
             print(f"  Extracted {len(tickers)} XETRA ETF tickers")
             return tickers
-            
+
         except Exception as e:
             print(f"  Error fetching from justETFs: {str(e)}")
             return tickers
@@ -326,12 +406,12 @@ class ETFDiscovery:
             info = t.info
             if info and len(info) > 0:
                 return (ticker, True)
-            
+
             # Alternative: try to get historical data
             hist = t.history(period="1d")
             if hist is not None and not hist.empty:
                 return (ticker, True)
-            
+
             return (ticker, False)
         except Exception:
             return (ticker, False)

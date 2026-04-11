@@ -3,7 +3,7 @@
 import json
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -111,58 +111,73 @@ class ETFScreener:
 
         for _, row in results.iterrows():
             ticker = row["ticker"]
-            
+
             try:
                 # Use manager to fetch and attach indicators with caching
+                hist_df: pd.DataFrame
                 setup = [
-                    {'name': 'EMA_50', 'func': calculate_ema, 'params': {'period': 50}},
-                    {'name': 'Supertrend', 'func': lambda x: calculate_supertrend(hist_df['High'], hist_df['Low'], x, period=st_period, multiplier=st_multiplier)[0], 'params': {}}
+                    {"name": "EMA_50", "func": calculate_ema, "params": {"period": 50}},
+                    {
+                        "name": "Supertrend",
+                        "func": lambda x: calculate_supertrend(
+                            hist_df["High"],
+                            hist_df["Low"],
+                            x,
+                            period=st_period,
+                            multiplier=st_multiplier,
+                        )[0],
+                        "params": {},
+                    },
                 ]
-                
+
                 # Fetch data and indicators via cache
                 hist_df = self.manager.prepare_data(ticker, setup, days=90)
-                
+
                 if hist_df.empty or len(hist_df) < 10:
                     continue
-                
+
                 # Get latest row
                 latest = hist_df.iloc[-1]
-                
+
                 # Skip if price is below Supertrend (RED - downtrend)
                 if require_green_supertrend:
                     if latest["Close"] <= latest["Supertrend"]:
                         continue
-                
+
                 # Calculate swing metrics
                 lookback = 10
                 recent_high = hist_df["Close"].tail(lookback).max()
                 pullback_pct = ((recent_high - latest["Close"]) / recent_high) * 100
-                ema_distance_pct = ((latest["Close"] - latest["EMA_50"]) / latest["EMA_50"]) * 100
+                ema_distance_pct = (
+                    (latest["Close"] - latest["EMA_50"]) / latest["EMA_50"]
+                ) * 100
                 in_uptrend = 1 if latest["Close"] > latest["EMA_50"] else 0
-                
+
                 # Apply filters
-                if (pullback_pct >= min_pullback and 
-                    ema_distance_pct >= 0 and 
-                    ema_distance_pct <= max_distance_from_ema and 
-                    in_uptrend == 1):
-                    
+                if (
+                    pullback_pct >= min_pullback
+                    and ema_distance_pct >= 0
+                    and ema_distance_pct <= max_distance_from_ema
+                    and in_uptrend == 1
+                ):
+
                     # Add swing metrics to row
                     swing_row = row.copy()
                     swing_row["Pullback_Pct"] = round(pullback_pct, 2)
                     swing_row["EMA_Distance_Pct"] = round(ema_distance_pct, 2)
                     swing_row["Recent_High"] = recent_high
                     swing_results.append(swing_row)
-            except Exception as e:
+            except Exception:
                 # Skip tickers with errors
                 continue
-        
+
         if not swing_results:
             return pd.DataFrame()
-        
+
         filtered = pd.DataFrame(swing_results)
         # Sort by pullback strength
         filtered = filtered.sort_values("Pullback_Pct", ascending=False)
-        
+
         return filtered
 
     def _strip_ansi(self, text: str) -> str:
@@ -189,22 +204,24 @@ class ETFScreener:
     def _load_formats(self) -> dict:
         """Load output format templates from JSON file."""
         # Check config/ folder in workspace root
-        format_file = Path(__file__).parent.parent.parent / "config" / "output_formats.json"
-        
+        format_file = (
+            Path(__file__).parent.parent.parent / "config" / "output_formats.json"
+        )
+
         if not format_file.exists():
             # Try path relative to CWD as fallback
             format_file = Path("config/output_formats.json")
-            
+
         if not format_file.exists():
             return {"default": {"columns": []}}
         try:
             with open(format_file) as f:
-                return json.load(f)
+                return json.load(f)  # type: ignore[no-any-return]
         except Exception as e:
             print(f"Warning: Could not load format file: {e}")
             return {"default": {"columns": []}}
 
-    def format_value(self, value: any, format_type: str, color: str = "") -> str:
+    def format_value(self, value: Any, format_type: str, color: str = "") -> str:
         """
         Format a value based on its type.
 
@@ -259,9 +276,7 @@ class ETFScreener:
         print(f"\n[RESULTS] Found {len(results)} ETFs:\n")
 
         # Build header
-        header = "".join(
-            f"{col['header']:<{col['width']}}" for col in columns
-        )
+        header = "".join(f"{col['header']:<{col['width']}}" for col in columns)
         print(header)
         print("-" * len(header))
 
@@ -277,7 +292,7 @@ class ETFScreener:
                     value_str = "N/A"
                 else:
                     value = row[field]
-                    
+
                     # Determine color for supertrend based on price comparison
                     color = ""
                     if field == "supertrend" and "latest_price" in row:
@@ -288,8 +303,8 @@ class ETFScreener:
                             if price > supertrend:
                                 color = GREEN  # Uptrend
                             else:
-                                color = RED    # Downtrend
-                    
+                                color = RED  # Downtrend
+
                     value_str = self.format_value(value, format_type, color)
 
                 # Calculate visible length (without ANSI codes) for proper padding

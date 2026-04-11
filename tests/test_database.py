@@ -46,7 +46,7 @@ class TestETFDatabase:
     def test_insert_dataframe(self, temp_db, sample_data):
         """Test inserting DataFrame."""
         temp_db.insert_dataframe(sample_data, "TEST")
-        
+
         result = temp_db.get_etf_data("TEST")
         assert len(result) == 60
         assert "TEST" not in result.columns  # ticker not in result
@@ -54,7 +54,7 @@ class TestETFDatabase:
     def test_ticker_exists(self, temp_db, sample_data):
         """Test checking if ticker exists."""
         assert not temp_db.ticker_exists("TEST")
-        
+
         temp_db.insert_dataframe(sample_data, "TEST")
         assert temp_db.ticker_exists("TEST")
 
@@ -62,7 +62,7 @@ class TestETFDatabase:
         """Test getting all tickers."""
         temp_db.insert_dataframe(sample_data, "ETFA")
         temp_db.insert_dataframe(sample_data, "ETFB")
-        
+
         tickers = temp_db.get_tickers()
         assert "ETFA" in tickers
         assert "ETFB" in tickers
@@ -71,7 +71,7 @@ class TestETFDatabase:
     def test_get_latest_date(self, temp_db, sample_data):
         """Test getting latest date."""
         temp_db.insert_dataframe(sample_data, "TEST")
-        
+
         latest = temp_db.get_latest_date("TEST")
         assert latest is not None
         # Latest date should be 59 days after first date (2024-01-01 + 59 days = 2024-02-29)
@@ -82,7 +82,9 @@ class TestETFDatabase:
         # Create sample data with recent dates
         recent_data = pd.DataFrame(
             {
-                "Date": pd.date_range(end="today", periods=15, freq="D"),  # Last 15 days to today
+                "Date": pd.date_range(
+                    end="today", periods=15, freq="D"
+                ),  # Last 15 days to today
                 "Open": [100 + i * 0.1 for i in range(15)],
                 "High": [101 + i * 0.1 for i in range(15)],
                 "Low": [99 + i * 0.1 for i in range(15)],
@@ -95,10 +97,10 @@ class TestETFDatabase:
                 "Signal": [0] * 15,
             }
         )
-        
+
         temp_db.insert_dataframe(recent_data, "HIGHVOL")
         results = temp_db.query_by_volume(min_days=10, min_volume=10_000_000, limit=10)
-        
+
         assert not results.empty
         assert "HIGHVOL" in results["ticker"].values
         assert results["avg_volume"].iloc[0] > 10_000_000

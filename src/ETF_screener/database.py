@@ -23,6 +23,7 @@ class ETFDatabase:
 
     def _init_db(self) -> None:
         """Initialize database with schema."""
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
@@ -55,9 +56,7 @@ class ETFDatabase:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_ticker_date ON etf_data(ticker, date)"
         )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_volume ON etf_data(volume)"
-        )
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_volume ON etf_data(volume)")
 
         conn.commit()
         conn.close()
@@ -149,23 +148,27 @@ class ETFDatabase:
                 # Try parsing if it's a string, or just use as is
                 try:
                     date_str = pd.to_datetime(row["Date"]).strftime("%Y-%m-%d")
-                except:
-                    date_str = str(row["Date"]).split(" ")[0]  # Remove time component if present
+                except Exception:
+                    date_str = str(row["Date"]).split(" ")[
+                        0
+                    ]  # Remove time component if present
 
-            data_to_insert.append((
-                ticker.upper(),
-                date_str,
-                row.get("Open"),
-                row.get("High"),
-                row.get("Low"),
-                row.get("Close"),
-                row.get("Volume", 0),
-                row.get("EMA_50"),
-                row.get("Supertrend"),
-                row.get("ST_Upper"),
-                row.get("ST_Lower"),
-                row.get("Signal", 0),
-            ))
+            data_to_insert.append(
+                (
+                    ticker.upper(),
+                    date_str,
+                    row.get("Open"),
+                    row.get("High"),
+                    row.get("Low"),
+                    row.get("Close"),
+                    row.get("Volume", 0),
+                    row.get("EMA_50"),
+                    row.get("Supertrend"),
+                    row.get("ST_Upper"),
+                    row.get("ST_Lower"),
+                    row.get("Signal", 0),
+                )
+            )
 
         cursor.executemany(
             """
@@ -174,13 +177,16 @@ class ETFDatabase:
              st_upper, st_lower, signal)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            data_to_insert
+            data_to_insert,
         )
 
         conn.commit()
 
     def get_etf_data(
-        self, ticker: str, start_date: Optional[str] = None, end_date: Optional[str] = None
+        self,
+        ticker: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> pd.DataFrame:
         """
         Retrieve ETF data for a ticker.
@@ -242,7 +248,9 @@ class ETFDatabase:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT 1 FROM etf_data WHERE ticker = ? LIMIT 1", (ticker.upper(),))
+        cursor.execute(
+            "SELECT 1 FROM etf_data WHERE ticker = ? LIMIT 1", (ticker.upper(),)
+        )
         return cursor.fetchone() is not None
 
     def get_latest_date(self, ticker: str) -> Optional[str]:
@@ -276,7 +284,7 @@ class ETFDatabase:
             DataFrame with OHLCV and indicator data
         """
         conn = self._get_connection()
-        
+
         # Modified query to be more resilient to lack of depth
         # We fetch the last N rows instead of a fixed 1-year lookback
         query = (
@@ -285,36 +293,62 @@ class ETFDatabase:
             "WHERE ticker = ? "
             "ORDER BY date DESC LIMIT ?"
         )
-        
+
         # We need to be careful with pd.read_sql_query when LIMIT is used
         # SQLite parameters must be clean
-        import sqlite3
+
         cursor = conn.cursor()
         cursor.execute(query, (ticker.upper(), int(days)))
         rows = cursor.fetchall()
-        
+
         if not rows:
             return pd.DataFrame()
-            
-        columns = ["ticker", "date", "open", "high", "low", "close", "volume", "ema_50", "supertrend", "st_upper", "st_lower", "signal"]
+
+        columns = [
+            "ticker",
+            "date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "ema_50",
+            "supertrend",
+            "st_upper",
+            "st_lower",
+            "signal",
+        ]
         df_raw = pd.DataFrame(rows, columns=columns)
-        
+
         # Sort back to ascending for technical analysis
         df_raw = df_raw.sort_values("date").reset_index(drop=True)
-        
+
         # Check for "zombie" tickers: return empty if 2+ days have 0 volume in the LATEST data
         # (Only check the last 30 days of data retrieved to avoid penalizing history)
         df_check = df_raw.tail(30)
         if (df_check["volume"] == 0).sum() >= 2:
             return pd.DataFrame()
-        
+
         # Ensure we don't have duplicates before renaming
-        df = df_raw.drop_duplicates(subset=['date']).copy()
-        
+        df = df_raw.drop_duplicates(subset=["date"]).copy()
+
         # Rename columns to match expected format
-        df.columns = ["ticker", "Date", "Open", "High", "Low", "Close", "Volume", "EMA_50", "Supertrend", "ST_Upper", "ST_Lower", "Signal"]
+        df.columns = [
+            "ticker",
+            "Date",
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume",
+            "EMA_50",
+            "Supertrend",
+            "ST_Upper",
+            "ST_Lower",
+            "Signal",
+        ]
         df["Date"] = pd.to_datetime(df["Date"])
-        
+
         return df
 
     def get_oldest_date(self, ticker: str) -> Optional[str]:
@@ -412,6 +446,6 @@ class ETFDatabase:
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, _exc_val, _exc_tb):
         """Context manager exit."""
         self.close()

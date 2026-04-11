@@ -242,6 +242,7 @@ EXIT:    cross_down(close, ema_50)"></textarea>
     let currentStrategy = "";
     let sourceStrategyName = ""; // tracks what strategy is being modified
     let scanAbortController = null;
+    const LAST_COMPLETED_STRATEGY_KEY = "etf-discovery:last-completed-strategy";
 
     // --- Console Log Capture System ---
     const consoleLogs = [];
@@ -321,6 +322,50 @@ EXIT:    cross_down(close, ema_50)"></textarea>
       t.className = `fixed bottom-6 right-6 ${isError ? 'bg-red-600' : 'bg-emerald-600'} text-white py-2 px-4 rounded-lg shadow-lg z-[200] text-sm font-bold transition-opacity`;
       document.body.appendChild(t);
       setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 400); }, 2800);
+    }
+
+    function saveLastCompletedStrategy(strategyName) {
+      try {
+        if (strategyName) {
+          localStorage.setItem(LAST_COMPLETED_STRATEGY_KEY, strategyName);
+        } else {
+          localStorage.removeItem(LAST_COMPLETED_STRATEGY_KEY);
+        }
+      } catch (err) {
+        console.warn("Could not persist strategy selection", err);
+      }
+    }
+
+    function loadLastCompletedStrategy() {
+      try {
+        return localStorage.getItem(LAST_COMPLETED_STRATEGY_KEY) || "";
+      } catch (err) {
+        console.warn("Could not read saved strategy selection", err);
+        return "";
+      }
+    }
+
+    async function restoreLastCompletedStrategy() {
+      const strategySelect = document.getElementById("strategy-select");
+      if (!strategySelect) {
+        return "";
+      }
+
+      const savedStrategy = loadLastCompletedStrategy();
+      if (!savedStrategy) {
+        return "";
+      }
+
+      const hasOption = Array.from(strategySelect.options).some((opt) => opt.value === savedStrategy);
+      if (!hasOption) {
+        saveLastCompletedStrategy("");
+        return "";
+      }
+
+      strategySelect.value = savedStrategy;
+      currentStrategy = savedStrategy;
+      await updateEditorContent(savedStrategy);
+      return savedStrategy;
     }
 
     // --- Refresh strategies dropdown without full page reload ---
@@ -616,6 +661,9 @@ EXIT:    cross_down(close, ema_50)"></textarea>
         clearInterval(progInterval);
 
         const rawData = await resp.json();
+        if (!resp.ok) {
+          throw new Error(rawData.detail || "Screen request failed");
+        }
         console.log("JSON parsed successfully. Data keys:", Object.keys(rawData));
 
         // Complete the bar
@@ -631,6 +679,10 @@ EXIT:    cross_down(close, ema_50)"></textarea>
         const matches = hasFormat ? rawData.matches : rawData;
         const errors = hasFormat ? rawData.errors : [];
         console.log("Data format check - hasFormat:", hasFormat, "matches count:", matches?.length, "errors count:", errors?.length);
+
+        if (!customDsl) {
+          saveLastCompletedStrategy(currentStrategy);
+        }
 
         if (!Array.isArray(matches)) {
           console.error("ERROR: matches is not an array!", typeof matches, matches);
@@ -701,6 +753,7 @@ EXIT:    cross_down(close, ema_50)"></textarea>
             const volumeVal = Number(item.volume ?? 0);
             const returnPctVal = Number(item.return_pct ?? 0);
             const changePctVal = Number(item.change_pct ?? 0);
+            const scoreVal = Number(item.score ?? 0);
 
             const changeVal = Number.isFinite(changePctVal)
               ? changePctVal.toFixed(2)
@@ -712,7 +765,10 @@ EXIT:    cross_down(close, ema_50)"></textarea>
             card.innerHTML = `
                         <div class="flex justify-between items-start">
                             <div class="flex flex-col">
-                                <span class="font-bold text-slate-800 text-lg leading-none">${item.ticker}</span>
+                                <div class="flex items-baseline gap-1.5">
+                                  <span class="font-bold text-slate-800 text-lg leading-none">${item.ticker}</span>
+                                  <span class="text-[10px] font-bold text-indigo-400">#${idx + 1}</span>
+                                </div>
                                 <span class="text-[10px] ${statusColor} mt-1 uppercase tracking-wider">${statusText}</span>
                             </div>
                             <div class="flex flex-col items-end">
@@ -724,8 +780,8 @@ EXIT:    cross_down(close, ema_50)"></textarea>
                             <div class="text-[10px] text-slate-400 font-semibold">
                               ${(volumeVal / 1000).toFixed(0)}K VOLUME
                             </div>
-                            <div class="text-[10px] font-bold ${returnPctVal >= 0 ? "text-emerald-600" : "text-rose-600"}">
-                              ${returnPctVal.toFixed(1)}% Rtn
+                            <div class="text-[10px] font-bold text-indigo-600">
+                              ${(scoreVal * 100).toFixed(0)} pts
                             </div>
                         </div>
                     `;
@@ -871,7 +927,13 @@ EXIT:    cross_down(close, ema_50)"></textarea>
       });
 
     // Initialize
-    runScreen();
+    (async function initializeDashboard() {
+      const restoredStrategy = await restoreLastCompletedStrategy();
+      if (restoredStrategy) {
+        console.info("Restored last completed strategy", restoredStrategy);
+      }
+      runScreen();
+    })();
 
     function testMe() {
       const dsl = document.getElementById("strategy-editor").value;

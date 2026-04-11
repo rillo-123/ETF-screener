@@ -1,7 +1,5 @@
 """Entry point for ETF screener CLI."""
 
-
-
 import argparse
 import io
 import json
@@ -11,18 +9,17 @@ from pathlib import Path
 
 from typing import Optional
 
-
-
 # Fix CSV handling and Unicode output on Windows
 
-if sys.stdout.encoding and sys.stdout.encoding.lower() == 'utf-8':
+if sys.stdout.encoding and sys.stdout.encoding.lower() == "utf-8":
 
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 else:
 
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding=sys.stdout.encoding or 'utf-8', errors='replace')
-
+    sys.stdout = io.TextIOWrapper(
+        sys.stdout.buffer, encoding=sys.stdout.encoding or "utf-8", errors="replace"
+    )
 
 
 import pandas as pd
@@ -30,13 +27,16 @@ import pandas as pd
 from tqdm import tqdm
 
 
-
 from ETF_screener.data_fetcher import FinnhubFetcher
 from ETF_screener.database import ETFDatabase
 from ETF_screener.backtester import Backtester
 from ETF_screener.etf_discovery import ETFDiscovery
 
-from ETF_screener.indicators import add_indicators, calculate_consecutive_streak, calculate_ema
+from ETF_screener.indicators import (
+    add_indicators,
+    calculate_consecutive_streak,
+    calculate_ema,
+)
 
 from ETF_screener.hotlist import generate_hotlist
 from ETF_screener.plotter_plotly import InteractivePlotter
@@ -51,11 +51,7 @@ from ETF_screener.xetra_extractor import XETRETFExtractor
 from ETF_screener.yfinance_fetcher import YFinanceFetcher
 
 
-
-
-
 def parse_volume(volume_str: str) -> int:
-
     """
 
     Parse volume string with K/M suffixes.
@@ -92,8 +88,6 @@ def parse_volume(volume_str: str) -> int:
 
     volume_str = volume_str.strip().upper()
 
-    
-
     if volume_str.endswith("K"):
 
         try:
@@ -104,8 +98,6 @@ def parse_volume(volume_str: str) -> int:
 
             raise ValueError(f"Invalid volume format: {volume_str}")
 
-    
-
     elif volume_str.endswith("M"):
 
         try:
@@ -115,8 +107,6 @@ def parse_volume(volume_str: str) -> int:
         except ValueError:
 
             raise ValueError(f"Invalid volume format: {volume_str}")
-
-    
 
     else:
 
@@ -129,11 +119,7 @@ def parse_volume(volume_str: str) -> int:
             raise ValueError(f"Invalid volume format: {volume_str}")
 
 
-
-
-
 def evaluate_condition(value: float, operator: str, threshold: float) -> bool:
-
     """
 
     Evaluate a numeric condition.
@@ -160,13 +146,9 @@ def evaluate_condition(value: float, operator: str, threshold: float) -> bool:
 
         return False
 
-    
-
     value = float(value)
 
     threshold = float(threshold)
-
-    
 
     if operator == "gt":
 
@@ -195,9 +177,6 @@ def evaluate_condition(value: float, operator: str, threshold: float) -> bool:
     else:
 
         return False
-
-
-
 
 
 def fetch_and_analyze(
@@ -255,9 +234,7 @@ def fetch_and_analyze(
             if not quiet:
                 print("Initializing Yahoo Finance fetcher...")
 
-            fetcher = YFinanceFetcher()
-
-
+            fetcher = YFinanceFetcher()  # type: ignore[assignment]
 
         # Fetch data for all symbols
 
@@ -266,16 +243,12 @@ def fetch_and_analyze(
 
         etf_data = fetcher.fetch_multiple_etfs(symbols, days=days, quiet=quiet)
 
-
-
         if not etf_data:
 
             if not quiet:
                 print("No data fetched. Exiting.")
 
             return
-
-
 
         # Add indicators
 
@@ -285,8 +258,6 @@ def fetch_and_analyze(
         for symbol, df in etf_data.items():
 
             etf_data[symbol] = add_indicators(df)
-
-
 
         # Save to database if enabled
 
@@ -303,8 +274,6 @@ def fetch_and_analyze(
 
             db.close()
 
-
-
         # Save to parquet
 
         if not quiet:
@@ -314,8 +283,6 @@ def fetch_and_analyze(
 
         storage.save_multiple_etfs(etf_data)
 
-
-
         # Generate plots
         if plot_results:
             plotter = InteractivePlotter(output_dir=plot_dir)
@@ -324,7 +291,9 @@ def fetch_and_analyze(
 
         if not quiet:
             print("\n" + "=" * 121)
-            print(f"{'TICKER':<12} | {'PRICE':<10} | {'EMA 50':<10} | {'MACD':<8} | {'SIGNAL':<8} | {'BUY':<4} | {'SELL':<4} | {'TREND'}")
+            print(
+                f"{'TICKER':<12} | {'PRICE':<10} | {'EMA 50':<10} | {'MACD':<8} | {'SIGNAL':<8} | {'BUY':<4} | {'SELL':<4} | {'TREND'}"
+            )
             print("-" * 121)
 
             for symbol, df in etf_data.items():
@@ -334,24 +303,26 @@ def fetch_and_analyze(
                 latest_row = df.iloc[-1]
                 latest_price = latest_row.get("Close", 0.0)
                 latest_ema = latest_row.get("EMA_50", 0.0)
-                
+
                 # Dynamic matching for MACD columns
                 macd_val = 0.0
                 sig_val = 0.0
                 for col in df.columns:
-                    if col.lower() == "macd": macd_val = latest_row[col]
-                    if col.lower() == "macd_signal": sig_val = latest_row[col]
+                    if col.lower() == "macd":
+                        macd_val = latest_row[col]
+                    if col.lower() == "macd_signal":
+                        sig_val = latest_row[col]
 
                 # Simple trend indicator (with 2% buffer)
                 trend = "UP" if latest_price > (latest_ema * 1.02) else "DOWN"
                 trend_color = "\033[92m" if trend == "UP" else "\033[91m"
                 reset = "\033[0m"
 
-                print(f"{symbol:<12} | {latest_price:>10.4f} | {latest_ema:>10.4f} | {macd_val:>8.4f} | {sig_val:>8.4f} | {buy_signals:>4} | {sell_signals:>4} | {trend_color}{trend:<5}{reset}")
-            
+                print(
+                    f"{symbol:<12} | {latest_price:>10.4f} | {latest_ema:>10.4f} | {macd_val:>8.4f} | {sig_val:>8.4f} | {buy_signals:>4} | {sell_signals:>4} | {trend_color}{trend:<5}{reset}"
+                )
+
             print("=" * 121 + "\n")
-
-
 
     except Exception as e:
 
@@ -359,9 +330,6 @@ def fetch_and_analyze(
             print(f"Error: {str(e)}", file=sys.stderr)
 
         sys.exit(1)
-
-
-
 
 
 def list_saved_etfs(data_dir: str = "data") -> None:
@@ -375,7 +343,7 @@ def list_saved_etfs(data_dir: str = "data") -> None:
     try:
         db = ETFDatabase()
         db_tickers = db.get_tickers()
-        print(f"\n[DATABASE] Database Statistics:")
+        print("\n[DATABASE] Database Statistics:")
         print(f"  - Total Tickers: {len(db_tickers)}")
         print(f"  - DB Path: {db.db_path}\n")
         db.close()
@@ -391,44 +359,29 @@ def list_saved_etfs(data_dir: str = "data") -> None:
         for symbol in etfs:
             df = storage.load_etf_data(symbol)
             if df is not None and not df.empty:
-                print(f"  {symbol}: {len(df)} rows, {df['Date'].min().date()} to {df['Date'].max().date()}")
+                print(
+                    f"  {symbol}: {len(df)} rows, {df['Date'].min().date()} to {df['Date'].max().date()}"
+                )
     else:
         print(f"No ETF Parquet files found in {data_dir}")
 
 
-
-
-
 def screen_etfs(
-
     symbols: Optional[list[str]] = None,
-
     nof_etfs: Optional[int] = None,
-
     min_avg_volume: int = 10_000_000,
-
     days: int = 10,
-
     days_to_keep: int = 365,
-
     api_key: Optional[str] = None,
     strategy_path: Optional[str] = None,
     format_name: str = "default",
-
     data_dir: str = "data",
-
     filter_swing: bool = False,
-
     swing_pullback: float = 2.0,
-
     supertrend_filter: Optional[str] = None,
-
     timeframe: str = "1D",
-
     st_period: int = 10,
-
     st_multiplier: float = 3.0,
-
     red_streak_min: int = 0,
     conditions: Optional[dict] = None,
     name_filter: Optional[str] = None,
@@ -438,7 +391,6 @@ def screen_etfs(
     clean_plots: bool = False,
     quiet: bool = False,
 ) -> None:
-
     """
 
     Screen ETFs by volume criteria. Fetches from online if not in cache (DB).
@@ -485,6 +437,8 @@ def screen_etfs(
         clean_plots: Wipe the plot directory before starting
     """
 
+    _ = nof_etfs
+
     try:
         # Wipe plots if requested and plot_results is True
         if clean_plots and plot_results and Path(plot_dir).exists():
@@ -498,17 +452,15 @@ def screen_etfs(
         db = ETFDatabase()
         manager = CachedStrategyManager(db)
 
-        
-
         if symbols:
 
             # Screen specific symbols
 
-            print(f"Processing {len(symbols)} symbols (minimum 50 days for accurate EMA50)...\n")
+            print(
+                f"Processing {len(symbols)} symbols (minimum 50 days for accurate EMA50)...\n"
+            )
 
             to_fetch = []
-
-            
 
             for symbol in symbols:
 
@@ -520,17 +472,13 @@ def screen_etfs(
 
                     print(f"  [OK] {symbol} found in cache")
 
-            
-
             if to_fetch:
 
                 print(f"\nFetching {len(to_fetch)} missing from Yahoo Finance...")
 
-                fetcher = YFinanceFetcher()
+                fetcher = YFinanceFetcher()  # type: ignore[assignment]
 
                 etf_data = fetcher.fetch_multiple_etfs(to_fetch, days=max(50, days))
-
-                
 
                 if etf_data:
 
@@ -538,10 +486,16 @@ def screen_etfs(
 
                     for symbol, df in etf_data.items():
                         # Use cached manager for heavy calculations
-                        setup = [{'name': 'EMA_50', 'func': calculate_ema, 'params': {'period': 50}}]
-                        etf_data[symbol] = manager.prepare_data(symbol, setup, days=max(50, days))
-
-                    
+                        setup = [
+                            {
+                                "name": "EMA_50",
+                                "func": calculate_ema,
+                                "params": {"period": 50},
+                            }
+                        ]
+                        etf_data[symbol] = manager.prepare_data(
+                            symbol, setup, days=max(50, days)
+                        )
 
                     print("Storing in cache...")
 
@@ -566,21 +520,15 @@ def screen_etfs(
 
                 return
 
-            
-
             try:
 
-                with open(etfs_file) as f:
+                with open(etfs_file) as f:  # type: ignore[assignment]
 
-                    etfs_data = json.load(f)
+                    etfs_data = json.load(f)  # type: ignore[arg-type]
 
                     available_symbols = list(etfs_data.keys())
 
-                
-
                 print(f"Scanning {len(available_symbols)} ETFs from etfs.json...")
-
-                
 
                 # Check which are already cached
 
@@ -598,23 +546,19 @@ def screen_etfs(
 
                         cached_count += 1
 
-                
-
                 print(f"  Found in cache: {cached_count}")
 
                 print(f"  Need to fetch: {len(to_fetch)}")
 
-                
-
                 if to_fetch:
 
-                    print(f"\nFetching {len(to_fetch)} ETFs (minimum 50 days for accurate EMA50)...")
+                    print(
+                        f"\nFetching {len(to_fetch)} ETFs (minimum 50 days for accurate EMA50)..."
+                    )
 
-                    fetcher = YFinanceFetcher()
+                    fetcher = YFinanceFetcher()  # type: ignore[assignment]
 
                     etf_data = fetcher.fetch_multiple_etfs(to_fetch, days=max(50, days))
-
-                    
 
                     if etf_data:
 
@@ -624,8 +568,6 @@ def screen_etfs(
 
                             etf_data[symbol] = add_indicators(df)
 
-                        
-
                         print("Storing in cache...")
 
                         for symbol, df in etf_data.items():
@@ -633,8 +575,6 @@ def screen_etfs(
                             db.insert_dataframe(df, symbol)
 
                         print(f"  [OK] Cached {len(etf_data)} new ETFs\n")
-
-                    
 
             except Exception as e:
 
@@ -644,93 +584,88 @@ def screen_etfs(
 
                 return
 
-        
-
         screener = ETFScreener(db=db, api_key=api_key)
 
-        print(f"Screening ALL ETFs (last {days} days, avg volume >= {min_avg_volume:,})...\n")
-
-
+        print(
+            f"Screening ALL ETFs (last {days} days, avg volume >= {min_avg_volume:,})...\n"
+        )
 
         # Return ALL results matching criteria (no limit)
 
         results = screener.screen_by_volume(
-
             min_days=days,
-
             min_avg_volume=min_avg_volume,
-
             max_results=None,
-
             fetch_missing=False,
-
         )
-
-
 
         # Apply swing filter if requested
 
         if filter_swing and not results.empty:
 
-            print(f"Filtering for swing setups (pullback >= {swing_pullback}%, price > Supertrend)...\n")
-
-            results = screener.filter_swing_setups(
-
-                results,
-
-                db=db,
-
-                min_pullback=swing_pullback,
-
-                max_distance_from_ema=5.0,
-
-                require_green_supertrend=True,
-
-                st_period=st_period,
-
-                st_multiplier=st_multiplier,
-
-                timeframe=timeframe,
-
+            print(
+                f"Filtering for swing setups (pullback >= {swing_pullback}%, price > Supertrend)...\n"
             )
 
-
+            results = screener.filter_swing_setups(
+                results,
+                db=db,
+                min_pullback=swing_pullback,
+                max_distance_from_ema=5.0,
+                require_green_supertrend=True,
+                st_period=st_period,
+                st_multiplier=st_multiplier,
+                timeframe=timeframe,
+            )
 
         # Apply supertrend color filter if requested
         if supertrend_filter and not results.empty:
             filtered_results = []
             updates_to_cache = {}
-            
+
             # Identify if we can use cached values
-            is_default_params = (timeframe == "1D" and st_period == 10 and st_multiplier == 3.0)
-            
-            for _, row in tqdm(results.iterrows(), total=len(results), desc="Checking Supertrend"):
+            is_default_params = (
+                timeframe == "1D" and st_period == 10 and st_multiplier == 3.0
+            )
+
+            for _, row in tqdm(
+                results.iterrows(), total=len(results), desc="Checking Supertrend"
+            ):
                 ticker = row["ticker"]
                 try:
                     # Check if Supertrend is already in results (from db.query_by_volume)
                     # and if we are using default parameters that match the cache
-                    if is_default_params and "supertrend" in row and pd.notna(row["supertrend"]):
+                    if (
+                        is_default_params
+                        and "supertrend" in row
+                        and pd.notna(row["supertrend"])
+                    ):
                         latest_close = row["latest_price"]
                         latest_st = row["supertrend"]
-                        
+
                         # Apply filter quickly using cached values
                         matches = False
                         if supertrend_filter == "green" and latest_close > latest_st:
                             matches = True
                         elif supertrend_filter == "red" and latest_close <= latest_st:
                             matches = True
-                            
+
                         if matches:
                             # We still need the streak, which requires historical data
                             # Fast Streak: only need a short lookback if we already trust the cache
-                            hist_df = db.get_ticker_data(ticker, days=30) 
+                            hist_df = db.get_ticker_data(ticker, days=30)
                             if not hist_df.empty:
-                                streak_days, streak_status = calculate_consecutive_streak(hist_df)
-                                
+                                streak_days, streak_status = (
+                                    calculate_consecutive_streak(hist_df)
+                                )
+
                                 # If red filter, check extra conditions
-                                if supertrend_filter == "red" and streak_days < red_streak_min:
+                                if (
+                                    supertrend_filter == "red"
+                                    and streak_days < red_streak_min
+                                ):
                                     continue
-                                    
+
                                 row_copy = row.copy()
                                 row_copy["streak_days"] = streak_days
                                 row_copy["streak_status"] = streak_status
@@ -746,71 +681,91 @@ def screen_etfs(
                     hist_df = db.get_ticker_data(ticker, days=lookback_days)
                     if hist_df.empty or len(hist_df) < 10:
                         continue
-                    
+
                     # Recalculate with new parameters and timeframe
-                    hist_df = add_indicators(hist_df, st_period=st_period, st_multiplier=st_multiplier, timeframe=timeframe)
+                    hist_df = add_indicators(
+                        hist_df,
+                        st_period=st_period,
+                        st_multiplier=st_multiplier,
+                        timeframe=timeframe,
+                    )
                     latest = hist_df.iloc[-1]
-                    
+
                     # Store in update queue
                     if timeframe == "1D" and st_period == 10 and st_multiplier == 3.0:
                         updates_to_cache[ticker] = hist_df
-                    
+
                     # Calculate RED/GREEN streak
                     streak_days, streak_status = calculate_consecutive_streak(hist_df)
-                    
+
                     # Apply filter
-                    if supertrend_filter == "green" and latest["Close"] > latest["Supertrend"]:
+                    if (
+                        supertrend_filter == "green"
+                        and latest["Close"] > latest["Supertrend"]
+                    ):
                         row_copy = row.copy()
                         row_copy["streak_days"] = streak_days
                         row_copy["streak_status"] = streak_status
                         filtered_results.append(row_copy)
 
-                    elif supertrend_filter == "red" and latest["Close"] <= latest["Supertrend"]:
+                    elif (
+                        supertrend_filter == "red"
+                        and latest["Close"] <= latest["Supertrend"]
+                    ):
                         row_copy = row.copy()
                         row_copy["streak_days"] = streak_days
                         row_copy["streak_status"] = streak_status
                         # Filter by red streak if specified
                         if streak_days >= red_streak_min:
                             filtered_results.append(row_copy)
-                        
+
                 except Exception:
                     continue
-            
+
             # Batch update the database for any newly calculated indicators
             if updates_to_cache:
                 print(f"Updating cache for {len(updates_to_cache)} ETFs...")
                 for t, df_to_cache in updates_to_cache.items():
                     db.insert_dataframe(df_to_cache, t)
-            
-            results = pd.DataFrame(filtered_results) if filtered_results else pd.DataFrame()
 
-            
+            results = (
+                pd.DataFrame(filtered_results) if filtered_results else pd.DataFrame()
+            )
 
             if supertrend_filter == "green":
 
-                print(f"Filtering for GREEN Supertrend ({timeframe}, mult={st_multiplier})...\n")
+                print(
+                    f"Filtering for GREEN Supertrend ({timeframe}, mult={st_multiplier})...\n"
+                )
 
             elif supertrend_filter == "red":
 
                 if red_streak_min > 0:
 
-                    print(f"Filtering for RED Supertrend ({timeframe}, mult={st_multiplier}) with RED streak >= {red_streak_min} days...\n")
+                    print(
+                        f"Filtering for RED Supertrend ({timeframe}, mult={st_multiplier}) with RED streak >= {red_streak_min} days...\n"
+                    )
 
                 else:
 
-                    print(f"Filtering for RED Supertrend ({timeframe}, mult={st_multiplier})...\n")
-
-
+                    print(
+                        f"Filtering for RED Supertrend ({timeframe}, mult={st_multiplier})...\n"
+                    )
 
         # Apply conditional filters if specified
         if conditions and not results.empty:
             for field, ops_list in conditions.items():
                 if not ops_list:
                     continue
-                
+
                 filtered_results = []
                 # Single TQDM for the field filtering
-                for _, row in tqdm(results.iterrows(), total=len(results), desc=f"Filtering {field}", leave=False):
+                for _, row in tqdm(
+                    results.iterrows(),
+                    total=len(results),
+                    desc=f"Filtering {field}",
+                    leave=False,
+                ):
                     # If indicators aren't already in the row (from supertrend filter), fetch them
                     if field not in row or pd.isna(row[field]):
                         try:
@@ -818,7 +773,12 @@ def screen_etfs(
                             hist_df = db.get_ticker_data(ticker, days=90)
                             if hist_df.empty or len(hist_df) < 10:
                                 continue
-                            hist_df = add_indicators(hist_df, st_period=st_period, st_multiplier=st_multiplier, timeframe=timeframe)
+                            hist_df = add_indicators(
+                                hist_df,
+                                st_period=st_period,
+                                st_multiplier=st_multiplier,
+                                timeframe=timeframe,
+                            )
                             latest = hist_df.iloc[-1]
                             row = row.copy()
                             row["close"] = latest["Close"]
@@ -833,10 +793,12 @@ def screen_etfs(
                                 row["pullback"] = latest["Pullback_Pct"]
 
                             if "avg_vol" in row or "Avg Vol" in row:
-                                row["volume"] = row.get("avg_vol", row.get("Avg Vol", 0))
+                                row["volume"] = row.get(
+                                    "avg_vol", row.get("Avg Vol", 0)
+                                )
                         except Exception:
                             continue
-                    
+
                     # Apply all conditions for this field
                     passes_all = True
                     for operator, threshold in ops_list:
@@ -845,11 +807,18 @@ def screen_etfs(
                         if field == "close":
                             field_value = row.get("close") or row.get("Close")
                         elif field == "ema":
-                            field_value = row.get("ema") or row.get("EMA_50") or row.get("ema_50")
+                            field_value = (
+                                row.get("ema") or row.get("EMA_50") or row.get("ema_50")
+                            )
                         elif field == "pullback":
                             field_value = row.get("pullback") or row.get("Pullback_Pct")
                         elif field == "volume":
-                            field_value = row.get("volume") or row.get("Avg Vol") or row.get("avg_vol") or row.get("avg_volume")
+                            field_value = (
+                                row.get("volume")
+                                or row.get("Avg Vol")
+                                or row.get("avg_vol")
+                                or row.get("avg_volume")
+                            )
                         elif field == "rsi":
                             field_value = row.get("rsi") or row.get("RSI")
                         elif field == "macd":
@@ -857,12 +826,18 @@ def screen_etfs(
                         elif field == "tsi":
                             field_value = row.get("tsi") or row.get("TSI")
 
-                        if field_value is None or not evaluate_condition(field_value, operator, threshold):
+                        if field_value is None or not evaluate_condition(
+                            field_value, operator, threshold
+                        ):
                             passes_all = False
                             break
                     if passes_all:
                         filtered_results.append(row)
-                results = pd.DataFrame(filtered_results) if filtered_results else pd.DataFrame()
+                results = (
+                    pd.DataFrame(filtered_results)
+                    if filtered_results
+                    else pd.DataFrame()
+                )
                 # Simplified status print
                 ops_str = " and ".join([f"{op} {val}" for op, val in ops_list])
                 print(f"Filtering {field} ({ops_str})...\n")
@@ -870,33 +845,35 @@ def screen_etfs(
         # Apply name filter if specified
         if name_filter and not results.empty:
             print(f"Filtering for name containing: '{name_filter}'...")
-            
+
             # Load etfs.json to get friendly names
             etfs_file = Path("config/etfs.json")
             if not etfs_file.exists():
                 etfs_file = Path(data_dir) / "etfs.json"
-            
+
             if etfs_file.exists():
-                with open(etfs_file) as f:
-                    etfs_lookup = json.load(f)
-                
+                with open(etfs_file) as f:  # type: ignore[assignment]
+                    etfs_lookup = json.load(f)  # type: ignore[arg-type]
+
                 filtered_by_name = []
                 # Support SQL-style % wildcard by converting to regex
                 raw_pattern = name_filter.lower()
                 # Default behavior: wrap in % if no wildcards provided
                 if "%" not in raw_pattern:
                     raw_pattern = f"%{raw_pattern}%"
-                
+
                 # IMPORTANT: Convert SQL wildcard % to regex .*
                 # and handle literal dots in tickers
                 # On some Python versions/OSs, re.escape might NOT escape '%'
-                regex_pattern = re.escape(raw_pattern).replace(r"\%", ".*").replace("%", ".*")
-                
+                regex_pattern = (
+                    re.escape(raw_pattern).replace(r"\%", ".*").replace("%", ".*")
+                )
+
                 # Check BOTH 'ticker' and 'ticker.lower()' to be safe
                 for _, row in results.iterrows():
                     ticker_raw = str(row["ticker"])
                     ticker_low = ticker_raw.lower()
-                    
+
                     # Look up name from etfs_lookup (handling the dict structure)
                     # Use ticker_raw first, then case-insensitive lookup
                     etf_info = etfs_lookup.get(ticker_raw)
@@ -906,20 +883,26 @@ def screen_etfs(
                             if k.lower() == ticker_low:
                                 etf_info = v
                                 break
-                    
+
                     name = ""
                     if isinstance(etf_info, dict):
                         name = etf_info.get("name", "").lower()
-                    
+
                     # Match against name, full ticker (DTE.DE), or ticker prefix (DTE)
                     ticker_prefix = ticker_low.split(".")[0]
-                    
-                    if (name and re.fullmatch(regex_pattern, name)) or \
-                       re.fullmatch(regex_pattern, ticker_low) or \
-                       re.fullmatch(regex_pattern, ticker_prefix):
+
+                    if (
+                        (name and re.fullmatch(regex_pattern, name))
+                        or re.fullmatch(regex_pattern, ticker_low)
+                        or re.fullmatch(regex_pattern, ticker_prefix)
+                    ):
                         filtered_by_name.append(row)
-                
-                results = pd.DataFrame(filtered_by_name) if filtered_by_name else pd.DataFrame()
+
+                results = (
+                    pd.DataFrame(filtered_by_name)
+                    if filtered_by_name
+                    else pd.DataFrame()
+                )
 
         # Apply custom DSL strategy if specified
         if strategy_path and not results.empty:
@@ -928,69 +911,93 @@ def screen_etfs(
             if not strat_file.exists():
                 print(f"[ERROR] Strategy file not found: {strategy_path}")
             else:
-                with open(strat_file, 'r') as f:
-                    content = f.read()
-                
+                with open(strat_file, "r") as f:  # type: ignore[assignment]
+                    content = f.read()  # type: ignore[attr-defined]
+
                 # DSL parsing - improved to filter out comments and extract terms
-                lines = [line.split('#')[0].strip() for line in content.split('\n')]
-                clean_content = "\n".join([l for l in lines if l])
-                
+                lines = [line.split("#")[0].strip() for line in content.split("\n")]
+                clean_content = "\n".join([ln for ln in lines if ln])
+
                 entry_script = ""
                 exit_script = ""
-                
+
                 # Check for explicit sections
-                has_sections = any(re.match(r'^(trigger|filter|entry|exit):', l, re.I) for l in lines)
-                
+                has_sections = any(
+                    re.match(r"^(trigger|filter|entry|exit):", ln, re.I) for ln in lines
+                )
+
                 if has_sections:
                     # Collect all entry-related terms (trigger, filter, entry)
                     entry_terms = []
                     for line in lines:
-                        if not line: continue
-                        m = re.match(r'^(trigger|filter|entry):\s*(.*)', line, re.I)
+                        if not line:
+                            continue
+                        m = re.match(r"^(trigger|filter|entry):\s*(.*)", line, re.I)
                         if m:
                             entry_terms.append(f"({m.group(2).strip()})")
-                        elif re.match(r'^exit:\s*(.*)', line, re.I):
-                            exit_script = re.match(r'^exit:\s*(.*)', line, re.I).group(1).strip()
-                    
+                        elif re.match(r"^exit:\s*(.*)", line, re.I):
+                            exit_script = (
+                                re.match(r"^exit:\s*(.*)", line, re.I).group(1).strip()  # type: ignore[union-attr]
+                            )
+
                     if entry_terms:
                         entry_script = " & ".join(entry_terms)
                 else:
                     entry_script = clean_content
-                
+
                 filtered_results = []
                 bt = Backtester(db_path=db.db_path)
-                
+
                 # Header for live discovery
                 if not quiet:
                     print(f"\n[STRATEGY] Discovering matches for: {strategy_path}")
-                    print(f"{'TICKER':<12} | {'MATCH':<5} | {'PRICE':<8} | {'EMA 50':<8}")
+                    print(
+                        f"{'TICKER':<12} | {'MATCH':<5} | {'PRICE':<8} | {'EMA 50':<8}"
+                    )
                     print("-" * 45)
 
-                for _, row in tqdm(results.iterrows(), total=len(results), desc="Executing Strategy", leave=False):
+                for _, row in tqdm(
+                    results.iterrows(),
+                    total=len(results),
+                    desc="Executing Strategy",
+                    leave=False,
+                ):
                     ticker = row["ticker"]
                     try:
                         df = db.get_ticker_data(ticker, days=253)
                         if df.empty or len(df) < 50:
                             continue
-                        
-                        res = bt.scripted_strategy(df, ticker, entry_script=entry_script, exit_script=exit_script or "close < ema(50)", manager=manager)
-                        
+
+                        res = bt.scripted_strategy(
+                            df,
+                            ticker,
+                            entry_script=entry_script,
+                            exit_script=exit_script or "close < ema(50)",
+                            manager=manager,
+                        )
+
                         # Check last signal
-                        if res['df']['signal'].iloc[-1] == 1:
+                        if res["df"]["signal"].iloc[-1] == 1:
                             filtered_results.append(row)
                             if not quiet:
                                 # Live reporting of matches
                                 last_row = df.iloc[-1]
-                                price = last_row.get('Close', 0.0)
-                                ema = last_row.get('EMA_50', 0.0)
-                                print(f"{ticker:<12} | \033[92mYES\033[0m   | {price:>8.2f} | {ema:>8.2f}")
+                                price = last_row.get("Close", 0.0)
+                                ema = last_row.get("EMA_50", 0.0)
+                                print(
+                                    f"{ticker:<12} | \033[92mYES\033[0m   | {price:>8.2f} | {ema:>8.2f}"
+                                )
                     except Exception:
                         continue
-                
+
                 if not quiet:
                     print("-" * 45 + "\n")
 
-                results = pd.DataFrame(filtered_results) if filtered_results else pd.DataFrame()
+                results = (
+                    pd.DataFrame(filtered_results)
+                    if filtered_results
+                    else pd.DataFrame()
+                )
 
         screener.print_results(results, format_name=format_name)
 
@@ -1000,14 +1007,22 @@ def screen_etfs(
             if clean_plots and Path(plot_dir).exists():
                 print(f"Cleaning plots directory: {plot_dir}...")
                 for f in Path(plot_dir).glob("*"):
-                    if f.name not in ["index.html", "plot_manifest.json"] and f.is_file():
+                    if (
+                        f.name not in ["index.html", "plot_manifest.json"]
+                        and f.is_file()
+                    ):
                         f.unlink()
 
             # Combined progress message
             storage = ParquetStorage(data_dir=data_dir)
             plotter = InteractivePlotter(output_dir=plot_dir)
-            
-            for _, row in tqdm(results.iterrows(), total=len(results), desc="Generating Plots", leave=True):
+
+            for _, row in tqdm(
+                results.iterrows(),
+                total=len(results),
+                desc="Generating Plots",
+                leave=True,
+            ):
                 ticker = row["ticker"]
                 df = storage.load_etf_data(ticker)
                 if not df.empty:
@@ -1017,8 +1032,6 @@ def screen_etfs(
 
         db.close()
 
-
-
     except Exception as e:
 
         print(f"Error: {str(e)}", file=sys.stderr)
@@ -1026,19 +1039,11 @@ def screen_etfs(
         sys.exit(1)
 
 
-
-
-
 def discover_etfs(
-
     tickers: Optional[list[str]] = None,
-
     etfs_file: str = "config/etfs.json",
-
     blacklist_file: str = "config/blacklist.json",
-
 ) -> None:
-
     """
 
     Discover and validate ETF tickers on Yahoo Finance.
@@ -1061,35 +1066,27 @@ def discover_etfs(
 
         results = discovery.discover(tickers=tickers, verbose=True)
 
-
-
         print("\n[DATA] Discovery Summary:")
 
         print(f"  Working: {len(results['working'])} ETFs")
 
         print(f"  Blacklisted: {len(results['blacklisted'])} ETFs")
 
-        
-
-        if results['working']:
+        if results["working"]:
 
             print("\n[OK] Working ETFs:")
 
-            for ticker in sorted(results['working'].keys()):
+            for ticker in sorted(results["working"].keys()):
 
                 print(f"  - {ticker}")
 
-        
-
-        if results['blacklisted']:
+        if results["blacklisted"]:
 
             print("\n[X] Blacklisted ETFs:")
 
-            for ticker in sorted(results['blacklisted'].keys()):
+            for ticker in sorted(results["blacklisted"].keys()):
 
                 print(f"  - {ticker}")
-
-
 
     except Exception as e:
 
@@ -1098,19 +1095,11 @@ def discover_etfs(
         sys.exit(1)
 
 
-
-
-
 def extract_xetra_etfs(
-
     csv_file: str = "reference/t7-xetr-allTradableInstruments.csv",
-
     etfs_file: str = "config/etfs.json",
-
     blacklist_file: str = "config/blacklist.json",
-
 ) -> None:
-
     """
 
     Extract and validate XETRA ETF tickers from Deutsche Brse CSV.
@@ -1130,18 +1119,12 @@ def extract_xetra_etfs(
     try:
 
         extractor = XETRETFExtractor(
-
             csv_file=csv_file,
-
             etfs_file=etfs_file,
-
             blacklist_file=blacklist_file,
-
         )
 
         results = extractor.discover_and_validate(verbose=True)
-
-
 
         print("\n[DATA] Extraction Summary:")
 
@@ -1151,21 +1134,17 @@ def extract_xetra_etfs(
 
         print(f"  Blacklisted: {len(results['blacklisted'])} ETFs")
 
-
-
-        if results['working']:
+        if results["working"]:
 
             print("\n[OK] Top 20 Working ETFs:")
 
-            for ticker in sorted(results['working'].keys())[:20]:
+            for ticker in sorted(results["working"].keys())[:20]:
 
                 print(f"  - {ticker}")
 
-            if len(results['working']) > 20:
+            if len(results["working"]) > 20:
 
                 print(f"  ... and {len(results['working']) - 20} more")
-
-
 
     except Exception as e:
 
@@ -1174,19 +1153,11 @@ def extract_xetra_etfs(
         sys.exit(1)
 
 
-
-
-
 def discover_all_etfs(
-
     etfs_file: str = "config/etfs.json",
-
     blacklist_file: str = "config/blacklist.json",
-
     max_workers: int = 5,
-
 ) -> None:
-
     """
 
     Discover ALL XETRA ETFs from justETFs and validate in parallel.
@@ -1209,9 +1180,9 @@ def discover_all_etfs(
 
         print("[START] Starting full XETRA ETF discovery from justETFs...\n")
 
-        results = discovery.discover_parallel(tickers=None, max_workers=max_workers, verbose=True)
-
-
+        results = discovery.discover_parallel(
+            tickers=None, max_workers=max_workers, verbose=True
+        )
 
         print("\n[DATA] Discovery Complete!")
 
@@ -1225,8 +1196,6 @@ def discover_all_etfs(
 
         print(f"    - {blacklist_file} (review delisted)")
 
-
-
     except Exception as e:
 
         print(f"Error: {str(e)}", file=sys.stderr)
@@ -1234,25 +1203,14 @@ def discover_all_etfs(
         sys.exit(1)
 
 
-
-
-
 def refresh_database(
-
     depth: int = 365,
-
     csv_file: str = "reference/t7-xetr-allTradableInstruments.csv",
-
     etfs_file: str = "config/etfs.json",
-
     blacklist_file: str = "config/blacklist.json",
-
     force: bool = False,
-
     include_blacklist: bool = False,
-
 ) -> None:
-
     """
 
     Refresh SQLite database by fetching/extending data for tickers from CSV.
@@ -1283,40 +1241,34 @@ def refresh_database(
 
         print(f" Starting database refresh (depth: {depth} days)...\n")
 
-
-
         # Extract tickers from CSV
 
         print(f"[READ] Reading ETF tickers from {csv_file}...")
 
         extractor = XETRETFExtractor(
-
             csv_file=csv_file,
-
             etfs_file=etfs_file,
-
             blacklist_file=blacklist_file,
-
         )
 
         tickers = extractor.extract_etf_tickers()
-
-        
 
         if not tickers:
             print("[ERROR] No tickers found in CSV. Exiting.")
             return
 
         # Load blacklist
-        raw_blacklist = extractor.blacklist if hasattr(extractor, 'blacklist') else {}
+        raw_blacklist = extractor.blacklist if hasattr(extractor, "blacklist") else {}
         blacklist = {str(k).upper(): v for k, v in raw_blacklist.items()}
-        
+
         # Filter out blacklisted tickers (unless --include-blacklist)
         if not include_blacklist:
             original_count = len(tickers)
-            tickers = [t for t in tickers if t.upper() not in blacklist]
+            tickers = [t for t in tickers if t.upper() not in blacklist]  # type: ignore[assignment]
             filtered_count = original_count - len(tickers)
-            print(f"[OK] Found {len(tickers)} tickers in CSV (filtered out {filtered_count} blacklisted)\n")
+            print(
+                f"[OK] Found {len(tickers)} tickers in CSV (filtered out {filtered_count} blacklisted)\n"
+            )
         else:
             print(f"[OK] Found {len(tickers)} tickers in CSV (including blacklisted)\n")
 
@@ -1325,13 +1277,9 @@ def refresh_database(
 
         fetcher = YFinanceFetcher()
 
-
-
         # Fetch and store data
 
         print(f"[DATA] Processing {len(tickers)} ETFs (target {depth} days)...\n")
-
-        
 
         successful = 0
 
@@ -1341,11 +1289,13 @@ def refresh_database(
 
         updated = 0
 
-        for ticker in tqdm(tickers, desc="Processing", ncols=80):
+        pbar = tqdm(tickers, desc="Processing", ncols=80)
+        for ticker in pbar:
+            pbar.set_description(f"Processing | {ticker}")
             try:
                 # Determine action
                 ticker_exists = db.ticker_exists(ticker)
-                
+
                 if force:
                     # Force: re-fetch everything
                     action = "refetch"
@@ -1357,60 +1307,80 @@ def refresh_database(
                     oldest_date = db.get_oldest_date(ticker)
                     if oldest_date:
                         from datetime import datetime, date
+
                         try:
                             # Standardize to naive dates for comparison
                             # Some datasets might have timestamps 'YYYY-MM-DD HH:MM:SS'
-                            oldest_dt = datetime.strptime(oldest_date.split(" ")[0], "%Y-%m-%d").date()
+                            oldest_dt = datetime.strptime(
+                                oldest_date.split(" ")[0], "%Y-%m-%d"
+                            ).date()
                             today_dt = date.today()
                             days_in_db = (today_dt - oldest_dt).days
-                            
+
                             if days_in_db < depth:
                                 # Check if it's already "maxed out" in the blacklist
-                                if ticker.upper() in blacklist and blacklist[ticker.upper()].get("reason") == "Max depth reached":
+                                if (
+                                    ticker.upper() in blacklist
+                                    and blacklist[ticker.upper()].get("reason")
+                                    == "Max depth reached"
+                                ):
                                     action = "skip"
                                 else:
                                     action = "extend"
                             else:
                                 action = "skip"
                         except (ValueError, TypeError) as e:
-                            tqdm.write(f"[WARN] Error parsing date '{oldest_date}' for {ticker}: {e}")
+                            pbar.write(
+                                f"[WARN] Error parsing date '{oldest_date}' for {ticker}: {e}"
+                            )
                             action = "refetch"
 
                     else:
                         action = "new"
-                
+
                 if action == "skip":
                     skipped += 1
                     continue
-                
+
                 if action == "extend":
-                    tqdm.write(f"DEBUG: {ticker} has {days_in_db} days, need {depth} (Oldest: {oldest_date})")
+                    pbar.write(
+                        f"DEBUG: {ticker} has {days_in_db} days, need {depth} (Oldest: {oldest_date})"
+                    )
 
                 # Fetch data
                 try:
                     df = fetcher.fetch_historical_data(ticker, days=depth)
                 except ValueError as e:
                     if "No data found for symbol" in str(e):
-                        tqdm.write(f"[ERROR] No data found for {ticker}")
+                        pbar.write(f"[ERROR] No data found for {ticker}")
                         # Blacklist if it's a new or problematic ticker to speed up future refreshes
-                        extractor.add_to_blacklist(ticker, reason="No data found during refresh")
+                        extractor.add_to_blacklist(
+                            ticker, reason="No data found during refresh"
+                        )
                         failed += 1
                         continue
                     else:
                         raise e
 
                 if df is None or df.empty:
-                    tqdm.write(f"[ERROR] No data found for {ticker}")
-                    extractor.add_to_blacklist(ticker, reason="No data found during refresh")
+                    pbar.write(f"[ERROR] No data found for {ticker}")
+                    extractor.add_to_blacklist(
+                        ticker, reason="No data found during refresh"
+                    )
                     failed += 1
                     continue
 
                 # Check for "stale" or delisted data (more than 5 days old)
                 from datetime import date
+
                 latest_date = df["Date"].max().date()
                 if (date.today() - latest_date).days > 5:
-                    tqdm.write(f"[WARN] {ticker} data is stale (Latest date: {latest_date}). Adding to blacklist.")
-                    extractor.add_to_blacklist(ticker, reason="Stale data (likely delisted)")
+                    pbar.write(
+                        f"[WARN] {ticker} data is stale (Latest date: {latest_date}). Adding to blacklist."
+                    )
+                    extractor.add_to_blacklist(
+                        ticker, reason="Stale data (likely delisted)"
+                    )
                     skipped += 1
                     continue
 
@@ -1418,7 +1388,9 @@ def refresh_database(
                     # Check if the oldest date moved
                     new_oldest_dt = df["Date"].min().date() if not df.empty else None
                     if new_oldest_dt and new_oldest_dt >= oldest_dt:
-                        tqdm.write(f"[INFO] {ticker} already at max available depth ({days_in_db} days).")
+                        pbar.write(
+                            f"[INFO] {ticker} already at max available depth ({days_in_db} days)."
+                        )
                         extractor.add_to_blacklist(ticker, reason="Max depth reached")
                         skipped += 1
                         continue
@@ -1427,13 +1399,9 @@ def refresh_database(
 
                 df = add_indicators(df)
 
-                
-
                 # Store in database (INSERT OR REPLACE handles updates)
 
                 db.insert_dataframe(df, ticker)
-
-                
 
                 if action == "new":
 
@@ -1447,21 +1415,15 @@ def refresh_database(
 
                     successful += 1
 
-                    
-
             except Exception as e:
-                tqdm.write(f"[PANIC] Unexpected error processing {ticker}: {str(e)}")
+                pbar.write(f"[PANIC] Unexpected error processing {ticker}: {str(e)}")
                 failed += 1
-
-
 
         db.close()
 
-
-
         # Print summary
 
-        print(f"\n[OK] Database refresh complete!")
+        print("\n[OK] Database refresh complete!")
 
         print(f"  [OK] New: {successful}")
 
@@ -1475,8 +1437,6 @@ def refresh_database(
 
         print(f"   Total: {successful + updated + failed + skipped}/{len(tickers)}")
 
-
-
     except Exception as e:
 
         print(f"Error: {str(e)}", file=sys.stderr)
@@ -1484,19 +1444,12 @@ def refresh_database(
         sys.exit(1)
 
 
-
-
-
 def main() -> None:
-
     """Main CLI entry point."""
 
     parser = argparse.ArgumentParser(
-
         prog="etfs",
-
         description="ETF Screener - Swing trading analysis for XETRA ETFs with technical indicators",
-
         epilog="""
 
 ======================== QUICK START GUIDE ========================
@@ -1570,77 +1523,48 @@ def main() -> None:
 ====================================================================
 
         """,
-
         formatter_class=argparse.RawDescriptionHelpFormatter,
-
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-
-
     # Fetch command
 
     fetch_parser = subparsers.add_parser(
-
-        "fetch", 
-
+        "fetch",
         help="Fetch & analyze ETF data: parquet + plots",
-
-        description="Download historical data, calculate indicators, save data & generate charts"
-
+        description="Download historical data, calculate indicators, save data & generate charts",
     )
 
     fetch_parser.add_argument(
-
         "symbols",
-
         nargs="+",
-
         help="ETF symbols to fetch (e.g., EXS1.DE EUNG.DE)",
-
     )
 
     fetch_parser.add_argument(
-
         "--days",
-
         type=int,
-
         default=365,
-
         help="Number of days of historical data (default: 365)",
-
     )
 
     fetch_parser.add_argument(
-
         "--source",
-
         choices=["yfinance", "finnhub"],
-
         default="yfinance",
-
         help="Data source (default: yfinance)",
-
     )
 
     fetch_parser.add_argument(
-
         "--api-key",
-
         help="Finnhub API key (only for --source finnhub)",
-
     )
 
     fetch_parser.add_argument(
-
         "--data-dir",
-
         default="data",
-
         help="Directory to store parquet files (default: data)",
-
     )
 
     fetch_parser.add_argument(
@@ -1651,11 +1575,8 @@ def main() -> None:
 
     fetch_parser.add_argument(
         "--plot-dir",
-
         default="plots",
-
         help="Directory to store plots (default: plots)",
-
     )
 
     fetch_parser.add_argument(
@@ -1679,100 +1600,60 @@ def main() -> None:
         help="Suppress all output except the progress bar",
     )
 
-
-
     # List command
 
     list_parser = subparsers.add_parser(
-
-        "list", 
-
+        "list",
         help="View cached ETF data",
-
-        description="Show all ETFs in database with data range"
-
+        description="Show all ETFs in database with data range",
     )
 
     list_parser.add_argument(
-
         "--data-dir",
-
         default="data",
-
         help="Directory containing parquet files (default: data)",
-
     )
-
-
 
     # Screener command
 
     screener_parser = subparsers.add_parser(
-
-        "screener", 
-
+        "screener",
         help="Find ETFs matching criteria: volume, trends, signals",
-
-        description="Screen cached ETF data by volume, technical indicators, and trend patterns"
-
+        description="Screen cached ETF data by volume, technical indicators, and trend patterns",
     )
 
     screener_parser.add_argument(
-
         "symbols",
-
         nargs="*",
-
         help="ETF symbols to screen (e.g., EXS1.DE EUNG.DE). If empty, screens all in database.",
-
     )
 
     screener_parser.add_argument(
-
         "--nofEtfs",
-
         type=int,
-
         default=None,
-
         help="Number of top ETFs to return (default from output_formats.json config, or 10)",
-
     )
 
     screener_parser.add_argument(
-
         "--aVol",
-
         type=parse_volume,
-
         default=0,
-
         help="Minimum average volume (default: 0). Use K for thousands, M for millions (e.g., 100K, 1.5M)",
-
     )
 
     screener_parser.add_argument(
-
         "--days",
-
         type=int,
-
         default=5,
-
         help="Number of days to analyze (default: 5)",
-
     )
 
     screener_parser.add_argument(
-
         "--keep-days",
-
         type=int,
-
         default=365,
-
         help="Keep data for this many days; prune older (default: 365)",
-
     )
 
     screener_parser.add_argument(
@@ -1785,121 +1666,73 @@ def main() -> None:
     )
     screener_parser.add_argument(
         "--format",
-
         choices=["default", "compact", "detailed"],
-
         default="default",
-
         help="Output format template (default: default)",
-
     )
 
     screener_parser.add_argument(
-
         "--compact",
-
         action="store_true",
-
         help="Use compact output format (shorthand for --format compact)",
-
     )
 
     screener_parser.add_argument(
-
         "--detailed",
-
         action="store_true",
-
         help="Use detailed output format (shorthand for --format detailed)",
-
     )
 
     screener_parser.add_argument(
-
         "--default",
-
         action="store_true",
-
         help="Use default output format (shorthand for --format default)",
-
     )
 
     screener_parser.add_argument(
-
         "--swing",
-
         action="store_true",
-
         help="Filter for swing-ready setups (price dipped to EMA50 in uptrend)",
-
     )
 
     screener_parser.add_argument(
-
         "--swing-pull",
-
         type=float,
-
         default=2.0,
-
         help="Minimum pullback %% from recent high for swing filter (default: 2.0)",
-
     )
 
     screener_parser.add_argument(
-
         "--supt",
-
         choices=["green", "red"],
-
         help="Filter by Supertrend color (green: price > supertrend, red: price < supertrend)",
-
     )
 
     screener_parser.add_argument(
-
         "--data-dir",
-
         default="data",
-
         help="Directory containing etfs.json (default: data)",
-
     )
 
     screener_parser.add_argument(
-
         "--timeframe",
-
         choices=["1D", "1W"],
-
         default="1D",
-
         help="Timeframe for Supertrend calculation ('1D' daily or '1W' weekly, default: 1D)",
-
     )
 
     screener_parser.add_argument(
-
         "--st-period",
-
         type=int,
-
         default=10,
-
         help="Supertrend ATR period (default: 10)",
-
     )
 
     screener_parser.add_argument(
-
         "--st-multiplier",
-
         type=float,
-
         default=3.0,
-
         help="Supertrend multiplier (default: 3.0, try 2.0-3.5 to adjust sensitivity)",
-
     )
 
     screener_parser.add_argument(
@@ -1955,8 +1788,8 @@ def main() -> None:
         # Choose type based on field
         data_type = float
         if field == "volume":
-            data_type = parse_volume
-            
+            data_type = parse_volume  # type: ignore[assignment]
+
         for op in ["gt", "gte", "lt", "lte", "eq", "ne"]:
             arg_name = f"--{field}-{op}"
             screener_parser.add_argument(
@@ -1965,343 +1798,202 @@ def main() -> None:
                 help=f"Filter {field} {op} value (e.g., --{field}-{op} 50)",
             )
 
-
-
     # Discover command
 
     discover_parser = subparsers.add_parser(
-
         "discover",
-
         help="Validate ETF tickers: test if they trade",
-
-        description="Check if ETF tickers are valid and tradeable on XETRA"
-
+        description="Check if ETF tickers are valid and tradeable on XETRA",
     )
 
     discover_parser.add_argument(
-
         "symbols",
-
         nargs="*",
-
         help="ETF symbols to validate. If empty, validates predefined XETRA list.",
-
     )
 
     discover_parser.add_argument(
-
         "--etfs-file",
-
         default="config/etfs.json",
-
         help="JSON file to save validated ETFs (default: config/etfs.json)",
-
     )
 
     discover_parser.add_argument(
-
         "--blacklist-file",
-
         default="config/blacklist.json",
-
         help="JSON file to save blacklisted/invalid ETFs (default: config/blacklist.json)",
-
     )
-
-
 
     # Discover all command
 
     discover_all_parser = subparsers.add_parser(
-
-        "discover-all", 
-
+        "discover-all",
         help="Find all ~3000 XETRA ETFs (5-10 min)",
-
-        description="Comprehensive discovery of all XETRA ETFs from justETFs database"
-
+        description="Comprehensive discovery of all XETRA ETFs from justETFs database",
     )
 
     discover_all_parser.add_argument(
-
         "--etfs-file",
-
         default="config/etfs.json",
-
         help="JSON file to save validated ETFs (default: config/etfs.json)",
-
     )
 
     discover_all_parser.add_argument(
-
         "--blacklist-file",
-
         default="config/blacklist.json",
-
         help="JSON file to save blacklisted/invalid ETFs (default: config/blacklist.json)",
-
     )
 
     discover_all_parser.add_argument(
-
         "--workers",
-
         type=int,
-
         default=5,
-
         help="Number of parallel workers (default: 5, use 1-10)",
-
     )
-
-
 
     # Refresh command
 
     refresh_parser = subparsers.add_parser(
-
         "refresh",
-
         help="Update database: fetch missing historical data",
-
-        description="Incrementally fill database with historical data for all XETRA ETFs"
-
+        description="Incrementally fill database with historical data for all XETRA ETFs",
     )
 
     refresh_parser.add_argument(
-
         "--depth",
-
         type=int,
-
         default=365,
-
         help="Target number of days of historical data (default: 365). Extends existing data to reach this depth.",
-
     )
 
     refresh_parser.add_argument(
-
         "--csv-file",
-
         default="reference/t7-xetr-allTradableInstruments.csv",
-
         help="Path to Deutsche Brse CSV file (default: reference/t7-xetr-allTradableInstruments.csv)",
-
     )
 
     refresh_parser.add_argument(
-
         "--etfs-file",
-
         default="config/etfs.json",
-
         help="JSON file with validated ETFs (default: config/etfs.json)",
-
     )
 
     refresh_parser.add_argument(
-
         "--blacklist-file",
-
         default="config/blacklist.json",
-
         help="JSON file with blacklisted ETFs (default: config/blacklist.json)",
-
     )
 
     refresh_parser.add_argument(
-
         "--force",
-
         action="store_true",
-
         help="Re-fetch all tickers even if already cached (full refresh)",
-
     )
 
     refresh_parser.add_argument(
-
         "--include-blacklist",
-
         action="store_true",
-
         help="Include blacklisted tickers (useful for re-validation)",
-
     )
-
-
 
     # Extract command
 
     extract_parser = subparsers.add_parser(
-
         "extract",
-
         help="Parse Deutsche Brse CSV: validate ETF list",
-
-        description="Extract and validate XETRA ETF tickers from official CSV file"
-
+        description="Extract and validate XETRA ETF tickers from official CSV file",
     )
 
     extract_parser.add_argument(
-
         "--csv-file",
-
         default="reference/t7-xetr-allTradableInstruments.csv",
-
         help="Path to Deutsche Brse CSV file",
-
     )
 
     extract_parser.add_argument(
-
         "--etfs-file",
-
         default="config/etfs.json",
-
         help="JSON file to save validated ETFs (default: config/etfs.json)",
-
     )
 
     extract_parser.add_argument(
-
         "--blacklist-file",
-
         default="config/blacklist.json",
-
         help="JSON file to save blacklisted/invalid ETFs (default: config/blacklist.json)",
-
     )
-
-
 
     # Hotlist command
 
     hotlist_parser = subparsers.add_parser(
-
         "hotlist",
-
         help="Generate swing trading hotlist (daily prospects)",
-
-        description="Create a timestamped report of ETFs with green supertrend and swing setups"
-
+        description="Create a timestamped report of ETFs with green supertrend and swing setups",
     )
 
     hotlist_parser.add_argument(
-
         "--aVol",
-
         type=parse_volume,
-
         default=10_000_000,
-
         help="Minimum average volume (default: 10M). Use K for thousands, M for millions (e.g., 100K, 1.5M)",
-
     )
 
     hotlist_parser.add_argument(
-
         "--days",
-
         type=int,
-
         default=10,
-
         help="Number of days to analyze (default: 10)",
-
     )
 
     hotlist_parser.add_argument(
-
         "--output",
-
         default="logs",
-
         help="Directory to save hotlist report (default: logs)",
-
     )
 
     hotlist_parser.add_argument(
-
         "--swing-pull",
-
         type=float,
-
         default=2.0,
-
         help="Minimum pullback %% from recent high (default: 2.0)",
-
     )
 
     hotlist_parser.add_argument(
-
         "--ema-distance",
-
         type=float,
-
         default=5.0,
-
         help="Maximum distance %% from EMA50 (default: 5.0)",
-
     )
 
     hotlist_parser.add_argument(
-
         "--timeframe",
-
         choices=["1D", "1W"],
-
         default="1D",
-
         help="Timeframe for analysis ('1D' daily or '1W' weekly, default: 1D)",
-
     )
 
     hotlist_parser.add_argument(
-
         "--st-period",
-
         type=int,
-
         default=10,
-
         help="Supertrend ATR period (default: 10)",
-
     )
 
     hotlist_parser.add_argument(
-
         "--st-multiplier",
-
         type=float,
-
         default=3.0,
-
         help="Supertrend multiplier (default: 3.0)",
-
     )
-
-
-
 
     args = parser.parse_args()
-
-
 
     if args.command == "fetch":
 
         fetch_and_analyze(
-
             args.symbols,
-
             days=args.days,
-
             api_key=args.api_key,
-
             data_dir=args.data_dir,
-
             plot_dir=args.plot_dir,
             source=args.source,
             plot_format=args.plot_format,
@@ -2336,8 +2028,6 @@ def main() -> None:
 
             format_name = "swing"
 
-        
-
         # Extract conditional filters from args
         conditions = {}
         min_avg_volume = args.aVol
@@ -2363,36 +2053,22 @@ def main() -> None:
 
                 conditions[field] = field_conditions
 
-        
-
         screen_etfs(
-
             symbols=args.symbols if args.symbols else None,
-
             nof_etfs=args.nofEtfs,
-
             min_avg_volume=min_avg_volume,
-
             days=args.days,
             days_to_keep=args.keep_days,
             api_key=args.api_key,
             strategy_path=args.strategy,
             format_name=format_name,
-
             data_dir=args.data_dir,
-
             filter_swing=args.swing,
-
             swing_pullback=args.swing_pull,
-
             supertrend_filter=args.supt,
-
             timeframe=args.timeframe,
-
             st_period=args.st_period,
-
             st_multiplier=args.st_multiplier,
-
             red_streak_min=args.red_streak,
             conditions=conditions if conditions else None,
             name_filter=args.name,
@@ -2406,77 +2082,49 @@ def main() -> None:
     elif args.command == "discover":
 
         discover_etfs(
-
             tickers=args.symbols if args.symbols else None,
-
             etfs_file=args.etfs_file,
-
             blacklist_file=args.blacklist_file,
-
         )
 
     elif args.command == "discover-all":
 
         discover_all_etfs(
-
             etfs_file=args.etfs_file,
-
             blacklist_file=args.blacklist_file,
-
             max_workers=args.workers,
-
         )
 
     elif args.command == "refresh":
 
         refresh_database(
-
             depth=args.depth,
-
             csv_file=args.csv_file,
-
             etfs_file=args.etfs_file,
-
             blacklist_file=args.blacklist_file,
-
             force=args.force,
-
             include_blacklist=args.include_blacklist,
-
         )
 
     elif args.command == "extract":
 
         extract_xetra_etfs(
-
             csv_file=args.csv_file,
-
             etfs_file=args.etfs_file,
-
             blacklist_file=args.blacklist_file,
-
         )
 
     elif args.command == "hotlist":
 
         generate_hotlist(
-
             min_avg_volume=args.aVol,
-
             days=args.days,
-
             output_dir=args.output,
-
             min_pullback=args.swing_pull,
-
             max_distance_from_ema=args.ema_distance,
-
             st_period=args.st_period,
-
             st_multiplier=args.st_multiplier,
-
             timeframe=args.timeframe,
-
         )
 
     else:
@@ -2484,10 +2132,6 @@ def main() -> None:
         parser.print_help()
 
 
-
-
-
 if __name__ == "__main__":
 
     main()
-

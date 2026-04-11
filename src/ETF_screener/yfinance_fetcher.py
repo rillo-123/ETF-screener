@@ -1,10 +1,13 @@
 """Fetch ETF data from Yahoo Finance API."""
 
+import logging
 from datetime import datetime, timedelta
 
 import pandas as pd
 import yfinance as yf
 from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 
 
 class YFinanceFetcher:
@@ -14,11 +17,33 @@ class YFinanceFetcher:
         """Initialize Yahoo Finance fetcher."""
         self.name = "Yahoo Finance"
 
-    def fetch_historical_data(
-        self, symbol: str, days: int = 365
+    def _fetch_yf(
+        self, symbol: str, start_date: datetime, end_date: datetime
     ) -> pd.DataFrame:
+        """Raw yfinance fetch, returns normalized DataFrame or empty DataFrame."""
+        try:
+            df = yf.Ticker(symbol).history(
+                start=start_date, end=end_date, interval="1d"
+            )
+        except Exception as e:
+            logger.debug("yfinance error for %s: %s", symbol, e)
+            return pd.DataFrame()
+        if df.empty:
+            return df
+        df = df.reset_index()
+        df.columns = df.columns.str.capitalize()
+        required = ["Date", "Open", "High", "Low", "Close", "Volume"]
+        if not all(c in df.columns for c in required):
+            return pd.DataFrame()
+        return df[required].sort_values("Date").reset_index(drop=True)
+
+    def fetch_historical_data(self, symbol: str, days: int = 365) -> pd.DataFrame:
         """
         Fetch historical OHLCV data for an ETF.
+
+        Tries the given symbol first. If it returns empty and the symbol ends
+        with a recognised exchange suffix (e.g. .DE), retries with the
+        Frankfurt suffix (.F) as a fallback before giving up.
 
         Args:
             symbol: Stock/ETF symbol (e.g., 'EXS1.DE' for XETRA)
@@ -30,32 +55,28 @@ class YFinanceFetcher:
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
 
-        ticker = yf.Ticker(symbol)
-        
-        # Fetch daily data
-        df = ticker.history(start=start_date, end=end_date, interval="1d")
+        df = self._fetch_yf(symbol, start_date, end_date)
+
+        if df.empty:
+            # Build a .F fallback symbol when the primary has a European suffix
+            base = symbol.rsplit(".", 1)[0] if "." in symbol else None
+            fallback = (
+                f"{base}.F" if base and not symbol.upper().endswith(".F") else None
+            )
+            if fallback:
+                logger.info(
+                    "No data for %s, retrying with fallback %s", symbol, fallback
+                )
+                df = self._fetch_yf(fallback, start_date, end_date)
 
         if df.empty:
             raise ValueError(f"No data found for symbol: {symbol}")
 
-        # Reset index to get Date as column
-        df = df.reset_index()
-        
-        # Rename columns to match expected format
-        df.columns = df.columns.str.capitalize()
-        
-        # Ensure we have the right columns
-        required_cols = ["Date", "Open", "High", "Low", "Close", "Volume"]
-        for col in required_cols:
-            if col not in df.columns:
-                raise ValueError(f"Missing required column: {col}")
-
-        # Sort by date
-        df = df[required_cols].sort_values("Date").reset_index(drop=True)
-
         return df
 
-    def fetch_multiple_etfs(self, symbols: list[str], days: int = 365, quiet: bool = False) -> dict:
+    def fetch_multiple_etfs(
+        self, symbols: list[str], days: int = 365, quiet: bool = False
+    ) -> dict:
         """
         Fetch data for multiple ETFs.
 

@@ -67,7 +67,10 @@ class TestPortfolioPlotter:
     def test_plot_multiple_etfs(self, temp_plot_dir, sample_data_with_indicators):
         """Test plotting multiple ETFs."""
         plotter = PortfolioPlotter(output_dir=temp_plot_dir)
-        etf_dict = {"ETFA": sample_data_with_indicators, "ETFB": sample_data_with_indicators}
+        etf_dict = {
+            "ETFA": sample_data_with_indicators,
+            "ETFB": sample_data_with_indicators,
+        }
 
         results = plotter.plot_multiple_etfs(etf_dict)
 

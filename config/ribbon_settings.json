@@ -3,6 +3,42 @@
         "left_gutter_x": -0.22,
         "left_margin": 300
     },
+    "aggregate": {
+        "fill_mode": "context_and_trigger",
+        "fill_condition": "context and trigger"
+    },
+    "dsl_layer_styles": {
+        "context": {
+            "label": "Layer 1 Context",
+            "color": "#2563eb",
+            "alpha": 0.6,
+            "height_multiplier": 1.0
+        },
+        "setup": {
+            "label": "Layer 2 Setup",
+            "color": "#f59e0b",
+            "alpha": 0.6,
+            "height_multiplier": 1.0
+        },
+        "trigger": {
+            "label": "Layer 3 Trigger",
+            "color": "#16a34a",
+            "alpha": 0.7,
+            "height_multiplier": 1.25
+        },
+        "risk": {
+            "label": "Layer 4 Risk",
+            "color": "#dc2626",
+            "alpha": 0.6,
+            "height_multiplier": 0.95
+        },
+        "entry_ready": {
+            "label": "Entry Ready (L1+L2+L3)",
+            "color": "#06b6d4",
+            "alpha": 0.85,
+            "height_multiplier": 1.1
+        }
+    },
     "ribbons": [
         {
             "label": "MACD",
