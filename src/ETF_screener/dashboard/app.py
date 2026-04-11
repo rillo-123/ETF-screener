@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, make_response
 import pandas as pd
 from pathlib import Path
 from ETF_screener.database import ETFDatabase
@@ -20,7 +20,11 @@ def index():
     tickers = pd.read_sql_query(
         "SELECT DISTINCT ticker FROM etf_data ORDER BY ticker", conn
     )["ticker"].tolist()
-    return render_template("index.html", tickers=tickers)
+    response = make_response(render_template("index.html", tickers=tickers))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @app.route("/api/chart/<ticker>")

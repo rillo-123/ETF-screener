@@ -5,6 +5,8 @@ Comprehensive test and code quality suite for ETF Screener project.
 
 Also writes a parsed companion log for each run in logs/:
 	test_results_YYYYMMDD_HHMMSS.parsed.log
+Also writes an analyzer companion log in logs/:
+	test_results_YYYYMMDD_HHMMSS.analyzer.log
 
 Usage:
   .\run_all_tests.ps1                    # Run pytest only
@@ -164,6 +166,9 @@ if (-not (Test-Path $logDir)) {
 Invoke-LogRetention -Directory $logDir -RetentionDays $LogRetentionDays -MaxFiles $LogRetentionMaxFiles -MaxPerType $LogRetentionMaxPerType
 $logFile = Join-Path $logDir "test_results_$timestamp.log"
 $pytestDetailLogFile = Join-Path $logDir "test_results_$timestamp.pytest.log"
+$ruffLogFile = Join-Path $logDir "ruff.out.txt"
+$mypyLogFile = Join-Path $logDir "mypy.out.txt"
+$banditLogFile = Join-Path $logDir "bandit.out.txt"
 Start-Transcript -Path $logFile -Append | Out-Null
 
 if ($Full -or $QualityGate -or $Ruff) { $progressTotal++ }
@@ -234,7 +239,9 @@ try {
 			Add-FailedCheck "ruff"
 			Write-Host "[FAIL] ruff is not installed in the active Python environment" -ForegroundColor $Red
 		} elseif ($pythonFiles) {
-			& $python -m ruff check src/ --statistics
+			& $python -m ruff check src/ --statistics 2>&1 |
+				Tee-Object -FilePath $ruffLogFile |
+				ForEach-Object { Write-Host $_ }
 			if ($LASTEXITCODE -ne 0) {
 				Add-FailedCheck "ruff"
 				Write-Host "[WARN] Ruff found issues" -ForegroundColor $Yellow
@@ -254,7 +261,9 @@ try {
 			Add-FailedCheck "mypy"
 			Write-Host "[FAIL] mypy is not installed in the active Python environment" -ForegroundColor $Red
 		} else {
-			& $python -m mypy src/ETF_screener/ --python-version $mypyPythonVersion --ignore-missing-imports --no-error-summary 2>&1
+			& $python -m mypy src/ETF_screener/ --python-version $mypyPythonVersion --ignore-missing-imports --no-error-summary 2>&1 |
+				Tee-Object -FilePath $mypyLogFile |
+				ForEach-Object { Write-Host $_ }
 		}
 		if ($LASTEXITCODE -eq 0 -and (Test-PythonModule -ModuleName 'mypy')) {
 			Write-Host "[OK] No type errors found" -ForegroundColor $Green
@@ -346,7 +355,9 @@ try {
 			Add-FailedCheck "bandit"
 			Write-Host "[FAIL] bandit is not installed in the active Python environment" -ForegroundColor $Red
 		} else {
-			& $python -m bandit -r src/ -f screen 2>&1
+			& $python -m bandit -r src/ -f screen 2>&1 |
+				Tee-Object -FilePath $banditLogFile |
+				ForEach-Object { Write-Host $_ }
 		}
 		if ($LASTEXITCODE -eq 0 -and (Test-PythonModule -ModuleName 'bandit')) {
 			Write-Host "[OK] No security issues found" -ForegroundColor $Green
@@ -385,12 +396,37 @@ finally {
 
 	# Create a concise parsed companion log from the full transcript.
 	try {
+		$analyzerLogFile = Join-Path $logDir "test_results_$timestamp.analyzer.log"
+		$analyzerScript = Join-Path $root 'scripts\analyze_test_logs.py'
+		if (Test-Path $analyzerScript) {
+			try {
+				& $python $analyzerScript --root $root 2>&1 |
+					Tee-Object -FilePath $analyzerLogFile |
+					ForEach-Object { Write-Host $_ }
+
+				if ($LASTEXITCODE -eq 0) {
+					Write-Host "Analyzer log saved to: $analyzerLogFile" -ForegroundColor $Cyan
+				} else {
+					Write-Host "[WARN] Test log analyzer exited with code $LASTEXITCODE" -ForegroundColor $Yellow
+				}
+			}
+			catch {
+				Write-Host "[WARN] Failed to run test log analyzer: $($_.Exception.Message)" -ForegroundColor $Yellow
+			}
+		} else {
+			Write-Host "[WARN] Analyzer script not found at: $analyzerScript" -ForegroundColor $Yellow
+		}
+
 		if (Test-Path $logFile) {
 			$parsedLogFile = [System.IO.Path]::ChangeExtension($logFile, '.parsed.log')
 			$logContent = Get-Content -Path $logFile -ErrorAction Stop
 			$pytestLogContent = @()
+			$analyzerLogContent = @()
 			if (Test-Path $pytestDetailLogFile) {
 				$pytestLogContent = Get-Content -Path $pytestDetailLogFile -ErrorAction SilentlyContinue
+			}
+			if (Test-Path $analyzerLogFile) {
+				$analyzerLogContent = Get-Content -Path $analyzerLogFile -ErrorAction SilentlyContinue
 			}
 
 			$parsedLines = [System.Collections.Generic.List[string]]::new()
@@ -398,6 +434,9 @@ finally {
 			$parsedLines.Add("Source: $logFile") | Out-Null
 			if (Test-Path $pytestDetailLogFile) {
 				$parsedLines.Add("Pytest detail source: $pytestDetailLogFile") | Out-Null
+			}
+			if (Test-Path $analyzerLogFile) {
+				$parsedLines.Add("Analyzer source: $analyzerLogFile") | Out-Null
 			}
 			$parsedLines.Add("Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')") | Out-Null
 			$parsedLines.Add(("=" * 60)) | Out-Null
@@ -444,6 +483,21 @@ finally {
 					}
 				} else {
 					$parsedLines.Add("No concrete pytest failure lines were found in pytest detail log.") | Out-Null
+				}
+			}
+
+			if ($analyzerLogContent.Count -gt 0) {
+				$parsedLines.Add("") | Out-Null
+				$parsedLines.Add("ANALYZER SNAPSHOT") | Out-Null
+				$analyzerSection = $analyzerLogContent |
+					Select-String -Pattern '^\[pytest\]|^\[mypy\]|^\[ruff\]|^\[bandit\]|^summary:|^failing tests:|^errors:|^issues:'
+
+				if ($analyzerSection) {
+					foreach ($line in $analyzerSection) {
+						$parsedLines.Add($line.Line.Trim()) | Out-Null
+					}
+				} else {
+					$parsedLines.Add("Analyzer log present but no summary lines matched parse patterns.") | Out-Null
 				}
 			}
 

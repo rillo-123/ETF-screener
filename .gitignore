@@ -60,6 +60,15 @@ Desktop.ini
 *.bak
 vulture_report*.txt
 logs/*.txt
+logs/*.out.txt
+logs/test_results_*
+logs/vulture_report*.txt
+_diag_out.txt
+_full_test_output.txt
+_vulture_wrapper_output.txt
+mypy.out.txt
+ruff.out.txt
+bandit.out.txt
 *.egg-info/
 
 # Generated data files (in data/ directory)

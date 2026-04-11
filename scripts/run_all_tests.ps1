@@ -48,7 +48,11 @@ if (-not (Test-Path $python)) { $python = 'python' }
 
 # Logging
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$logFile = "data/test_results_$timestamp.txt"
+$logDir = Join-Path $root "logs"
+if (-not (Test-Path $logDir)) {
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+}
+$logFile = Join-Path $logDir "test_results_$timestamp.log"
 Start-Transcript -Path $logFile -Append | Out-Null
 
 $failedTests = @()

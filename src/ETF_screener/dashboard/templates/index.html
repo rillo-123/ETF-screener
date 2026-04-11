@@ -16,13 +16,70 @@
       cursor: pointer;
     }
 
-    /* Keep Plotly modebar clear of the top chart/header edge and give it a border. */
-    #plotly-chart .modebar-container {
-      top: 0.25rem !important;
-      border: 1px solid #d1d5db;
-      border-radius: 4px;
-      padding: 2px;
-      background: rgba(255,255,255,0.9);
+    /* Dock for custom Plotly tools below legend, left-justified. */
+    #plotly-tools-dock {
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      min-height: 32px;
+      margin: 0 0 0.5rem 0;
+    }
+
+    #plotly-tools-dock:empty {
+      min-height: 0;
+      margin: 0;
+    }
+
+    #plotly-tools-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      border: 2px solid #94a3b8;
+      border-radius: 6px;
+      padding: 3px 6px;
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 4px 10px rgba(15, 23, 42, 0.16);
+    }
+
+    #plotly-tools-actions {
+      display: inline-flex !important;
+      align-items: center;
+      gap: 0.25rem;
+      width: auto !important;
+    }
+
+    .plotly-tool-btn {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #f8fafc;
+      color: #334155;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      line-height: 1;
+      transition: all 0.12s ease;
+    }
+
+    .plotly-tool-btn:hover {
+      background: #e2e8f0;
+    }
+
+    .plotly-tool-btn.is-active {
+      color: #1d4ed8;
+      border-color: #93c5fd;
+      background: #dbeafe;
+    }
+
+    #plotly-tools-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      background: rgba(241, 245, 249, 0.9);
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      padding: 2px 8px;
     }
   </style>
 </head>
@@ -220,6 +277,9 @@ EXIT:    cross_down(close, ema_50)"></textarea>
           <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-emerald-600"></span>Trigger</span>
           <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-red-600"></span>Risk</span>
           <span class="text-slate-400">Shown when strategy layers are evaluable on chart data.</span>
+        </div>
+        <div id="plotly-tools-dock">
+          <div id="plotly-tools-box"><span id="plotly-tools-label">Tools</span><div id="plotly-tools-actions"></div></div>
         </div>
         <div id="plotly-chart"
           class="flex-grow w-full bg-slate-50 rounded-lg border border-dashed border-indigo-200 overflow-hidden">
@@ -895,10 +955,67 @@ EXIT:    cross_down(close, ema_50)"></textarea>
         chartDiv.innerHTML = "";
         await Plotly.newPlot(chartDiv, figData.data, figData.layout, {
           responsive: true,
-          displayModeBar: true,
+          displayModeBar: false,
           displaylogo: false,
           scrollZoom: true,
         });
+
+        const toolsActions = document.getElementById("plotly-tools-actions");
+        if (toolsActions) {
+          toolsActions.innerHTML = "";
+
+          const setActive = (mode) => {
+            toolsActions.querySelectorAll(".plotly-tool-btn[data-mode]").forEach((btn) => {
+              btn.classList.toggle("is-active", btn.dataset.mode === mode);
+            });
+          };
+
+          const addBtn = (label, title, onClick, mode = null) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "plotly-tool-btn";
+            btn.textContent = label;
+            btn.title = title;
+            if (mode) {
+              btn.dataset.mode = mode;
+            }
+            btn.addEventListener("click", onClick);
+            toolsActions.appendChild(btn);
+            return btn;
+          };
+
+          addBtn("Pan", "Pan chart", () => {
+            Plotly.relayout(chartDiv, { dragmode: "pan" });
+            setActive("pan");
+          }, "pan");
+
+          addBtn("Zoom", "Box zoom", () => {
+            Plotly.relayout(chartDiv, { dragmode: "zoom" });
+            setActive("zoom");
+          }, "zoom");
+
+          addBtn("Autoscale", "Autoscale axes", () => {
+            Plotly.relayout(chartDiv, { "xaxis.autorange": true, "yaxis.autorange": true });
+          });
+
+          addBtn("Reset", "Reset axes and zoom mode", () => {
+            Plotly.relayout(chartDiv, { "xaxis.autorange": true, "yaxis.autorange": true, dragmode: "zoom" });
+            setActive("zoom");
+          });
+
+          addBtn("PNG", "Download chart as PNG", () => {
+            Plotly.downloadImage(chartDiv, {
+              format: "png",
+              filename: `${ticker}_chart`,
+              width: chartDiv.clientWidth || 1400,
+              height: chartDiv.clientHeight || 900,
+              scale: 2,
+            });
+          });
+
+          setActive("zoom");
+        }
+
         console.info("loadChart render complete", ticker);
       } catch (err) {
         console.error("loadChart error:", err);

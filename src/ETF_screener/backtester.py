@@ -709,11 +709,26 @@ class Backtester:
         indicators_setup=None,
         strategy_kwargs=None,
         max_workers=None,
+        show_progress=True,
+        progress_label=None,
     ):
         import concurrent.futures
 
         results = []
         total = len(tickers)
+        desc = progress_label or getattr(base_strategy, "__name__", "Backtest")
+        tqdm_cls = None
+        if show_progress:
+            try:
+                from tqdm import tqdm as tqdm_cls  # type: ignore
+            except Exception:
+                tqdm_cls = None
+
+        pbar = (
+            tqdm_cls(total=total, desc=str(desc), unit="ticker", leave=False)
+            if (tqdm_cls and total > 0)
+            else None
+        )
         with concurrent.futures.ProcessPoolExecutor(
             max_workers=max_workers
         ) as executor:
@@ -738,12 +753,19 @@ class Backtester:
                 results.append(future.result())
                 completed += 1
 
+                if pbar is not None:
+                    pbar.update(1)
+                    continue
+
                 # Plain line-based progress avoids CR-based rendering artifacts in pwsh.
                 pct = int((completed * 100) / total) if total else 100
                 if pct >= next_report or completed == total:
                     print(f"Discovery: {pct}% ({completed}/{total})")
                     while next_report <= pct:
                         next_report += 10
+
+        if pbar is not None:
+            pbar.close()
         return results
 
 

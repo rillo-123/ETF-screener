@@ -42,12 +42,35 @@ param(
     [switch]$OpenResult
 )
 
+function Normalize-DslExpr {
+    param([string]$Expr)
+    if (-not $Expr) { return $Expr }
+
+    $normalized = $Expr
+    $normalized = $normalized -replace '(?i)\s+-ge\s+', ' >= '
+    $normalized = $normalized -replace '(?i)\s+-le\s+', ' <= '
+    $normalized = $normalized -replace '(?i)\s+-gt\s+', ' > '
+    $normalized = $normalized -replace '(?i)\s+-lt\s+', ' < '
+    $normalized = $normalized -replace '(?i)\s+-eq\s+', ' == '
+    $normalized = $normalized -replace '(?i)\s+-ne\s+', ' != '
+    $normalized = $normalized -replace '(?i)\s+-and\s+', ' and '
+    $normalized = $normalized -replace '(?i)\s+-or\s+', ' or '
+    return $normalized
+}
+
+$Entry = Normalize-DslExpr -Expr $Entry
+$Exit = Normalize-DslExpr -Expr $Exit
+$Filter = Normalize-DslExpr -Expr $Filter
+
 # Function to create a clean mnemonic from the script string
 function Get-Mnemonic($scriptText) {
     if (-not $scriptText) { return "none" }
     # Remove operators and leave keywords/numbers, join with underscores
     $clean = $scriptText -replace '[-()\[\]]',' ' -replace '\s+','_'
+    # Remove characters invalid in Windows file names
+    $clean = $clean -replace '[<>:"/\\|\?\*]', '_'
     $clean = $clean -replace 'and|or',''
+    $clean = $clean -replace ',','_'
     $clean = $clean -replace '__+','_'
     # Truncate to avoid path length issues
     if ($clean.Length -gt 40) { $clean = $clean.Substring(0, 40) }

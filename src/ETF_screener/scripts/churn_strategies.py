@@ -7,42 +7,123 @@ import argparse
 import re
 import datetime
 from pathlib import Path
+from typing import Dict, List
 
 
 def load_dsl_file(file_path):
-    """Parse a .dsl file for TRIGGER, FILTER, ENTRY, and EXIT blocks."""
+    """Parse a .dsl file with block-aware semantics.
+
+    Entry is composed from positive conditions in CONTEXT/SETUP/QUALIFY/TRIGGER.
+    Exit is composed from EXIT lines plus INVALIDATE/RISK conditions.
+    """
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Try to find TRIGGER and FILTER first (New Option A)
-    # ^ + MULTILINE ensures comment lines like "# TRIGGER: ..." are skipped
-    trigger = re.search(r"^TRIGGER:\s*(.*)", content, re.IGNORECASE | re.MULTILINE)
-    filter_ = re.search(r"^FILTER:\s*(.*)", content, re.IGNORECASE | re.MULTILINE)
+    canonical_alias: Dict[str, str] = {
+        "context": "context",
+        "setup": "setup",
+        "qualify": "setup",
+        "trigger": "trigger",
+        "entry": "trigger",
+        "risk": "risk",
+        "invalidate": "risk",
+        "exit": "risk",
+    }
+    canonical_prefixes: List[str] = [
+        "context",
+        "setup",
+        "qualify",
+        "trigger",
+        "risk",
+        "invalidate",
+        "entry",
+        "exit",
+    ]
 
-    # Legacy ENTRY block
-    entry = re.search(r"^ENTRY:\s*(.*)", content, re.IGNORECASE | re.MULTILINE)
+    def resolve_block(raw_name: str | None) -> str:
+        if not raw_name:
+            return "global"
+        k = raw_name.strip().lower()
+        if k in canonical_alias:
+            return canonical_alias[k]
+        for prefix in canonical_prefixes:
+            if k.startswith(prefix):
+                return canonical_alias[prefix]
+        return "setup"
 
-    # EXIT block is required for both
-    exit_ = re.search(r"^EXIT:\s*(.*)", content, re.IGNORECASE | re.MULTILINE)
+    scoped_terms = {
+        "context": [],
+        "setup": [],
+        "trigger": [],
+        "risk": [],
+        "global": [],
+    }
+    explicit_exits: list[str] = []
 
-    # Combine any available entry terms; strategies are allowed to omit blocks.
-    # If nothing entry-like is present, use a safe no-op expression.
-    entry_parts = []
-    if trigger and trigger.group(1).strip():
-        entry_parts.append(f"({trigger.group(1).strip()})")
-    if filter_ and filter_.group(1).strip():
-        entry_parts.append(f"({filter_.group(1).strip()})")
-    if entry and entry.group(1).strip():
-        entry_parts.append(f"({entry.group(1).strip()})")
+    current_block_raw: str | None = None
+    for raw in content.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        begin_prefix = re.match(r"^begin\s+(.+)$", line, re.IGNORECASE)
+        begin_suffix = re.match(r"^(.+?)\s+begin\b", line, re.IGNORECASE)
+        if begin_prefix:
+            current_block_raw = begin_prefix.group(1).strip()
+            continue
+        if begin_suffix:
+            current_block_raw = begin_suffix.group(1).strip()
+            continue
+        if re.match(r"^end\b", line, re.IGNORECASE):
+            current_block_raw = None
+            continue
+
+        section = re.match(r"^(TRIGGER|FILTER|ENTRY|EXIT):\s*(.+)$", line, re.IGNORECASE)
+        if not section:
+            continue
+
+        section_name = section.group(1).upper()
+        expr = section.group(2).strip()
+        if not expr:
+            continue
+
+        canonical_block = resolve_block(current_block_raw)
+        wrapped = f"({expr})"
+
+        if section_name == "EXIT":
+            explicit_exits.append(wrapped)
+            continue
+
+        if canonical_block == "risk":
+            # INVALIDATE/RISK positive conditions should disqualify, so treat as exits.
+            explicit_exits.append(wrapped)
+            continue
+
+        if canonical_block in scoped_terms:
+            scoped_terms[canonical_block].append(wrapped)
+        else:
+            scoped_terms["setup"].append(wrapped)
+
+    entry_parts = (
+        scoped_terms["context"]
+        + scoped_terms["setup"]
+        + scoped_terms["trigger"]
+        + scoped_terms["global"]
+    )
     final_entry = " and ".join(entry_parts) if entry_parts else "False"
 
-    final_exit = exit_.group(1).strip() if exit_ and exit_.group(1).strip() else "False"
+    final_exit = " or ".join(explicit_exits) if explicit_exits else "False"
+    has_valid_exit = final_exit != "False"
+
+    first_trigger = scoped_terms["trigger"][0][1:-1] if scoped_terms["trigger"] else None
+    first_filter = scoped_terms["setup"][0][1:-1] if scoped_terms["setup"] else None
 
     return {
-        "trigger": trigger.group(1).strip() if trigger else None,
-        "filter": filter_.group(1).strip() if filter_ else None,
+        "trigger": first_trigger,
+        "filter": first_filter,
         "entry": final_entry,
         "exit": final_exit,
+        "has_valid_exit": has_valid_exit,
     }
 
 
@@ -94,21 +175,31 @@ def churn_db(
         path = Path(strategy_path)
         if path.is_file():
             res = load_dsl_file(path)
-            strategies.append(
-                {
-                    "name": path.stem,
-                    "func": backtester.scripted_strategy,
-                    "kwargs": {
-                        "entry_script": res["entry"],
-                        "exit_script": res["exit"],
-                    },
-                }
-            )
+            if not res.get("has_valid_exit", False):
+                print(
+                    f"Skipping strategy '{path.stem}': missing EXIT condition in {path.name}"
+                )
+            else:
+                strategies.append(
+                    {
+                        "name": path.stem,
+                        "func": backtester.scripted_strategy,
+                        "kwargs": {
+                            "entry_script": res["entry"],
+                            "exit_script": res["exit"],
+                        },
+                    }
+                )
         elif path.is_dir():
             for dsl_file in path.glob("*.dsl"):
                 if "strat_cache" in dsl_file.parts:
                     continue
                 res = load_dsl_file(dsl_file)
+                if not res.get("has_valid_exit", False):
+                    print(
+                        f"Skipping strategy '{dsl_file.stem}': missing EXIT condition in {dsl_file.name}"
+                    )
+                    continue
                 strategies.append(
                     {
                         "name": dsl_file.stem,
@@ -143,13 +234,23 @@ def churn_db(
     # Pre-loading data or using a shared cache could speed this up,
     # but the backtester already uses a CachedStrategyManager.
 
-    for strat in strategies:
+    strategy_iter = strategies
+    try:
+        from tqdm import tqdm  # type: ignore
+
+        strategy_iter = tqdm(strategies, desc="Strategies", unit="strategy")
+    except Exception:
+        strategy_iter = strategies
+
+    for strat in strategy_iter:
         print(f"Running Strategy: {strat['name']}")
         results = backtester.run_parallel_backtest(
             tickers,
             strat["func"],
             days=500,  # Reduced from 730 to 500 (~2 years) for faster discovery
             strategy_kwargs=strat.get("kwargs"),
+            show_progress=True,
+            progress_label=f"{strat['name']} ({len(tickers)} tickers)",
         )
         for res in results:
             if res and "error" not in res:

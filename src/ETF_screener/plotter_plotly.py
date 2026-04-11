@@ -209,8 +209,10 @@ class InteractivePlotter:
         _CANONICAL_ALIAS = {
             "context": (1, "context"),
             "setup": (2, "setup"),
+            "qualify": (2, "setup"),
             "trigger": (3, "trigger"),
             "risk": (4, "risk"),
+            "invalidate": (4, "risk"),
             "entry": (3, "trigger"),
             "exit": (4, "risk"),
         }
@@ -218,8 +220,10 @@ class InteractivePlotter:
         _CANONICAL_PREFIX_ORDER = [
             "context",
             "setup",
+            "qualify",
             "trigger",
             "risk",
+            "invalidate",
             "entry",
             "exit",
         ]
@@ -900,12 +904,18 @@ class InteractivePlotter:
             if "context" in label.lower() and len(lane_mask_np) == len(df):
                 context_lane_mask = context_lane_mask | lane_mask_np
                 has_context_lane = True
-            if "setup" in label.lower() and len(lane_mask_np) == len(df):
+            if (
+                ("setup" in label.lower() or "qualify" in label.lower())
+                and len(lane_mask_np) == len(df)
+            ):
                 has_setup_lane = True
             if "trigger" in label.lower() and len(lane_mask_np) == len(df):
                 trigger_lane_mask = trigger_lane_mask | lane_mask_np
                 has_trigger_lane = True
-            if "risk" in label.lower() and len(lane_mask_np) == len(df):
+            if (
+                ("risk" in label.lower() or "invalidate" in label.lower())
+                and len(lane_mask_np) == len(df)
+            ):
                 has_risk_lane = True
 
             fig.update_yaxes(showticklabels=False, range=[0.9, 1.1], row=row, col=1)
@@ -1004,9 +1014,9 @@ class InteractivePlotter:
                 df_state
             ):
                 mask_np = ribbon_lane_activity[i]
-                if "setup" in label:
+                if "setup" in label or "qualify" in label:
                     lane_masks["setup"] = lane_masks["setup"] | mask_np
-                if "risk" in label:
+                if "risk" in label or "invalidate" in label:
                     lane_masks["risk"] = lane_masks["risk"] | mask_np
 
         block_presence = {

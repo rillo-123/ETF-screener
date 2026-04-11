@@ -17,7 +17,7 @@ Usage examples:
 
 Param(
     [int]$MinConfidence = 70,
-    [string]$OutFile = "data/vulture_report.txt",
+    [string]$OutFile = "logs/vulture_report.txt",
     [switch]$Open,
     [string]$ExtraArgs = "",
     [string]$Exclude = ".venv,.git",

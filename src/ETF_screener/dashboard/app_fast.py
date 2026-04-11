@@ -165,11 +165,15 @@ async def index(request: Request):
         tickers = []
 
     strategies = get_strategies()
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request=request,
         name="index.html",
         context={"tickers": tickers, "strategies": strategies},
     )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @app.get("/api/strategies")

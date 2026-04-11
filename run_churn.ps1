@@ -1,0 +1,1 @@
+scripts/run_churn.ps1 @args

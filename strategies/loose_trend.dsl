@@ -1,8 +1,9 @@
-# Loose Trend - Four Layer Version (block-based)
-# Layer 1 (Context): Stay in established uptrends.
-# Layer 2 (Setup): Require pullback-to-trend structure to still be intact.
-# Layer 3 (Trigger): Enter on fresh momentum reclaim.
-# Layer 4 (Risk/Quality): Keep only liquid continuation and define invalidation.
+# Loose Trend - Block-Based Version
+# Context: stay in established uptrends.
+# Setup: require pullback-to-trend structure to still be intact.
+# Trigger: enter on fresh momentum reclaim.
+# Qualify: keep only liquid continuation.
+# Invalidate: define invalidation states.
 
 BEGIN CONTEXT
 FILTER: close > ema_200
@@ -18,7 +19,10 @@ BEGIN TRIGGER
 TRIGGER: close > ema_20 AND close_d1 <= ema_20_d1
 END
 
-BEGIN RISK_LIQUIDITY
+BEGIN QUALIFY
 FILTER: volume > vol_ema_20
+END
+
+BEGIN INVALIDATE
 EXIT: close < ema_50 OR (close < ema_20 AND close_d1 >= ema_20_d1)
 END
