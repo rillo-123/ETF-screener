@@ -723,40 +723,46 @@ class InteractivePlotter:
                 col=1,
             )
 
-        # Supertrend Price Overlay — only when referenced by the active strategy DSL.
+        # Supertrend Price Overlay — single color-changing line, only when referenced by DSL.
         supertrend_specs = self._extract_supertrend_specs(strategy_content)
         if (
             "ST_Lower" in df.columns
             and "ST_Upper" in df.columns
-            and (supertrend_specs or not strategy_content)
+            and (supertrend_specs if strategy_content else True)
         ):
-            green_mask = df["Close"] > df["ST_Lower"]
-            support = np.where(green_mask, df["ST_Lower"], np.nan)
-            resistance = np.where(~green_mask, df["ST_Upper"], np.nan)
-            fig.add_trace(
-                go.Scatter(
-                    x=df["Date"],
-                    y=support,
-                    name="ST Support",
-                    mode="lines",
-                    line=dict(color="green", width=1.5),
-                    connectgaps=False,
-                ),
-                row=1,
-                col=1,
-            )
-            fig.add_trace(
-                go.Scatter(
-                    x=df["Date"],
-                    y=resistance,
-                    name="ST Resistance",
-                    mode="lines",
-                    line=dict(color="red", width=1.5),
-                    connectgaps=False,
-                ),
-                row=1,
-                col=1,
-            )
+            st_lower = df["ST_Lower"].values.astype(float)
+            st_upper = df["ST_Upper"].values.astype(float)
+            # Green regime: ST_Lower is populated; red regime: ST_Upper is populated.
+            is_green_regime = ~np.isnan(st_lower)
+            st_active = np.where(is_green_regime, st_lower, st_upper)
+
+            # Split into contiguous same-color runs and draw one trace per run.
+            # Adjacent runs share their boundary index so the line appears continuous.
+            transitions = np.where(np.diff(is_green_regime.astype(int)) != 0)[0] + 1
+            run_starts = np.concatenate([[0], transitions])
+            run_ends = np.concatenate([transitions, [len(is_green_regime)]])
+
+            first_st_trace = True
+            for run_start, run_end in zip(run_starts, run_ends):
+                green = bool(is_green_regime[run_start])
+                color = "#16a34a" if green else "#dc2626"
+                # Include one bridge point (start of next run) for visual continuity.
+                slice_end = int(min(run_end + 1, len(df)))
+                fig.add_trace(
+                    go.Scatter(
+                        x=df["Date"].iloc[run_start:slice_end],
+                        y=st_active[run_start:slice_end],
+                        name="Supertrend",
+                        legendgroup="supertrend",
+                        showlegend=first_st_trace,
+                        mode="lines",
+                        line=dict(color=color, width=1.5),
+                        connectgaps=False,
+                    ),
+                    row=1,
+                    col=1,
+                )
+                first_st_trace = False
 
         # 2. Volume Chart
         colors = [
@@ -1073,7 +1079,17 @@ class InteractivePlotter:
             xanchor="left",
             yanchor="top",
             orientation="v",
-            bgcolor="rgba(255,255,255,0.7)",
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="#d1d5db",
+            borderwidth=1,
+        )
+        # Move the modebar to a vertical strip on the right so it doesn't
+        # overlap with the chart legend at the top.
+        layout["modebar"] = dict(
+            orientation="v",
+            bgcolor="rgba(255,255,255,0.9)",
+            color="#374151",
+            activecolor="#2563eb",
         )
 
         return go.Figure(fig_dict)
@@ -1081,5 +1097,16 @@ class InteractivePlotter:
     def plot_etf_analysis(self, df: pd.DataFrame, symbol: str) -> Path:
         fig = self.create_plot(df, symbol)
         output_path = self.output_dir / f"{symbol.lower()}_interactive.html"
-        fig.write_html(str(output_path))
+        # Inject a tiny style block so the modebar gets a visible border frame
+        # in the standalone HTML output (mirrors the legend's bordercolor).
+        post_script = (
+            "var s=document.createElement('style');"
+            "s.textContent='.modebar-container{"
+            "border:1px solid #d1d5db;"
+            "border-radius:4px;"
+            "padding:2px;"
+            "}';"
+            "document.head.appendChild(s);"
+        )
+        fig.write_html(str(output_path), post_script=post_script)
         return output_path
