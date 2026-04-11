@@ -472,18 +472,17 @@ END
     fig = InteractivePlotter().create_plot(
         df, "TEST", strategy_content=strategy_content
     )
-    st_traces = [
-        t for t in fig.data if getattr(t, "name", "") in ("ST Support", "ST Resistance")
-    ]
+    st_traces = [t for t in fig.data if getattr(t, "name", "") == "Supertrend"]
 
-    assert st_traces, "Expected ST overlay trace(s)"
-    colors = set()
+    assert st_traces, "Expected Supertrend trace(s)"
+    # Every segment must be a line trace.
     for tr in st_traces:
         assert getattr(tr, "mode", "") == "lines"
-        colors.add(getattr(tr, "name", ""))
 
-    assert "ST Support" in colors
-    assert "ST Resistance" in colors
+    # Both green (#16a34a) and red (#dc2626) segments must be present.
+    line_colors = {tr.line.color for tr in st_traces}
+    assert "#16a34a" in line_colors, "Expected green Supertrend segment"
+    assert "#dc2626" in line_colors, "Expected red Supertrend segment"
 
 
 def test_prepare_eval_columns_st_green_uses_supertrend_line():
@@ -532,14 +531,13 @@ END
     fig = InteractivePlotter().create_plot(
         df, "TEST", strategy_content=strategy_content
     )
-    st_traces = [
-        t for t in fig.data if getattr(t, "name", "") in ("ST Support", "ST Resistance")
-    ]
+    st_traces = [t for t in fig.data if getattr(t, "name", "") == "Supertrend"]
 
     assert st_traces
-    names = {t.name for t in st_traces}
-    assert "ST Support" in names
-    assert "ST Resistance" in names
+    # Both green and red segments must be present (data has regime changes at rows 2 and 4).
+    line_colors = {tr.line.color for tr in st_traces}
+    assert "#16a34a" in line_colors, "Expected green Supertrend segment"
+    assert "#dc2626" in line_colors, "Expected red Supertrend segment"
 
 
 def test_context_ribbon_with_was_true_has_rendered_gaps():
@@ -662,7 +660,7 @@ END
     st_traces = [
         t
         for t in fig.data
-        if getattr(t, "name", "") in ("ST Support", "ST Resistance")
+        if getattr(t, "name", "") == "Supertrend"
     ]
 
     assert not st_traces, (
