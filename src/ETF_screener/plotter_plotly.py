@@ -1083,10 +1083,9 @@ class InteractivePlotter:
             bordercolor="#d1d5db",
             borderwidth=1,
         )
-        # Move the modebar to a vertical strip on the right so it doesn't
-        # overlap with the chart legend at the top.
+        # Style the modebar (keep default horizontal orientation so it
+        # renders at the top-right, clear of the left-gutter legend).
         layout["modebar"] = dict(
-            orientation="v",
             bgcolor="rgba(255,255,255,0.9)",
             color="#374151",
             activecolor="#2563eb",
