@@ -95,9 +95,65 @@ class InteractivePlotter:
         raw = aggregate_cfg.get(
             "fill_condition", aggregate_cfg.get("fill_mode", "context_and_trigger")
         )
-        cond = str(raw).strip().lower()
+        return self._aggregate_fill_condition_alias(str(raw))
 
-        # Backward-compatible aliases.
+    def _eval_rule_when(self, when_expr: str, block_presence: dict[str, bool]) -> bool:
+        """Evaluate a rule `when` expression using IsContext/IsSetup/IsTrigger/IsRisk flags."""
+        expr = str(when_expr or "").strip()
+        if not expr:
+            return False
+
+        normalized = expr.lower().replace("&&", " and ").replace("||", " or ")
+        normalized = normalized.replace("!", " not ")
+        normalized = normalized.replace("_and_", " and ").replace("_or_", " or ")
+
+        token_map = {
+            "iscontext": block_presence.get("context", False),
+            "issetup": block_presence.get("setup", False),
+            "istrigger": block_presence.get("trigger", False),
+            "isrisk": block_presence.get("risk", False),
+        }
+        for token, value in token_map.items():
+            normalized = re.sub(
+                rf"\b{token}\b", "True" if value else "False", normalized
+            )
+
+        try:
+            return bool(eval(normalized, {"__builtins__": {}}, {}))
+        except Exception:
+            return False
+
+    def _resolve_aggregate_expression(self, block_presence: dict[str, bool]) -> str:
+        """Resolve aggregate fill expression, optionally via config-defined conditional rules."""
+        if not isinstance(self.ribbon_config, dict):
+            return "context and trigger"
+
+        aggregate_cfg = self.ribbon_config.get("aggregate", {})
+        rules = aggregate_cfg.get("rules", []) if isinstance(aggregate_cfg, dict) else []
+        if isinstance(rules, list):
+            for rule in rules:
+                if not isinstance(rule, dict):
+                    continue
+
+                when_expr = str(rule.get("when", "")).strip()
+                if not when_expr:
+                    continue
+
+                if not self._eval_rule_when(when_expr, block_presence):
+                    continue
+
+                raw_expr = rule.get(
+                    "aggregate", rule.get("fill_condition", rule.get("expression", ""))
+                )
+                candidate = str(raw_expr or "").strip()
+                if candidate:
+                    return self._aggregate_fill_condition_alias(candidate)
+
+        return self._aggregate_fill_condition()
+
+    def _aggregate_fill_condition_alias(self, condition: str) -> str:
+        """Normalize aliases for aggregate expressions to canonical expression strings."""
+        cond = str(condition).strip().lower()
         alias_map = {
             "strict": "context and trigger",
             "context_and_trigger": "context and trigger",
@@ -316,32 +372,6 @@ class InteractivePlotter:
                 }
             )
 
-        # Synthesised entry-ready ribbon: show when context + setup + trigger all active.
-        # Collect all expressions per canonical slot for this.
-        slot_exprs: dict[int, list[str]] = {1: [], 2: [], 3: [], 4: []}
-        for block_name, slot in block_order:
-            slot_exprs[slot].extend(block_exprs.get(block_name, []))
-
-        if slot_exprs[1] and slot_exprs[2] and slot_exprs[3]:
-            entry_ready_cond = " AND ".join(
-                [
-                    f"({' AND '.join(slot_exprs[1])})",
-                    f"({' AND '.join(slot_exprs[2])})",
-                    f"({' AND '.join(slot_exprs[3])})",
-                ]
-            )
-            entry_ready_style = self._dsl_layer_style(
-                "entry_ready",
-                {"label": "Entry Ready", "color": "#06b6d4", "alpha": 0.85},
-            )
-            ribbons.append(
-                {
-                    "label": entry_ready_style["label"],
-                    "condition": entry_ready_cond,
-                    "color": entry_ready_style["color"],
-                    "alpha": entry_ready_style.get("alpha", 0.85),
-                }
-            )
         return ribbons
 
     def _extract_ema_periods(self, strategy_content: str | None) -> list[int]:
@@ -405,7 +435,6 @@ class InteractivePlotter:
             "Layer 2 Setup": "#d97706",
             "Layer 3 Trigger": "#15803d",
             "Layer 4 Risk": "#b91c1c",
-            "Entry Ready (L1+L2+L3)": "#0891b2",
         }
         return color_map.get(label, "#6b7280")
 
@@ -555,7 +584,7 @@ class InteractivePlotter:
                 if base in eval_df.columns and w not in eval_df.columns:
                     shifted = eval_df[base].shift(delay)
                     if base.endswith("_is_green"):
-                        shifted = shifted.fillna(False).astype(bool)
+                        shifted = shifted.eq(True)
                     eval_df[w] = shifted
                 continue
 
@@ -567,7 +596,7 @@ class InteractivePlotter:
         for w in words:
             _ensure_st_green_column(w)
             if w in eval_df.columns and w.endswith("_is_green"):
-                eval_df[w] = eval_df[w].fillna(False).astype(bool)
+                eval_df[w] = eval_df[w].eq(True)
 
         return eval_df
 
@@ -787,6 +816,8 @@ class InteractivePlotter:
         trigger_lane_mask = np.zeros(len(df), dtype=bool)
         has_context_lane = False
         has_trigger_lane = False
+        has_setup_lane = False
+        has_risk_lane = False
         for i, rib in enumerate(active_ribbons):
             row = 3 + i
             label = rib.get("label", "Indicator")
@@ -869,9 +900,13 @@ class InteractivePlotter:
             if "context" in label.lower() and len(lane_mask_np) == len(df):
                 context_lane_mask = context_lane_mask | lane_mask_np
                 has_context_lane = True
+            if "setup" in label.lower() and len(lane_mask_np) == len(df):
+                has_setup_lane = True
             if "trigger" in label.lower() and len(lane_mask_np) == len(df):
                 trigger_lane_mask = trigger_lane_mask | lane_mask_np
                 has_trigger_lane = True
+            if "risk" in label.lower() and len(lane_mask_np) == len(df):
+                has_risk_lane = True
 
             fig.update_yaxes(showticklabels=False, range=[0.9, 1.1], row=row, col=1)
 
@@ -974,7 +1009,13 @@ class InteractivePlotter:
                 if "risk" in label:
                     lane_masks["risk"] = lane_masks["risk"] | mask_np
 
-        fill_condition = self._aggregate_fill_condition()
+        block_presence = {
+            "context": has_context_lane,
+            "setup": has_setup_lane,
+            "trigger": has_trigger_lane,
+            "risk": has_risk_lane,
+        }
+        fill_condition = self._resolve_aggregate_expression(block_presence)
         if fill_condition == "context and trigger":
             agg_mask_np = (
                 context_lane_mask & trigger_lane_mask

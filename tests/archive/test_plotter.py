@@ -80,8 +80,8 @@ class TestPortfolioPlotter:
     def test_plot_with_signals(self, temp_plot_dir, sample_data_with_indicators):
         """Test that signals are properly plotted."""
         # Add some buy and sell signals
-        sample_data_with_indicators["Signal"].iloc[20] = 1  # Buy
-        sample_data_with_indicators["Signal"].iloc[50] = -1  # Sell
+        sample_data_with_indicators.loc[20, "Signal"] = 1  # Buy
+        sample_data_with_indicators.loc[50, "Signal"] = -1  # Sell
 
         plotter = PortfolioPlotter(output_dir=temp_plot_dir)
         path = plotter.plot_etf_analysis(sample_data_with_indicators, "SIGNALTEST")

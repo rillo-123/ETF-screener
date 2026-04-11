@@ -11,7 +11,7 @@ Usage:
 	.\run_all_tests.ps1 -Parallel          # Run pytest in parallel (-n auto)
 	.\run_all_tests.ps1 -RandomOrder       # Randomize pytest order (pytest-randomly)
 	.\run_all_tests.ps1 -TimeoutSec 120    # Per-test timeout in seconds
-	.\run_all_tests.ps1 -LogRetentionDays 30 -LogRetentionMaxFiles 500  # Enforce logs/ retention
+	.\run_all_tests.ps1 -LogRetentionDays 7 -LogRetentionMaxFiles 20 -LogRetentionMaxPerType 5  # Enforce logs/ retention
 	.\run_all_tests.ps1 -QualityGate       # Run pytest + ruff + mypy + vulture + black (no coverage/bandit)
 	.\run_all_tests.ps1 -Full              # Run all checks (pytest, ruff, mypy, coverage, vulture, black, bandit)
 	.\run_all_tests.ps1 -All               # Alias for -Full
@@ -30,8 +30,9 @@ param(
 	[switch]$Parallel,
 	[switch]$RandomOrder,
 	[int]$TimeoutSec = 0,
-	[int]$LogRetentionDays = 30,
-	[int]$LogRetentionMaxFiles = 500,
+	[int]$LogRetentionDays = 7,
+	[int]$LogRetentionMaxFiles = 20,
+	[int]$LogRetentionMaxPerType = 5,
 	[switch]$Ruff,
 	[switch]$Mypy,
 	[switch]$Coverage,
@@ -75,7 +76,8 @@ function Invoke-LogRetention {
 	param(
 		[string]$Directory,
 		[int]$RetentionDays,
-		[int]$MaxFiles
+		[int]$MaxFiles,
+		[int]$MaxPerType
 	)
 
 	if (-not (Test-Path $Directory)) {
@@ -84,6 +86,7 @@ function Invoke-LogRetention {
 
 	if ($RetentionDays -lt 0) { $RetentionDays = 0 }
 	if ($MaxFiles -lt 1) { $MaxFiles = 1 }
+	if ($MaxPerType -lt 1) { $MaxPerType = 1 }
 
 	$allFiles = Get-ChildItem -Path $Directory -Recurse -File -ErrorAction SilentlyContinue
 	if (-not $allFiles) {
@@ -104,7 +107,35 @@ function Invoke-LogRetention {
 		}
 	}
 
-	# Rule 2: keep only the most recent N files.
+	# Rule 2: for test_results logs, keep only the most recent N files per subtype.
+	$remainingFiles = Get-ChildItem -Path $Directory -Recurse -File -ErrorAction SilentlyContinue |
+		Sort-Object LastWriteTime -Descending
+	if ($remainingFiles) {
+		$testResultFiles = $remainingFiles | Where-Object { $_.Name -like 'test_results_*' }
+		$typedGroups = $testResultFiles | Group-Object {
+			if ($_.Name -like '*.parsed.log') { 'parsed' }
+			elseif ($_.Name -like '*.pytest.log') { 'pytest' }
+			elseif ($_.Name -like '*.log') { 'main' }
+			else { 'other' }
+		}
+
+		foreach ($group in $typedGroups) {
+			$groupFiles = $group.Group | Sort-Object LastWriteTime -Descending
+			if ($groupFiles.Count -gt $MaxPerType) {
+				$extraTypedFiles = $groupFiles | Select-Object -Skip $MaxPerType
+				foreach ($file in $extraTypedFiles) {
+					try {
+						Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop
+						$deletedCount++
+					} catch {
+						Write-Host "[WARN] Could not delete excess test-result log file: $($file.FullName)" -ForegroundColor Yellow
+					}
+				}
+			}
+		}
+	}
+
+	# Rule 3: keep only the most recent N files overall.
 	$remainingFiles = Get-ChildItem -Path $Directory -Recurse -File -ErrorAction SilentlyContinue |
 		Sort-Object LastWriteTime -Descending
 	if ($remainingFiles.Count -gt $MaxFiles) {
@@ -130,7 +161,7 @@ $logDir = Join-Path $root 'logs'
 if (-not (Test-Path $logDir)) {
 	New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 }
-Invoke-LogRetention -Directory $logDir -RetentionDays $LogRetentionDays -MaxFiles $LogRetentionMaxFiles
+Invoke-LogRetention -Directory $logDir -RetentionDays $LogRetentionDays -MaxFiles $LogRetentionMaxFiles -MaxPerType $LogRetentionMaxPerType
 $logFile = Join-Path $logDir "test_results_$timestamp.log"
 $pytestDetailLogFile = Join-Path $logDir "test_results_$timestamp.pytest.log"
 Start-Transcript -Path $logFile -Append | Out-Null

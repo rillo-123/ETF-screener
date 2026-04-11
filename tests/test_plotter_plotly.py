@@ -444,6 +444,78 @@ END
     assert aggregated_y[3] > 0
 
 
+def test_aggregate_rules_fallback_when_setup_block_missing():
+    dates = pd.date_range(start="2024-01-01", periods=5)
+    close = np.array([94.0, 101.0, 94.0, 103.0, 104.0])
+
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.full(5, 200000.0),
+            "ema_200": np.full(5, 95.0),
+            "ema_200_slope": np.full(5, 0.1),
+            "macd": np.array([-0.2, 0.1, -0.1, 0.2, 0.3]),
+            "macd_signal": np.array([-0.1, 0.0, 0.0, 0.1, 0.2]),
+            "macd_d1": np.array([-0.3, -0.2, -0.2, -0.1, 0.2]),
+            "macd_signal_d1": np.array([-0.2, -0.1, -0.1, 0.0, 0.1]),
+        }
+    )
+
+    strategy_content = """
+BEGIN CONTEXT
+FILTER: close > ema_200
+FILTER: ema_200_slope > 0
+END
+
+BEGIN TRIGGER
+TRIGGER: macd > macd_signal AND macd_d1 <= macd_signal_d1
+END
+"""
+
+    plotter = InteractivePlotter()
+    plotter.ribbon_config["aggregate"] = {
+        "rules": [
+            {
+                "when": "IsContext and IsSetup and IsTrigger",
+                "aggregate": "context and setup and trigger",
+            },
+            {
+                "when": "IsContext and IsSetup",
+                "aggregate": "context and setup",
+            },
+            {
+                "when": "IsContext and IsTrigger",
+                "aggregate": "context and trigger",
+            },
+        ],
+        "fill_condition": "context and trigger",
+    }
+
+    fig = plotter.create_plot(df, "TEST", strategy_content=strategy_content)
+    _fig_json = json.loads(fig.to_json())
+
+    def _y(trace_dict):
+        y = trace_dict.get("y")
+        if isinstance(y, dict) and "bdata" in y:
+            return np.frombuffer(
+                base64.b64decode(y["bdata"]), dtype=y.get("dtype", "f8")
+            )
+        return np.asarray(y, dtype=float)
+
+    aggregated_y = _y(
+        next(t for t in _fig_json["data"] if t.get("name") == "Aggregated")
+    )
+
+    # With no setup block present, rules must fall back to context AND trigger.
+    assert aggregated_y[1] > 0
+    assert aggregated_y[2] == 0
+    assert aggregated_y[3] > 0
+
+
 def test_supertrend_overlay_is_solid_and_switches_regime_colors():
     dates = pd.date_range(start="2024-01-01", periods=8)
     close = np.array([101.0, 102.0, 103.0, 99.0, 98.0, 99.5, 101.5, 102.0])

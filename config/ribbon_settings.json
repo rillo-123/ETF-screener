@@ -5,7 +5,21 @@
     },
     "aggregate": {
         "fill_mode": "context_and_trigger",
-        "fill_condition": "context and trigger"
+        "fill_condition": "context and trigger",
+        "rules": [
+            {
+                "when": "IsContext and IsSetup and IsTrigger",
+                "aggregate": "context and setup and trigger"
+            },
+            {
+                "when": "IsContext and IsSetup",
+                "aggregate": "context and setup"
+            },
+            {
+                "when": "IsContext and IsTrigger",
+                "aggregate": "context and trigger"
+            }
+        ]
     },
     "dsl_layer_styles": {
         "context": {
@@ -33,7 +47,7 @@
             "height_multiplier": 0.95
         },
         "entry_ready": {
-            "label": "Entry Ready (L1+L2+L3)",
+            "label": "Entry Ready",
             "color": "#06b6d4",
             "alpha": 0.85,
             "height_multiplier": 1.1
