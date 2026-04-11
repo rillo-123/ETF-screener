@@ -11,6 +11,8 @@ Usage:
 	.\run_all_tests.ps1 -Parallel          # Run pytest in parallel (-n auto)
 	.\run_all_tests.ps1 -RandomOrder       # Randomize pytest order (pytest-randomly)
 	.\run_all_tests.ps1 -TimeoutSec 120    # Per-test timeout in seconds
+	.\run_all_tests.ps1 -LogRetentionDays 30 -LogRetentionMaxFiles 500  # Enforce logs/ retention
+	.\run_all_tests.ps1 -QualityGate       # Run pytest + ruff + mypy + vulture + black (no coverage/bandit)
 	.\run_all_tests.ps1 -Full              # Run all checks (pytest, ruff, mypy, coverage, vulture, black, bandit)
 	.\run_all_tests.ps1 -All               # Alias for -Full
   .\run_all_tests.ps1 -Ruff              # Run pytest + ruff linter
@@ -24,9 +26,12 @@ Usage:
 param(
 	[Alias('All')]
 	[switch]$Full,
+	[switch]$QualityGate,
 	[switch]$Parallel,
 	[switch]$RandomOrder,
 	[int]$TimeoutSec = 0,
+	[int]$LogRetentionDays = 30,
+	[int]$LogRetentionMaxFiles = 500,
 	[switch]$Ruff,
 	[switch]$Mypy,
 	[switch]$Coverage,
@@ -54,6 +59,7 @@ $logDir = Join-Path $root 'logs'
 if (-not (Test-Path $logDir)) {
 	New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 }
+Invoke-LogRetention -Directory $logDir -RetentionDays $LogRetentionDays -MaxFiles $LogRetentionMaxFiles
 $logFile = Join-Path $logDir "test_results_$timestamp.log"
 $pytestDetailLogFile = Join-Path $logDir "test_results_$timestamp.pytest.log"
 Start-Transcript -Path $logFile -Append | Out-Null
@@ -76,11 +82,64 @@ function Test-PythonModule {
 	return ($LASTEXITCODE -eq 0)
 }
 
-if ($Full -or $Ruff) { $progressTotal++ }
-if ($Full -or $Mypy) { $progressTotal++ }
+function Invoke-LogRetention {
+	param(
+		[string]$Directory,
+		[int]$RetentionDays,
+		[int]$MaxFiles
+	)
+
+	if (-not (Test-Path $Directory)) {
+		return
+	}
+
+	if ($RetentionDays -lt 0) { $RetentionDays = 0 }
+	if ($MaxFiles -lt 1) { $MaxFiles = 1 }
+
+	$allFiles = Get-ChildItem -Path $Directory -Recurse -File -ErrorAction SilentlyContinue
+	if (-not $allFiles) {
+		return
+	}
+
+	$deletedCount = 0
+	$cutoff = (Get-Date).AddDays(-$RetentionDays)
+
+	# Rule 1: delete files older than retention window.
+	$expiredFiles = $allFiles | Where-Object { $_.LastWriteTime -lt $cutoff }
+	foreach ($file in $expiredFiles) {
+		try {
+			Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop
+			$deletedCount++
+		} catch {
+			Write-Host "[WARN] Could not delete old log file: $($file.FullName)" -ForegroundColor Yellow
+		}
+	}
+
+	# Rule 2: keep only the most recent N files.
+	$remainingFiles = Get-ChildItem -Path $Directory -Recurse -File -ErrorAction SilentlyContinue |
+		Sort-Object LastWriteTime -Descending
+	if ($remainingFiles.Count -gt $MaxFiles) {
+		$extraFiles = $remainingFiles | Select-Object -Skip $MaxFiles
+		foreach ($file in $extraFiles) {
+			try {
+				Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop
+				$deletedCount++
+			} catch {
+				Write-Host "[WARN] Could not delete excess log file: $($file.FullName)" -ForegroundColor Yellow
+			}
+		}
+	}
+
+	if ($deletedCount -gt 0) {
+		Write-Host "[INFO] Log retention removed $deletedCount file(s) from logs/" -ForegroundColor Cyan
+	}
+}
+
+if ($Full -or $QualityGate -or $Ruff) { $progressTotal++ }
+if ($Full -or $QualityGate -or $Mypy) { $progressTotal++ }
 if ($Full -or $Coverage) { $progressTotal++ }
-if ($Full -or $Vulture) { $progressTotal++ }
-if ($Full -or $Black) { $progressTotal++ }
+if ($Full -or $QualityGate -or $Vulture) { $progressTotal++ }
+if ($Full -or $QualityGate -or $Black) { $progressTotal++ }
 if ($Full -or $Bandit) { $progressTotal++ }
 
 function Start-Section {
@@ -136,7 +195,7 @@ try {
 	}
 
 	# ===================== RUFF (optional) =====================
-	if ($Full -or $Ruff) {
+	if ($Full -or $QualityGate -or $Ruff) {
 		Start-Section -Name "Running Ruff Linter" -Label "Running Ruff Linter..."
         
 		$pythonFiles = Get-ChildItem -Path "src" -Recurse -Filter "*.py" | Select-Object -ExpandProperty FullName
@@ -157,7 +216,7 @@ try {
 	}
 
 	# ===================== MYPY (optional) =====================
-	if ($Full -or $Mypy) {
+	if ($Full -or $QualityGate -or $Mypy) {
 		Start-Section -Name "Running Mypy Type Checker" -Label "Running Mypy Type Checker..."
 		
 		if (-not (Test-PythonModule -ModuleName 'mypy')) {
@@ -194,7 +253,7 @@ try {
 	}
 
 	# ===================== VULTURE (optional) =====================
-	if ($Full -or $Vulture) {
+	if ($Full -or $QualityGate -or $Vulture) {
 		Start-Section -Name "Running Vulture Dead Code Scanner" -Label "Running Vulture Dead Code Scanner..."
 
 		$vultureScript = Join-Path $root 'scripts\run_vulture.ps1'
@@ -217,7 +276,7 @@ try {
 	}
 
 	# ===================== BLACK (optional) =====================
-	if ($Full -or $Black) {
+	if ($Full -or $QualityGate -or $Black) {
 		Start-Section -Name "Running Black Code Formatter (check mode)" -Label "Running Black Code Formatter (check mode)..."
 		$pythonFiles = Get-ChildItem -Path "src", "tests" -Recurse -Filter "*.py" -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
 		
