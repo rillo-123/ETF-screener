@@ -471,7 +471,7 @@ def movie_scanner(
             print(f"Warning: Could not cleanup old CSVs: {e}")
 
         if open_result:
-            os.startfile(output_file.absolute())
+            os.startfile(output_file.absolute())  # type: ignore[attr-defined]
 
     if not found_any:
         print("No signals found in the specified window.")

@@ -23,11 +23,13 @@ class ETFDatabase:
 
     def _init_db(self) -> None:
         """Initialize database with schema."""
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
         # Create ETF data table with proper indexing
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS etf_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ticker TEXT NOT NULL,
@@ -45,7 +47,8 @@ class ETFDatabase:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(ticker, date)
             )
-            """)
+            """
+        )
 
         # Create indices for efficient querying
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_ticker ON etf_data(ticker)")

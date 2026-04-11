@@ -53,17 +53,6 @@ Push-Location $root
 $python = Join-Path $root '.venv\Scripts\python.exe'
 if (-not (Test-Path $python)) { $python = 'python' }
 
-# Logging
-$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$logDir = Join-Path $root 'logs'
-if (-not (Test-Path $logDir)) {
-	New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-}
-Invoke-LogRetention -Directory $logDir -RetentionDays $LogRetentionDays -MaxFiles $LogRetentionMaxFiles
-$logFile = Join-Path $logDir "test_results_$timestamp.log"
-$pytestDetailLogFile = Join-Path $logDir "test_results_$timestamp.pytest.log"
-Start-Transcript -Path $logFile -Append | Out-Null
-
 $failedTests = @()
 $progressActivity = "run_all_tests progress"
 $progressCurrent = 0
@@ -134,6 +123,17 @@ function Invoke-LogRetention {
 		Write-Host "[INFO] Log retention removed $deletedCount file(s) from logs/" -ForegroundColor Cyan
 	}
 }
+
+# Logging (after function definitions so Invoke-LogRetention is available)
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$logDir = Join-Path $root 'logs'
+if (-not (Test-Path $logDir)) {
+	New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+}
+Invoke-LogRetention -Directory $logDir -RetentionDays $LogRetentionDays -MaxFiles $LogRetentionMaxFiles
+$logFile = Join-Path $logDir "test_results_$timestamp.log"
+$pytestDetailLogFile = Join-Path $logDir "test_results_$timestamp.pytest.log"
+Start-Transcript -Path $logFile -Append | Out-Null
 
 if ($Full -or $QualityGate -or $Ruff) { $progressTotal++ }
 if ($Full -or $QualityGate -or $Mypy) { $progressTotal++ }
