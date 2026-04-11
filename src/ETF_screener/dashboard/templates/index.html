@@ -895,6 +895,7 @@ EXIT:    cross_down(close, ema_50)"></textarea>
         chartDiv.innerHTML = "";
         await Plotly.newPlot(chartDiv, figData.data, figData.layout, {
           responsive: true,
+          displayModeBar: true,
           displaylogo: false,
           scrollZoom: true,
         });
