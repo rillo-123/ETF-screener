@@ -1148,5 +1148,13 @@ class InteractivePlotter:
             "}';"
             "document.head.appendChild(s);"
         )
-        fig.write_html(str(output_path), post_script=post_script)
+        fig.write_html(
+            str(output_path),
+            post_script=post_script,
+            config={
+                "displayModeBar": True,
+                "displaylogo": False,
+                "scrollZoom": True,
+            },
+        )
         return output_path
