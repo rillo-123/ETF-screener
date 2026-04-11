@@ -723,8 +723,13 @@ class InteractivePlotter:
                 col=1,
             )
 
-        # Supertrend Price Overlay
-        if "ST_Lower" in df.columns and "ST_Upper" in df.columns:
+        # Supertrend Price Overlay — only when referenced by the active strategy DSL.
+        supertrend_specs = self._extract_supertrend_specs(strategy_content)
+        if (
+            "ST_Lower" in df.columns
+            and "ST_Upper" in df.columns
+            and (supertrend_specs or not strategy_content)
+        ):
             green_mask = df["Close"] > df["ST_Lower"]
             support = np.where(green_mask, df["ST_Lower"], np.nan)
             resistance = np.where(~green_mask, df["ST_Upper"], np.nan)

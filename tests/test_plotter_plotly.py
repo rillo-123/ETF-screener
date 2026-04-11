@@ -623,3 +623,48 @@ END
     ]
 
     assert context_traces, "Expected context ribbon trace"
+
+
+def test_supertrend_overlay_hidden_when_strategy_has_no_supertrend():
+    """Supertrend curves must NOT appear on the price panel when the DSL strategy
+    does not reference any supertrend indicator (e.g. an EMA-only strategy)."""
+    dates = pd.date_range(start="2024-01-01", periods=6)
+    close = np.array([101.0, 102.0, 99.0, 98.0, 101.0, 102.0])
+    st = np.array([100.0, 100.5, 100.8, 100.7, 100.4, 100.2])
+
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.full(6, 100000.0),
+            "ema_200": np.full(6, 95.0),
+            "ema_200_slope": np.full(6, 0.1),
+            # Supertrend columns are present in the DataFrame …
+            "ST_Lower": np.where(close > st, st, np.nan),
+            "ST_Upper": np.where(close <= st, st, np.nan),
+        }
+    )
+
+    # … but the strategy only uses EMA indicators.
+    strategy_content = """
+BEGIN CONTEXT
+FILTER: close > ema_200
+FILTER: ema_200_slope > 0
+END
+"""
+
+    fig = InteractivePlotter().create_plot(
+        df, "TEST", strategy_content=strategy_content
+    )
+    st_traces = [
+        t
+        for t in fig.data
+        if getattr(t, "name", "") in ("ST Support", "ST Resistance")
+    ]
+
+    assert not st_traces, (
+        "Supertrend overlay should NOT be drawn when the strategy does not reference supertrend"
+    )
