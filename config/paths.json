@@ -1,0 +1,13 @@
+{
+  "data": {
+    "backtests": "data/backtests",
+    "discovery": "data/discovery",
+    "movie_scans": "data/movie_scans",
+    "test_results": "data/test_results",
+    "etf_db": "data/etf_db/etfs.db",
+    "parquet": "data/parquet",
+    "cache": "data/cache",
+    "vulture_report": "data/vulture_report.txt"
+  },
+  "plots": "plots"
+}

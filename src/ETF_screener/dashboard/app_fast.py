@@ -1,3 +1,5 @@
+import glob
+from ETF_screener.config_loader import get_paths
 import json
 import logging as _logging_mod
 import math
@@ -14,7 +16,9 @@ from ETF_screener.plotter_plotly import InteractivePlotter
 from ETF_screener.yfinance_fetcher import YFinanceFetcher
 from ETF_screener.indicators import add_indicators
 from ETF_screener.backtester import Backtester
+from ETF_screener.dsl_parser import parse_strategy_scripts
 from ETF_screener.logging_setup import setup_logging, get_log_file
+from ETF_screener.scripts.churn_strategies import evaluate_strategies
 
 app = FastAPI(title="ETF Discovery Lab API")
 fetcher = YFinanceFetcher()  # For on-demand fetching
@@ -111,32 +115,9 @@ def load_strategy_content(name):
     return ""
 
 
-def parse_strategy_scripts(content: str) -> tuple[str, str]:
-    """Parse layered DSL into entry/exit expressions."""
-    import re
-
-    trigger_terms = re.findall(
-        r"^TRIGGER:\s*(.*)", content, re.IGNORECASE | re.MULTILINE
-    )
-    filter_terms = re.findall(r"^FILTER:\s*(.*)", content, re.IGNORECASE | re.MULTILINE)
-    entry_terms = re.findall(r"^ENTRY:\s*(.*)", content, re.IGNORECASE | re.MULTILINE)
-    exit_terms = re.findall(r"^EXIT:\s*(.*)", content, re.IGNORECASE | re.MULTILINE)
-
-    entry_parts = [
-        f"({t.strip()})"
-        for t in (trigger_terms + filter_terms + entry_terms)
-        if t.strip()
-    ]
-    exit_parts = [f"({t.strip()})" for t in exit_terms if t.strip()]
-
-    final_entry = " and ".join(entry_parts)
-    final_exit = " or ".join(exit_parts) if exit_parts else "False"
-    return final_entry, final_exit
-
-
 # Database access function (FastAPI style)
 def get_db():
-    return ETFDatabase(db_path="data/etfs.db")
+    return ETFDatabase(db_path=get_paths()["data"]["etf_db"])
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -433,6 +414,117 @@ async def screen(strategy: Optional[str] = None, dsl_content: Optional[str] = No
         )
 
 
+@app.get("/api/backtest")
+async def backtest_view(
+    strategy: Optional[str] = None,
+    dsl_content: Optional[str] = None,
+    limit: int = 25,
+):
+    """Evaluate a saved strategy and return ranked quality metrics for the UI."""
+    strategy_name = (strategy or "").strip()
+    dsl_text = (dsl_content or "").strip()
+    source_type = "editor" if dsl_text else "saved"
+
+    if not strategy_name and not dsl_text:
+        return {
+            "strategy_name": "",
+            "source_type": source_type,
+            "summary": {
+                "count": 0,
+                "best_quality": 0.0,
+                "avg_return": 0.0,
+                "avg_sharpe": 0.0,
+            },
+            "rows": [],
+            "chart": {"data": [], "layout": {}},
+        }
+
+    strat_path = Path("strategies") / f"{strategy_name}.dsl"
+    if not dsl_text and not strat_path.exists():
+        raise HTTPException(status_code=404, detail="Strategy not found")
+
+    try:
+        df = evaluate_strategies(
+            strategy_path=(str(strat_path) if not dsl_text else None),
+            dsl_content=dsl_text or None,
+            strategy_name=(strategy_name or "Editor Draft"),
+        )
+    except Exception as e:
+        logger.error("Backtest endpoint failed for %s: %s", strategy_name, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if df.empty:
+        return {
+            "strategy_name": strategy_name or "Editor Draft",
+            "source_type": source_type,
+            "summary": {
+                "count": 0,
+                "best_quality": 0.0,
+                "avg_return": 0.0,
+                "avg_sharpe": 0.0,
+            },
+            "rows": [],
+            "chart": {"data": [], "layout": {}},
+        }
+
+    safe_limit = max(1, min(int(limit), 100))
+    view = df.head(safe_limit).copy()
+    rows = []
+    for _, row in view.iterrows():
+        rows.append(
+            {
+                "ticker": row["Ticker"],
+                "strategy": row["Strategy"],
+                "quality_score": round(float(row.get("Quality Score", 0.0)), 2),
+                "return_pct": round(float(row.get("Return (%)", 0.0)), 2),
+                "win_rate_pct": round(float(row.get("Win Rate (%)", 0.0)), 2),
+                "profit_factor": round(float(row.get("Profit Factor", 0.0)), 2),
+                "sharpe": round(float(row.get("Sharpe", 0.0)), 2),
+                "max_dd_pct": round(float(row.get("Max DD (%)", 0.0)), 2),
+                "trades": int(row.get("Trades", 0) or 0),
+                "days_since_entry": int(row.get("Days Since Entry", 999) or 999),
+            }
+        )
+
+    chart_rows = rows[: min(len(rows), 10)]
+    chart = {
+        "data": [
+            {
+                "type": "bar",
+                "x": [row["ticker"] for row in chart_rows],
+                "y": [row["quality_score"] for row in chart_rows],
+                "marker": {
+                    "color": [row["return_pct"] for row in chart_rows],
+                    "colorscale": "RdYlGn",
+                    "colorbar": {"title": "Return %"},
+                },
+                "hovertemplate": "Ticker: %{x}<br>Quality: %{y:.2f}<br>Return: %{marker.color:.2f}%<extra></extra>",
+            }
+        ],
+        "layout": {
+            "title": {"text": "Top Quality Scores", "font": {"size": 16}},
+            "paper_bgcolor": "#ffffff",
+            "plot_bgcolor": "#ffffff",
+            "margin": {"l": 50, "r": 20, "t": 40, "b": 60},
+            "xaxis": {"title": "Ticker", "tickangle": -25, "automargin": True},
+            "yaxis": {"title": "Quality Score"},
+        },
+    }
+
+    return {
+        "strategy_name": strategy_name or "Editor Draft",
+        "source_type": source_type,
+        "summary": {
+            "count": int(len(df)),
+            "best_quality": round(float(df["Quality Score"].max()), 2),
+            "avg_return": round(float(df["Return (%)"].mean()), 2),
+            "avg_sharpe": round(float(df["Sharpe"].mean()), 2),
+        },
+        "rows": rows,
+        "chart": chart,
+    }
+
+
 @app.get("/api/chart/{ticker}")
 async def get_chart(
     ticker: str,
@@ -598,6 +690,7 @@ async def get_chart(
         fig_dict = json.loads(fig_json)
         return {
             "ticker": ticker,
+            "strategy_name": strategy or "Custom Strategy",
             "figure": fig_json,
             "data": fig_dict.get("data", []),
             "layout": fig_dict.get("layout", {}),

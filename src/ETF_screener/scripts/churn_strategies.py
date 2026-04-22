@@ -1,3 +1,4 @@
+from ETF_screener.config_loader import get_paths
 from ETF_screener.backtester import (
     Backtester,
 )
@@ -8,6 +9,7 @@ import re
 import datetime
 from pathlib import Path
 from typing import Dict, List
+from ETF_screener.dsl_parser import parse_strategy_scripts
 
 
 def load_dsl_file(file_path):
@@ -127,6 +129,166 @@ def load_dsl_file(file_path):
     }
 
 
+def _load_strategy_specs(
+    backtester: Backtester,
+    strategy_path: str | None = None,
+    entry_script: str | None = None,
+    exit_script: str | None = None,
+    dsl_content: str | None = None,
+    strategy_name: str | None = None,
+):
+    """Build runnable strategy specs from a saved DSL path or direct scripts."""
+    strategies = []
+
+    if strategy_path:
+        path = Path(strategy_path)
+        if path.is_file():
+            res = load_dsl_file(path)
+            if res.get("has_valid_exit", False):
+                strategies.append(
+                    {
+                        "name": path.stem,
+                        "func": backtester.scripted_strategy,
+                        "kwargs": {
+                            "entry_script": res["entry"],
+                            "exit_script": res["exit"],
+                        },
+                    }
+                )
+        elif path.is_dir():
+            for dsl_file in path.glob("*.dsl"):
+                if "strat_cache" in dsl_file.parts:
+                    continue
+                res = load_dsl_file(dsl_file)
+                if not res.get("has_valid_exit", False):
+                    continue
+                strategies.append(
+                    {
+                        "name": dsl_file.stem,
+                        "func": backtester.scripted_strategy,
+                        "kwargs": {
+                            "entry_script": res["entry"],
+                            "exit_script": res["exit"],
+                        },
+                    }
+                )
+    elif dsl_content:
+        parsed_entry, parsed_exit = parse_strategy_scripts(dsl_content)
+        if parsed_entry and parsed_entry != "False":
+            strategies.append(
+                {
+                    "name": strategy_name or "Editor Draft",
+                    "func": backtester.scripted_strategy,
+                    "kwargs": {
+                        "entry_script": parsed_entry,
+                        "exit_script": parsed_exit,
+                    },
+                }
+            )
+    elif entry_script and exit_script:
+        strategies.append(
+            {
+                "name": "CLI_Custom",
+                "func": backtester.scripted_strategy,
+                "kwargs": {"entry_script": entry_script, "exit_script": exit_script},
+            }
+        )
+
+    return strategies
+
+
+def evaluate_strategies(
+    entry_script: str | None = None,
+    exit_script: str | None = None,
+    ticker_filter: str | None = None,
+    strategy_path: str | None = None,
+    since_days: int | None = None,
+    dsl_content: str | None = None,
+    strategy_name: str | None = None,
+) -> pd.DataFrame:
+    """Run strategy scoring and return a ranked DataFrame without plotting side effects."""
+    backtester = Backtester()
+    conn = backtester.db._get_connection()
+    query = "SELECT DISTINCT ticker FROM etf_data"
+
+    if ticker_filter:
+        if "%" in ticker_filter or "_" in ticker_filter:
+            query += f" WHERE ticker LIKE '{ticker_filter}'"
+        else:
+            query += f" WHERE ticker LIKE '{ticker_filter}%'"
+
+    tickers = pd.read_sql_query(query, conn)["ticker"].tolist()
+    strategies = _load_strategy_specs(
+        backtester,
+        strategy_path=strategy_path,
+        entry_script=entry_script,
+        exit_script=exit_script,
+        dsl_content=dsl_content,
+        strategy_name=strategy_name,
+    )
+
+    if not strategies:
+        return pd.DataFrame()
+
+    all_results = []
+    for strat in strategies:
+        results = backtester.run_parallel_backtest(
+            tickers,
+            strat["func"],
+            days=500,
+            strategy_kwargs=strat.get("kwargs"),
+            show_progress=False,
+            progress_label=f"{strat['name']} ({len(tickers)} tickers)",
+        )
+        for res in results:
+            if not res or "error" in res:
+                continue
+
+            df = res.get("df")
+            recent_days = 999
+            if df is not None and "recent_entry_days" in df.columns:
+                recent_days = df["recent_entry_days"].iloc[-1]
+
+            if since_days is not None and recent_days > since_days:
+                continue
+
+            all_results.append(
+                {
+                    "Ticker": res["ticker"],
+                    "Strategy": strat["name"],
+                    "Return (%)": res["total_return_pct"],
+                    "Win Rate (%)": res["win_rate_pct"],
+                    "Profit Factor": res["profit_factor"],
+                    "Sharpe": res.get("sharpe_ratio", 0),
+                    "Max DD (%)": res.get("max_drawdown_pct", 0),
+                    "Trades": res.get("num_trades", 0),
+                    "Days Since Entry": (
+                        int(recent_days) if not pd.isna(recent_days) else 999
+                    ),
+                    "df": df,
+                }
+            )
+
+    summary_df = pd.DataFrame(all_results)
+    if summary_df.empty:
+        return summary_df
+
+    summary_df["Quality Score"] = (
+        summary_df["Return (%)"]
+        * (summary_df["Win Rate (%)"] / 100)
+        * (summary_df["Sharpe"] + 1)
+        / ((1 + summary_df["Trades"] / 100.0) * (1 + summary_df["Max DD (%)"] / 10.0))
+    )
+    if since_days is not None:
+        summary_df = summary_df.sort_values(
+            by=["Days Since Entry", "Quality Score"], ascending=[True, False]
+        )
+    else:
+        summary_df = summary_df.sort_values(by="Quality Score", ascending=False)
+
+    return summary_df.reset_index(drop=True)
+
+
 def churn_db(
     entry_script: str | None = None,
     exit_script: str | None = None,
@@ -168,58 +330,14 @@ def churn_db(
 
     tickers = pd.read_sql_query(query, conn)["ticker"].tolist()
 
-    strategies = []
-
-    # Mode 1: Path to a .dsl file or a directory of .dsl files
-    if strategy_path:
-        path = Path(strategy_path)
-        if path.is_file():
-            res = load_dsl_file(path)
-            if not res.get("has_valid_exit", False):
-                print(
-                    f"Skipping strategy '{path.stem}': missing EXIT condition in {path.name}"
-                )
-            else:
-                strategies.append(
-                    {
-                        "name": path.stem,
-                        "func": backtester.scripted_strategy,
-                        "kwargs": {
-                            "entry_script": res["entry"],
-                            "exit_script": res["exit"],
-                        },
-                    }
-                )
-        elif path.is_dir():
-            for dsl_file in path.glob("*.dsl"):
-                if "strat_cache" in dsl_file.parts:
-                    continue
-                res = load_dsl_file(dsl_file)
-                if not res.get("has_valid_exit", False):
-                    print(
-                        f"Skipping strategy '{dsl_file.stem}': missing EXIT condition in {dsl_file.name}"
-                    )
-                    continue
-                strategies.append(
-                    {
-                        "name": dsl_file.stem,
-                        "func": backtester.scripted_strategy,
-                        "kwargs": {
-                            "entry_script": res["entry"],
-                            "exit_script": res["exit"],
-                        },
-                    }
-                )
-
-    # Mode 2: Direct CLI strings
-    elif entry_script and exit_script:
-        strategies.append(
-            {
-                "name": "CLI_Custom",
-                "func": backtester.scripted_strategy,
-                "kwargs": {"entry_script": entry_script, "exit_script": exit_script},
-            }
-        )
+    strategies = _load_strategy_specs(
+        backtester,
+        strategy_path=strategy_path,
+        entry_script=entry_script,
+        exit_script=exit_script,
+        dsl_content=None,
+        strategy_name=None,
+    )
 
     if not strategies:
         print("No strategies found to run.")
@@ -475,7 +593,7 @@ def churn_db(
 
         # Save to CSV with 2 decimal precision (keeps full precision in memory/code)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_name = f"data/discovery_results_{timestamp}.csv"
+        output_name = f"{get_paths()['data']['discovery']}/discovery_results_{timestamp}.csv"
 
         # Exclude the bulky 'df' column from CSV output for better compatibility with Spreadsheet tools
         cols_to_save = [c for c in summary_df.columns if c != "df"]
@@ -487,13 +605,13 @@ def churn_db(
 
         # Also maintain a symlink-like constant copy for the PS1 script if needed
         clean_df[cols_to_save].to_csv(
-            "data/multi_strategy_results.csv", index=False, float_format="%.2f"
+            f"{get_paths()['data']['discovery']}/multi_strategy_results.csv", index=False, float_format="%.2f"
         )
 
         # Keep only the 3 most recent discovery CSV files to save space
         try:
             history_files = sorted(
-                Path("data").glob("discovery_results_*.csv"),
+                Path(get_paths()['data']['discovery']).glob("discovery_results_*.csv"),
                 key=os.path.getmtime,
                 reverse=True,
             )
@@ -507,7 +625,7 @@ def churn_db(
         # Also save to "custom_script_results.csv" for run_custom_backtest.ps1 compatibility
         if not strategy_path:
             clean_df[cols_to_save].to_csv(
-                "data/custom_script_results.csv", index=False, float_format="%.2f"
+                f"{get_paths()['data']['discovery']}/custom_script_results.csv", index=False, float_format="%.2f"
             )
 
         print(f"\nFull results saved to {output_name}")

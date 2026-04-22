@@ -159,145 +159,367 @@
     </div>
   </nav>
 
-  <div class="w-full flex gap-6 px-6 mt-6 pb-12">
-    <!-- Sidebar for matching tickers -->
-    <aside class="w-80 flex flex-col gap-4 overflow-hidden shrink-0">
-      <div
-        class="bg-white shadow-xl rounded-xl p-4 overflow-hidden max-h-[65vh] border-t-4 border-indigo-500 flex flex-col">
-        <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
-          Top Matches
-          <span id="match-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">0</span>
-        </h2>
-        <div id="ticker-list" class="space-y-2 pb-6 overflow-y-auto flex-1 h-full">
-          <!-- Ticker list items will appear here -->
-          <div class="text-sm text-slate-400 italic">
-            No matches... run screen
-          </div>
-        </div>
-      </div>
 
-      <!-- Error/Failed Tickers Section -->
-      <div id="error-section"
-        class="hidden bg-white shadow-lg rounded-xl p-4 border-t-4 border-red-400 flex flex-col flex-1 overflow-hidden max-h-[25vh]">
-        <h3 class="text-sm font-bold text-red-600 mb-2 flex justify-between">
-          Failed to Load
-          <span id="error-count" class="bg-red-50 text-red-600 px-1.5 rounded">0</span>
-        </h3>
-        <div id="error-list" class="text-[10px] text-slate-500 overflow-y-auto font-mono"></div>
-      </div>
-    </aside>
-
-    <!-- Main Chart Display -->
-    <main class="flex-1 min-w-0">
-      <div id="chart-card"
-        class="bg-white shadow-xl rounded-xl p-4 h-[85vh] flex flex-col border border-indigo-100 mb-8 overflow-hidden relative">
-        <!-- Strategy Pop-out Window -->
-        <div id="strategy-panel"
-          class="hidden absolute top-0 right-0 w-[450px] h-full bg-slate-900 shadow-2xl z-50 transform transition-transform border-l border-indigo-500/30 flex flex-col">
-          <div class="p-4 border-b border-indigo-500/20 flex justify-between items-center bg-slate-800">
-            <div class="flex flex-col">
-              <h3 class="text-white font-bold flex items-center">
-                <span class="bg-indigo-600 rounded p-1 mr-2"><svg class="w-4 h-4" fill="none" stroke="currentColor"
-                    viewBox="0 0 24 24">
-                    <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-width="2" stroke-linecap="round"
-                      stroke-linejoin="round"></path>
-                  </svg></span>
-                STRATEGY LAB
-              </h3>
-              <div id="source-strategy-badge" class="hidden mt-1 ml-7 text-[10px] text-amber-300 font-mono">
-                Modifying: <span id="source-strategy-name" class="font-bold"></span>
-              </div>
-            </div>
-            <button onclick="toggleStrategyPanel()" class="text-slate-400 hover:text-white">
-              &times; CLOSE
-            </button>
-          </div>
-          <div class="flex-1 p-4 flex flex-col overflow-hidden">
-            <div class="flex justify-between items-end mb-2">
-              <div class="flex-1 mr-2">
-                <label class="text-[10px] font-bold text-slate-500 uppercase block mb-1">Strategy Name</label>
-                <input id="strategy-filename" type="text" placeholder="my_new_strat"
-                  class="w-full bg-slate-800 text-white text-xs p-2 rounded border border-indigo-500/20 focus:border-indigo-500 outline-none">
-              </div>
-              <div class="flex flex-col gap-1">
-                <button onclick="saveAsStrategy()"
-                  class="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-2 px-3 rounded transition-all flex items-center whitespace-nowrap"
-                  title="Save with new name (preserves original)">
-                  <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                  </svg>
-                  SAVE AS
-                </button>
-                <button id="overwrite-btn" onclick="saveStrategy()"
-                  class="hidden bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold py-1.5 px-3 rounded transition-all flex items-center whitespace-nowrap"
-                  title="Overwrite the original strategy file">
-                  OVERWRITE
-                </button>
-              </div>
-            </div>
-
-            <textarea id="strategy-editor"
-              class="w-full flex-1 bg-slate-950 text-indigo-200 font-mono text-xs p-3 rounded border border-indigo-500/20 focus:border-indigo-400 focus:outline-none resize-none"
-              spellcheck="false" placeholder="TRIGGER: close > ema_50
-FILTER:  supertrend < close
-ENTRY:   cross_up(close, ema_50)
-EXIT:    cross_down(close, ema_50)"></textarea>
-
-            <div class="mt-4 flex gap-2">
-              <button onclick="applyDsl()"
-                class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded transition-all active:scale-95 flex items-center justify-center text-sm">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M5 13l4 4L19 7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-                RUN THIS LOGIC
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div id="chart-header" class="mb-4 flex justify-between items-center h-12 flex-shrink-0">
-          <h2 id="active-ticker-title"
-            class="text-3xl font-bold text-slate-900 tracking-tight text-ellipsis overflow-hidden whitespace-nowrap mr-4">
-            Select a Ticker
-          </h2>
-          <div id="chart-stats" class="text-emerald-600 font-mono text-xl flex space-x-4 items-center flex-shrink-0">
-            <!-- Dynamic stats like price/streak will go here -->
-            <div id="loading-spinner" class="hidden">
-              <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
-            </div>
-          </div>
-        </div>
-        <div id="layer-legend"
-          class="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-[11px] font-semibold text-slate-600">
-          <span class="uppercase tracking-wide text-slate-500">Layer Shading</span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-blue-600"></span>Context</span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-amber-500"></span>Setup</span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-emerald-600"></span>Trigger</span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-red-600"></span>Risk</span>
-          <span class="text-slate-400">Shown when strategy layers are evaluable on chart data.</span>
-        </div>
-        <div id="plotly-tools-dock">
-          <div id="plotly-tools-box"><span id="plotly-tools-label">Tools</span><div id="plotly-tools-actions"></div></div>
-        </div>
-        <div id="plotly-chart"
-          class="flex-grow w-full bg-slate-50 rounded-lg border border-dashed border-indigo-200 overflow-hidden">
-          <div class="flex flex-col items-center justify-center h-full text-indigo-300">
-            <svg class="w-16 h-16 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
-            </svg>
-            <p class="mt-4 font-medium italic">
-              Your interactive workspace is ready
-            </p>
-          </div>
-        </div>
-      </div>
-    </main>
+  <!-- Tab Bar -->
+  <div id="dashboard-tabs" class="flex space-x-3 bg-slate-800 px-6 pt-3 pb-2 border-b border-slate-700">
+    <button id="tab-btn-screener" class="tab-btn active bg-rose-600 text-white font-bold py-2.5 px-5 rounded-lg border border-rose-400/50 shadow-sm"
+      onclick="showTab('screener')">Screener</button>
+    <button id="tab-btn-backtest" class="tab-btn bg-emerald-700 text-white font-bold py-2.5 px-5 rounded-lg border border-emerald-400/40 shadow-sm"
+      onclick="showTab('backtest')">Backtester</button>
   </div>
 
+  <!-- Tab Content Sections -->
+  <div id="tab-screener">
+    <div class="w-full flex gap-6 px-6 mt-6 pb-12">
+      <!-- Sidebar for matching tickers -->
+      <aside class="w-80 flex flex-col gap-4 overflow-hidden shrink-0">
+        <div class="bg-white shadow-xl rounded-xl p-4 overflow-hidden max-h-[65vh] border-t-4 border-indigo-500 flex flex-col">
+          <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
+            Top Matches
+            <span id="match-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">0</span>
+          </h2>
+          <div id="ticker-list" class="space-y-2 pb-6 overflow-y-auto flex-1 h-full">
+            <!-- Ticker list items will appear here -->
+            <div class="text-sm text-slate-400 italic">
+              No matches... run screen
+            </div>
+          </div>
+        </div>
+
+        <!-- Error/Failed Tickers Section -->
+        <div id="error-section" class="hidden bg-white shadow-lg rounded-xl p-4 border-t-4 border-red-400 flex flex-col flex-1 overflow-hidden max-h-[25vh]">
+          <h3 class="text-sm font-bold text-red-600 mb-2 flex justify-between">
+            Failed to Load
+            <span id="error-count" class="bg-red-50 text-red-600 px-1.5 rounded">0</span>
+          </h3>
+          <div id="error-list" class="text-[10px] text-slate-500 overflow-y-auto font-mono"></div>
+        </div>
+      </aside>
+
+      <!-- Main Chart Display -->
+      <main class="flex-1 min-w-0">
+        <div id="chart-card" class="bg-white shadow-xl rounded-xl p-4 h-[85vh] flex flex-col border border-indigo-100 mb-8 overflow-hidden relative">
+          <!-- Strategy Pop-out Window -->
+          <div id="strategy-panel" class="hidden absolute top-0 right-0 w-[450px] h-full bg-slate-900 shadow-2xl z-50 transform transition-transform border-l border-indigo-500/30 flex flex-col">
+            <div class="px-4 py-3 border-b border-indigo-500/20 bg-slate-950/70">
+              <div class="text-sm font-bold text-white">Strategy Lab</div>
+              <div id="source-strategy-name" class="text-[11px] font-mono text-amber-300 mt-1">No Active Strategy</div>
+            </div>
+            <div class="p-4 flex flex-col gap-3 flex-1 min-h-0">
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">File Name</label>
+                <input id="strategy-filename" type="text"
+                  class="w-full rounded border border-indigo-500/20 bg-slate-800 text-white px-3 py-2 text-sm outline-none"
+                  placeholder="strategy_name">
+              </div>
+              <div class="flex-1 min-h-0 flex flex-col">
+                <label class="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">DSL Editor</label>
+                <textarea id="strategy-editor" spellcheck="false"
+                  class="flex-1 min-h-[260px] rounded border border-indigo-500/20 bg-slate-950 text-indigo-100 font-mono text-sm px-3 py-3 outline-none resize-none"
+                  placeholder="TRIGGER: close > ema_20&#10;EXIT: close < ema_20"></textarea>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="applyDsl()"
+                  class="rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm py-2 px-3">Run Draft</button>
+                <button onclick="saveStrategy()"
+                  class="rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm py-2 px-3">Save</button>
+                <button onclick="saveAsStrategy()"
+                  class="rounded bg-amber-500 hover:bg-amber-400 text-white font-bold text-sm py-2 px-3">Save As</button>
+                <button onclick="toggleStrategyPanel()"
+                  class="rounded bg-slate-700 hover:bg-slate-600 text-white font-bold text-sm py-2 px-3">Close</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="chart-header" class="mb-4 flex justify-between items-center h-12 flex-shrink-0">
+            <h2 id="active-ticker-title" class="text-3xl font-bold text-slate-900 tracking-tight text-ellipsis overflow-hidden whitespace-nowrap mr-4">
+              Select a Ticker
+            </h2>
+            <div id="chart-stats" class="text-emerald-600 font-mono text-xl flex space-x-4 items-center flex-shrink-0">
+              <!-- Dynamic stats like price/streak will go here -->
+              <div id="loading-spinner" class="hidden">
+                <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+              </div>
+            </div>
+          </div>
+          <div id="layer-legend" class="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-[11px] font-semibold text-slate-600">
+            <span class="uppercase tracking-wide text-slate-500">Layer Shading</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-blue-600"></span>Context</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-amber-500"></span>Setup</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-emerald-600"></span>Trigger</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-red-600"></span>Risk</span>
+            <span class="text-slate-400">Shown when strategy layers are evaluable on chart data.</span>
+          </div>
+          <div id="plotly-tools-dock">
+            <div id="plotly-tools-box"><span id="plotly-tools-label">Tools</span><div id="plotly-tools-actions"></div></div>
+          </div>
+          <div id="plotly-chart" class="flex-grow w-full bg-slate-50 rounded-lg border border-dashed border-indigo-200 overflow-hidden">
+            <div class="flex flex-col items-center justify-center h-full text-indigo-300">
+              <svg class="w-16 h-16 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+              </svg>
+              <p class="mt-4 font-medium italic">
+                Your interactive workspace is ready
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div id="tab-backtest" class="hidden">
+    <div class="p-6 space-y-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">Backtester</h2>
+          <p class="text-sm text-slate-500">Evaluate saved strategies or the current editor draft and refine them with ranked quality metrics.</p>
+        </div>
+        <div class="flex flex-col items-end gap-3">
+          <div class="inline-flex rounded-lg border border-slate-300 bg-white p-1 shadow-sm">
+            <button id="bt-source-saved" type="button" onclick="setBacktestSourceMode('saved')"
+              class="rounded-md px-3 py-2 text-sm font-bold bg-indigo-600 text-white">Saved Strategy</button>
+            <button id="bt-source-editor" type="button" onclick="setBacktestSourceMode('editor')"
+              class="rounded-md px-3 py-2 text-sm font-bold text-slate-600">Editor Draft</button>
+          </div>
+          <button id="backtest-run-btn" onclick="loadBacktestMetrics()"
+            class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-emerald-500/60 transition-all">
+            Evaluate Strategy
+          </button>
+        </div>
+      </div>
+
+      <div id="backtest-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+        Select a saved strategy or switch to Editor Draft to evaluate the current DSL in the GUI.
+      </div>
+
+      <div id="backtest-content" class="hidden space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-emerald-500">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Strategy</div>
+            <div id="bt-strategy" class="mt-2 text-lg font-bold text-slate-800">-</div>
+          </div>
+          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-indigo-500">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Candidates</div>
+            <div id="bt-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
+          </div>
+          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-amber-500">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Best Quality</div>
+            <div id="bt-best-quality" class="mt-2 text-lg font-bold text-slate-800">0.00</div>
+          </div>
+          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-rose-500">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Avg Return</div>
+            <div id="bt-avg-return" class="mt-2 text-lg font-bold text-slate-800">0.00%</div>
+          </div>
+          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-cyan-500">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Avg Sharpe</div>
+            <div id="bt-avg-sharpe" class="mt-2 text-lg font-bold text-slate-800">0.00</div>
+          </div>
+        </div>
+
+        <div class="overflow-hidden rounded-xl bg-white shadow border border-slate-200">
+          <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-700">Quality Snapshot</div>
+          <div id="backtest-chart" class="w-full h-[360px]"></div>
+        </div>
+
+        <div class="overflow-hidden rounded-xl bg-white shadow border border-slate-200">
+          <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-700">Top Ranked Results</div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-100 text-slate-600 uppercase text-xs tracking-wide">
+                <tr>
+                  <th class="px-4 py-3 text-left">Ticker</th>
+                  <th class="px-4 py-3 text-left">Quality</th>
+                  <th class="px-4 py-3 text-left">Return</th>
+                  <th class="px-4 py-3 text-left">Win Rate</th>
+                  <th class="px-4 py-3 text-left">Sharpe</th>
+                  <th class="px-4 py-3 text-left">PF</th>
+                  <th class="px-4 py-3 text-left">Max DD</th>
+                  <th class="px-4 py-3 text-left">Trades</th>
+                  <th class="px-4 py-3 text-left">Days Since Entry</th>
+                </tr>
+              </thead>
+              <tbody id="backtest-table-body" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
   <script>
+    let backtestSourceMode = "saved";
+
+    function getBacktestTabs() {
+      return ["screener", "backtest"]
+        .map((name) => document.getElementById(`tab-${name}`))
+        .filter(Boolean);
+    }
+
+    function getActiveEditorDsl() {
+      const strategyEditor = document.getElementById("strategy-editor");
+      return strategyEditor ? strategyEditor.value.trim() : "";
+    }
+
+    function setBacktestEmptyState(message) {
+      const emptyState = document.getElementById("backtest-empty");
+      const content = document.getElementById("backtest-content");
+      const body = document.getElementById("backtest-table-body");
+      const chartDiv = document.getElementById("backtest-chart");
+
+      if (body) {
+        body.innerHTML = "";
+      }
+      if (chartDiv && window.Plotly) {
+        Plotly.purge(chartDiv);
+      }
+      emptyState.textContent = message;
+      emptyState.classList.remove("hidden");
+      content.classList.add("hidden");
+    }
+
+    function showTab(tab) {
+      console.log('[TABBAR] Switching to tab:', tab);
+      fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: 'info', message: `[TABBAR] Switching to tab: ${tab}` })
+      });
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      getBacktestTabs().forEach((section) => section.classList.add('hidden'));
+      const activeBtn = document.getElementById(`tab-btn-${tab}`);
+      if (activeBtn) {
+        activeBtn.classList.add('active');
+      }
+      const activeSection = document.getElementById(`tab-${tab}`);
+      if (activeSection) {
+        activeSection.classList.remove('hidden');
+      }
+      if (tab === 'backtest') {
+        loadBacktestMetrics();
+      }
+    }
+
+    function setBacktestSourceMode(mode) {
+      backtestSourceMode = mode === "editor" ? "editor" : "saved";
+      const savedBtn = document.getElementById("bt-source-saved");
+      const editorBtn = document.getElementById("bt-source-editor");
+      if (savedBtn && editorBtn) {
+        savedBtn.className = `rounded-md px-3 py-2 text-sm font-bold ${backtestSourceMode === 'saved' ? 'bg-indigo-600 text-white' : 'text-slate-600'}`;
+        editorBtn.className = `rounded-md px-3 py-2 text-sm font-bold ${backtestSourceMode === 'editor' ? 'bg-indigo-600 text-white' : 'text-slate-600'}`;
+      }
+      if (!document.getElementById("tab-backtest").classList.contains("hidden")) {
+        loadBacktestMetrics();
+      }
+    }
+
+    async function loadBacktestMetrics() {
+      const strategySelect = document.getElementById("strategy-select");
+      const strategyName = strategySelect && strategySelect.value ? strategySelect.value : "";
+      const editorDsl = getActiveEditorDsl();
+      const runBtn = document.getElementById("backtest-run-btn");
+      const body = document.getElementById("backtest-table-body");
+      const chartDiv = document.getElementById("backtest-chart");
+      const content = document.getElementById("backtest-content");
+
+      if (backtestSourceMode === "saved" && !strategyName) {
+        setBacktestEmptyState("Select a saved strategy first, then open Backtester to score it.");
+        return;
+      }
+      if (backtestSourceMode === "editor" && !editorDsl) {
+        setBacktestEmptyState("Editor Draft is selected, but the Labs editor is empty.");
+        return;
+      }
+
+      setBacktestEmptyState(`Evaluating ${backtestSourceMode === 'editor' ? 'Editor Draft' : strategyName}...`);
+      runBtn.disabled = true;
+      runBtn.textContent = "Evaluating...";
+
+      try {
+        let url = `/api/backtest?limit=25`;
+        if (backtestSourceMode === "editor") {
+          url += `&strategy=${encodeURIComponent(strategyName || 'Editor Draft')}`;
+          url += `&dsl_content=${encodeURIComponent(editorDsl)}`;
+        } else {
+          url += `&strategy=${encodeURIComponent(strategyName)}`;
+        }
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || "Backtest request failed");
+        }
+
+        document.getElementById("bt-strategy").textContent =
+          `${data.strategy_name || strategyName || "Editor Draft"} (${data.source_type === "editor" ? "Editor Draft" : "Saved Strategy"})`;
+        document.getElementById("bt-count").textContent = String(data.summary?.count || 0);
+        document.getElementById("bt-best-quality").textContent = Number(data.summary?.best_quality || 0).toFixed(2);
+        document.getElementById("bt-avg-return").textContent = `${Number(data.summary?.avg_return || 0).toFixed(2)}%`;
+        document.getElementById("bt-avg-sharpe").textContent = Number(data.summary?.avg_sharpe || 0).toFixed(2);
+
+        body.innerHTML = "";
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        if (rows.length === 0) {
+          setBacktestEmptyState(`No scored results were returned for ${data.strategy_name || strategyName || 'Editor Draft'}.`);
+          return;
+        }
+
+        rows.forEach((row) => {
+          const tr = document.createElement("tr");
+          tr.className = "hover:bg-slate-50 cursor-pointer";
+          tr.onclick = () => {
+            showTab('screener');
+            loadChart(row.ticker);
+          };
+          tr.innerHTML = `
+            <td class="px-4 py-3 font-bold text-slate-800">${row.ticker}</td>
+            <td class="px-4 py-3 font-mono text-indigo-700">${Number(row.quality_score || 0).toFixed(2)}</td>
+            <td class="px-4 py-3 font-mono ${Number(row.return_pct || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${Number(row.return_pct || 0).toFixed(2)}%</td>
+            <td class="px-4 py-3 font-mono">${Number(row.win_rate_pct || 0).toFixed(2)}%</td>
+            <td class="px-4 py-3 font-mono">${Number(row.sharpe || 0).toFixed(2)}</td>
+            <td class="px-4 py-3 font-mono">${Number(row.profit_factor || 0).toFixed(2)}</td>
+            <td class="px-4 py-3 font-mono">${Number(row.max_dd_pct || 0).toFixed(2)}%</td>
+            <td class="px-4 py-3 font-mono">${Number(row.trades || 0)}</td>
+            <td class="px-4 py-3 font-mono">${Number(row.days_since_entry || 0)}</td>
+          `;
+          body.appendChild(tr);
+        });
+
+        if (chartDiv) {
+          const chart = data.chart || { data: [], layout: {} };
+          if (chart.data && chart.data.length > 0 && window.Plotly) {
+            await Plotly.newPlot(chartDiv, chart.data, chart.layout || {}, {
+              responsive: true,
+              displayModeBar: false,
+              displaylogo: false,
+            });
+          } else if (window.Plotly) {
+            Plotly.purge(chartDiv);
+          }
+        }
+
+        document.getElementById("backtest-empty").classList.add("hidden");
+        content.classList.remove("hidden");
+      } catch (err) {
+        setBacktestEmptyState(`Backtest error: ${err.message || err}`);
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = "Evaluate Strategy";
+      }
+    }
+    // Show default tab on load
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('[TABBAR] Tab bar rendered');
+      fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: 'info', message: '[TABBAR] Tab bar rendered' })
+      });
+      showTab('screener');
+    });
     let currentDays = 365 * 2;
     let currentTicker = "";
     let currentStrategy = "";
@@ -873,8 +1095,8 @@ EXIT:    cross_down(close, ema_50)"></textarea>
     async function loadChart(ticker) {
       console.log("loadChart starting for", ticker);
       currentTicker = ticker;
-      document.getElementById("active-ticker-title").textContent =
-        `${ticker} - Supertrend breakdown analysis`;
+      // Set the label dynamically after fetching chart data
+
       document.getElementById("ticker-select").value = ticker;
 
       const chartDiv = document.getElementById("plotly-chart");
@@ -887,9 +1109,10 @@ EXIT:    cross_down(close, ema_50)"></textarea>
                 </div>
             `;
 
+
       try {
-        const strategySelect = document.getElementById("strategy-select");
-        const strategyName = (strategySelect && strategySelect.value) ? strategySelect.value : currentStrategy;
+      const strategySelect = document.getElementById("strategy-select");
+      const strategyName = (strategySelect && strategySelect.value) ? strategySelect.value : currentStrategy;
         const strategyPart = strategyName ? `&strategy=${encodeURIComponent(strategyName)}` : "";
         const url = `/api/chart/${ticker}?days=${currentDays}${strategyPart}`;
         console.info("loadChart request URL", url);
@@ -898,6 +1121,10 @@ EXIT:    cross_down(close, ema_50)"></textarea>
         console.info("loadChart response status", resp.status);
 
         if (!resp.ok) throw new Error(responseData.detail || "Server error");
+
+        // Set the label using the returned strategy_name
+        document.getElementById("active-ticker-title").textContent =
+          `${ticker} - ${responseData.strategy_name || "Strategy Analysis"}`;
 
         let figData = null;
         if (responseData.figure) {
@@ -1042,6 +1269,9 @@ EXIT:    cross_down(close, ema_50)"></textarea>
         runScreen(); // Restore runScreen() on strategy change
         if (currentTicker) {
           loadChart(currentTicker);
+        }
+        if (!document.getElementById("tab-backtest").classList.contains("hidden")) {
+          loadBacktestMetrics();
         }
       });
 
