@@ -10,6 +10,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import logging
 
+from ETF_screener.dsl_parser import parse_strategy_blocks
+
 logger = logging.getLogger(__name__)
 
 
@@ -202,31 +204,9 @@ class InteractivePlotter:
 
     def _build_strategy_layer_ribbons(self, strategy_content: str | None) -> list[dict]:
         """Build dynamic ribbon layers from DSL block names — block name is the single source of truth for labels."""
-        if not strategy_content:
+        parsed_blocks = parse_strategy_blocks(strategy_content)
+        if not parsed_blocks:
             return []
-
-        # Canonical aliases map a block name to a layer slot and a preferred style key.
-        _CANONICAL_ALIAS = {
-            "context": (1, "context"),
-            "setup": (2, "setup"),
-            "qualify": (2, "setup"),
-            "trigger": (3, "trigger"),
-            "risk": (4, "risk"),
-            "invalidate": (4, "risk"),
-            "entry": (3, "trigger"),
-            "exit": (4, "risk"),
-        }
-        # Prefix fallback (e.g. CONTEXT_REGIME → context)
-        _CANONICAL_PREFIX_ORDER = [
-            "context",
-            "setup",
-            "qualify",
-            "trigger",
-            "risk",
-            "invalidate",
-            "entry",
-            "exit",
-        ]
 
         # Alternating palette for extra/unrecognised blocks.
         _EXTRA_COLORS = [
@@ -237,101 +217,6 @@ class InteractivePlotter:
             "#065f46",
             "#1e40af",
         ]
-
-        default_map = {"TRIGGER": 3, "ENTRY": 3, "FILTER": 2, "EXIT": 4}
-
-        # Ordered list of (block_name_raw, layer_slot) pairs encountered in the file.
-        # We preserve encounter order so ribbons appear top→bottom in DSL order.
-        block_order: list[tuple[str, int]] = []
-        block_exprs: dict[str, list[str]] = {}  # raw_block_name → conditions
-        current_block: str | None = None
-        current_layer: int | None = None
-
-        def _resolve_block(raw_name: str) -> tuple[int, str]:
-            """Return (layer_slot, style_key) for a block name."""
-            k = raw_name.strip().lower()
-            # Exact match
-            m = re.match(r"^layer\s*([1-4])$", k) or re.match(r"^l([1-4])$", k)
-            if m:
-                return (
-                    int(m.group(1)),
-                    list(_CANONICAL_ALIAS.keys())[int(m.group(1)) - 1],
-                )
-            if k in _CANONICAL_ALIAS:
-                return _CANONICAL_ALIAS[k]
-            for prefix in _CANONICAL_PREFIX_ORDER:
-                if k.startswith(prefix):
-                    return _CANONICAL_ALIAS[prefix]
-            return 2, ""  # unknown → treat as setup slot
-
-        for raw in strategy_content.splitlines():
-            line = raw.strip()
-            if not line:
-                continue
-
-            begin_prefix = re.match(r"^begin\s+(.+)$", line, re.IGNORECASE)
-            begin_suffix = re.match(r"^(.+?)\s+begin\b", line, re.IGNORECASE)
-
-            if begin_prefix:
-                raw_name = begin_prefix.group(1).strip()
-                current_block = raw_name
-                current_layer, _ = _resolve_block(raw_name)
-                if raw_name not in block_exprs:
-                    block_exprs[raw_name] = []
-                    block_order.append((raw_name, current_layer))
-                continue
-
-            if begin_suffix:
-                raw_name = begin_suffix.group(1).strip()
-                current_block = raw_name
-                current_layer, _ = _resolve_block(raw_name)
-                if raw_name not in block_exprs:
-                    block_exprs[raw_name] = []
-                    block_order.append((raw_name, current_layer))
-                continue
-
-            if re.match(r"^end\b", line, re.IGNORECASE):
-                current_block = None
-                current_layer = None
-                continue
-
-            if re.match(r"^begin\b", line, re.IGNORECASE):
-                continue
-
-            layer_match = re.match(r"^#\s*layer\s*([1-4])\b", line, re.IGNORECASE)
-            if layer_match:
-                current_layer = int(layer_match.group(1))
-                continue
-
-            if line.startswith("#"):
-                continue
-
-            section = re.match(
-                r"^(TRIGGER|FILTER|ENTRY|EXIT):\s*(.+)$", line, re.IGNORECASE
-            )
-            if not section:
-                continue
-
-            expr = section.group(2).strip()
-            if not expr:
-                continue
-
-            if current_block:
-                block_exprs[current_block].append(f"({expr})")
-            else:
-                # No explicit block — fall back to section keyword → layer slot.
-                slot = (
-                    current_layer
-                    if current_layer
-                    else default_map.get(section.group(1).upper(), 2)
-                )
-                fallback_name = {1: "Context", 2: "Setup", 3: "Trigger", 4: "Risk"}.get(
-                    slot, "Block"
-                )
-                if fallback_name not in block_exprs:
-                    block_exprs[fallback_name] = []
-                    block_order.append((fallback_name, slot))
-                block_exprs[fallback_name].append(f"({expr})")
 
         # Build palette: canonical blocks get their configured color; extras get alternating colors.
         layer_style_cache = {
@@ -352,10 +237,10 @@ class InteractivePlotter:
         seen_slots: set[int] = set()
 
         ribbons = []
-        for block_name, slot in block_order:
-            exprs = block_exprs.get(block_name, [])
-            if not exprs:
-                continue
+        for block in parsed_blocks:
+            block_name = block.name
+            slot = block.layer
+            exprs = list(block.expressions)
             # Use canonical style for first occurrence of each slot; alternate color for subsequent.
             if slot not in seen_slots:
                 style = layer_style_cache.get(slot, {"color": "#6b7280", "alpha": 0.6})
@@ -414,8 +299,50 @@ class InteractivePlotter:
         return sorted(specs)
 
     def _compact_ribbon_label(self, label: str) -> str:
-        # Label comes directly from the DSL block name — return as-is.
-        return label
+        # Convert DSL block names into readable left-gutter labels.
+        words = str(label).replace("_", " ").strip().split()
+        if not words:
+            return str(label)
+        return " ".join(word[:1].upper() + word[1:].lower() for word in words)
+
+    def _condition_lines(self, condition: str, max_lines: int = 2) -> list[str]:
+        """Return a short human-readable condition summary for labels/hover."""
+        if not condition:
+            return []
+
+        parts = re.split(r"\s+AND\s+", str(condition).strip(), flags=re.IGNORECASE)
+        cleaned = []
+        for part in parts:
+            line = part.strip()
+            if line.startswith("(") and line.endswith(")"):
+                line = line[1:-1].strip()
+            line = line.replace("_d1", " (prev)")
+            if line:
+                cleaned.append(line)
+
+        if len(cleaned) > max_lines:
+            shown = cleaned[:max_lines]
+            shown.append(f"+{len(cleaned) - max_lines} more")
+            return shown
+        return cleaned
+
+    def _ribbon_annotation_text(self, ribbon: dict) -> str:
+        """Build the left gutter label for a ribbon lane."""
+        label = self._compact_ribbon_label(ribbon.get("label", "Indicator"))
+        return f"<b>{label}</b>"
+
+    def _ribbon_hovertemplate(self, ribbon: dict, color: str) -> str:
+        """Build hover content that explains the current DSL block."""
+        label = self._compact_ribbon_label(ribbon.get("label", "Indicator"))
+        condition = str(ribbon.get("condition", "")).strip() or "n/a"
+        condition = condition.replace("<", "&lt;").replace(">", "&gt;")
+        color_name = str(color)
+        return (
+            f"Block: {label}<br>"
+            f"State: {color_name}<br>"
+            f"Condition: {condition}<br>"
+            "Date: %{x}<extra></extra>"
+        )
 
     def _compact_ribbon_label_color(self, label: str) -> str:
         if isinstance(self.ribbon_config, dict):
@@ -830,22 +757,6 @@ class InteractivePlotter:
             is_trigger_lane = "trigger" in label.lower()
             lane_width = lane_line_width
 
-            # Paint a neutral base so lanes remain contiguous even when condition masks are false.
-            fig.add_trace(
-                go.Bar(
-                    x=df["Date"],
-                    y=np.full(len(df), 0.2),
-                    base=0.9,
-                    width=self._time_bucket_width_ms(df["Date"]),
-                    marker=dict(color="#d1d5db", line=dict(width=0)),
-                    opacity=0.4,
-                    showlegend=False,
-                    name=f"{label} base",
-                ),
-                row=row,
-                col=1,
-            )
-
             eval_df = df.copy()
             for c in eval_df.columns:
                 if pd.api.types.is_numeric_dtype(eval_df[c]):
@@ -892,7 +803,7 @@ class InteractivePlotter:
                             color=color,
                             lane_width=lane_width,
                             name=f"{label} - {color}",
-                            hovertemplate=None,
+                            hovertemplate=self._ribbon_hovertemplate(rib, color),
                             show_markers=is_trigger_lane,
                             alpha=alpha,
                         )
@@ -918,7 +829,14 @@ class InteractivePlotter:
             ):
                 has_risk_lane = True
 
-            fig.update_yaxes(showticklabels=False, range=[0.9, 1.1], row=row, col=1)
+            fig.update_yaxes(
+                showticklabels=False,
+                range=[0.9, 1.1],
+                showgrid=False,
+                zeroline=False,
+                row=row,
+                col=1,
+            )
 
             # Add a horizontal label just left of each ribbon lane.
             yaxis_name = "yaxis" if row == 1 else f"yaxis{row}"
@@ -932,7 +850,7 @@ class InteractivePlotter:
                 xanchor="left",
                 yanchor="middle",
                 xshift=0,
-                text=f"<b>{self._compact_ribbon_label(label)}</b>",
+                text=self._ribbon_annotation_text(rib),
                 showarrow=False,
                 font=dict(size=10, color=rib.get("color", "#6b7280")),
                 align="left",
@@ -978,23 +896,8 @@ class InteractivePlotter:
                 states.append(1 if in_position else 0)
             df_state["aggregated_state"] = states
 
-        # Base lane — full-height grey bar covering the whole lane.
         agg_lane_min, agg_lane_max = 0.9, 1.1
         agg_lane_span = agg_lane_max - agg_lane_min
-        fig.add_trace(
-            go.Bar(
-                x=df_state["Date"],
-                y=np.full(len(df_state), agg_lane_span),
-                base=agg_lane_min,
-                width=self._time_bucket_width_ms(df_state["Date"]),
-                marker=dict(color="#d1d5db", line=dict(width=0)),
-                opacity=0.4,
-                showlegend=False,
-                name="Aggregated base",
-            ),
-            row=aggregated_row,
-            col=1,
-        )
 
         in_position_mask = (
             df_state["aggregated_state"].fillna(0).astype(int) == 1
@@ -1073,7 +976,12 @@ class InteractivePlotter:
             col=1,
         )
         fig.update_yaxes(
-            showticklabels=False, range=[0.9, 1.1], row=aggregated_row, col=1
+            showticklabels=False,
+            range=[0.9, 1.1],
+            showgrid=False,
+            zeroline=False,
+            row=aggregated_row,
+            col=1,
         )
 
         # Add label for aggregated lane
@@ -1112,6 +1020,9 @@ class InteractivePlotter:
                 layout[key]["visible"] = True
                 layout[key]["type"] = "date"
                 layout[key]["tickformat"] = "%b %Y"
+                row_num = 1 if key == "xaxis" else int(key.replace("xaxis", ""))
+                is_ribbon_axis = row_num >= 3
+                layout[key]["showgrid"] = not is_ribbon_axis
                 layout[key]["gridcolor"] = "lightgray"
                 layout[key]["ticks"] = "outside" if is_bottom else ""
                 layout[key]["showline"] = is_bottom

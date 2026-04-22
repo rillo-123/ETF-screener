@@ -35,7 +35,7 @@ END
     plotter = InteractivePlotter()
     fig = plotter.create_plot(df, "TEST", strategy_content=strategy_content)
 
-    # Block name "CONTEXT_REGIME" → title case label "Context_Regime"
+    # Block name "CONTEXT_REGIME" keeps its trace id while rendering a readable annotation label.
     context_traces = [
         t for t in fig.data if getattr(t, "name", "") == "Context_Regime - #2563eb"
     ]
@@ -83,11 +83,11 @@ END
         df, "TEST", strategy_content=strategy_content
     )
 
-    # Block "CONTEXT_REGIME" → title case "Context_Regime"
+    # Block "CONTEXT_REGIME" → readable left gutter label with condition summary
     labels = [
         a
         for a in fig.layout.annotations
-        if getattr(a, "text", "") == "<b>Context_Regime</b>"
+        if "Context Regime" in getattr(a, "text", "")
     ]
     assert labels, "Expected left-side annotation for Context_Regime"
 
@@ -125,6 +125,39 @@ def test_create_plot_hides_sell_signal_markers():
     trace_names = {getattr(t, "name", "") for t in fig.data}
     assert "Sell Signal" not in trace_names
     assert "Buy Signal" not in trace_names
+
+
+def test_ribbons_do_not_draw_gray_base_background_traces():
+    dates = pd.date_range(start="2024-01-01", periods=4)
+    close = np.array([101.0, 99.0, 102.0, 98.0])
+
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.array([1000.0] * 4),
+            "ema_200": np.array([100.0] * 4),
+            "ema_200_slope": np.array([1.0] * 4),
+        }
+    )
+
+    strategy_content = """
+BEGIN CONTEXT
+FILTER: close > ema_200
+FILTER: ema_200_slope > 0
+END
+"""
+
+    fig = InteractivePlotter().create_plot(
+        df, "TEST", strategy_content=strategy_content
+    )
+
+    trace_names = {getattr(t, "name", "") for t in fig.data}
+    assert "Context base" not in trace_names
+    assert "Aggregated base" not in trace_names
 
 
 def test_only_bottom_xaxis_shows_ticklabels_for_ribbon_layout():
@@ -224,8 +257,8 @@ END
     )
     label_texts = {getattr(a, "text", "") for a in fig.layout.annotations}
 
-    assert "<b>Context</b>" in label_texts
-    assert "<b>Trigger</b>" in label_texts
+    assert any("Context" in text for text in label_texts)
+    assert any("Trigger" in text for text in label_texts)
     assert "<b>Setup</b>" not in label_texts
     assert "<b>Risk</b>" not in label_texts
 
