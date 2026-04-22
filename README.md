@@ -23,6 +23,24 @@ Technical analysis tool for identifying swing trading opportunities in large XET
 pip install -r requirements.txt
 ```
 
+### Root Entry Scripts
+
+The main PowerShell entry surface lives at the repo root so you can launch common workflows without changing directories:
+
+```powershell
+.\run_dashboard.ps1
+.\run_all_tests.ps1
+.\run_discovery.ps1
+.\run_movie_scan.ps1
+.\run_custom_backtest.ps1
+.\run_churn.ps1
+.\run_churn_all.ps1
+.\run_filtered_plots.ps1
+.\run_vulture.ps1
+```
+
+These root scripts forward into the underlying `scripts/` implementations where applicable.
+
 ### Get Finnhub API Key
 
 1. Sign up at [finnhub.io](https://finnhub.io)
