@@ -22,8 +22,21 @@ Write-Host "[NIGHTLY] 3:00 AM reached! Starting refresh..." -ForegroundColor Gre
 # Prevent sleep while this process is running
 $execution = Start-Job -ScriptBlock {
     $env:PYTHONPATH = "src"
-    # Using python -m to ensure package discovery
-    python -m ETF_screener.main refresh --depth 730
+    @'
+from ETF_screener.config_loader import get_paths
+from ETF_screener.market_data_service import MarketDataRefresher
+
+db_path = get_paths()["data"]["etf_db"]
+refresher = MarketDataRefresher(db_path=db_path)
+status = refresher.refresh_market_data(
+    depth=730,
+    stale_after_days=0,
+    force=True,
+    max_workers=8,
+    rebuild_shortlist=True,
+)
+print(status)
+'@ | python -
 }
 
 # Keep the terminal busy so Windows sees activity

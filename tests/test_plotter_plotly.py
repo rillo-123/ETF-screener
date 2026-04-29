@@ -6,6 +6,13 @@ import pandas as pd
 from ETF_screener.plotter_plotly import InteractivePlotter
 
 
+def _trace_y(trace_dict):
+    y = trace_dict.get("y")
+    if isinstance(y, dict) and "bdata" in y:
+        return np.frombuffer(base64.b64decode(y["bdata"]), dtype=y.get("dtype", "f8"))
+    return np.asarray(y, dtype=float)
+
+
 def test_context_ribbon_preserves_false_gaps():
     dates = pd.date_range(start="2024-01-01", periods=6)
     close = np.array([101.0, 99.0, 102.0, 98.0, 103.0, 97.0])
@@ -450,19 +457,11 @@ END
         t for t in fig.data if getattr(t, "name", "") == "Aggregated"
     )
 
-    def _y(trace_dict):
-        y = trace_dict.get("y")
-        if isinstance(y, dict) and "bdata" in y:
-            return np.frombuffer(
-                base64.b64decode(y["bdata"]), dtype=y.get("dtype", "f8")
-            )
-        return np.asarray(y, dtype=float)
-
     _fig_json = json.loads(fig.to_json())
-    trigger_y = _y(
+    trigger_y = _trace_y(
         next(t for t in _fig_json["data"] if t.get("name", "").startswith("Trigger - "))
     )
-    aggregated_y = _y(
+    aggregated_y = _trace_y(
         next(t for t in _fig_json["data"] if t.get("name") == "Aggregated")
     )
 
@@ -531,15 +530,7 @@ END
     fig = plotter.create_plot(df, "TEST", strategy_content=strategy_content)
     _fig_json = json.loads(fig.to_json())
 
-    def _y(trace_dict):
-        y = trace_dict.get("y")
-        if isinstance(y, dict) and "bdata" in y:
-            return np.frombuffer(
-                base64.b64decode(y["bdata"]), dtype=y.get("dtype", "f8")
-            )
-        return np.asarray(y, dtype=float)
-
-    aggregated_y = _y(
+    aggregated_y = _trace_y(
         next(t for t in _fig_json["data"] if t.get("name") == "Aggregated")
     )
 
@@ -547,6 +538,135 @@ END
     assert aggregated_y[1] > 0
     assert aggregated_y[2] == 0
     assert aggregated_y[3] > 0
+
+
+def test_qualify_block_merges_into_setup_lane_and_tightens_aggregate():
+    dates = pd.date_range(start="2024-01-01", periods=5)
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": np.ones(5),
+            "High": np.full(5, 2.0),
+            "Low": np.zeros(5),
+            "Close": np.ones(5),
+            "Volume": np.full(5, 200000.0),
+            "ctx": np.ones(5),
+            "setup_ok": np.array([0, 1, 1, 0, 1], dtype=float),
+            "qual_ok": np.array([1, 0, 1, 1, 1], dtype=float),
+            "trigger_ok": np.array([0, 1, 1, 1, 0], dtype=float),
+            "risk_ok": np.zeros(5),
+        }
+    )
+
+    strategy_content = """
+BEGIN CONTEXT
+FILTER: ctx > 0.5
+END
+
+BEGIN SETUP
+FILTER: setup_ok > 0.5
+END
+
+BEGIN QUALIFY
+FILTER: qual_ok > 0.5
+END
+
+BEGIN TRIGGER
+TRIGGER: trigger_ok > 0.5
+END
+
+BEGIN INVALIDATE
+EXIT: risk_ok > 0.5
+END
+"""
+
+    fig = InteractivePlotter().create_plot(df, "TEST", strategy_content=strategy_content)
+    fig_json = json.loads(fig.to_json())
+    trace_names = [t.get("name", "") for t in fig_json["data"]]
+    label_texts = {a.get("text", "") for a in fig_json["layout"].get("annotations", [])}
+
+    assert not any(name.startswith("Qualify") for name in trace_names)
+    assert "<b>Qualify</b>" not in label_texts
+
+    setup_y = _trace_y(
+        next(t for t in fig_json["data"] if t.get("name", "").startswith("Setup - "))
+    )
+    aggregated_y = _trace_y(
+        next(t for t in fig_json["data"] if t.get("name") == "Aggregated")
+    )
+
+    # Setup lane now reflects Setup AND Qualify together: only indices 2 and 4 survive.
+    assert setup_y[1] == 0
+    assert setup_y[2] > 0
+    assert setup_y[3] == 0
+    assert setup_y[4] > 0
+
+    # Aggregate requires Context AND merged Setup AND Trigger, so only index 2 is active.
+    assert aggregated_y[1] == 0
+    assert aggregated_y[2] > 0
+    assert aggregated_y[3] == 0
+    assert aggregated_y[4] == 0
+
+
+def test_invalidate_ribbon_only_draws_when_ready_stack_is_vetoed():
+    dates = pd.date_range(start="2024-01-01", periods=5)
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": np.ones(5),
+            "High": np.full(5, 2.0),
+            "Low": np.zeros(5),
+            "Close": np.ones(5),
+            "Volume": np.full(5, 200000.0),
+            "ctx": np.ones(5),
+            "setup_ok": np.array([0, 1, 1, 0, 1], dtype=float),
+            "qual_ok": np.array([1, 0, 1, 1, 1], dtype=float),
+            "trigger_ok": np.array([0, 1, 1, 1, 0], dtype=float),
+            "risk_ok": np.array([1, 1, 1, 0, 0], dtype=float),
+        }
+    )
+
+    strategy_content = """
+BEGIN CONTEXT
+FILTER: ctx > 0.5
+END
+
+BEGIN SETUP
+FILTER: setup_ok > 0.5
+END
+
+BEGIN QUALIFY
+FILTER: qual_ok > 0.5
+END
+
+BEGIN TRIGGER
+TRIGGER: trigger_ok > 0.5
+END
+
+BEGIN INVALIDATE
+EXIT: risk_ok > 0.5
+END
+"""
+
+    fig = InteractivePlotter().create_plot(df, "TEST", strategy_content=strategy_content)
+    fig_json = json.loads(fig.to_json())
+
+    invalidate_y = _trace_y(
+        next(t for t in fig_json["data"] if t.get("name", "").startswith("Invalidate - "))
+    )
+    aggregated_y = _trace_y(
+        next(t for t in fig_json["data"] if t.get("name") == "Aggregated")
+    )
+
+    # Risk is true on indices 0, 1, 2, but only index 2 has Context + Setup + Trigger lined up.
+    assert invalidate_y[0] == 0
+    assert invalidate_y[1] == 0
+    assert invalidate_y[2] > 0
+    assert invalidate_y[3] == 0
+    assert invalidate_y[4] == 0
+
+    # The veto removes the only would-be aggregate bar.
+    assert np.all(aggregated_y == 0)
 
 
 def test_supertrend_overlay_is_solid_and_switches_regime_colors():
@@ -640,6 +760,43 @@ END
 
     assert st_traces
     # Both green and red segments must be present (data has regime changes at rows 2 and 4).
+    line_colors = {tr.line.color for tr in st_traces}
+    assert "#16a34a" in line_colors, "Expected green Supertrend segment"
+    assert "#dc2626" in line_colors, "Expected red Supertrend segment"
+
+
+def test_supertrend_overlay_falls_back_to_combined_supertrend_series():
+    dates = pd.date_range(start="2024-01-01", periods=8)
+    close = np.array([101.0, 102.0, 103.0, 99.0, 98.0, 99.5, 101.5, 102.0])
+    st = np.array([100.0, 100.5, 101.0, 101.2, 100.8, 100.2, 100.0, 100.1])
+
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.full(8, 200000.0),
+            "Supertrend": st,
+        }
+    )
+
+    strategy_content = """
+BEGIN TRIGGER
+TRIGGER: cross_up(close, supertrend_10_4)
+END
+"""
+
+    fig = InteractivePlotter().create_plot(
+        df, "TEST", strategy_content=strategy_content
+    )
+    st_traces = [t for t in fig.data if getattr(t, "name", "") == "Supertrend"]
+
+    assert st_traces, "Expected Supertrend trace(s) from combined series"
+    for tr in st_traces:
+        assert getattr(tr, "mode", "") == "lines"
+
     line_colors = {tr.line.color for tr in st_traces}
     assert "#16a34a" in line_colors, "Expected green Supertrend segment"
     assert "#dc2626" in line_colors, "Expected red Supertrend segment"

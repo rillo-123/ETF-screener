@@ -1,5 +1,5 @@
 # Auto-refresh ETF database on logon
-# This script runs etfs refresh with a shallow depth (30 days) to keep data fresh
+# This script runs the parallel market-data refresher with a shallow depth (30 days) to keep data fresh
 # Then generates a hotlist of swing trading prospects
 # Designed to run once per day at logon via Windows Task Scheduler
 
@@ -59,14 +59,31 @@ try {
         throw "Virtual environment not found at $venvScript"
     }
 
-    # Run refresh with shallow depth (30 days - quick update)
+    # Run the parallel refresh with shallow depth (30 days - quick update)
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Write-LogLine "[$timestamp] Running: etfs refresh --depth 30 --force"
+    Write-LogLine "[$timestamp] Running: MarketDataRefresher.refresh_market_data(depth=30, force=True)"
     
     # Run refresh and capture output to both the latest log and the per-run log.
     # Line-by-line logging avoids the encoding/control-character corruption that
     # made previous appended logs hard to read.
-    $refreshExitCode = Invoke-LoggedCommand -Command { etfs refresh --depth 30 --force }
+    $refreshExitCode = Invoke-LoggedCommand -Command {
+        $env:PYTHONPATH = "src"
+        @'
+from ETF_screener.config_loader import get_paths
+from ETF_screener.market_data_service import MarketDataRefresher
+
+db_path = get_paths()["data"]["etf_db"]
+refresher = MarketDataRefresher(db_path=db_path)
+status = refresher.refresh_market_data(
+    depth=30,
+    stale_after_days=0,
+    force=True,
+    max_workers=8,
+    rebuild_shortlist=True,
+)
+print(status)
+'@ | python -
+    }
     
     if ($refreshExitCode -eq 0) {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

@@ -36,14 +36,16 @@ class Snippet:
     Set auto_fetch=False to use only cached database data.
     """
 
-    def __init__(self, db_path: str = "data/etfs.db", auto_fetch: bool = True):
+    def __init__(self, db_path: str = "data/etf_db/etfs.db", auto_fetch: bool = True):
         """Initialize with database connection.
 
         Args:
             db_path: Path to SQLite database
             auto_fetch: If True, automatically fetch from yfinance on cache miss (default True)
         """
-        self.db = ETFDatabase(db_path=db_path)
+            if db_path is None:
+                db_path = get_paths()["data"]["etf_db"]
+            self.db = ETFDatabase(db_path=db_path)
         self.auto_fetch = auto_fetch
         self.fetcher = YFinanceFetcher() if auto_fetch else None
 

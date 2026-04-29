@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import logging
 
-from ETF_screener.dsl_parser import parse_strategy_blocks
+from ETF_screener.dsl_parser import parse_strategy_blocks, resolve_block
 
 logger = logging.getLogger(__name__)
 
@@ -237,10 +237,32 @@ class InteractivePlotter:
         seen_slots: set[int] = set()
 
         ribbons = []
+        merged_setup_idx: int | None = None
         for block in parsed_blocks:
             block_name = block.name
             slot = block.layer
             exprs = list(block.expressions)
+            _, style_key = resolve_block(block_name)
+            if style_key == "setup":
+                style = layer_style_cache[2]
+                merged_condition = " AND ".join(exprs)
+                if merged_setup_idx is None:
+                    ribbons.append(
+                        {
+                            "label": "Setup",
+                            "condition": merged_condition,
+                            "color": style["color"],
+                            "alpha": style.get("alpha", 0.6),
+                        }
+                    )
+                    merged_setup_idx = len(ribbons) - 1
+                else:
+                    existing = str(ribbons[merged_setup_idx].get("condition", "")).strip()
+                    ribbons[merged_setup_idx]["condition"] = " AND ".join(
+                        part for part in [existing, merged_condition] if part
+                    )
+                continue
+
             # Use canonical style for first occurrence of each slot; alternate color for subsequent.
             if slot not in seen_slots:
                 style = layer_style_cache.get(slot, {"color": "#6b7280", "alpha": 0.6})
@@ -262,6 +284,100 @@ class InteractivePlotter:
             )
 
         return ribbons
+
+    def _evaluate_ribbon_overlays(
+        self, df: pd.DataFrame, ribbon: dict
+    ) -> tuple[np.ndarray, list[dict]]:
+        """Evaluate a ribbon into a lane mask plus concrete overlay traces."""
+        label = str(ribbon.get("label", "Indicator"))
+        layers = ribbon.get("layers", [])
+        ribbon_condition = str(ribbon.get("condition", "")).strip()
+        is_trigger_lane = "trigger" in label.lower()
+
+        eval_df = df.copy()
+        for column in eval_df.columns:
+            if pd.api.types.is_numeric_dtype(eval_df[column]):
+                eval_df[column] = eval_df[column].ffill()
+        eval_df.columns = [column.lower() for column in eval_df.columns]
+        eval_df = eval_df.loc[:, ~eval_df.columns.duplicated()]
+
+        ribbon_any_mask = pd.Series(False, index=eval_df.index)
+        overlay_specs = []
+        if ribbon_condition:
+            overlay_specs.append(
+                {
+                    "condition": ribbon_condition,
+                    "color": ribbon.get(
+                        "color", layers[0].get("color", "gray") if layers else "gray"
+                    ),
+                    "alpha": ribbon.get(
+                        "alpha", layers[0].get("alpha", 0.8) if layers else 0.8
+                    ),
+                }
+            )
+        else:
+            overlay_specs.extend(layers)
+
+        overlay_draws: list[dict] = []
+        for overlay in overlay_specs:
+            color = overlay.get("color", "gray")
+            alpha = overlay.get("alpha", 0.8)
+            condition = overlay.get("condition", "False")
+
+            try:
+                clean_cond = self._to_eval_condition(condition)
+                eval_df = self._prepare_eval_columns(eval_df, clean_cond)
+                mask = eval_df.eval(clean_cond, engine="python")
+            except Exception:
+                continue
+
+            if not isinstance(mask, pd.Series) or not mask.any():
+                continue
+
+            mask = mask.fillna(False).astype(bool)
+            mask_np = mask.to_numpy(dtype=bool)
+            ribbon_any_mask = ribbon_any_mask | mask
+            overlay_draws.append(
+                {
+                    "mask": mask_np,
+                    "color": color,
+                    "alpha": alpha,
+                    "name": f"{label} - {color}",
+                    "hovertemplate": self._ribbon_hovertemplate(ribbon, color),
+                    "show_markers": is_trigger_lane,
+                }
+            )
+
+        return ribbon_any_mask.to_numpy(dtype=bool), overlay_draws
+
+    def _evaluate_lane_expression(
+        self, expression: str, lane_masks: dict[str, np.ndarray], length: int
+    ) -> np.ndarray | None:
+        """Evaluate an aggregate-style lane expression against numpy mask arrays."""
+        normalized_expr = str(expression or "").replace("_and_", " and ").replace(
+            "_or_", " or "
+        )
+        normalized_expr = re.sub(r"\band\b", "&", normalized_expr)
+        normalized_expr = re.sub(r"\bor\b", "|", normalized_expr)
+        normalized_expr = re.sub(r"\bnot\b", "~", normalized_expr)
+        normalized_expr = re.sub(r"\s+", " ", normalized_expr).strip()
+        if not normalized_expr:
+            return np.zeros(length, dtype=bool)
+
+        try:
+            result = eval(
+                normalized_expr, {"__builtins__": {}}, lane_masks
+            )  # nosec B307 - sandboxed: empty builtins, only numpy arrays in namespace
+        except Exception:
+            return None
+
+        if isinstance(result, pd.Series):
+            return result.fillna(False).to_numpy(dtype=bool)
+        if isinstance(result, np.ndarray):
+            return result.astype(bool)
+        if np.isscalar(result):
+            return np.full(length, bool(result), dtype=bool)
+        return None
 
     def _extract_ema_periods(self, strategy_content: str | None) -> list[int]:
         """Extract EMA periods referenced in DSL content (e.g. ema_50, ema_200)."""
@@ -612,7 +728,149 @@ class InteractivePlotter:
                 if ribbon_is_possible or "supertrend" in rib.get("label", "").lower():
                     active_ribbons.append(rib)
 
-        num_ribbons = len(active_ribbons)
+        ribbon_render_data: list[dict] = []
+        context_lane_mask = np.zeros(len(df), dtype=bool)
+        trigger_lane_mask = np.zeros(len(df), dtype=bool)
+        has_context_lane = False
+        has_trigger_lane = False
+        has_setup_lane = False
+        has_risk_lane = False
+        lane_masks = {
+            "context": np.zeros(len(df), dtype=bool),
+            "setup": np.zeros(len(df), dtype=bool),
+            "trigger": np.zeros(len(df), dtype=bool),
+            "risk": np.zeros(len(df), dtype=bool),
+        }
+
+        for ribbon in active_ribbons:
+            lane_mask_np, overlay_draws = self._evaluate_ribbon_overlays(df, ribbon)
+            label_lower = str(ribbon.get("label", "")).lower()
+            is_context_lane = "context" in label_lower
+            is_setup_lane = "setup" in label_lower
+            is_trigger_lane = "trigger" in label_lower
+            is_risk_lane = "risk" in label_lower or "invalidate" in label_lower
+
+            if is_context_lane and len(lane_mask_np) == len(df):
+                context_lane_mask = context_lane_mask | lane_mask_np
+                lane_masks["context"] = lane_masks["context"] | lane_mask_np
+                has_context_lane = True
+            if is_setup_lane and len(lane_mask_np) == len(df):
+                lane_masks["setup"] = lane_masks["setup"] | lane_mask_np
+                has_setup_lane = True
+            if is_trigger_lane and len(lane_mask_np) == len(df):
+                trigger_lane_mask = trigger_lane_mask | lane_mask_np
+                lane_masks["trigger"] = lane_masks["trigger"] | lane_mask_np
+                has_trigger_lane = True
+            if is_risk_lane and len(lane_mask_np) == len(df):
+                lane_masks["risk"] = lane_masks["risk"] | lane_mask_np
+                has_risk_lane = True
+
+            ribbon_render_data.append(
+                {
+                    "ribbon": ribbon,
+                    "label_lower": label_lower,
+                    "lane_mask": lane_mask_np,
+                    "overlay_draws": overlay_draws,
+                    "is_risk_lane": is_risk_lane,
+                }
+            )
+
+        df_state = df.copy()
+        df_state["aggregated_state"] = 0
+        if "Signal" in df_state.columns or "signal" in df_state.columns:
+            signal_col = "signal" if "signal" in df_state.columns else "Signal"
+            in_position = False
+            states = []
+            for sig in df_state[signal_col].fillna(0).astype(int):
+                if sig == 1:
+                    in_position = True
+                elif sig == -1:
+                    in_position = False
+                states.append(1 if in_position else 0)
+            df_state["aggregated_state"] = states
+        elif (
+            "entry_condition" in df_state.columns
+            or "exit_condition" in df_state.columns
+        ):
+            in_position = False
+            states = []
+            for i in range(len(df_state)):
+                is_entry = (
+                    bool(df_state["entry_condition"].iloc[i])
+                    if "entry_condition" in df_state.columns
+                    else False
+                )
+                is_exit = (
+                    bool(df_state["exit_condition"].iloc[i])
+                    if "exit_condition" in df_state.columns
+                    else False
+                )
+                if is_entry:
+                    in_position = True
+                if is_exit:
+                    in_position = False
+                states.append(1 if in_position else 0)
+            df_state["aggregated_state"] = states
+        lane_masks["in_position"] = (
+            df_state["aggregated_state"].fillna(0).astype(int) == 1
+        ).to_numpy(dtype=bool)
+
+        block_presence = {
+            "context": has_context_lane,
+            "setup": has_setup_lane,
+            "trigger": has_trigger_lane,
+            "risk": has_risk_lane,
+        }
+        fill_condition = self._resolve_aggregate_expression(block_presence)
+        fallback_mask = (
+            context_lane_mask & lane_masks["setup"] & trigger_lane_mask
+            if has_context_lane and has_setup_lane and has_trigger_lane
+            else (
+                context_lane_mask & trigger_lane_mask
+                if has_context_lane and has_trigger_lane
+                else np.zeros(len(df_state), dtype=bool)
+            )
+        )
+        entry_ready_lane_masks = dict(lane_masks)
+        entry_ready_lane_masks["risk"] = np.zeros(len(df_state), dtype=bool)
+        entry_ready_mask_np = self._evaluate_lane_expression(
+            fill_condition, entry_ready_lane_masks, len(df_state)
+        )
+        if entry_ready_mask_np is None:
+            entry_ready_mask_np = fallback_mask
+
+        agg_mask_np = self._evaluate_lane_expression(
+            fill_condition, lane_masks, len(df_state)
+        )
+        if agg_mask_np is None:
+            agg_mask_np = fallback_mask
+
+        visible_ribbon_data = []
+        for item in ribbon_render_data:
+            lane_mask_np = item["lane_mask"]
+            overlay_draws = item["overlay_draws"]
+            if item["is_risk_lane"]:
+                display_mask = lane_mask_np & entry_ready_mask_np
+                display_overlays = []
+                for overlay in overlay_draws:
+                    gated_mask = overlay["mask"] & entry_ready_mask_np
+                    if gated_mask.any():
+                        display_overlays.append({**overlay, "mask": gated_mask})
+                if not display_mask.any():
+                    continue
+            else:
+                display_mask = lane_mask_np
+                display_overlays = overlay_draws
+
+            visible_ribbon_data.append(
+                {
+                    **item,
+                    "display_mask": display_mask,
+                    "display_overlays": display_overlays,
+                }
+            )
+
+        num_ribbons = len(visible_ribbon_data)
         layout_spec = self._get_ribbon_layout(num_ribbons)
         row_heights = layout_spec["row_heights"]
         lane_line_width = layout_spec["lane_line_width"]
@@ -685,44 +943,101 @@ class InteractivePlotter:
 
         # Supertrend Price Overlay — single color-changing line, only when referenced by DSL.
         supertrend_specs = self._extract_supertrend_specs(strategy_content)
-        if (
-            "ST_Lower" in df.columns
-            and "ST_Upper" in df.columns
-            and (supertrend_specs if strategy_content else True)
-        ):
-            st_lower = df["ST_Lower"].values.astype(float)
-            st_upper = df["ST_Upper"].values.astype(float)
-            # Green regime: ST_Lower is populated; red regime: ST_Upper is populated.
-            is_green_regime = ~np.isnan(st_lower)
-            st_active = np.where(is_green_regime, st_lower, st_upper)
+        if supertrend_specs if strategy_content else True:
+            lower_col = next(
+                (c for c in df.columns if str(c).lower() == "st_lower"),
+                None,
+            )
+            upper_col = next(
+                (c for c in df.columns if str(c).lower() == "st_upper"),
+                None,
+            )
+            st_col = next(
+                (
+                    c
+                    for c in df.columns
+                    if str(c).lower() in {"supertrend", "st"}
+                ),
+                None,
+            )
 
-            # Split into contiguous same-color runs and draw one trace per run.
-            # Adjacent runs share their boundary index so the line appears continuous.
-            transitions = np.where(np.diff(is_green_regime.astype(int)) != 0)[0] + 1
-            run_starts = np.concatenate([[0], transitions])
-            run_ends = np.concatenate([transitions, [len(is_green_regime)]])
+            st_active = None
+            is_green_regime = None
 
-            first_st_trace = True
-            for run_start, run_end in zip(run_starts, run_ends):
-                green = bool(is_green_regime[run_start])
-                color = "#16a34a" if green else "#dc2626"
-                # Include one bridge point (start of next run) for visual continuity.
-                slice_end = int(min(run_end + 1, len(df)))
-                fig.add_trace(
-                    go.Scatter(
-                        x=df["Date"].iloc[run_start:slice_end],
-                        y=st_active[run_start:slice_end],
-                        name="Supertrend",
-                        legendgroup="supertrend",
-                        showlegend=first_st_trace,
-                        mode="lines",
-                        line=dict(color=color, width=1.5),
-                        connectgaps=False,
-                    ),
-                    row=1,
-                    col=1,
+            if lower_col and upper_col:
+                st_lower = pd.to_numeric(df[lower_col], errors="coerce").to_numpy(
+                    dtype=float
                 )
-                first_st_trace = False
+                st_upper = pd.to_numeric(df[upper_col], errors="coerce").to_numpy(
+                    dtype=float
+                )
+                # Green regime: ST_Lower is populated; red regime: ST_Upper is populated.
+                is_green_regime = ~np.isnan(st_lower)
+                st_active = np.where(is_green_regime, st_lower, st_upper)
+            elif st_col and "Close" in df.columns:
+                st_active = pd.to_numeric(df[st_col], errors="coerce").to_numpy(
+                    dtype=float
+                )
+                close_values = pd.to_numeric(df["Close"], errors="coerce").to_numpy(
+                    dtype=float
+                )
+                valid = ~np.isnan(st_active) & ~np.isnan(close_values)
+                is_green_regime = valid & (close_values > st_active)
+            elif st_col and "close" in df.columns:
+                st_active = pd.to_numeric(df[st_col], errors="coerce").to_numpy(
+                    dtype=float
+                )
+                close_values = pd.to_numeric(df["close"], errors="coerce").to_numpy(
+                    dtype=float
+                )
+                valid = ~np.isnan(st_active) & ~np.isnan(close_values)
+                is_green_regime = valid & (close_values > st_active)
+
+            if st_active is not None and is_green_regime is not None:
+                valid_mask = ~np.isnan(st_active)
+
+                # Split into contiguous same-color runs and draw one trace per run.
+                # Adjacent runs share their boundary index so the line appears continuous.
+                run_starts: list[int] = []
+                run_ends: list[int] = []
+                i = 0
+                while i < len(st_active):
+                    if not valid_mask[i]:
+                        i += 1
+                        continue
+                    green = bool(is_green_regime[i])
+                    j = i + 1
+                    while (
+                        j < len(st_active)
+                        and valid_mask[j]
+                        and bool(is_green_regime[j]) == green
+                    ):
+                        j += 1
+                    run_starts.append(i)
+                    run_ends.append(j)
+                    i = j
+
+                first_st_trace = True
+                for run_start, run_end in zip(run_starts, run_ends):
+                    green = bool(is_green_regime[run_start])
+                    color = "#16a34a" if green else "#dc2626"
+                    # Include one bridge point (start of next run) for visual continuity.
+                    slice_end = int(min(run_end + 1, len(df)))
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df["Date"].iloc[run_start:slice_end],
+                            y=st_active[run_start:slice_end],
+                            name="Supertrend",
+                            legendgroup="supertrend",
+                            showlegend=first_st_trace,
+                            mode="lines",
+                            line=dict(color=color, width=1.7),
+                            connectgaps=False,
+                        ),
+                        row=1,
+                        col=1,
+                    )
+                    first_st_trace = False
 
         # 2. Volume Chart
         colors = [
@@ -742,92 +1057,23 @@ class InteractivePlotter:
         )
 
         # 3. Indicator Ribbons (layer lanes)
-        ribbon_lane_activity: list[np.ndarray] = []
-        context_lane_mask = np.zeros(len(df), dtype=bool)
-        trigger_lane_mask = np.zeros(len(df), dtype=bool)
-        has_context_lane = False
-        has_trigger_lane = False
-        has_setup_lane = False
-        has_risk_lane = False
-        for i, rib in enumerate(active_ribbons):
+        for i, item in enumerate(visible_ribbon_data):
             row = 3 + i
+            rib = item["ribbon"]
             label = rib.get("label", "Indicator")
-            layers = rib.get("layers", [])
-            ribbon_condition = str(rib.get("condition", "")).strip()
-            is_trigger_lane = "trigger" in label.lower()
-            lane_width = lane_line_width
-
-            eval_df = df.copy()
-            for c in eval_df.columns:
-                if pd.api.types.is_numeric_dtype(eval_df[c]):
-                    eval_df[c] = eval_df[c].ffill()
-            eval_df.columns = [c.lower() for c in eval_df.columns]
-            eval_df = eval_df.loc[:, ~eval_df.columns.duplicated()]
-            ribbon_any_mask = pd.Series(False, index=eval_df.index)
-
-            overlay_specs = []
-            if ribbon_condition:
-                overlay_specs.append(
-                    {
-                        "condition": ribbon_condition,
-                        "color": rib.get(
-                            "color",
-                            layers[0].get("color", "gray") if layers else "gray",
-                        ),
-                        "alpha": rib.get(
-                            "alpha", layers[0].get("alpha", 0.8) if layers else 0.8
-                        ),
-                    }
+            for overlay in item["display_overlays"]:
+                self._draw_ribbon_mask_trace(
+                    fig=fig,
+                    x_values=df["Date"],
+                    mask=overlay["mask"],
+                    row=row,
+                    color=overlay["color"],
+                    lane_width=lane_line_width,
+                    name=overlay["name"],
+                    hovertemplate=overlay["hovertemplate"],
+                    show_markers=overlay["show_markers"],
+                    alpha=overlay["alpha"],
                 )
-            else:
-                overlay_specs.extend(layers)
-
-            for overlay in overlay_specs:
-                color = overlay.get("color", "gray")
-                alpha = overlay.get("alpha", 0.8)
-                condition = overlay.get("condition", "False")
-
-                try:
-                    clean_cond = self._to_eval_condition(condition)
-                    eval_df = self._prepare_eval_columns(eval_df, clean_cond)
-                    mask = eval_df.eval(clean_cond, engine="python")
-
-                    if isinstance(mask, pd.Series) and mask.any():
-                        mask = mask.fillna(False).astype(bool)
-                        ribbon_any_mask = ribbon_any_mask | mask
-                        self._draw_ribbon_mask_trace(
-                            fig=fig,
-                            x_values=df["Date"],
-                            mask=mask,
-                            row=row,
-                            color=color,
-                            lane_width=lane_width,
-                            name=f"{label} - {color}",
-                            hovertemplate=self._ribbon_hovertemplate(rib, color),
-                            show_markers=is_trigger_lane,
-                            alpha=alpha,
-                        )
-                except Exception:
-                    continue
-
-            ribbon_lane_activity.append(ribbon_any_mask.to_numpy(dtype=bool))
-            lane_mask_np = ribbon_any_mask.to_numpy(dtype=bool)
-            if "context" in label.lower() and len(lane_mask_np) == len(df):
-                context_lane_mask = context_lane_mask | lane_mask_np
-                has_context_lane = True
-            if (
-                ("setup" in label.lower() or "qualify" in label.lower())
-                and len(lane_mask_np) == len(df)
-            ):
-                has_setup_lane = True
-            if "trigger" in label.lower() and len(lane_mask_np) == len(df):
-                trigger_lane_mask = trigger_lane_mask | lane_mask_np
-                has_trigger_lane = True
-            if (
-                ("risk" in label.lower() or "invalidate" in label.lower())
-                and len(lane_mask_np) == len(df)
-            ):
-                has_risk_lane = True
 
             fig.update_yaxes(
                 showticklabels=False,
@@ -858,105 +1104,9 @@ class InteractivePlotter:
 
         # Bottom-most lane: Aggregated state ribbon (single lane)
         aggregated_row = 3 + num_ribbons
-        df_state = df.copy()
-        df_state["aggregated_state"] = 0
-
-        if "Signal" in df_state.columns or "signal" in df_state.columns:
-            signal_col = "signal" if "signal" in df_state.columns else "Signal"
-            in_position = False
-            states = []
-            for sig in df_state[signal_col].fillna(0).astype(int):
-                if sig == 1:
-                    in_position = True
-                elif sig == -1:
-                    in_position = False
-                states.append(1 if in_position else 0)
-            df_state["aggregated_state"] = states
-        elif (
-            "entry_condition" in df_state.columns
-            or "exit_condition" in df_state.columns
-        ):
-            in_position = False
-            states = []
-            for i in range(len(df_state)):
-                is_entry = (
-                    bool(df_state["entry_condition"].iloc[i])
-                    if "entry_condition" in df_state.columns
-                    else False
-                )
-                is_exit = (
-                    bool(df_state["exit_condition"].iloc[i])
-                    if "exit_condition" in df_state.columns
-                    else False
-                )
-                if is_entry:
-                    in_position = True
-                if is_exit:
-                    in_position = False
-                states.append(1 if in_position else 0)
-            df_state["aggregated_state"] = states
 
         agg_lane_min, agg_lane_max = 0.9, 1.1
         agg_lane_span = agg_lane_max - agg_lane_min
-
-        in_position_mask = (
-            df_state["aggregated_state"].fillna(0).astype(int) == 1
-        ).to_numpy(dtype=bool)
-        lane_masks = {
-            "context": context_lane_mask,
-            "trigger": trigger_lane_mask,
-            "setup": np.zeros(len(df_state), dtype=bool),
-            "risk": np.zeros(len(df_state), dtype=bool),
-            "in_position": in_position_mask,
-        }
-
-        # Capture setup/risk too so custom fill_condition can reference them.
-        for i, rib in enumerate(active_ribbons):
-            label = rib.get("label", "").lower()
-            if i < len(ribbon_lane_activity) and len(ribbon_lane_activity[i]) == len(
-                df_state
-            ):
-                mask_np = ribbon_lane_activity[i]
-                if "setup" in label or "qualify" in label:
-                    lane_masks["setup"] = lane_masks["setup"] | mask_np
-                if "risk" in label or "invalidate" in label:
-                    lane_masks["risk"] = lane_masks["risk"] | mask_np
-
-        block_presence = {
-            "context": has_context_lane,
-            "setup": has_setup_lane,
-            "trigger": has_trigger_lane,
-            "risk": has_risk_lane,
-        }
-        fill_condition = self._resolve_aggregate_expression(block_presence)
-        if fill_condition == "context and trigger":
-            agg_mask_np = (
-                context_lane_mask & trigger_lane_mask
-                if has_context_lane and has_trigger_lane
-                else np.zeros(len(df_state), dtype=bool)
-            )
-        else:
-            normalized_expr = fill_condition.replace("_and_", " and ").replace(
-                "_or_", " or "
-            )
-            normalized_expr = re.sub(r"\band\b", "&", normalized_expr)
-            normalized_expr = re.sub(r"\bor\b", "|", normalized_expr)
-            normalized_expr = re.sub(r"\bnot\b", "~", normalized_expr)
-            normalized_expr = re.sub(r"\s+", " ", normalized_expr).strip()
-
-            try:
-                agg_mask_np = eval(
-                    normalized_expr, {"__builtins__": {}}, lane_masks
-                )  # nosec B307 - sandboxed: empty builtins, only numpy arrays in namespace
-                if isinstance(agg_mask_np, np.ndarray):
-                    agg_mask_np = agg_mask_np.astype(bool)
-                else:
-                    agg_mask_np = np.zeros(len(df_state), dtype=bool)
-            except Exception:
-                if has_context_lane and has_trigger_lane:
-                    agg_mask_np = context_lane_mask & trigger_lane_mask
-                else:
-                    agg_mask_np = np.zeros(len(df_state), dtype=bool)
 
         agg_fill_label = fill_condition
         bucket_ms = self._time_bucket_width_ms(df_state["Date"])

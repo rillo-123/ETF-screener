@@ -1,3 +1,4 @@
+from ETF_screener.config_loader import get_paths
 """Data storage utilities for parquet files."""
 
 from pathlib import Path
@@ -8,13 +9,15 @@ import pandas as pd
 class ParquetStorage:
     """Handle parquet data storage and retrieval."""
 
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = None):
         """
         Initialize storage.
 
         Args:
             data_dir: Directory to store parquet files
         """
+        if data_dir is None:
+            data_dir = get_paths()["data"]["parquet"]
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(exist_ok=True)
 

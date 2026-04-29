@@ -18,14 +18,10 @@ FILTER: was_true(close > ema_20, 5)
 END
 
 BEGIN TRIGGER
-TRIGGER: cross_down(st_10_4, ema_50)
+TRIGGER: cross_down(st_10_4, ema_40)
 END
 
 BEGIN QUALIFY
 FILTER: volume > vol_ema_20
-END
-
-BEGIN INVALIDATE
-EXIT: close < ema_50 OR cross_down(st_10_4_is_green, 0.5)
 END
 

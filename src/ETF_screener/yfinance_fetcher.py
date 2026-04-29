@@ -1,7 +1,8 @@
 """Fetch ETF data from Yahoo Finance API."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from typing import Optional
 
 import pandas as pd
 import yfinance as yf
@@ -23,7 +24,11 @@ class YFinanceFetcher:
         """Raw yfinance fetch, returns normalized DataFrame or empty DataFrame."""
         try:
             df = yf.Ticker(symbol).history(
-                start=start_date, end=end_date, interval="1d"
+                start=start_date,
+                end=end_date,
+                interval="1d",
+                auto_adjust=False,
+                actions=True,
             )
         except Exception as e:
             logger.debug("yfinance error for %s: %s", symbol, e)
@@ -32,12 +37,20 @@ class YFinanceFetcher:
             return df
         df = df.reset_index()
         df.columns = df.columns.str.capitalize()
+        if "Dividends" not in df.columns:
+            df["Dividends"] = 0.0
         required = ["Date", "Open", "High", "Low", "Close", "Volume"]
         if not all(c in df.columns for c in required):
             return pd.DataFrame()
-        return df[required].sort_values("Date").reset_index(drop=True)
+        return df[[*required, "Dividends"]].sort_values("Date").reset_index(drop=True)
 
-    def fetch_historical_data(self, symbol: str, days: int = 365) -> pd.DataFrame:
+    def fetch_historical_data(
+        self,
+        symbol: str,
+        days: int = 365,
+        start_date: Optional[datetime | date | str] = None,
+        end_date: Optional[datetime | date | str] = None,
+    ) -> pd.DataFrame:
         """
         Fetch historical OHLCV data for an ETF.
 
@@ -47,15 +60,21 @@ class YFinanceFetcher:
 
         Args:
             symbol: Stock/ETF symbol (e.g., 'EXS1.DE' for XETRA)
-            days: Number of days of historical data to fetch (default 365)
+            days: Number of days of historical data to fetch when no explicit
+                start/end window is provided (default 365)
+            start_date: Optional explicit inclusive start date for incremental fetches
+            end_date: Optional explicit exclusive end date for incremental fetches
 
         Returns:
-            DataFrame with columns: Date, Open, High, Low, Close, Volume
+            DataFrame with columns: Date, Open, High, Low, Close, Volume, Dividends
         """
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days)
+        resolved_end = pd.to_datetime(end_date).to_pydatetime() if end_date else datetime.now()
+        if start_date is not None:
+            resolved_start = pd.to_datetime(start_date).to_pydatetime()
+        else:
+            resolved_start = resolved_end - timedelta(days=days)
 
-        df = self._fetch_yf(symbol, start_date, end_date)
+        df = self._fetch_yf(symbol, resolved_start, resolved_end)
 
         if df.empty:
             # Build a .F fallback symbol when the primary has a European suffix
@@ -67,9 +86,10 @@ class YFinanceFetcher:
                 logger.info(
                     "No data for %s, retrying with fallback %s", symbol, fallback
                 )
-                df = self._fetch_yf(fallback, start_date, end_date)
+                df = self._fetch_yf(fallback, resolved_start, resolved_end)
 
         if df.empty:
+            logger.warning(f"No data found for symbol: {symbol} (tried .DE and .F if applicable)")
             raise ValueError(f"No data found for symbol: {symbol}")
 
         return df
@@ -93,6 +113,7 @@ class YFinanceFetcher:
             try:
                 results[symbol] = self.fetch_historical_data(symbol, days)
             except Exception as e:
+                logger.warning(f"Skipping {symbol}: {str(e)}")
                 if not quiet:
                     print(f"Error fetching {symbol}: {str(e)}")
         return results

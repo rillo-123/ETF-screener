@@ -5033,5 +5033,9 @@
   "AXA.DE": {
     "status": "invalid",
     "reason": "low trend/disqualified"
+  },
+  "TABI.DE": {
+    "status": "invalid",
+    "reason": "Stale data (likely delisted)"
   }
 }

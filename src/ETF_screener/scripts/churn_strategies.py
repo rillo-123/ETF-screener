@@ -9,17 +9,15 @@ import re
 import datetime
 from pathlib import Path
 from typing import Dict, List
-from ETF_screener.dsl_parser import parse_strategy_scripts
 
 
-def load_dsl_file(file_path):
-    """Parse a .dsl file with block-aware semantics.
+def parse_dsl_content(content: str | None) -> dict:
+    """Parse DSL content into runnable scripts plus strategy metadata.
 
     Entry is composed from positive conditions in CONTEXT/SETUP/QUALIFY/TRIGGER.
     Exit is composed from EXIT lines plus INVALIDATE/RISK conditions.
     """
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
+    content = content or ""
 
     canonical_alias: Dict[str, str] = {
         "context": "context",
@@ -63,9 +61,22 @@ def load_dsl_file(file_path):
     explicit_exits: list[str] = []
 
     current_block_raw: str | None = None
+    max_days: int | None = None
     for raw in content.splitlines():
         line = raw.strip()
-        if not line or line.startswith("#"):
+        if not line:
+            continue
+
+        directive = re.match(
+            r"^(MAX_DAYS|MAX_SIGNAL_AGE_DAYS|SIGNAL_MAX_DAYS|SINCE_DAYS)\s*:\s*(\d+)\s*$",
+            line,
+            re.IGNORECASE,
+        )
+        if directive:
+            max_days = int(directive.group(2))
+            continue
+
+        if line.startswith("#"):
             continue
 
         begin_prefix = re.match(r"^begin\s+(.+)$", line, re.IGNORECASE)
@@ -112,21 +123,145 @@ def load_dsl_file(file_path):
         + scoped_terms["trigger"]
         + scoped_terms["global"]
     )
+    filter_parts = (
+        scoped_terms["context"] + scoped_terms["setup"] + scoped_terms["global"]
+    )
     final_entry = " and ".join(entry_parts) if entry_parts else "False"
-
+    filter_entry = " and ".join(filter_parts) if filter_parts else None
+    trigger_entry = (
+        " and ".join(scoped_terms["trigger"]) if scoped_terms["trigger"] else None
+    )
     final_exit = " or ".join(explicit_exits) if explicit_exits else "False"
     has_valid_exit = final_exit != "False"
 
-    first_trigger = scoped_terms["trigger"][0][1:-1] if scoped_terms["trigger"] else None
-    first_filter = scoped_terms["setup"][0][1:-1] if scoped_terms["setup"] else None
-
     return {
-        "trigger": first_trigger,
-        "filter": first_filter,
+        "trigger": trigger_entry,
+        "filter": filter_entry,
         "entry": final_entry,
         "exit": final_exit,
         "has_valid_exit": has_valid_exit,
+        "max_days": max_days,
     }
+
+
+def load_dsl_file(file_path):
+    """Load and parse a .dsl file with block-aware semantics."""
+    with open(file_path, "r", encoding="utf-8") as f:
+        return parse_dsl_content(f.read())
+
+
+def _prepare_scan_expression(expr: str) -> str:
+    """Convert DSL-style expressions into a pandas.eval-friendly form."""
+    s = str(expr or "").strip()
+    if not s:
+        return "False"
+    if s.lower() in {"true", "false"}:
+        return s.title()
+
+    s = re.sub(
+        r"cross_up\(([^,]+),\s*([^)]+)\)",
+        r"(\1 > \2 and \1_d1 <= \2_d1)",
+        s,
+        flags=re.IGNORECASE,
+    )
+    s = re.sub(
+        r"cross_down\(([^,]+),\s*([^)]+)\)",
+        r"(\1 < \2 and \1_d1 >= \2_d1)",
+        s,
+        flags=re.IGNORECASE,
+    )
+
+    def d_sub(match):
+        return f"{match.group(1)}_d{match.group(2)}"
+
+    s = re.sub(r"([a-z_][a-z0-9_]*)\.d\[(\d+)\]", d_sub, s, flags=re.IGNORECASE)
+
+    def shift_cond(match):
+        condition = match.group(1).strip()
+        lookback = int(match.group(2))
+        shifted = " or ".join([f"{condition}_d{i}" for i in range(1, lookback + 1)])
+        return f"({shifted})"
+
+    s = re.sub(
+        r"was_true\(([^,]+),\s*(\d+)\)",
+        shift_cond,
+        s,
+        flags=re.IGNORECASE,
+    )
+
+    return (
+        s.lower()
+        .replace(" and ", " & ")
+        .replace(" or ", " | ")
+        .replace("-gt", ">")
+        .replace("-lt", "<")
+        .replace("-eq", "==")
+        .replace("-ge", ">=")
+        .replace("-le", "<=")
+    )
+
+
+def _evaluate_strategy_mask(df: pd.DataFrame, expr: str | None) -> pd.Series:
+    """Evaluate a DSL expression against a strategy dataframe."""
+    if df is None or df.empty:
+        return pd.Series(dtype=bool)
+
+    normalized = str(expr or "").strip()
+    if not normalized:
+        return pd.Series(True, index=df.index, dtype=bool)
+    if normalized.lower() == "false":
+        return pd.Series(False, index=df.index, dtype=bool)
+    if normalized.lower() == "true":
+        return pd.Series(True, index=df.index, dtype=bool)
+
+    eval_df = df.copy()
+    eval_df.columns = [str(column).lower() for column in eval_df.columns]
+    eval_df = eval_df.loc[:, ~eval_df.columns.duplicated()]
+    prepared = _prepare_scan_expression(normalized)
+    result = eval_df.eval(prepared, engine="python")
+    if not isinstance(result, pd.Series):
+        return pd.Series([bool(result)] * len(eval_df), index=eval_df.index, dtype=bool)
+    return result.fillna(False).astype(bool)
+
+
+def find_recent_entry_days(
+    df: pd.DataFrame | None,
+    strategy_spec: dict,
+    max_days: int | None = None,
+) -> int | None:
+    """Return the age in bars of the most recent still-valid entry candidate."""
+    if df is None or df.empty:
+        return None
+
+    trigger_expr = strategy_spec.get("trigger") or strategy_spec.get("entry")
+    filter_expr = strategy_spec.get("filter")
+    if not trigger_expr:
+        return None
+
+    trigger_mask = _evaluate_strategy_mask(df, trigger_expr)
+    filter_mask = _evaluate_strategy_mask(df, filter_expr)
+
+    if "exit_condition" in df.columns:
+        exit_mask = df["exit_condition"].fillna(False).astype(bool)
+    else:
+        exit_mask = _evaluate_strategy_mask(df, strategy_spec.get("exit"))
+
+    scan_limit = len(df) if max_days is None else min(int(max_days) + 1, len(df))
+    for age in range(scan_limit):
+        idx = len(df) - 1 - age
+        if idx < 0:
+            break
+        if not bool(trigger_mask.iloc[idx]):
+            continue
+        if bool(exit_mask.iloc[idx]):
+            continue
+        if idx + 1 < len(df) and bool(exit_mask.iloc[idx + 1 :].any()):
+            continue
+        if not bool(filter_mask.iloc[idx:].all()):
+            continue
+        return age
+
+    return None
 
 
 def _load_strategy_specs(
@@ -153,6 +288,10 @@ def _load_strategy_specs(
                             "entry_script": res["entry"],
                             "exit_script": res["exit"],
                         },
+                        "trigger": res.get("trigger"),
+                        "filter": res.get("filter"),
+                        "exit": res.get("exit"),
+                        "max_days": res.get("max_days"),
                     }
                 )
         elif path.is_dir():
@@ -170,19 +309,27 @@ def _load_strategy_specs(
                             "entry_script": res["entry"],
                             "exit_script": res["exit"],
                         },
+                        "trigger": res.get("trigger"),
+                        "filter": res.get("filter"),
+                        "exit": res.get("exit"),
+                        "max_days": res.get("max_days"),
                     }
                 )
     elif dsl_content:
-        parsed_entry, parsed_exit = parse_strategy_scripts(dsl_content)
-        if parsed_entry and parsed_entry != "False":
+        res = parse_dsl_content(dsl_content)
+        if res["entry"] and res["entry"] != "False":
             strategies.append(
                 {
                     "name": strategy_name or "Editor Draft",
                     "func": backtester.scripted_strategy,
                     "kwargs": {
-                        "entry_script": parsed_entry,
-                        "exit_script": parsed_exit,
+                        "entry_script": res["entry"],
+                        "exit_script": res["exit"],
                     },
+                    "trigger": res.get("trigger"),
+                    "filter": res.get("filter"),
+                    "exit": res.get("exit"),
+                    "max_days": res.get("max_days"),
                 }
             )
     elif entry_script and exit_script:
@@ -191,6 +338,11 @@ def _load_strategy_specs(
                 "name": "CLI_Custom",
                 "func": backtester.scripted_strategy,
                 "kwargs": {"entry_script": entry_script, "exit_script": exit_script},
+                "trigger": None,
+                "filter": None,
+                "entry": entry_script,
+                "exit": exit_script,
+                "max_days": None,
             }
         )
 
@@ -245,11 +397,24 @@ def evaluate_strategies(
                 continue
 
             df = res.get("df")
-            recent_days = 999
-            if df is not None and "recent_entry_days" in df.columns:
-                recent_days = df["recent_entry_days"].iloc[-1]
+            strategy_max_days = strat.get("max_days")
+            recent_days = find_recent_entry_days(
+                df,
+                strat,
+                max_days=(
+                    min(since_days, strategy_max_days)
+                    if since_days is not None and strategy_max_days is not None
+                    else since_days if since_days is not None else strategy_max_days
+                ),
+            )
+            recent_days_value = 999 if recent_days is None else int(recent_days)
+            max_allowed_days = (
+                min(since_days, strategy_max_days)
+                if since_days is not None and strategy_max_days is not None
+                else since_days if since_days is not None else strategy_max_days
+            )
 
-            if since_days is not None and recent_days > since_days:
+            if max_allowed_days is not None and recent_days_value > max_allowed_days:
                 continue
 
             all_results.append(
@@ -262,9 +427,7 @@ def evaluate_strategies(
                     "Sharpe": res.get("sharpe_ratio", 0),
                     "Max DD (%)": res.get("max_drawdown_pct", 0),
                     "Trades": res.get("num_trades", 0),
-                    "Days Since Entry": (
-                        int(recent_days) if not pd.isna(recent_days) else 999
-                    ),
+                    "Days Since Entry": recent_days_value,
                     "df": df,
                 }
             )
@@ -374,15 +537,25 @@ def churn_db(
             if res and "error" not in res:
                 df = res.get("df")
 
-                # Fetch recent entry days from the dataframe
-                recent_days = 999
-                if df is not None and "recent_entry_days" in df.columns:
-                    recent_days = df["recent_entry_days"].iloc[-1]
+                strategy_max_days = strat.get("max_days")
+                recent_days = find_recent_entry_days(
+                    df,
+                    strat,
+                    max_days=(
+                        min(since_days, strategy_max_days)
+                        if since_days is not None and strategy_max_days is not None
+                        else since_days if since_days is not None else strategy_max_days
+                    ),
+                )
+                recent_days_value = 999 if recent_days is None else int(recent_days)
+                max_allowed_days = (
+                    min(since_days, strategy_max_days)
+                    if since_days is not None and strategy_max_days is not None
+                    else since_days if since_days is not None else strategy_max_days
+                )
 
-                # Apply 'Since Days' filter if requested
-                if since_days is not None:
-                    if recent_days > since_days:
-                        continue
+                if max_allowed_days is not None and recent_days_value > max_allowed_days:
+                    continue
 
                 all_results.append(
                     {
@@ -394,9 +567,7 @@ def churn_db(
                         "Sharpe": res.get("sharpe_ratio", 0),
                         "Max DD (%)": res.get("max_drawdown_pct", 0),
                         "Trades": res.get("num_trades", 0),
-                        "Days Since Entry": (
-                            int(recent_days) if not pd.isna(recent_days) else 999
-                        ),
+                        "Days Since Entry": recent_days_value,
                         "df": res.get("df"),
                     }
                 )

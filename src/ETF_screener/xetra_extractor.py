@@ -50,6 +50,18 @@ class XETRETFExtractor:
         etfs: dict[str, str] = {}
 
         if not self.csv_file.exists():
+            if self.working_etfs:
+                print(
+                    f"CSV file not found: {self.csv_file}. "
+                    "Falling back to validated tickers from config/etfs.json."
+                )
+                return {
+                    str(ticker).upper(): str(
+                        meta.get("name", "") if isinstance(meta, dict) else ""
+                    )
+                    for ticker, meta in self.working_etfs.items()
+                }
+
             print(f"CSV file not found: {self.csv_file}")
             return etfs
 

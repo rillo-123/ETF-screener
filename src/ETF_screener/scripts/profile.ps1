@@ -138,3 +138,12 @@ function ensure-venv {
     }
 }
 
+function update-devtools {
+    $scriptPath = Join-Path (Split-Path -Parent $PSCommandPath) "update-devtools.ps1"
+    if (Test-Path $scriptPath) {
+        & $scriptPath @args
+    } else {
+        Write-Error "update-devtools.ps1 not found"
+    }
+}
+

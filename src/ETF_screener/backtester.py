@@ -1,3 +1,4 @@
+from ETF_screener.config_loader import get_paths
 """Backtesting engine for ETF trading strategies."""
 
 import hashlib
@@ -55,12 +56,15 @@ def _worker_run_remote(
 class Backtester:
     def __init__(
         self,
-        db_path="data/etfs.db",
+        db_path=None,
         initial_capital=10000.0,
         commission=5.0,
         slippage_pct=0.1,
     ):
-        self.db_path = db_path
+        if db_path is None:
+            self.db_path = get_paths()["data"]["etf_db"]
+        else:
+            self.db_path = db_path
         # self.db = ETFDatabase(db_path) # Removed to allow pickling for multiprocessing
         self.initial_capital = initial_capital
         self.commission = commission
@@ -94,7 +98,7 @@ class Backtester:
 
         # Determine if we should look for or save to a parquet cache
         # Cache key is based on ticker and strategy name if scripted
-        cache_dir = Path("data/cache")
+        cache_dir = Path(get_paths()["data"]["cache"])
         cache_path = None
         strategy_name = "unknown"
         if strategy_kwargs and "entry_script" in strategy_kwargs:
@@ -106,7 +110,7 @@ class Backtester:
             ).hexdigest()[:8]
             strategy_name = f"dsl_{strat_hash}"
             cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path = cache_dir / f"{ticker}_{strategy_name}_{days}.parquet"
+            cache_path = Path(get_paths()["data"]["parquet"]) / f"{ticker}_{strategy_name}_{days}.parquet"
 
         # Try loading from cache first
         if cache_path and cache_path.exists():
@@ -653,6 +657,19 @@ class Backtester:
                 except KeyError:
                     pass
 
+
+        # Guard: skip empty or whitespace-only expressions
+        if not e_s or not e_s.strip():
+            logger.error("ERROR_IN_EVAL: Entry expression is empty after DSL parsing. Skipping ticker.")
+            logger.debug("TRANSFORMED ENTRY: %s", e_s)
+            logger.debug("TRANSFORMED EXIT:  %s", r_s)
+            return None
+        if not r_s or not r_s.strip():
+            logger.error("ERROR_IN_EVAL: Exit expression is empty after DSL parsing. Skipping ticker.")
+            logger.debug("TRANSFORMED ENTRY: %s", e_s)
+            logger.debug("TRANSFORMED EXIT:  %s", r_s)
+            return None
+
         try:
             # We use engine='python' and parser='python' to allow python-style keywords
             # and avoid conflicts with ticker symbols that are also pandas/numexpr keywords.
@@ -718,11 +735,14 @@ class Backtester:
         total = len(tickers)
         desc = progress_label or getattr(base_strategy, "__name__", "Backtest")
         tqdm_cls = None
+        import multiprocessing
         if show_progress:
-            try:
-                from tqdm import tqdm as tqdm_cls  # type: ignore
-            except Exception:
-                tqdm_cls = None
+            # Only allow tqdm in the main process
+            if multiprocessing.current_process().name == "MainProcess":
+                try:
+                    from tqdm import tqdm as tqdm_cls  # type: ignore
+                except Exception:
+                    tqdm_cls = None
 
         pbar = (
             tqdm_cls(total=total, desc=str(desc), unit="ticker", leave=False)
