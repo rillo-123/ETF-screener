@@ -16,7 +16,7 @@ class StrategyBlock:
 
 
 _DEFAULT_SECTION_LAYER = {"TRIGGER": 3, "ENTRY": 3, "FILTER": 2, "EXIT": 4}
-_FALLBACK_BLOCK_NAMES = {1: "Context", 2: "Setup", 3: "Trigger", 4: "Risk"}
+_FALLBACK_BLOCK_NAMES = {1: "Context", 2: "Setup", 3: "Trigger", 4: "Invalidate"}
 _CANONICAL_ALIAS = {
     "context": (1, "context"),
     "setup": (2, "setup"),

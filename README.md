@@ -23,6 +23,8 @@ Technical analysis tool for identifying swing trading opportunities in large XET
 pip install -r requirements.txt
 ```
 
+`requirements.txt` and `pyproject.toml` are kept in sync for runtime dependencies.
+
 ### Root Entry Scripts
 
 The main PowerShell entry surface lives at the repo root so you can launch common workflows without changing directories:

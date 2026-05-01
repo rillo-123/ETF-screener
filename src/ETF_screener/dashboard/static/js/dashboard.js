@@ -61,29 +61,70 @@ let backtestSourceMode = "saved";
         .filter(Boolean);
     }
 
+    const RANGE_PRESETS = [
+      { days: 21, label: "1M", buttonId: "range-btn-1m" },
+      { days: 63, label: "3M", buttonId: "range-btn-3m" },
+      { days: 126, label: "6M", buttonId: "range-btn-6m" },
+      { days: 365, label: "1Y", buttonId: "range-btn-1y" },
+      { days: 365 * 2, label: "2Y", buttonId: "range-btn-2y" },
+      { days: 365 * 3, label: "3Y", buttonId: "range-btn-3y" },
+    ];
+    const LAST_CHART_RANGE_KEY = "etf-discovery:last-chart-range-days";
+
+    function readSavedChartRangeDays() {
+      try {
+        const raw = localStorage.getItem(LAST_CHART_RANGE_KEY);
+        const value = Number(raw);
+        return Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function saveChartRangeDays(days) {
+      try {
+        localStorage.setItem(LAST_CHART_RANGE_KEY, String(Math.floor(days)));
+      } catch (err) {
+        // Ignore storage failures in privacy-restricted environments.
+      }
+    }
+
     function getRangeButton(days) {
-      if (days === 365) return document.getElementById("range-btn-1y");
-      if (days === 365 * 2) return document.getElementById("range-btn-2y");
-      if (days === 365 * 3) return document.getElementById("range-btn-3y");
-      return null;
+      const preset = RANGE_PRESETS.find((item) => item.days === days);
+      return preset ? document.getElementById(preset.buttonId) : null;
+    }
+
+    function getRangeLabel(days) {
+      const preset = RANGE_PRESETS.find((item) => item.days === days);
+      if (preset) return preset.label;
+      if (days >= 365) return `${Math.round(days / 365)}Y`;
+      if (days >= 30) return `${Math.round(days / 30)}M`;
+      return `${days}D`;
     }
 
     function updateRangeChrome() {
       const label = document.getElementById("chart-range-label");
       if (label) {
-        const years = Math.round(currentDays / 365);
-        label.textContent = `${years}Y chart`;
+        label.textContent = `${getRangeLabel(currentDays)} chart`;
       }
 
-      [365, 365 * 2, 365 * 3].forEach((days) => {
+      RANGE_PRESETS.forEach((preset) => {
+        const days = preset.days;
         const button = getRangeButton(days);
         if (!button) {
           return;
         }
         const active = currentDays === days;
-        button.className = active
-          ? "px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-indigo-400 shadow-sm"
-          : "px-4 py-2 text-sm font-medium text-white bg-slate-800 border border-slate-700 hover:bg-slate-700";
+        if (!button.dataset.baseClass) {
+          button.dataset.baseClass = button.className;
+        }
+        button.className = button.dataset.baseClass;
+        button.style.backgroundColor = active ? "#4f46e5" : "";
+        button.style.borderColor = active ? "#818cf8" : "";
+        button.style.boxShadow = active ? "0 0 0 2px rgba(165, 180, 252, 0.38)" : "";
+        button.style.transform = active ? "translateY(-1px)" : "";
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+        button.dataset.active = active ? "true" : "false";
       });
     }
 
@@ -3009,6 +3050,7 @@ let backtestSourceMode = "saved";
       if (spinner) spinner.classList.add("hidden");
       if (navProgress) navProgress.classList.add("hidden");
       if (navProgressBar) navProgressBar.style.width = "0%";
+      if (navProgressBar) navProgressBar.classList.remove("animate-pulse");
       if (navProgressText) navProgressText.textContent = "0%";
 
       if (scanBtn) {
@@ -3092,124 +3134,147 @@ let backtestSourceMode = "saved";
         console.log("Screen scan starting with URL:", url);
         console.log("Current strategy:", currentStrategy);
 
-        // Fake progress since we wait for one big JSON result from backend
-        // We'll tick it up slowly to give a sense of depth
+        // Fake progress only for the early part of the wait. Once the bar
+        // reaches the high-80s, switch to an indeterminate "working" state
+        // so the UI does not appear frozen while the backend finishes.
         let fakeProg = 0;
-        const progInterval = setInterval(() => {
-          if (fakeProg < 95) {
-            fakeProg += (95 - fakeProg) * 0.1;
-            if (navProgressBar) navProgressBar.style.width = `${Math.round(fakeProg)}%`;
-            if (navProgressText) navProgressText.textContent = `${Math.round(fakeProg)}%`;
+        let isWorkingPhase = false;
+        let progInterval = null;
+        const startProgress = () => {
+          progInterval = setInterval(() => {
+            if (!navProgressBar || !navProgressText) return;
+
+            if (fakeProg < 90) {
+              fakeProg = Math.min(90, fakeProg + Math.max(0.5, (90 - fakeProg) * 0.12));
+              navProgressBar.style.width = `${Math.round(fakeProg)}%`;
+              navProgressText.textContent = `${Math.round(fakeProg)}%`;
+              return;
+            }
+
+            if (!isWorkingPhase) {
+              isWorkingPhase = true;
+              navProgressText.textContent = "WORKING";
+              navProgressBar.classList.add("animate-pulse");
+            }
+
+            const pulse = 88 + Math.round(4 * (0.5 + 0.5 * Math.sin(Date.now() / 350)));
+            navProgressBar.style.width = `${pulse}%`;
+            navProgressText.textContent = "WORKING";
+          }, 300);
+        };
+        startProgress();
+
+        let resp = null;
+        let rawData = null;
+          resp = await fetch(url, { signal: scanAbortController.signal });
+          console.log("Fetch response status:", resp.status, "URL:", url);
+          if (progInterval) clearInterval(progInterval);
+          progInterval = null;
+
+          rawData = await resp.json();
+          if (!resp.ok) {
+            throw new Error(rawData.detail || "Screen request failed");
           }
-        }, 400);
+          console.log("JSON parsed successfully. Data keys:", Object.keys(rawData));
 
-        const resp = await fetch(url, { signal: scanAbortController.signal });
-        console.log("Fetch response status:", resp.status, "URL:", url);
-        clearInterval(progInterval);
+          // Complete the bar
+          if (navProgressBar) navProgressBar.style.width = "100%";
+          if (navProgressText) navProgressText.textContent = "100%";
+          if (navProgressBar) navProgressBar.classList.remove("animate-pulse");
 
-        const rawData = await resp.json();
-        if (!resp.ok) {
-          throw new Error(rawData.detail || "Screen request failed");
-        }
-        console.log("JSON parsed successfully. Data keys:", Object.keys(rawData));
+          // Small delay to let user see 100%
+          await new Promise(r => setTimeout(r, 500));
+          resetScanUI();
 
-        // Complete the bar
-        if (navProgressBar) navProgressBar.style.width = "100%";
-        if (navProgressText) navProgressText.textContent = "100%";
+          // Handle new response format
+          const hasFormat = rawData.matches !== undefined;
+          const matches = hasFormat ? rawData.matches : rawData;
+          const errors = hasFormat ? rawData.errors : [];
+          console.log("Data format check - hasFormat:", hasFormat, "matches count:", matches?.length, "errors count:", errors?.length);
 
-        // Small delay to let user see 100%
-        await new Promise(r => setTimeout(r, 500));
-        resetScanUI();
-
-        // Handle new response format
-        const hasFormat = rawData.matches !== undefined;
-        const matches = hasFormat ? rawData.matches : rawData;
-        const errors = hasFormat ? rawData.errors : [];
-        console.log("Data format check - hasFormat:", hasFormat, "matches count:", matches?.length, "errors count:", errors?.length);
-
-        if (!customDsl) {
-          saveLastCompletedStrategy(currentStrategy);
-        }
-
-        if (!Array.isArray(matches)) {
-          console.error("ERROR: matches is not an array!", typeof matches, matches);
-          throw new Error("Expected matches to be an array, got " + typeof matches);
-        }
-
-        list.innerHTML = "";
-        document.getElementById("match-count").textContent = matches.length;
-        console.log("List cleared, match count updated to:", matches.length);
-
-        // Update ticker dropdown options based on screen results
-        const tickerSelect = document.getElementById("ticker-select");
-        if (matches.length > 0 && (strategySelect.value || customDsl)) {
-          const currentVal = tickerSelect.value;
-          tickerSelect.innerHTML =
-            '<option value="">Select Ticker...</option>';
-          matches.forEach((item) => {
-            const opt = document.createElement("option");
-            opt.value = item.ticker;
-            opt.textContent = item.ticker;
-            tickerSelect.appendChild(opt);
-          });
-          if (
-            currentVal &&
-            matches.some((item) => item.ticker === currentVal)
-          ) {
-            tickerSelect.value = currentVal;
+          if (!customDsl) {
+            saveLastCompletedStrategy(currentStrategy);
           }
-        }
 
-        // Display errors if any
-        if (errors && errors.length > 0) {
-          errorSection.classList.remove("hidden");
-          document.getElementById("error-count").textContent =
-            rawData.total_errors || errors.length;
-          errorList.innerHTML = errors
-            .map(
-              (err) => `
+          if (!Array.isArray(matches)) {
+            console.error("ERROR: matches is not an array!", typeof matches, matches);
+            throw new Error("Expected matches to be an array, got " + typeof matches);
+          }
+
+          list.innerHTML = "";
+          document.getElementById("match-count").textContent = matches.length;
+          console.log("List cleared, match count updated to:", matches.length);
+
+          // Update ticker dropdown options based on screen results
+          const tickerSelect = document.getElementById("ticker-select");
+          if (matches.length > 0 && (strategySelect.value || customDsl)) {
+            const currentVal = tickerSelect.value;
+            tickerSelect.innerHTML =
+              '<option value="">Select Ticker...</option>';
+            matches.forEach((item) => {
+              const opt = document.createElement("option");
+              opt.value = item.ticker;
+              opt.textContent = item.ticker;
+              tickerSelect.appendChild(opt);
+            });
+            if (
+              currentVal &&
+              matches.some((item) => item.ticker === currentVal)
+            ) {
+              tickerSelect.value = currentVal;
+            }
+          }
+
+          // Display errors if any
+          if (errors && errors.length > 0) {
+            errorSection.classList.remove("hidden");
+            document.getElementById("error-count").textContent =
+              rawData.total_errors || errors.length;
+            errorList.innerHTML = errors
+              .map(
+                (err) => `
                         <div class="mb-1 border-b border-slate-50 pb-1">
                             <span class="font-bold text-slate-700">${err.ticker}</span>: 
                             <span class="text-red-400 capitalize">${err.error}</span>
                         </div>
                     `,
-            )
-            .join("");
-        } else {
-          errorSection.classList.add("hidden");
-        }
+              )
+              .join("");
+          } else {
+            errorSection.classList.add("hidden");
+          }
 
-        if (matches.length === 0) {
-          list.innerHTML =
-            '<div class="text-sm text-slate-400 italic p-4 text-center">No matching ETFs found for this strategy...</div>';
-        }
+          if (matches.length === 0) {
+            list.innerHTML =
+              '<div class="text-sm text-slate-400 italic p-4 text-center">No matching ETFs found for this strategy...</div>';
+          }
 
-        matches.forEach((item, idx) => {
-          try {
-            const card = document.createElement("div");
-            card.className =
-              "ticker-card p-3 bg-slate-50 border-l-4 border-indigo-500 rounded shadow-sm hover:shadow-md hover:bg-indigo-50 cursor-pointer transition-all";
-            card.onclick = () => loadChart(item.ticker);
-            const statusText = item.status || "TRENDING";
-            const statusColor =
-              item.status === "Entry Signal"
-                ? "text-emerald-500 animate-pulse font-bold"
-                : "text-indigo-600";
+          matches.forEach((item, idx) => {
+            try {
+              const card = document.createElement("div");
+              card.className =
+                "ticker-card p-3 bg-slate-50 border-l-4 border-indigo-500 rounded shadow-sm hover:shadow-md hover:bg-indigo-50 cursor-pointer transition-all";
+              card.onclick = () => loadChart(item.ticker);
+              const statusText = item.status || "TRENDING";
+              const statusColor =
+                item.status === "Entry Signal"
+                  ? "text-emerald-500 animate-pulse font-bold"
+                  : "text-indigo-600";
 
-            const closeVal = Number(item.close ?? 0);
-            const volumeVal = Number(item.volume ?? 0);
-            const returnPctVal = Number(item.return_pct ?? 0);
-            const changePctVal = Number(item.change_pct ?? 0);
-            const scoreVal = Number(item.score ?? 0);
+              const closeVal = Number(item.close ?? 0);
+              const volumeVal = Number(item.volume ?? 0);
+              const returnPctVal = Number(item.return_pct ?? 0);
+              const changePctVal = Number(item.change_pct ?? 0);
+              const scoreVal = Number(item.score ?? 0);
 
-            const changeVal = Number.isFinite(changePctVal)
-              ? changePctVal.toFixed(2)
-              : "0.00";
-            const changeColor =
-              parseFloat(changeVal) >= 0 ? "text-emerald-500" : "text-rose-500";
-            const sign = parseFloat(changeVal) >= 0 ? "+" : "";
+              const changeVal = Number.isFinite(changePctVal)
+                ? changePctVal.toFixed(2)
+                : "0.00";
+              const changeColor =
+                parseFloat(changeVal) >= 0 ? "text-emerald-500" : "text-rose-500";
+              const sign = parseFloat(changeVal) >= 0 ? "+" : "";
 
-            card.innerHTML = `
+              card.innerHTML = `
                         <div class="flex justify-between items-start">
                             <div class="flex flex-col">
                                 <div class="flex items-baseline gap-1.5">
@@ -3232,14 +3297,14 @@ let backtestSourceMode = "saved";
                             </div>
                         </div>
                     `;
-            list.appendChild(card);
-            console.log(`Card ${idx} added for ${item.ticker}`);
-          } catch (cardErr) {
-            console.error(`Error processing card at index ${idx}:`, cardErr);
-            console.error("Item data:", item);
-          }
-        });
-        console.log("All cards processed successfully");
+              list.appendChild(card);
+              console.log(`Card ${idx} added for ${item.ticker}`);
+            } catch (cardErr) {
+              console.error(`Error processing card at index ${idx}:`, cardErr);
+              console.error("Item data:", item);
+            }
+          });
+          console.log("All cards processed successfully");
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         const errStack = err instanceof Error ? err.stack : "No stack trace";
@@ -3252,6 +3317,7 @@ let backtestSourceMode = "saved";
             `<div class="text-xs text-red-500 p-2">Screen error: ${errMsg}<br/><span class="text-[9px] text-slate-500">Check console for details.</span></div>`;
         }
       } finally {
+        if (progInterval) clearInterval(progInterval);
         resetScanUI();
       }
     }
@@ -3416,6 +3482,7 @@ let backtestSourceMode = "saved";
 
     function setRange(days) {
       currentDays = days;
+      saveChartRangeDays(days);
       updateRangeChrome();
       if (currentTicker) loadChart(currentTicker);
     }
@@ -3434,10 +3501,14 @@ let backtestSourceMode = "saved";
       });
 
     // Initialize
-    (async function initializeDashboard() {
+    const dashboardReadyPromise = (async function initializeDashboard() {
       const restoredStrategy = await restoreLastCompletedStrategy();
       if (restoredStrategy) {
         console.info("Restored last completed strategy", restoredStrategy);
+      }
+      const restoredDays = readSavedChartRangeDays();
+      if (restoredDays !== null) {
+        currentDays = restoredDays;
       }
       updateRangeChrome();
       await ensureFreshMarketData();
@@ -3465,6 +3536,7 @@ let backtestSourceMode = "saved";
       saveStrategy,
       setBacktestSourceMode,
       setRange,
+      dashboardReadyPromise,
       setShortlistFilter,
       setSwarmAgentsPerNode,
       setSwarmFilter,

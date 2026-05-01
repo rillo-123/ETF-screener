@@ -481,7 +481,7 @@ class InteractivePlotter:
             "Layer 1 Context": "#3b82f6",
             "Layer 2 Setup": "#d97706",
             "Layer 3 Trigger": "#15803d",
-            "Layer 4 Risk": "#b91c1c",
+            "Layer 4 Invalidate": "#b91c1c",
         }
         return color_map.get(label, "#6b7280")
 
@@ -578,8 +578,13 @@ class InteractivePlotter:
     ) -> pd.DataFrame:
         words = set(re.findall(r"[a-z][a-z0-9_]*", condition))
 
-        def _ensure_st_green_column(col_name: str) -> None:
-            if not col_name.endswith("_is_green"):
+        def _ensure_st_regime_column(col_name: str) -> None:
+            if not (
+                col_name.endswith("_is_green")
+                or col_name.endswith("_is_red")
+                or col_name.endswith("_is_flat")
+                or col_name.endswith("_is_near_flat")
+            ):
                 return
             # Do NOT trust a pre-existing column: it may be a stale float stored in
             # the DB (e.g. st_10_4_is_green=1.0 even while price is below the ST
@@ -587,39 +592,48 @@ class InteractivePlotter:
             if "close" not in eval_df.columns:
                 return
 
-            base_st = col_name[:-9]  # strip '_is_green'
-            if base_st in eval_df.columns:
-                eval_df[col_name] = (
-                    (eval_df["close"] > eval_df[base_st]).fillna(False).astype(bool)
-                )
+            match = re.fullmatch(
+                r"((?:st|supertrend)(?:_\d+_\d+)?)_is_(green|red|flat|near_flat)",
+                col_name,
+            )
+            if not match:
                 return
+            base_st, regime = match.groups()
 
-            if base_st.startswith("st_"):
+            line = None
+            if base_st in eval_df.columns:
+                line = eval_df[base_st]
+            if line is None and base_st.startswith("st_"):
                 alt = f"supertrend_{base_st[3:]}"
                 if alt in eval_df.columns:
-                    eval_df[col_name] = (
-                        (eval_df["close"] > eval_df[alt]).fillna(False).astype(bool)
-                    )
-                    return
-            if base_st.startswith("supertrend_"):
+                    line = eval_df[alt]
+            if line is None and base_st.startswith("supertrend_"):
                 alt = f"st_{base_st[11:]}"
                 if alt in eval_df.columns:
-                    eval_df[col_name] = (
-                        (eval_df["close"] > eval_df[alt]).fillna(False).astype(bool)
-                    )
-                    return
+                    line = eval_df[alt]
+            if line is None and "supertrend" in eval_df.columns:
+                line = eval_df["supertrend"]
+            if line is None and "st_lower" in eval_df.columns:
+                # Last-resort fallback for legacy data frames missing the supertrend line.
+                line = eval_df["st_lower"]
 
-            if "supertrend" in eval_df.columns:
-                eval_df[col_name] = (
-                    (eval_df["close"] > eval_df["supertrend"])
-                    .fillna(False)
-                    .astype(bool)
-                )
+            if line is None:
                 return
-            if "st_lower" in eval_df.columns:
-                # Last-resort fallback for legacy data frames missing supertrend line.
+
+            if regime == "green":
+                eval_df[col_name] = ((eval_df["close"] > line).fillna(False)).astype(bool)
+            elif regime == "red":
+                eval_df[col_name] = ((eval_df["close"] < line).fillna(False)).astype(bool)
+            elif regime == "flat":
                 eval_df[col_name] = (
-                    (eval_df["close"] > eval_df["st_lower"]).fillna(False).astype(bool)
+                    line.diff().abs().le(1e-9).fillna(False).astype(bool)
+                )
+            else:
+                close_abs = eval_df["close"].abs().replace(0, np.nan)
+                eval_df[col_name] = (
+                    line.diff().abs().div(close_abs).le(0.001).fillna(False).astype(
+                        bool
+                    )
                 )
 
         for w in words:
@@ -627,12 +641,34 @@ class InteractivePlotter:
             if delay_match:
                 base = re.sub(r"_d\d+$", "", w)
                 delay = int(delay_match.group(1))
-                _ensure_st_green_column(base)
+                _ensure_st_regime_column(base)
                 if base in eval_df.columns and w not in eval_df.columns:
                     shifted = eval_df[base].shift(delay)
-                    if base.endswith("_is_green"):
+                    if base.endswith("_is_green") or base.endswith("_is_red"):
                         shifted = shifted.eq(True)
                     eval_df[w] = shifted
+                continue
+
+            slope_flip_match = re.fullmatch(r"(.+_slope)_cross_(up|down)", w)
+            if slope_flip_match:
+                slope_base, direction = slope_flip_match.groups()
+                if slope_base not in eval_df.columns and slope_base.endswith("_slope"):
+                    source_base = slope_base[:-6]
+                    if source_base in eval_df.columns:
+                        eval_df[slope_base] = eval_df[source_base].diff().fillna(0)
+                if slope_base in eval_df.columns and w not in eval_df.columns:
+                    slope_sign = pd.Series(
+                        np.sign(eval_df[slope_base]), index=eval_df.index
+                    )
+                    prev_nonzero = slope_sign.replace(0, np.nan).ffill().shift(1)
+                    if direction == "up":
+                        eval_df[w] = (
+                            (slope_sign > 0) & (prev_nonzero < 0)
+                        ).fillna(False).astype(bool)
+                    else:
+                        eval_df[w] = (
+                            (slope_sign < 0) & (prev_nonzero > 0)
+                        ).fillna(False).astype(bool)
                 continue
 
             if w.endswith("_slope"):
@@ -641,8 +677,12 @@ class InteractivePlotter:
                     eval_df[w] = eval_df[base].diff().fillna(0)
 
         for w in words:
-            _ensure_st_green_column(w)
-            if w in eval_df.columns and w.endswith("_is_green"):
+            _ensure_st_regime_column(w)
+            if w in eval_df.columns and (
+                w.endswith("_is_green")
+                or w.endswith("_is_red")
+                or w.endswith("_is_flat")
+            ):
                 eval_df[w] = eval_df[w].eq(True)
 
         return eval_df
@@ -897,7 +937,7 @@ class InteractivePlotter:
 
         # Fixed left gutter anchor so legend and ribbon labels are visually justified.
         # Tunable in config/ribbon_settings.json under layout.left_gutter_x.
-        left_gutter_x = self._layout_numeric_setting("left_gutter_x", -0.22)
+        left_gutter_x = self._layout_numeric_setting("left_gutter_x", -0.28)
 
         # 1. Price Chart (Candlestick)
         fig.add_trace(
@@ -1183,7 +1223,7 @@ class InteractivePlotter:
         layout["xaxis_rangeslider_visible"] = False
         layout["hovermode"] = "x unified"
         # Tunable in config/ribbon_settings.json under layout.left_margin.
-        left_margin = int(self._layout_numeric_setting("left_margin", 300))
+        left_margin = int(self._layout_numeric_setting("left_margin", 220))
         layout["margin"] = dict(l=left_margin, r=20, t=50, b=80)
         layout["legend"] = dict(
             x=left_gutter_x,

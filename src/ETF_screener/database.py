@@ -24,6 +24,19 @@ class ETFDatabase:
         self.connection: Optional[sqlite3.Connection] = None
         self._init_db()
 
+    def _connect(self) -> sqlite3.Connection:
+        """Open a SQLite connection with conservative concurrency settings."""
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.OperationalError:
+            # Another connection may already hold the database lock during startup.
+            # Fall back to the default journal mode and rely on the busy timeout.
+            pass
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        return conn
+
     @staticmethod
     def _ensure_columns(
         cursor: sqlite3.Cursor,
@@ -44,7 +57,7 @@ class ETFDatabase:
     def _init_db(self) -> None:
         """Initialize database with schema."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
 
         # Create ETF data table with proper indexing
@@ -196,7 +209,7 @@ class ETFDatabase:
     def _get_connection(self) -> sqlite3.Connection:
         """Get database connection."""
         if self.connection is None:
-            self.connection = sqlite3.connect(self.db_path)
+            self.connection = self._connect()
             self.connection.row_factory = sqlite3.Row
         return self.connection
 

@@ -112,6 +112,9 @@ def setup_logging(app_name: str = "ETF_screener") -> logging.Logger:
         lg.handlers.clear()
         lg.propagate = True
 
+    # yfinance is extremely chatty at DEBUG/INFO; keep only warnings/errors.
+    logging.getLogger("yfinance").setLevel(logging.WARNING)
+
     # ---- Capture bare print()/stderr writes -----------------------------
     if not isinstance(sys.stdout, _PrintCapture):
         print_logger = logging.getLogger("print")

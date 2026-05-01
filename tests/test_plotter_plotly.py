@@ -104,9 +104,102 @@ END
     assert label.xanchor == "left"
     assert label.align == "left"
     assert label.font.size == 10
-    assert fig.layout.margin.l == 300
+    assert fig.layout.margin.l == 220
     assert float(label.x) == float(fig.layout.legend.x)
     assert fig.layout.legend.xanchor == "left"
+
+
+def test_prepare_eval_columns_supports_supertrend_flat():
+    dates = pd.date_range(start="2024-01-01", periods=5)
+    close = np.array([100.0, 100.0, 100.0, 101.0, 101.0])
+
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.array([1000.0] * 5),
+            "st_10_4": np.array([99.0, 99.0, 99.0, 100.0, 100.0]),
+        }
+    )
+
+    plotter = InteractivePlotter()
+    eval_df = df.copy()
+    eval_df.columns = [c.lower() for c in eval_df.columns]
+    eval_df = plotter._prepare_eval_columns(eval_df, "st_10_4_is_flat")
+
+    assert "st_10_4_is_flat" in eval_df.columns
+    assert eval_df["st_10_4_is_flat"].tolist() == [False, True, True, False, True]
+
+
+def test_prepare_eval_columns_supports_supertrend_near_flat():
+    dates = pd.date_range(start="2024-01-01", periods=5)
+    close = np.array([100.0, 100.0, 100.0, 100.0, 100.0])
+
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.array([1000.0] * 5),
+            "st_10_4": np.array([99.0, 99.05, 99.08, 99.09, 99.10]),
+        }
+    )
+
+    plotter = InteractivePlotter()
+    eval_df = df.copy()
+    eval_df.columns = [c.lower() for c in eval_df.columns]
+    eval_df = plotter._prepare_eval_columns(eval_df, "st_10_4_is_near_flat")
+
+    assert "st_10_4_is_near_flat" in eval_df.columns
+    assert eval_df["st_10_4_is_near_flat"].tolist() == [
+        False,
+        True,
+        True,
+        True,
+        True,
+    ]
+
+
+def test_prepare_eval_columns_supports_ema_slope_flip_helpers():
+    df = pd.DataFrame(
+        {
+            "ema_50": np.array([10.0, 11.0, 12.0, 12.0, 11.0, 10.0, 10.0, 11.0]),
+        }
+    )
+
+    plotter = InteractivePlotter()
+    eval_df = plotter._prepare_eval_columns(
+        df.copy(), "ema_50_slope_cross_up OR ema_50_slope_cross_down"
+    )
+
+    assert "ema_50_slope" in eval_df.columns
+    assert "ema_50_slope_cross_up" in eval_df.columns
+    assert "ema_50_slope_cross_down" in eval_df.columns
+    assert eval_df["ema_50_slope_cross_up"].tolist() == [
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+        True,
+    ]
+    assert eval_df["ema_50_slope_cross_down"].tolist() == [
+        False,
+        False,
+        False,
+        False,
+        True,
+        False,
+        False,
+        False,
+    ]
 
 
 def test_create_plot_hides_sell_signal_markers():
@@ -725,6 +818,73 @@ def test_prepare_eval_columns_st_green_uses_supertrend_line():
     expected = np.array([1.0, 0.0, 1.0, 0.0])
 
     assert np.array_equal(actual, expected)
+
+
+def test_prepare_eval_columns_st_red_uses_supertrend_line():
+    df = pd.DataFrame(
+        {
+            "close": np.array([100.0, 99.0, 101.0, 98.0]),
+            "supertrend": np.array([99.0, 100.0, 100.5, 99.5]),
+            # Include st_lower to ensure supertrend is preferred over lower-band fallback.
+            "st_lower": np.array([97.0, 97.0, 97.0, 97.0]),
+        }
+    )
+
+    out = InteractivePlotter()._prepare_eval_columns(df.copy(), "st_10_4_is_red")
+    actual = out["st_10_4_is_red"].to_numpy()
+    expected = np.array([0.0, 1.0, 0.0, 1.0])
+
+    assert np.array_equal(actual, expected)
+
+
+def test_context_and_invalidate_ribbons_render_with_is_red_history():
+    dates = pd.date_range(start="2024-01-01", periods=4)
+    close = np.array([100.0, 99.0, 101.0, 102.0])
+    st = np.array([101.0, 100.0, 100.0, 99.5])
+
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.full(4, 200000.0),
+            "ema_200": np.full(4, 90.0),
+            "ema_200_slope": np.full(4, 1.0),
+            "ema_50": np.array([120.0, 120.0, 120.0, 120.0]),
+            "st_10_4": st,
+        }
+    )
+
+    strategy_content = """
+BEGIN CONTEXT
+FILTER: close > ema_200
+FILTER: ema_200_slope > 0
+FILTER: was_true(st_10_4_is_red, 1)
+END
+
+BEGIN TRIGGER
+TRIGGER: st_10_4_is_green
+END
+
+BEGIN INVALIDATE
+EXIT: close < ema_50
+END
+"""
+
+    fig = InteractivePlotter().create_plot(
+        df, "TEST", strategy_content=strategy_content
+    )
+    trace_names = [getattr(t, "name", "") for t in fig.data]
+
+    context_traces = [name for name in trace_names if str(name).startswith("Context - ")]
+    invalidate_traces = [
+        name for name in trace_names if str(name).startswith("Invalidate - ")
+    ]
+
+    assert context_traces, "Expected context ribbon trace"
+    assert invalidate_traces, "Expected invalidate ribbon trace"
 
 
 def test_supertrend_overlay_ignores_stale_green_flag_and_uses_line_relation():

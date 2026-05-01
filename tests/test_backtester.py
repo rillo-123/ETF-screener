@@ -93,6 +93,108 @@ class TestBacktester:
             df_out["ema_200_slope"].to_numpy(), expected_slope.to_numpy()
         )
 
+    def test_scripted_strategy_supports_supertrend_flat_helper(self, bt):
+        dates = pd.date_range(start="2024-01-01", periods=20)
+        close = np.full(20, 100.0)
+
+        df = pd.DataFrame(
+            {
+                "Date": dates,
+                "close": close,
+                "open": close,
+                "high": close + 1.0,
+                "low": close - 1.0,
+                "volume": np.full(20, 100000.0),
+                "ema_200": np.full(20, 98.0),
+            }
+        )
+
+        entry = "st_10_4_is_flat"
+        exit_rule = "close < ema_200"
+
+        res = bt.scripted_strategy(df, "TEST", entry, exit_rule)
+        df_out = res["df"] if isinstance(res, dict) else res
+
+        assert df_out is not None
+        assert "st_10_4_is_flat" in df_out.columns
+        assert not df_out["st_10_4_is_flat"].isna().any()
+        assert df_out["st_10_4_is_flat"].iloc[10:].max() == 1.0
+
+    def test_scripted_strategy_supports_supertrend_near_flat_helper(self, bt):
+        dates = pd.date_range(start="2024-01-01", periods=20)
+        close = np.full(20, 100.0)
+
+        df = pd.DataFrame(
+            {
+                "Date": dates,
+                "close": close,
+                "open": close,
+                "high": close + 1.0,
+                "low": close - 1.0,
+                "volume": np.full(20, 100000.0),
+                "ema_200": np.full(20, 98.0),
+            }
+        )
+
+        entry = "st_10_4_is_near_flat"
+        exit_rule = "close < ema_200"
+
+        res = bt.scripted_strategy(df, "TEST", entry, exit_rule)
+        df_out = res["df"] if isinstance(res, dict) else res
+
+        assert df_out is not None
+        assert "st_10_4_is_near_flat" in df_out.columns
+        assert df_out["st_10_4_is_near_flat"].iloc[10:].max() == 1.0
+
+    def test_scripted_strategy_supports_ema_slope_flip_helpers(self, bt):
+        dates = pd.date_range(start="2024-01-01", periods=8)
+        close = np.full(8, 100.0)
+        ema_50 = np.array([10.0, 11.0, 12.0, 12.0, 11.0, 10.0, 10.0, 11.0])
+
+        df = pd.DataFrame(
+            {
+                "Date": dates,
+                "close": close,
+                "open": close,
+                "high": close + 1.0,
+                "low": close - 1.0,
+                "volume": np.full(8, 100000.0),
+                "ema_50": ema_50,
+                "ema_200": np.full(8, 98.0),
+            }
+        )
+
+        entry = "ema_50_slope_cross_up OR ema_50_slope_cross_down"
+        exit_rule = "close < ema_200"
+
+        res = bt.scripted_strategy(df, "TEST", entry, exit_rule)
+        df_out = res["df"] if isinstance(res, dict) else res
+
+        assert df_out is not None
+        assert "ema_50_slope" in df_out.columns
+        assert "ema_50_slope_cross_up" in df_out.columns
+        assert "ema_50_slope_cross_down" in df_out.columns
+        assert df_out["ema_50_slope_cross_up"].tolist() == [
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+        ]
+        assert df_out["ema_50_slope_cross_down"].tolist() == [
+            False,
+            False,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+        ]
+
     def test_backtester_run(self, bt, monkeypatch):
         # We need to mock the db property specifically on the CLASS or use a different approach
         # because the @property decorator makes it tricky to monkeypatch on the instance

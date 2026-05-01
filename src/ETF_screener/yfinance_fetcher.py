@@ -83,7 +83,7 @@ class YFinanceFetcher:
                 f"{base}.F" if base and not symbol.upper().endswith(".F") else None
             )
             if fallback:
-                logger.info(
+                logger.debug(
                     "No data for %s, retrying with fallback %s", symbol, fallback
                 )
                 df = self._fetch_yf(fallback, resolved_start, resolved_end)

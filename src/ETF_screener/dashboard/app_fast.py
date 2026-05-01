@@ -1,4 +1,5 @@
 import glob
+import inspect
 from ETF_screener.config_loader import get_paths
 import json
 import logging as _logging_mod
@@ -736,12 +737,17 @@ async def screen(
         # Run backtest for current status
         bt = Backtester()
         logger.info("Starting parallel backtest for %d tickers", len(tickers))
-        results = bt.run_parallel_backtest(
-            tickers,
-            bt.scripted_strategy,
-            days=200,
-            strategy_kwargs={"entry_script": final_entry, "exit_script": final_exit},
-        )
+        run_kwargs = {
+            "days": 200,
+            "strategy_kwargs": {"entry_script": final_entry, "exit_script": final_exit},
+        }
+        if "max_workers" in inspect.signature(bt.run_parallel_backtest).parameters:
+            run_kwargs["max_workers"] = 8
+        if "show_progress" in inspect.signature(bt.run_parallel_backtest).parameters:
+            run_kwargs["show_progress"] = True
+        if "task_timeout_seconds" in inspect.signature(bt.run_parallel_backtest).parameters:
+            run_kwargs["task_timeout_seconds"] = 45
+        results = bt.run_parallel_backtest(tickers, bt.scripted_strategy, **run_kwargs)
         logger.info(
             "Backtest complete, processing %d results", len(results) if results else 0
         )

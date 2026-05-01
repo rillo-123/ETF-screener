@@ -53,6 +53,7 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
             this.clientHeight = 520;
           }}
           addEventListener() {{}}
+          setAttribute(name, value) {{ this[name] = value; }}
           appendChild(child) {{ this.children.push(child); return child; }}
           remove() {{}}
           getContext() {{
@@ -129,6 +130,143 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
+def test_dashboard_js_persists_chart_range():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for dashboard JavaScript smoke tests")
+
+    dashboard_js = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "ETF_screener"
+        / "dashboard"
+        / "static"
+        / "js"
+        / "dashboard.js"
+    )
+    script = textwrap.dedent(
+        f"""
+        const fs = require("fs");
+
+        class ClassList {{
+          constructor() {{ this.values = new Set(); }}
+          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
+          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
+          contains(name) {{ return this.values.has(name); }}
+          toggle(name, force) {{
+            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
+            if (shouldAdd) this.values.add(name);
+            else this.values.delete(name);
+            return shouldAdd;
+          }}
+        }}
+
+        class Element {{
+          constructor(id = "") {{
+            this.id = id;
+            this.classList = new ClassList();
+            this.children = [];
+            this.dataset = {{}};
+            this.style = {{}};
+            this.options = [];
+            this.value = "";
+            this.textContent = "";
+            this.innerHTML = "";
+            this.disabled = false;
+            this.clientWidth = 900;
+            this.clientHeight = 520;
+          }}
+          addEventListener() {{}}
+          setAttribute(name, value) {{ this[name] = value; }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          remove() {{}}
+          getContext() {{
+            const noop = () => {{}};
+            return new Proxy({{}}, {{ get: () => noop, set: () => true }});
+          }}
+        }}
+
+        const elements = new Map();
+        const getElement = (id) => {{
+          if (!elements.has(id)) elements.set(id, new Element(id));
+          return elements.get(id);
+        }};
+
+        ["screener", "shortlist", "swarm", "backtest"].forEach((tab) => {{
+          getElement(`tab-${{tab}}`).classList.add("hidden");
+          getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
+        }});
+        getElement("chart-range-label");
+        getElement("range-btn-1m");
+        getElement("range-btn-3m");
+        getElement("range-btn-6m");
+        getElement("range-btn-1y");
+        getElement("range-btn-2y");
+        getElement("range-btn-3y");
+
+        const storage = new Map([["etf-discovery:last-chart-range-days", "126"]]);
+
+        global.window = global;
+        global.window.addEventListener = () => {{}};
+        global.document = {{
+          body: new Element("body"),
+          createElement: (tag) => new Element(tag),
+          getElementById: getElement,
+          querySelectorAll: (selector) => selector === ".tab-btn"
+            ? ["screener", "shortlist", "swarm", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            : [],
+          addEventListener: () => {{}},
+        }};
+        global.localStorage = {{
+          getItem: (key) => storage.has(key) ? storage.get(key) : "",
+          setItem: (key, value) => {{ storage.set(key, String(value)); }},
+          removeItem: (key) => {{ storage.delete(key); }},
+        }};
+        global.fetch = async () => ({{
+          ok: true,
+          json: async () => ({{ world: {{ layout: "grid", rows: 1, columns: 1, cell_width: 1, cell_height: 1 }}, nodes: [], count: 0 }}),
+        }});
+        global.requestAnimationFrame = () => 1;
+        global.cancelAnimationFrame = () => {{}};
+        global.setTimeout = () => 1;
+        global.setInterval = () => 1;
+        global.clearInterval = () => {{}};
+        global.alert = () => {{}};
+        global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
+
+        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
+        Function(source)();
+
+        (async () => {{
+          if (window.dashboardReadyPromise) {{
+            await window.dashboardReadyPromise;
+          }}
+          await Promise.resolve();
+
+          if (document.getElementById("chart-range-label").textContent !== "6M chart") {{
+            throw new Error("Dashboard did not restore the saved chart range");
+          }}
+
+          window.setRange(63);
+          if (storage.get("etf-discovery:last-chart-range-days") !== "63") {{
+            throw new Error("Dashboard did not persist the updated chart range");
+          }}
+        }})().catch((err) => {{
+          console.error(err);
+          process.exit(1);
+        }});
+        """
+    )
+
+    result = subprocess.run(
+        [node, "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
 def test_dashboard_js_auto_refreshes_stale_market_data():
     node = shutil.which("node")
     if not node:
@@ -176,6 +314,7 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
             this.clientHeight = 520;
           }}
           addEventListener() {{}}
+          setAttribute(name, value) {{ this[name] = value; }}
           appendChild(child) {{ this.children.push(child); return child; }}
           remove() {{}}
           getContext() {{
@@ -322,6 +461,9 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
         Function(source)();
 
         (async () => {{
+          if (window.dashboardReadyPromise) {{
+            await window.dashboardReadyPromise;
+          }}
           await Promise.resolve();
           await Promise.resolve();
           await Promise.resolve();

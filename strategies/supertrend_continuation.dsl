@@ -6,12 +6,13 @@
 BEGIN CONTEXT
 FILTER: close > ema_200
 FILTER: ema_200_slope > 0
+FILTER: was_true(st_10_4_is_green,1)
 END
 
 BEGIN TRIGGER
-TRIGGER: cross_up(st_10_4_is_green, 0.5) OR cross_up(close, st_10_4)
+TRIGGER: st_10_4_is_red
 END
 
 BEGIN INVALIDATE
-EXIT: cross_down(st_10_4_is_green, 0.5) OR close < ema_50
+EXIT: close < ema_50
 END
