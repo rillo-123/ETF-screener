@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 from typing import Any, Union, Tuple
 
+SUPERTREND_NEAR_FLAT_PCT = 0.001  # 0.1% move or less is treated as "near flat"
+
 
 def clean_price_data(series: pd.Series, max_pct_change: float = 0.5) -> pd.Series:
     """
@@ -454,6 +456,14 @@ def calculate_linreg_slope(series: pd.Series, period: int = 14) -> pd.Series:
     return series.rolling(window=period).apply(get_slope, raw=True)
 
 
+def _supertrend_flatness(line: pd.Series, close: pd.Series, *, pct: float) -> pd.Series:
+    if line is None or close is None:
+        return pd.Series(dtype=float)
+    close_abs = close.abs().replace(0, np.nan)
+    delta_pct = line.diff().abs().div(close_abs)
+    return delta_pct.le(pct).fillna(False).astype(float)
+
+
 def calculate_consecutive_streak(df: pd.DataFrame) -> tuple[int, str]:
     """
     Calculate consecutive RED/GREEN days from the current bar backwards.
@@ -548,9 +558,23 @@ def add_indicators(
         st = st_res
         ub = lb = None
 
-    df_copy["Supertrend"] = st
-    df_copy["ST_Upper"] = ub
-    df_copy["ST_Lower"] = lb
+    # Determine trend direction for each row
+    trend_dir = pd.Series(index=df_copy.index, dtype=float)
+    if ub is not None and lb is not None and st is not None:
+        # Trend is up if supertrend equals lower band, down if equals upper band
+        trend_dir[:] = float('nan')
+        trend_dir[st == lb] = 1
+        trend_dir[st == ub] = -1
+        # Only one of ST_Lower or ST_Upper should be set per row
+        st_lower = lb.where(trend_dir == 1, float('nan'))
+        st_upper = ub.where(trend_dir == -1, float('nan'))
+        df_copy["Supertrend"] = st
+        df_copy["ST_Lower"] = st_lower
+        df_copy["ST_Upper"] = st_upper
+    else:
+        df_copy["Supertrend"] = st
+        df_copy["ST_Lower"] = lb
+        df_copy["ST_Upper"] = ub
 
     # Supertrend 10/4 for specific breakdown strategies
     st_10_4_res = calculate_supertrend(df_copy, period=10, multiplier=4.0)
@@ -562,6 +586,30 @@ def add_indicators(
     df_copy["st_is_green"] = (df_copy["Close"] > df_copy["ST_Lower"]).astype(float)
     df_copy["st_10_4_is_green"] = (
         (df_copy["Close"] > df_copy["st_10_4"]).astype(float)
+        if "st_10_4" in df_copy.columns
+        else 0.0
+    )
+    df_copy["st_is_flat"] = (
+        df_copy["Supertrend"].diff().abs().le(1e-9).fillna(False).astype(float)
+        if "Supertrend" in df_copy.columns
+        else 0.0
+    )
+    df_copy["st_is_near_flat"] = (
+        _supertrend_flatness(
+            df_copy["Supertrend"], df_copy["Close"], pct=SUPERTREND_NEAR_FLAT_PCT
+        )
+        if "Supertrend" in df_copy.columns
+        else 0.0
+    )
+    df_copy["st_10_4_is_flat"] = (
+        df_copy["st_10_4"].diff().abs().le(1e-9).fillna(False).astype(float)
+        if "st_10_4" in df_copy.columns
+        else 0.0
+    )
+    df_copy["st_10_4_is_near_flat"] = (
+        _supertrend_flatness(
+            df_copy["st_10_4"], df_copy["Close"], pct=SUPERTREND_NEAR_FLAT_PCT
+        )
         if "st_10_4" in df_copy.columns
         else 0.0
     )

@@ -1,8 +1,22 @@
-"""CLI configuration loader for dynamic command setup."""
 
 import json
 from pathlib import Path
 from typing import Any, Dict
+
+_paths_cache = None
+
+def get_paths() -> Dict[str, Any]:
+    """
+    Load and cache paths from config/paths.json.
+    """
+    global _paths_cache
+    if _paths_cache is not None:
+        return _paths_cache
+    config_dir = Path(__file__).parent.parent.parent / "config"
+    path_file = config_dir / "paths.json"
+    with open(path_file, "r", encoding="utf-8") as f:
+        _paths_cache = json.load(f)
+    return _paths_cache
 
 
 def load_command_config(config_file: str = "config/commands.json") -> Dict[str, Any]:

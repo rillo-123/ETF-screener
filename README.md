@@ -23,6 +23,8 @@ Technical analysis tool for identifying swing trading opportunities in large XET
 pip install -r requirements.txt
 ```
 
+`requirements.txt` and `pyproject.toml` are kept in sync for runtime dependencies.
+
 ### Root Entry Scripts
 
 The main PowerShell entry surface lives at the repo root so you can launch common workflows without changing directories:
@@ -37,9 +39,11 @@ The main PowerShell entry surface lives at the repo root so you can launch commo
 .\run_churn_all.ps1
 .\run_filtered_plots.ps1
 .\run_vulture.ps1
+.\update-devtools.ps1
 ```
 
 These root scripts forward into the underlying `scripts/` implementations where applicable.
+Use `.\update-devtools.ps1` to upgrade stable VS Code and refresh installed extensions from the CLI.
 
 ### Get Finnhub API Key
 
@@ -442,24 +446,34 @@ etfs discover-all --workers 10  # Fast but aggressive
 etfs discover-all --workers 3   # Slower but gentler
 ```
 
-## Output Files
 
-Data and plots are automatically saved:
+## Data Folder Structure
+
+All data files are now organized into subfolders for clarity and maintainability:
 
 ```
 data/
-├── exs1_data.parquet          # Historical OHLCV + indicators
-├── eung_data.parquet
-├── etfs.json                  # Discovered valid ETF tickers
-├── blacklist.json             # Invalid/delisted ETFs
-├── etfs.db                    # SQLite database
-└── test_results_*.txt         # Test logs
+├── backtests/                 # Backtest result CSVs (backtest_*.csv)
+├── discovery/                 # Discovery results, multi-strategy, custom script results
+│   ├── discovery_results_*.csv
+│   ├── multi_strategy_results.csv
+│   └── custom_script_results.csv
+├── movie_scans/               # Movie scan result CSVs (movie_scan_*.csv)
+├── test_results/              # Test result TXT files (test_results_*.txt)
+├── etf_db/                    # ETF database files (etfs.db, etf_data.db, etf_database.db, etf_database.sqlite)
+├── parquet/                   # All .parquet data files
+├── cache/                     # Cached/intermediate files
+├── vulture_report.txt         # Lint/report output
+└── organize_data.ps1          # Script to organize files into subfolders
 
 plots/
 ├── exs1_analysis.png          # Full technical analysis chart
 ├── eung_analysis.png
 └── ...
 ```
+
+**Note:** All code and scripts have been updated to use these new locations. If you have legacy files in `data/`, run `data/organize_data.ps1` to move them into the correct subfolders.
+
 
 ## Parquet Data Format
 
@@ -591,10 +605,13 @@ screener.print_results(results, format_name="default")
 ### ETFDatabase (SQLite)
 
 ```python
+db = ETFDatabase(db_path="data/etfs.db")
+
 from ETF_screener import ETFDatabase
 import pandas as pd
 
-db = ETFDatabase(db_path="data/etfs.db")
+# New default location for database:
+db = ETFDatabase(db_path="data/etf_db/etfs.db")
 
 # Insert DataFrame with price and indicator data
 df = pd.DataFrame({...})
@@ -657,7 +674,9 @@ print(df_with_indicators[["Date", "Close", "EMA_50", "Supertrend", "Signal"]])
 ```python
 from ETF_screener import ParquetStorage
 
-storage = ParquetStorage(data_dir="data")
+
+# New default location for parquet files:
+storage = ParquetStorage(data_dir="data/parquet")
 
 # Save ETF data
 storage.save_etf_data(df, "EXS1")

@@ -48,7 +48,11 @@ def test_parse_strategy_blocks_preserves_block_order_and_fallback_sections():
 
     blocks = parse_strategy_blocks(content)
 
-    assert [block.name for block in blocks] == ["Setup", "TRIGGER_EVENT", "Risk"]
+    assert [block.name for block in blocks] == [
+        "Setup",
+        "TRIGGER_EVENT",
+        "Invalidate",
+    ]
     assert [block.layer for block in blocks] == [2, 3, 4]
     assert blocks[0].expressions == ("(close > ema_200)",)
     assert blocks[1].expressions == ("(macd > macd_signal)",)

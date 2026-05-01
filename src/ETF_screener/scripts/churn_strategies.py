@@ -1,3 +1,4 @@
+from ETF_screener.config_loader import get_paths
 from ETF_screener.backtester import (
     Backtester,
 )
@@ -10,14 +11,13 @@ from pathlib import Path
 from typing import Dict, List
 
 
-def load_dsl_file(file_path):
-    """Parse a .dsl file with block-aware semantics.
+def parse_dsl_content(content: str | None) -> dict:
+    """Parse DSL content into runnable scripts plus strategy metadata.
 
     Entry is composed from positive conditions in CONTEXT/SETUP/QUALIFY/TRIGGER.
     Exit is composed from EXIT lines plus INVALIDATE/RISK conditions.
     """
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
+    content = content or ""
 
     canonical_alias: Dict[str, str] = {
         "context": "context",
@@ -61,9 +61,22 @@ def load_dsl_file(file_path):
     explicit_exits: list[str] = []
 
     current_block_raw: str | None = None
+    max_days: int | None = None
     for raw in content.splitlines():
         line = raw.strip()
-        if not line or line.startswith("#"):
+        if not line:
+            continue
+
+        directive = re.match(
+            r"^(MAX_DAYS|MAX_SIGNAL_AGE_DAYS|SIGNAL_MAX_DAYS|SINCE_DAYS)\s*:\s*(\d+)\s*$",
+            line,
+            re.IGNORECASE,
+        )
+        if directive:
+            max_days = int(directive.group(2))
+            continue
+
+        if line.startswith("#"):
             continue
 
         begin_prefix = re.match(r"^begin\s+(.+)$", line, re.IGNORECASE)
@@ -110,21 +123,333 @@ def load_dsl_file(file_path):
         + scoped_terms["trigger"]
         + scoped_terms["global"]
     )
+    filter_parts = (
+        scoped_terms["context"] + scoped_terms["setup"] + scoped_terms["global"]
+    )
     final_entry = " and ".join(entry_parts) if entry_parts else "False"
-
+    filter_entry = " and ".join(filter_parts) if filter_parts else None
+    trigger_entry = (
+        " and ".join(scoped_terms["trigger"]) if scoped_terms["trigger"] else None
+    )
     final_exit = " or ".join(explicit_exits) if explicit_exits else "False"
     has_valid_exit = final_exit != "False"
 
-    first_trigger = scoped_terms["trigger"][0][1:-1] if scoped_terms["trigger"] else None
-    first_filter = scoped_terms["setup"][0][1:-1] if scoped_terms["setup"] else None
-
     return {
-        "trigger": first_trigger,
-        "filter": first_filter,
+        "trigger": trigger_entry,
+        "filter": filter_entry,
         "entry": final_entry,
         "exit": final_exit,
         "has_valid_exit": has_valid_exit,
+        "max_days": max_days,
     }
+
+
+def load_dsl_file(file_path):
+    """Load and parse a .dsl file with block-aware semantics."""
+    with open(file_path, "r", encoding="utf-8") as f:
+        return parse_dsl_content(f.read())
+
+
+def _prepare_scan_expression(expr: str) -> str:
+    """Convert DSL-style expressions into a pandas.eval-friendly form."""
+    s = str(expr or "").strip()
+    if not s:
+        return "False"
+    if s.lower() in {"true", "false"}:
+        return s.title()
+
+    s = re.sub(
+        r"cross_up\(([^,]+),\s*([^)]+)\)",
+        r"(\1 > \2 and \1_d1 <= \2_d1)",
+        s,
+        flags=re.IGNORECASE,
+    )
+    s = re.sub(
+        r"cross_down\(([^,]+),\s*([^)]+)\)",
+        r"(\1 < \2 and \1_d1 >= \2_d1)",
+        s,
+        flags=re.IGNORECASE,
+    )
+
+    def d_sub(match):
+        return f"{match.group(1)}_d{match.group(2)}"
+
+    s = re.sub(r"([a-z_][a-z0-9_]*)\.d\[(\d+)\]", d_sub, s, flags=re.IGNORECASE)
+
+    def shift_cond(match):
+        condition = match.group(1).strip()
+        lookback = int(match.group(2))
+        shifted = " or ".join([f"{condition}_d{i}" for i in range(1, lookback + 1)])
+        return f"({shifted})"
+
+    s = re.sub(
+        r"was_true\(([^,]+),\s*(\d+)\)",
+        shift_cond,
+        s,
+        flags=re.IGNORECASE,
+    )
+
+    return (
+        s.lower()
+        .replace(" and ", " & ")
+        .replace(" or ", " | ")
+        .replace("-gt", ">")
+        .replace("-lt", "<")
+        .replace("-eq", "==")
+        .replace("-ge", ">=")
+        .replace("-le", "<=")
+    )
+
+
+def _evaluate_strategy_mask(df: pd.DataFrame, expr: str | None) -> pd.Series:
+    """Evaluate a DSL expression against a strategy dataframe."""
+    if df is None or df.empty:
+        return pd.Series(dtype=bool)
+
+    normalized = str(expr or "").strip()
+    if not normalized:
+        return pd.Series(True, index=df.index, dtype=bool)
+    if normalized.lower() == "false":
+        return pd.Series(False, index=df.index, dtype=bool)
+    if normalized.lower() == "true":
+        return pd.Series(True, index=df.index, dtype=bool)
+
+    eval_df = df.copy()
+    eval_df.columns = [str(column).lower() for column in eval_df.columns]
+    eval_df = eval_df.loc[:, ~eval_df.columns.duplicated()]
+    prepared = _prepare_scan_expression(normalized)
+    result = eval_df.eval(prepared, engine="python")
+    if not isinstance(result, pd.Series):
+        return pd.Series([bool(result)] * len(eval_df), index=eval_df.index, dtype=bool)
+    return result.fillna(False).astype(bool)
+
+
+def find_recent_entry_days(
+    df: pd.DataFrame | None,
+    strategy_spec: dict,
+    max_days: int | None = None,
+) -> int | None:
+    """Return the age in bars of the most recent still-valid entry candidate."""
+    if df is None or df.empty:
+        return None
+
+    trigger_expr = strategy_spec.get("trigger") or strategy_spec.get("entry")
+    filter_expr = strategy_spec.get("filter")
+    if not trigger_expr:
+        return None
+
+    trigger_mask = _evaluate_strategy_mask(df, trigger_expr)
+    filter_mask = _evaluate_strategy_mask(df, filter_expr)
+
+    if "exit_condition" in df.columns:
+        exit_mask = df["exit_condition"].fillna(False).astype(bool)
+    else:
+        exit_mask = _evaluate_strategy_mask(df, strategy_spec.get("exit"))
+
+    scan_limit = len(df) if max_days is None else min(int(max_days) + 1, len(df))
+    for age in range(scan_limit):
+        idx = len(df) - 1 - age
+        if idx < 0:
+            break
+        if not bool(trigger_mask.iloc[idx]):
+            continue
+        if bool(exit_mask.iloc[idx]):
+            continue
+        if idx + 1 < len(df) and bool(exit_mask.iloc[idx + 1 :].any()):
+            continue
+        if not bool(filter_mask.iloc[idx:].all()):
+            continue
+        return age
+
+    return None
+
+
+def _load_strategy_specs(
+    backtester: Backtester,
+    strategy_path: str | None = None,
+    entry_script: str | None = None,
+    exit_script: str | None = None,
+    dsl_content: str | None = None,
+    strategy_name: str | None = None,
+):
+    """Build runnable strategy specs from a saved DSL path or direct scripts."""
+    strategies = []
+
+    if strategy_path:
+        path = Path(strategy_path)
+        if path.is_file():
+            res = load_dsl_file(path)
+            if res.get("has_valid_exit", False):
+                strategies.append(
+                    {
+                        "name": path.stem,
+                        "func": backtester.scripted_strategy,
+                        "kwargs": {
+                            "entry_script": res["entry"],
+                            "exit_script": res["exit"],
+                        },
+                        "trigger": res.get("trigger"),
+                        "filter": res.get("filter"),
+                        "exit": res.get("exit"),
+                        "max_days": res.get("max_days"),
+                    }
+                )
+        elif path.is_dir():
+            for dsl_file in path.glob("*.dsl"):
+                if "strat_cache" in dsl_file.parts:
+                    continue
+                res = load_dsl_file(dsl_file)
+                if not res.get("has_valid_exit", False):
+                    continue
+                strategies.append(
+                    {
+                        "name": dsl_file.stem,
+                        "func": backtester.scripted_strategy,
+                        "kwargs": {
+                            "entry_script": res["entry"],
+                            "exit_script": res["exit"],
+                        },
+                        "trigger": res.get("trigger"),
+                        "filter": res.get("filter"),
+                        "exit": res.get("exit"),
+                        "max_days": res.get("max_days"),
+                    }
+                )
+    elif dsl_content:
+        res = parse_dsl_content(dsl_content)
+        if res["entry"] and res["entry"] != "False":
+            strategies.append(
+                {
+                    "name": strategy_name or "Editor Draft",
+                    "func": backtester.scripted_strategy,
+                    "kwargs": {
+                        "entry_script": res["entry"],
+                        "exit_script": res["exit"],
+                    },
+                    "trigger": res.get("trigger"),
+                    "filter": res.get("filter"),
+                    "exit": res.get("exit"),
+                    "max_days": res.get("max_days"),
+                }
+            )
+    elif entry_script and exit_script:
+        strategies.append(
+            {
+                "name": "CLI_Custom",
+                "func": backtester.scripted_strategy,
+                "kwargs": {"entry_script": entry_script, "exit_script": exit_script},
+                "trigger": None,
+                "filter": None,
+                "entry": entry_script,
+                "exit": exit_script,
+                "max_days": None,
+            }
+        )
+
+    return strategies
+
+
+def evaluate_strategies(
+    entry_script: str | None = None,
+    exit_script: str | None = None,
+    ticker_filter: str | None = None,
+    strategy_path: str | None = None,
+    since_days: int | None = None,
+    dsl_content: str | None = None,
+    strategy_name: str | None = None,
+) -> pd.DataFrame:
+    """Run strategy scoring and return a ranked DataFrame without plotting side effects."""
+    backtester = Backtester()
+    conn = backtester.db._get_connection()
+    query = "SELECT DISTINCT ticker FROM etf_data"
+
+    if ticker_filter:
+        if "%" in ticker_filter or "_" in ticker_filter:
+            query += f" WHERE ticker LIKE '{ticker_filter}'"
+        else:
+            query += f" WHERE ticker LIKE '{ticker_filter}%'"
+
+    tickers = pd.read_sql_query(query, conn)["ticker"].tolist()
+    strategies = _load_strategy_specs(
+        backtester,
+        strategy_path=strategy_path,
+        entry_script=entry_script,
+        exit_script=exit_script,
+        dsl_content=dsl_content,
+        strategy_name=strategy_name,
+    )
+
+    if not strategies:
+        return pd.DataFrame()
+
+    all_results = []
+    for strat in strategies:
+        results = backtester.run_parallel_backtest(
+            tickers,
+            strat["func"],
+            days=500,
+            strategy_kwargs=strat.get("kwargs"),
+            show_progress=False,
+            progress_label=f"{strat['name']} ({len(tickers)} tickers)",
+        )
+        for res in results:
+            if not res or "error" in res:
+                continue
+
+            df = res.get("df")
+            strategy_max_days = strat.get("max_days")
+            recent_days = find_recent_entry_days(
+                df,
+                strat,
+                max_days=(
+                    min(since_days, strategy_max_days)
+                    if since_days is not None and strategy_max_days is not None
+                    else since_days if since_days is not None else strategy_max_days
+                ),
+            )
+            recent_days_value = 999 if recent_days is None else int(recent_days)
+            max_allowed_days = (
+                min(since_days, strategy_max_days)
+                if since_days is not None and strategy_max_days is not None
+                else since_days if since_days is not None else strategy_max_days
+            )
+
+            if max_allowed_days is not None and recent_days_value > max_allowed_days:
+                continue
+
+            all_results.append(
+                {
+                    "Ticker": res["ticker"],
+                    "Strategy": strat["name"],
+                    "Return (%)": res["total_return_pct"],
+                    "Win Rate (%)": res["win_rate_pct"],
+                    "Profit Factor": res["profit_factor"],
+                    "Sharpe": res.get("sharpe_ratio", 0),
+                    "Max DD (%)": res.get("max_drawdown_pct", 0),
+                    "Trades": res.get("num_trades", 0),
+                    "Days Since Entry": recent_days_value,
+                    "df": df,
+                }
+            )
+
+    summary_df = pd.DataFrame(all_results)
+    if summary_df.empty:
+        return summary_df
+
+    summary_df["Quality Score"] = (
+        summary_df["Return (%)"]
+        * (summary_df["Win Rate (%)"] / 100)
+        * (summary_df["Sharpe"] + 1)
+        / ((1 + summary_df["Trades"] / 100.0) * (1 + summary_df["Max DD (%)"] / 10.0))
+    )
+    if since_days is not None:
+        summary_df = summary_df.sort_values(
+            by=["Days Since Entry", "Quality Score"], ascending=[True, False]
+        )
+    else:
+        summary_df = summary_df.sort_values(by="Quality Score", ascending=False)
+
+    return summary_df.reset_index(drop=True)
 
 
 def churn_db(
@@ -168,58 +493,14 @@ def churn_db(
 
     tickers = pd.read_sql_query(query, conn)["ticker"].tolist()
 
-    strategies = []
-
-    # Mode 1: Path to a .dsl file or a directory of .dsl files
-    if strategy_path:
-        path = Path(strategy_path)
-        if path.is_file():
-            res = load_dsl_file(path)
-            if not res.get("has_valid_exit", False):
-                print(
-                    f"Skipping strategy '{path.stem}': missing EXIT condition in {path.name}"
-                )
-            else:
-                strategies.append(
-                    {
-                        "name": path.stem,
-                        "func": backtester.scripted_strategy,
-                        "kwargs": {
-                            "entry_script": res["entry"],
-                            "exit_script": res["exit"],
-                        },
-                    }
-                )
-        elif path.is_dir():
-            for dsl_file in path.glob("*.dsl"):
-                if "strat_cache" in dsl_file.parts:
-                    continue
-                res = load_dsl_file(dsl_file)
-                if not res.get("has_valid_exit", False):
-                    print(
-                        f"Skipping strategy '{dsl_file.stem}': missing EXIT condition in {dsl_file.name}"
-                    )
-                    continue
-                strategies.append(
-                    {
-                        "name": dsl_file.stem,
-                        "func": backtester.scripted_strategy,
-                        "kwargs": {
-                            "entry_script": res["entry"],
-                            "exit_script": res["exit"],
-                        },
-                    }
-                )
-
-    # Mode 2: Direct CLI strings
-    elif entry_script and exit_script:
-        strategies.append(
-            {
-                "name": "CLI_Custom",
-                "func": backtester.scripted_strategy,
-                "kwargs": {"entry_script": entry_script, "exit_script": exit_script},
-            }
-        )
+    strategies = _load_strategy_specs(
+        backtester,
+        strategy_path=strategy_path,
+        entry_script=entry_script,
+        exit_script=exit_script,
+        dsl_content=None,
+        strategy_name=None,
+    )
 
     if not strategies:
         print("No strategies found to run.")
@@ -256,15 +537,25 @@ def churn_db(
             if res and "error" not in res:
                 df = res.get("df")
 
-                # Fetch recent entry days from the dataframe
-                recent_days = 999
-                if df is not None and "recent_entry_days" in df.columns:
-                    recent_days = df["recent_entry_days"].iloc[-1]
+                strategy_max_days = strat.get("max_days")
+                recent_days = find_recent_entry_days(
+                    df,
+                    strat,
+                    max_days=(
+                        min(since_days, strategy_max_days)
+                        if since_days is not None and strategy_max_days is not None
+                        else since_days if since_days is not None else strategy_max_days
+                    ),
+                )
+                recent_days_value = 999 if recent_days is None else int(recent_days)
+                max_allowed_days = (
+                    min(since_days, strategy_max_days)
+                    if since_days is not None and strategy_max_days is not None
+                    else since_days if since_days is not None else strategy_max_days
+                )
 
-                # Apply 'Since Days' filter if requested
-                if since_days is not None:
-                    if recent_days > since_days:
-                        continue
+                if max_allowed_days is not None and recent_days_value > max_allowed_days:
+                    continue
 
                 all_results.append(
                     {
@@ -276,9 +567,7 @@ def churn_db(
                         "Sharpe": res.get("sharpe_ratio", 0),
                         "Max DD (%)": res.get("max_drawdown_pct", 0),
                         "Trades": res.get("num_trades", 0),
-                        "Days Since Entry": (
-                            int(recent_days) if not pd.isna(recent_days) else 999
-                        ),
+                        "Days Since Entry": recent_days_value,
                         "df": res.get("df"),
                     }
                 )
@@ -475,7 +764,7 @@ def churn_db(
 
         # Save to CSV with 2 decimal precision (keeps full precision in memory/code)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_name = f"data/discovery_results_{timestamp}.csv"
+        output_name = f"{get_paths()['data']['discovery']}/discovery_results_{timestamp}.csv"
 
         # Exclude the bulky 'df' column from CSV output for better compatibility with Spreadsheet tools
         cols_to_save = [c for c in summary_df.columns if c != "df"]
@@ -487,13 +776,13 @@ def churn_db(
 
         # Also maintain a symlink-like constant copy for the PS1 script if needed
         clean_df[cols_to_save].to_csv(
-            "data/multi_strategy_results.csv", index=False, float_format="%.2f"
+            f"{get_paths()['data']['discovery']}/multi_strategy_results.csv", index=False, float_format="%.2f"
         )
 
         # Keep only the 3 most recent discovery CSV files to save space
         try:
             history_files = sorted(
-                Path("data").glob("discovery_results_*.csv"),
+                Path(get_paths()['data']['discovery']).glob("discovery_results_*.csv"),
                 key=os.path.getmtime,
                 reverse=True,
             )
@@ -507,7 +796,7 @@ def churn_db(
         # Also save to "custom_script_results.csv" for run_custom_backtest.ps1 compatibility
         if not strategy_path:
             clean_df[cols_to_save].to_csv(
-                "data/custom_script_results.csv", index=False, float_format="%.2f"
+                f"{get_paths()['data']['discovery']}/custom_script_results.csv", index=False, float_format="%.2f"
             )
 
         print(f"\nFull results saved to {output_name}")

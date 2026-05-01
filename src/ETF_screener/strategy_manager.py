@@ -44,7 +44,7 @@ class CachedStrategyManager:
             return self._memory_cache[cache_key]
 
         # 2. Check Disk Cache
-        disk_cache_file = self.cache_dir / f"{cache_key}.parquet"
+        disk_cache_file = Path("data/parquet") / f"{cache_key}.parquet"
         if disk_cache_file.exists():
             try:
                 result = pd.read_parquet(disk_cache_file).iloc[:, 0]

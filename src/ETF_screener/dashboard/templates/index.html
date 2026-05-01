@@ -70,6 +70,19 @@
       background: #dbeafe;
     }
 
+    .tab-btn {
+      transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease, filter 0.14s ease;
+    }
+
+    .tab-btn.active {
+      border-color: rgba(255, 255, 255, 0.9) !important;
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.22),
+        0 10px 22px rgba(15, 23, 42, 0.32);
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+    }
+
     #plotly-tools-label {
       font-size: 10px;
       font-weight: 700;
@@ -86,11 +99,15 @@
 
 <body class="bg-slate-100 min-h-screen">
   <nav class="bg-slate-900 border-b border-indigo-500/30 p-4">
-    <div class="px-6 flex justify-between items-center text-white">
+    <div class="px-6 flex justify-between items-center gap-6 text-white">
       <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
         ETF Discovery Lab
       </h1>
-      <div class="flex items-center space-x-4">
+      <div class="flex items-center gap-4">
+        <div id="nav-tab-context" class="text-xs font-bold uppercase tracking-[0.18em] text-slate-300 text-right">
+          Screener controls
+        </div>
+        <div id="nav-screener-controls" class="flex items-center space-x-4">
         <div class="flex items-center">
           <button onclick="toggleStrategyPanel()"
             class="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-l-lg border border-indigo-500/50 flex items-center transition-all">
@@ -103,18 +120,18 @@
           </button>
           <select id="strategy-select" onchange="updateEditorContent(this.value)"
             class="bg-slate-800 text-white p-2 border border-l-0 border-indigo-500/50 min-w-[200px]">
-            <option value="">-- No Active Strategy --</option>
+            <option value="">-- Select Screener Strategy --</option>
             {% for strat in strategies %}
             <option value="{{ strat }}">{{ strat }}</option>
             {% endfor %}
           </select>
           <button id="run-btn" onclick="runScreen()"
             class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2 px-3 border border-l-0 border-green-500/60 transition-all flex items-center whitespace-nowrap"
-            title="Run the selected strategy">
+            title="Run the selected strategy in the Screener tab">
             <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24">
               <path d="M5 3l14 9-14 9V3z" />
             </svg>
-            Run
+            Run Screener
           </button>
           <button id="modify-btn" onclick="modifyStrategy()"
             class="bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold py-2 px-3 rounded-r-lg border border-amber-400/60 transition-all flex items-center whitespace-nowrap"
@@ -132,7 +149,7 @@
               <div id="nav-scan-progress-bar" class="h-full bg-emerald-400 transition-all duration-300"
                 style="width: 0%"></div>
             </div>
-            <span id="nav-scan-progress-text" class="text-[10px] text-emerald-200 font-bold min-w-[30px]">0%</span>
+            <span id="nav-scan-progress-text" class="text-[10px] text-emerald-200 font-bold min-w-[64px] text-right">0%</span>
           </div>
         </div>
         <select id="ticker-select" class="bg-slate-800 text-white p-2 rounded-lg border border-indigo-500/50">
@@ -141,925 +158,526 @@
           <option value="{{ ticker }}">{{ ticker }}</option>
           {% endfor %}
         </select>
+        <div class="flex items-center gap-3">
         <div class="flex rounded-md shadow-sm" role="group">
-          <button type="button" onclick="setRange(365)"
+          <button id="range-btn-1m" type="button" onclick="setRange(21)"
             class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border border-slate-700 rounded-s-lg hover:bg-slate-700">
+            1M
+          </button>
+          <button id="range-btn-3m" type="button" onclick="setRange(63)"
+            class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border-y border-x border-slate-700 hover:bg-slate-700">
+            3M
+          </button>
+          <button id="range-btn-6m" type="button" onclick="setRange(126)"
+            class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border-y border-x border-slate-700 hover:bg-slate-700">
+            6M
+          </button>
+          <button id="range-btn-1y" type="button" onclick="setRange(365)"
+            class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border-y border-x border-slate-700 hover:bg-slate-700">
             1Y
           </button>
-          <button type="button" onclick="setRange(365 * 2)"
+          <button id="range-btn-2y" type="button" onclick="setRange(365 * 2)"
             class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border-y border-x border-slate-700 hover:bg-slate-700">
             2Y
           </button>
-          <button type="button" onclick="setRange(365 * 5)"
+          <button id="range-btn-3y" type="button" onclick="setRange(365 * 3)"
             class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border border-slate-700 rounded-e-lg hover:bg-slate-700">
-            5Y
+            3Y
           </button>
+        </div>
+        <span id="chart-range-label" class="text-xs font-bold uppercase tracking-[0.18em] text-slate-300">2Y chart</span>
+        </div>
         </div>
       </div>
     </div>
   </nav>
 
-  <div class="w-full flex gap-6 px-6 mt-6 pb-12">
-    <!-- Sidebar for matching tickers -->
-    <aside class="w-80 flex flex-col gap-4 overflow-hidden shrink-0">
-      <div
-        class="bg-white shadow-xl rounded-xl p-4 overflow-hidden max-h-[65vh] border-t-4 border-indigo-500 flex flex-col">
-        <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
-          Top Matches
-          <span id="match-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">0</span>
-        </h2>
-        <div id="ticker-list" class="space-y-2 pb-6 overflow-y-auto flex-1 h-full">
-          <!-- Ticker list items will appear here -->
-          <div class="text-sm text-slate-400 italic">
-            No matches... run screen
-          </div>
-        </div>
-      </div>
 
-      <!-- Error/Failed Tickers Section -->
-      <div id="error-section"
-        class="hidden bg-white shadow-lg rounded-xl p-4 border-t-4 border-red-400 flex flex-col flex-1 overflow-hidden max-h-[25vh]">
-        <h3 class="text-sm font-bold text-red-600 mb-2 flex justify-between">
-          Failed to Load
-          <span id="error-count" class="bg-red-50 text-red-600 px-1.5 rounded">0</span>
-        </h3>
-        <div id="error-list" class="text-[10px] text-slate-500 overflow-y-auto font-mono"></div>
-      </div>
-    </aside>
-
-    <!-- Main Chart Display -->
-    <main class="flex-1 min-w-0">
-      <div id="chart-card"
-        class="bg-white shadow-xl rounded-xl p-4 h-[85vh] flex flex-col border border-indigo-100 mb-8 overflow-hidden relative">
-        <!-- Strategy Pop-out Window -->
-        <div id="strategy-panel"
-          class="hidden absolute top-0 right-0 w-[450px] h-full bg-slate-900 shadow-2xl z-50 transform transition-transform border-l border-indigo-500/30 flex flex-col">
-          <div class="p-4 border-b border-indigo-500/20 flex justify-between items-center bg-slate-800">
-            <div class="flex flex-col">
-              <h3 class="text-white font-bold flex items-center">
-                <span class="bg-indigo-600 rounded p-1 mr-2"><svg class="w-4 h-4" fill="none" stroke="currentColor"
-                    viewBox="0 0 24 24">
-                    <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-width="2" stroke-linecap="round"
-                      stroke-linejoin="round"></path>
-                  </svg></span>
-                STRATEGY LAB
-              </h3>
-              <div id="source-strategy-badge" class="hidden mt-1 ml-7 text-[10px] text-amber-300 font-mono">
-                Modifying: <span id="source-strategy-name" class="font-bold"></span>
-              </div>
-            </div>
-            <button onclick="toggleStrategyPanel()" class="text-slate-400 hover:text-white">
-              &times; CLOSE
-            </button>
-          </div>
-          <div class="flex-1 p-4 flex flex-col overflow-hidden">
-            <div class="flex justify-between items-end mb-2">
-              <div class="flex-1 mr-2">
-                <label class="text-[10px] font-bold text-slate-500 uppercase block mb-1">Strategy Name</label>
-                <input id="strategy-filename" type="text" placeholder="my_new_strat"
-                  class="w-full bg-slate-800 text-white text-xs p-2 rounded border border-indigo-500/20 focus:border-indigo-500 outline-none">
-              </div>
-              <div class="flex flex-col gap-1">
-                <button onclick="saveAsStrategy()"
-                  class="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-2 px-3 rounded transition-all flex items-center whitespace-nowrap"
-                  title="Save with new name (preserves original)">
-                  <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
-                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                  </svg>
-                  SAVE AS
-                </button>
-                <button id="overwrite-btn" onclick="saveStrategy()"
-                  class="hidden bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold py-1.5 px-3 rounded transition-all flex items-center whitespace-nowrap"
-                  title="Overwrite the original strategy file">
-                  OVERWRITE
-                </button>
-              </div>
-            </div>
-
-            <textarea id="strategy-editor"
-              class="w-full flex-1 bg-slate-950 text-indigo-200 font-mono text-xs p-3 rounded border border-indigo-500/20 focus:border-indigo-400 focus:outline-none resize-none"
-              spellcheck="false" placeholder="TRIGGER: close > ema_50
-FILTER:  supertrend < close
-ENTRY:   cross_up(close, ema_50)
-EXIT:    cross_down(close, ema_50)"></textarea>
-
-            <div class="mt-4 flex gap-2">
-              <button onclick="applyDsl()"
-                class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded transition-all active:scale-95 flex items-center justify-center text-sm">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M5 13l4 4L19 7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-                RUN THIS LOGIC
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div id="chart-header" class="mb-4 flex justify-between items-center h-12 flex-shrink-0">
-          <h2 id="active-ticker-title"
-            class="text-3xl font-bold text-slate-900 tracking-tight text-ellipsis overflow-hidden whitespace-nowrap mr-4">
-            Select a Ticker
-          </h2>
-          <div id="chart-stats" class="text-emerald-600 font-mono text-xl flex space-x-4 items-center flex-shrink-0">
-            <!-- Dynamic stats like price/streak will go here -->
-            <div id="loading-spinner" class="hidden">
-              <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
-            </div>
-          </div>
-        </div>
-        <div id="layer-legend"
-          class="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-[11px] font-semibold text-slate-600">
-          <span class="uppercase tracking-wide text-slate-500">Layer Shading</span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-blue-600"></span>Context</span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-amber-500"></span>Setup</span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-emerald-600"></span>Trigger</span>
-          <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-red-600"></span>Risk</span>
-          <span class="text-slate-400">Shown when strategy layers are evaluable on chart data.</span>
-        </div>
-        <div id="plotly-tools-dock">
-          <div id="plotly-tools-box"><span id="plotly-tools-label">Tools</span><div id="plotly-tools-actions"></div></div>
-        </div>
-        <div id="plotly-chart"
-          class="flex-grow w-full bg-slate-50 rounded-lg border border-dashed border-indigo-200 overflow-hidden">
-          <div class="flex flex-col items-center justify-center h-full text-indigo-300">
-            <svg class="w-16 h-16 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
-            </svg>
-            <p class="mt-4 font-medium italic">
-              Your interactive workspace is ready
-            </p>
-          </div>
-        </div>
-      </div>
-    </main>
+  <!-- Tab Bar -->
+  <div id="dashboard-tabs" class="flex space-x-3 bg-slate-800 px-6 pt-3 pb-2 border-b border-slate-700">
+    <button id="tab-btn-screener" class="tab-btn active bg-rose-600 text-white font-bold py-2.5 px-5 rounded-lg border border-rose-400/50 shadow-sm"
+      onclick="showTab('screener')">Screener</button>
+    <button id="tab-btn-shortlist" class="tab-btn bg-sky-700 text-white font-bold py-2.5 px-5 rounded-lg border border-sky-400/40 shadow-sm"
+      onclick="showTab('shortlist')">Shortlist</button>
+    <button id="tab-btn-swarm" class="tab-btn bg-violet-700 text-white font-bold py-2.5 px-5 rounded-lg border border-violet-400/40 shadow-sm"
+      onclick="showTab('swarm')">Swarm</button>
+    <button id="tab-btn-backtest" class="tab-btn bg-emerald-700 text-white font-bold py-2.5 px-5 rounded-lg border border-emerald-400/40 shadow-sm"
+      onclick="showTab('backtest')">Backtester</button>
   </div>
 
-  <script>
-    let currentDays = 365 * 2;
-    let currentTicker = "";
-    let currentStrategy = "";
-    let sourceStrategyName = ""; // tracks what strategy is being modified
-    let scanAbortController = null;
-    const LAST_COMPLETED_STRATEGY_KEY = "etf-discovery:last-completed-strategy";
+  <!-- Tab Content Sections -->
+  <div id="tab-screener">
+    <div class="w-full flex gap-6 px-6 mt-6 pb-12">
+      <!-- Sidebar for matching tickers -->
+      <aside class="w-80 flex flex-col gap-4 overflow-hidden shrink-0">
+        <div class="bg-white shadow-xl rounded-xl p-4 overflow-hidden max-h-[65vh] border-t-4 border-indigo-500 flex flex-col">
+          <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
+            Top Matches
+            <span id="match-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">0</span>
+          </h2>
+          <div id="ticker-list" class="space-y-2 pb-6 overflow-y-auto flex-1 h-full">
+            <!-- Ticker list items will appear here -->
+            <div class="text-sm text-slate-400 italic">
+              No matches... run screen
+            </div>
+          </div>
+        </div>
 
-    // --- Console Log Capture System ---
-    const consoleLogs = [];
-    const maxLogsBeforeSend = 50;
-    
-    function setupConsoleCapture() {
-      const originalLog = console.log;
-      const originalError = console.error;
-      const originalWarn = console.warn;
-      const originalInfo = console.info;
-      
-      const captureLog = (level, args) => {
-        const timestamp = new Date().toISOString();
-        const message = args.map(arg => {
-          if (typeof arg === 'object') {
-            try { return JSON.stringify(arg); } catch { return String(arg); }
-          }
-          return String(arg);
-        }).join(' ');
-        
-        consoleLogs.push({ timestamp, level, message });
-        if (consoleLogs.length >= maxLogsBeforeSend) {
-          flushConsoleLogs();
-        }
-      };
-      
-      console.log = function(...args) {
-        originalLog.apply(console, args);
-        captureLog('LOG', args);
-      };
-      
-      console.error = function(...args) {
-        originalError.apply(console, args);
-        captureLog('ERROR', args);
-      };
-      
-      console.warn = function(...args) {
-        originalWarn.apply(console, args);
-        captureLog('WARN', args);
-      };
-      
-      console.info = function(...args) {
-        originalInfo.apply(console, args);
-        captureLog('INFO', args);
-      };
-      
-      // Flush remaining logs on page unload
-      window.addEventListener('beforeunload', flushConsoleLogs);
-      
-      // Flush logs every 30 seconds
-      setInterval(flushConsoleLogs, 30000);
-    }
-    
-    async function flushConsoleLogs() {
-      if (consoleLogs.length === 0) return;
-      const logsToSend = [...consoleLogs];
-      consoleLogs.length = 0;
-      
-      try {
-        await fetch('/api/log/console', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ logs: logsToSend })
-        });
-      } catch (err) {
-        // Silently fail to avoid infinite loops if logging fails
-      }
-    }
-    
-    // Start capturing console logs immediately
-    setupConsoleCapture();
+        <!-- Error/Failed Tickers Section -->
+        <div id="error-section" class="hidden bg-white shadow-lg rounded-xl p-4 border-t-4 border-red-400 flex flex-col flex-1 overflow-hidden max-h-[25vh]">
+          <h3 class="text-sm font-bold text-red-600 mb-2 flex justify-between">
+            Failed to Load
+            <span id="error-count" class="bg-red-50 text-red-600 px-1.5 rounded">0</span>
+          </h3>
+          <div id="error-list" class="text-[10px] text-slate-500 overflow-y-auto font-mono"></div>
+        </div>
+      </aside>
 
-    // --- Toast notification ---
-    function showToast(msg, isError = false) {
-      const t = document.createElement("div");
-      t.textContent = msg;
-      t.className = `fixed bottom-6 right-6 ${isError ? 'bg-red-600' : 'bg-emerald-600'} text-white py-2 px-4 rounded-lg shadow-lg z-[200] text-sm font-bold transition-opacity`;
-      document.body.appendChild(t);
-      setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 400); }, 2800);
-    }
+      <!-- Main Chart Display -->
+      <main class="flex-1 min-w-0">
+        <div id="chart-card" class="bg-white shadow-xl rounded-xl p-4 h-[85vh] flex flex-col border border-indigo-100 mb-8 overflow-hidden relative">
+          <!-- Strategy Pop-out Window -->
+          <div id="strategy-panel" class="hidden absolute top-0 right-0 w-[450px] h-full bg-slate-900 shadow-2xl z-50 transform transition-transform border-l border-indigo-500/30 flex flex-col">
+            <div class="px-4 py-3 border-b border-indigo-500/20 bg-slate-950/70">
+              <div class="text-sm font-bold text-white">Strategy Lab</div>
+              <div id="source-strategy-name" class="text-[11px] font-mono text-amber-300 mt-1">No Active Strategy</div>
+            </div>
+            <div class="p-4 flex flex-col gap-3 flex-1 min-h-0">
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">File Name</label>
+                <input id="strategy-filename" type="text"
+                  class="w-full rounded border border-indigo-500/20 bg-slate-800 text-white px-3 py-2 text-sm outline-none"
+                  placeholder="strategy_name">
+              </div>
+              <div class="flex-1 min-h-0 flex flex-col">
+                <label class="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">DSL Editor</label>
+                <textarea id="strategy-editor" spellcheck="false"
+                  class="flex-1 min-h-[260px] rounded border border-indigo-500/20 bg-slate-950 text-indigo-100 font-mono text-sm px-3 py-3 outline-none resize-none"
+                  placeholder="TRIGGER: close > ema_20&#10;EXIT: close < ema_20"></textarea>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="applyDsl()"
+                  class="rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm py-2 px-3">Run Draft</button>
+                <button onclick="saveStrategy()"
+                  class="rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm py-2 px-3">Save</button>
+                <button onclick="saveAsStrategy()"
+                  class="rounded bg-amber-500 hover:bg-amber-400 text-white font-bold text-sm py-2 px-3">Save As</button>
+                <button onclick="toggleStrategyPanel()"
+                  class="rounded bg-slate-700 hover:bg-slate-600 text-white font-bold text-sm py-2 px-3">Close</button>
+              </div>
+            </div>
+          </div>
 
-    function saveLastCompletedStrategy(strategyName) {
-      try {
-        if (strategyName) {
-          localStorage.setItem(LAST_COMPLETED_STRATEGY_KEY, strategyName);
-        } else {
-          localStorage.removeItem(LAST_COMPLETED_STRATEGY_KEY);
-        }
-      } catch (err) {
-        console.warn("Could not persist strategy selection", err);
-      }
-    }
+          <div id="chart-header" class="mb-4 flex justify-between items-center h-12 flex-shrink-0">
+            <h2 id="active-ticker-title" class="text-3xl font-bold text-slate-900 tracking-tight text-ellipsis overflow-hidden whitespace-nowrap mr-4">
+              Select a Ticker
+            </h2>
+            <div id="chart-stats" class="text-emerald-600 font-mono text-xl flex space-x-4 items-center flex-shrink-0">
+              <!-- Dynamic stats like price/streak will go here -->
+              <div id="loading-spinner" class="hidden">
+                <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+              </div>
+            </div>
+          </div>
+          <div id="layer-legend" class="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-[11px] font-semibold text-slate-600">
+            <span class="uppercase tracking-wide text-slate-500">Layer Shading</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-blue-600"></span>Context</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-amber-500"></span>Setup</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-emerald-600"></span>Trigger</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-red-600"></span>Invalidate</span>
+            <span class="text-slate-400">Shown when strategy layers are evaluable on chart data.</span>
+          </div>
+          <div id="plotly-tools-dock">
+            <div id="plotly-tools-box"><span id="plotly-tools-label">Tools</span><div id="plotly-tools-actions"></div></div>
+          </div>
+          <div id="plotly-chart" class="flex-grow w-full bg-slate-50 rounded-lg border border-dashed border-indigo-200 overflow-hidden">
+            <div class="flex flex-col items-center justify-center h-full text-indigo-300">
+              <svg class="w-16 h-16 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+              </svg>
+              <p class="mt-4 font-medium italic">
+                Your interactive workspace is ready
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
 
-    function loadLastCompletedStrategy() {
-      try {
-        return localStorage.getItem(LAST_COMPLETED_STRATEGY_KEY) || "";
-      } catch (err) {
-        console.warn("Could not read saved strategy selection", err);
-        return "";
-      }
-    }
+  <div id="tab-shortlist" class="hidden">
+    <div class="p-6 space-y-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">ETF Shortlist</h2>
+          <p class="text-sm text-slate-500">Use this tab to browse ETF candidates first, then click any card to inspect the full chart in Screener.</p>
+        </div>
+        <div class="flex flex-col items-end gap-3">
+          <div id="shortlist-market-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Checking market data freshness...</div>
+          <div id="shortlist-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Using cached shortlist snapshot</div>
+          <div class="flex flex-wrap justify-end gap-2">
+            <button id="market-refresh-btn" onclick="refreshMarketData()"
+              class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-indigo-500/60 transition-all">
+              Refresh Market Data
+            </button>
+            <button id="shortlist-refresh-btn" onclick="loadShortlist(true)"
+              class="bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-sky-500/60 transition-all">
+              Rebuild Shortlist
+            </button>
+          </div>
+        </div>
+      </div>
 
-    async function restoreLastCompletedStrategy() {
-      const strategySelect = document.getElementById("strategy-select");
-      if (!strategySelect) {
-        return "";
-      }
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-sky-500">
+          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Data As Of</div>
+          <div id="shortlist-as-of" class="mt-2 text-lg font-bold text-slate-800">-</div>
+        </div>
+        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-indigo-500">
+          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Candidates</div>
+          <div id="shortlist-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
+        </div>
+        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-emerald-500">
+          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Buy</div>
+          <div id="shortlist-buy-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
+        </div>
+        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-amber-500">
+          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Watch</div>
+          <div id="shortlist-watch-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
+        </div>
+        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-rose-500">
+          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Skip</div>
+          <div id="shortlist-skip-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
+        </div>
+      </div>
 
-      const savedStrategy = loadLastCompletedStrategy();
-      if (!savedStrategy) {
-        return "";
-      }
+      <div id="shortlist-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+        Open the Shortlist tab to load the cached ETF ranking snapshot.
+      </div>
 
-      const hasOption = Array.from(strategySelect.options).some((opt) => opt.value === savedStrategy);
-      if (!hasOption) {
-        saveLastCompletedStrategy("");
-        return "";
-      }
+      <div id="shortlist-content" class="hidden">
+        <div class="mb-4 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <span class="font-bold">How to use it:</span> treat the shortlist as a ranked idea queue, not an auto-buy list. Open the chart, confirm the setup, then decide whether it belongs in `Buy`, `Watch`, or `Skip` for you.
+        </div>
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+          <span class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Show</span>
+          <button id="shortlist-filter-all" type="button" onclick="setShortlistFilter('All')"
+            class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+            All
+          </button>
+          <button id="shortlist-filter-buy" type="button" onclick="setShortlistFilter('Buy')"
+            class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+            Buy
+          </button>
+          <button id="shortlist-filter-watch" type="button" onclick="setShortlistFilter('Watch')"
+            class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+            Watch
+          </button>
+          <button id="shortlist-filter-skip" type="button" onclick="setShortlistFilter('Skip')"
+            class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+            Skip
+          </button>
+        </div>
+        <div id="shortlist-grid" class="grid grid-cols-1 xl:grid-cols-2 gap-4"></div>
+      </div>
+    </div>
+  </div>
 
-      strategySelect.value = savedStrategy;
-      currentStrategy = savedStrategy;
-      await updateEditorContent(savedStrategy);
-      return savedStrategy;
-    }
+  <div id="tab-swarm" class="hidden">
+    <div class="p-6 space-y-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">Swarm Lab</h2>
+          <p class="text-sm text-slate-500">Explore the ETF universe as a charged sphere where virus-like agents sense nearby cells and move one intersection at a time.</p>
+        </div>
+        <div class="flex flex-col items-end gap-3">
+          <div id="swarm-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Waiting for cached swarm world...</div>
+          <div class="flex flex-wrap justify-end gap-2">
+            <button id="swarm-play-btn" onclick="toggleSwarmPlayback()"
+              class="bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-violet-500/60 transition-all">
+              Play
+            </button>
+            <button id="swarm-stop-btn" onclick="stopSwarmPlayback()"
+              class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold py-2 px-4 rounded-lg border border-slate-500/60 transition-all">
+              Stop
+            </button>
+            <button id="swarm-reset-btn" onclick="resetSwarmSimulation()"
+              class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold py-2 px-4 rounded-lg border border-slate-500/60 transition-all">
+              Restart
+            </button>
+            <button id="swarm-refresh-btn" onclick="loadSwarmWorld(true)"
+              class="bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-sky-500/60 transition-all">
+              Refresh World
+            </button>
+          </div>
+        </div>
+      </div>
 
-    // --- Refresh strategies dropdown without full page reload ---
-    async function refreshStrategiesDropdown(selectName = null) {
-      try {
-        const resp = await fetch("/api/strategies");
-        const strategies = await resp.json();
-        const sel = document.getElementById("strategy-select");
-        const prev = selectName || sel.value;
-        sel.innerHTML = '<option value="">-- No Active Strategy --</option>';
-        strategies.forEach(s => {
-          const opt = document.createElement("option");
-          opt.value = s;
-          opt.textContent = s;
-          sel.appendChild(opt);
-        });
-        if (prev) sel.value = prev;
-      } catch (e) {
-        console.error("Failed to refresh strategies dropdown", e);
-      }
-    }
+      <div id="swarm-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+        Open the Swarm tab to load the cached ticker ecosystem.
+      </div>
 
-    // UI Helpers
-    function toggleStrategyPanel() {
-      const panel = document.getElementById("strategy-panel");
-      panel.classList.toggle("hidden");
-    }
-
-    async function updateEditorContent(strategyName) {
-      const strategyEditor = document.getElementById("strategy-editor");
-      const strategyFilename = document.getElementById("strategy-filename");
-
-      // If the Labs editor is not mounted in this render, avoid throwing and
-      // let the rest of the dashboard (including chart loading) continue.
-      if (!strategyEditor || !strategyFilename) {
-        console.warn("Strategy editor elements not found; skipping editor sync.");
-        return;
-      }
-
-      if (!strategyName) {
-        strategyEditor.value = "";
-        strategyFilename.value = "";
-        return;
-      }
-      try {
-        const resp = await fetch(`/api/strategy/${encodeURIComponent(strategyName)}`);
-        if (!resp.ok) {
-          throw new Error("Failed to load strategy content");
-        }
-        const data = await resp.json();
-        strategyEditor.value = data.content;
-        strategyFilename.value = strategyName;
-      } catch (err) {
-        console.error("Failed to load strategy", err);
-      }
-    }
-
-    // Opens a simple modal with the strategy DSL ready to edit.
-    async function modifyStrategy() {
-      const strategySelect = document.getElementById("strategy-select");
-      const strategyName = strategySelect ? strategySelect.value : "";
-      const modal = document.getElementById("modify-modal");
-      if (!modal) {
-        showToast("Modify dialog is missing from page.", true);
-        return;
-      }
-
-      if (!strategyName) {
-        // Fallback: allow editing current DSL text from Labs panel even without an active dropdown selection.
-        const editor = document.getElementById("strategy-editor");
-        const filename = document.getElementById("strategy-filename");
-        const existingDsl = editor ? editor.value : "";
-        const baseName = (filename && filename.value ? filename.value : "custom_strategy").trim() || "custom_strategy";
-
-        document.getElementById("modify-modal-editor").value = existingDsl;
-        document.getElementById("modify-modal-name").value = `${baseName}_v2`;
-        document.getElementById("modify-modal-source").textContent = "Based on: unsaved editor content";
-        sourceStrategyName = baseName;
-
-        modal.style.display = "flex";
-        document.getElementById("modify-modal-editor").focus();
-        return;
-      }
-
-      // Open immediately, then load the exact file content for the selected strategy.
-      document.getElementById("modify-modal-editor").value = "Loading strategy file...";
-      document.getElementById("modify-modal-name").value = strategyName + "_v2";
-      document.getElementById("modify-modal-source").textContent = "Based on: " + strategyName;
-      sourceStrategyName = strategyName;
-      modal.style.display = "flex";
-      document.getElementById("modify-modal-editor").focus();
-
-      try {
-        const resp = await fetch(`/api/strategy/${encodeURIComponent(strategyName)}`);
-        if (!resp.ok) {
-          throw new Error("Failed to load selected strategy");
-        }
-        const data = await resp.json();
-        document.getElementById("modify-modal-editor").value = data.content || "";
-      } catch (err) {
-        console.error("Failed to load selected strategy", err);
-        document.getElementById("modify-modal-editor").value = "";
-        showToast("Could not load selected strategy file.", true);
-      }
-    }
-
-    function closeModifyModal() {
-      document.getElementById("modify-modal").style.display = "none";
-    }
-
-    async function saveFromModal() {
-      const name = document.getElementById("modify-modal-name").value.trim();
-      const content = document.getElementById("modify-modal-editor").value;
-      if (!name || !content) { showToast("Need both a name and DSL content!", true); return; }
-      if (name === sourceStrategyName) {
-        showToast(`Change the name first — "${name}" is the original.`, true);
-        document.getElementById("modify-modal-name").focus();
-        return;
-      }
-      await _doSave(name, content, name);
-      closeModifyModal();
-    }
-
-    // Save As — requires a name that differs from the source
-    async function saveAsStrategy() {
-      const name = document.getElementById("strategy-filename").value.trim();
-      const content = document.getElementById("strategy-editor").value;
-      if (!name || !content) { showToast("Need both a name and DSL content!", true); return; }
-      if (name === sourceStrategyName) {
-        showToast(`Change the name first — "${name}" is the original.`, true);
-        document.getElementById("strategy-filename").focus();
-        return;
-      }
-      await _doSave(name, content, name);
-    }
-
-    // Overwrite — saves back to the exact source file
-    async function saveStrategy() {
-      const name = document.getElementById("strategy-filename").value.trim();
-      const content = document.getElementById("strategy-editor").value;
-      if (!name || !content) { showToast("Need both a name and DSL content!", true); return; }
-      await _doSave(name, content, name);
-    }
-
-    async function _doSave(name, content, selectAfter) {
-      try {
-        const resp = await fetch('/api/strategy/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, content })
-        });
-        const res = await resp.json();
-        if (resp.ok && res.status === 'success') {
-          await refreshStrategiesDropdown(selectAfter);
-          sourceStrategyName = name;
-          document.getElementById("source-strategy-name").textContent = name;
-          showToast(`Saved: ${name}.dsl`);
-        } else {
-          showToast("Error: " + (res.detail || 'Unknown error'), true);
-        }
-      } catch (err) {
-        showToast("Save failed: " + err, true);
-      }
-    }
-
-    async function applyDsl() {
-      // Extract current DSL from editor and pass it to runScreen
-      const dsl = document.getElementById("strategy-editor").value;
-      if (!dsl.trim()) {
-        alert("Please enter strategy DSL before applying.");
-        return;
-      }
-      toggleStrategyPanel();
-      // Pass true to indicate we're using custom DSL from active editor
-      runScreen(dsl);
-    }
-
-    // Initial Load
-    function cancelScan() {
-      if (scanAbortController) {
-        scanAbortController.abort();
-        resetScanUI();
-      }
-    }
-
-    function resetScanUI() {
-      const spinner = document.getElementById("loading-spinner");
-      const scanBtn = document.getElementById("scan-btn");
-      const runBtn = document.getElementById("run-btn");
-      const list = document.getElementById("ticker-list");
-      const navProgress = document.getElementById("nav-scan-progress");
-      const navProgressBar = document.getElementById("nav-scan-progress-bar");
-      const navProgressText = document.getElementById("nav-scan-progress-text");
-
-      if (spinner) spinner.classList.add("hidden");
-      if (navProgress) navProgress.classList.add("hidden");
-      if (navProgressBar) navProgressBar.style.width = "0%";
-      if (navProgressText) navProgressText.textContent = "0%";
-
-      if (scanBtn) {
-        scanBtn.textContent = "Run Scanner";
-        scanBtn.classList.add("bg-indigo-600");
-        scanBtn.classList.remove("bg-indigo-400");
-        scanBtn.disabled = false;
-      }
-
-      if (runBtn) {
-        runBtn.innerHTML = `
-            <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M5 3l14 9-14 9V3z"></path>
-            </svg>
-            Run
-          `;
-        runBtn.classList.remove("bg-emerald-500", "cursor-wait");
-        runBtn.classList.add("bg-green-600");
-        runBtn.disabled = false;
-      }
-
-      if (list) list.style.opacity = "1.0";
-      scanAbortController = null;
-    }
-
-    async function runScreen(customDsl = null) {
-      const list = document.getElementById("ticker-list");
-      const spinner = document.getElementById("loading-spinner");
-      const scanBtn = document.getElementById("scan-btn");
-      const runBtn = document.getElementById("run-btn");
-      const strategySelect = document.getElementById("strategy-select");
-      const errorSection = document.getElementById("error-section");
-      const errorList = document.getElementById("error-list");
-      const navProgress = document.getElementById("nav-scan-progress");
-      const navProgressBar = document.getElementById("nav-scan-progress-bar");
-      const navProgressText = document.getElementById("nav-scan-progress-text");
-
-      // Set up abortion
-      scanAbortController = new AbortController();
-
-      if (spinner) spinner.classList.remove("hidden");
-      if (navProgress) navProgress.classList.remove("hidden");
-      if (navProgressBar) navProgressBar.style.width = "0%";
-      if (navProgressText) navProgressText.textContent = "0%";
-
-      if (scanBtn) {
-        scanBtn.textContent = "Scanning...";
-        scanBtn.classList.add("bg-indigo-400"); // De-emphasize while running
-        scanBtn.classList.remove("bg-indigo-600");
-        scanBtn.disabled = true;
-      }
-
-      if (runBtn) {
-        runBtn.innerHTML = `
-            <svg class="w-3.5 h-3.5 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="9" stroke-width="2" stroke-opacity="0.3"></circle>
-              <path d="M21 12a9 9 0 00-9-9" stroke-width="2" stroke-linecap="round"></path>
-            </svg>
-            Running
-          `;
-        runBtn.classList.remove("bg-green-600");
-        runBtn.classList.add("bg-emerald-500", "cursor-wait");
-        runBtn.disabled = true;
-      }
-
-      if (list) list.style.opacity = "0.5";
-
-      try {
-        let url = "/api/screen";
-        if (customDsl) {
-          url += `?dsl_content=${encodeURIComponent(customDsl)}`;
-          strategySelect.value = "";
-          currentStrategy = "";
-        } else if (strategySelect.value) {
-          url += `?strategy=${strategySelect.value}`;
-          currentStrategy = strategySelect.value;
-        } else {
-          currentStrategy = "";
-        }
-        console.log("Screen scan starting with URL:", url);
-        console.log("Current strategy:", currentStrategy);
-
-        // Fake progress since we wait for one big JSON result from backend
-        // We'll tick it up slowly to give a sense of depth
-        let fakeProg = 0;
-        const progInterval = setInterval(() => {
-          if (fakeProg < 95) {
-            fakeProg += (95 - fakeProg) * 0.1;
-            if (navProgressBar) navProgressBar.style.width = `${Math.round(fakeProg)}%`;
-            if (navProgressText) navProgressText.textContent = `${Math.round(fakeProg)}%`;
-          }
-        }, 400);
-
-        const resp = await fetch(url, { signal: scanAbortController.signal });
-        console.log("Fetch response status:", resp.status, "URL:", url);
-        clearInterval(progInterval);
-
-        const rawData = await resp.json();
-        if (!resp.ok) {
-          throw new Error(rawData.detail || "Screen request failed");
-        }
-        console.log("JSON parsed successfully. Data keys:", Object.keys(rawData));
-
-        // Complete the bar
-        if (navProgressBar) navProgressBar.style.width = "100%";
-        if (navProgressText) navProgressText.textContent = "100%";
-
-        // Small delay to let user see 100%
-        await new Promise(r => setTimeout(r, 500));
-        resetScanUI();
-
-        // Handle new response format
-        const hasFormat = rawData.matches !== undefined;
-        const matches = hasFormat ? rawData.matches : rawData;
-        const errors = hasFormat ? rawData.errors : [];
-        console.log("Data format check - hasFormat:", hasFormat, "matches count:", matches?.length, "errors count:", errors?.length);
-
-        if (!customDsl) {
-          saveLastCompletedStrategy(currentStrategy);
-        }
-
-        if (!Array.isArray(matches)) {
-          console.error("ERROR: matches is not an array!", typeof matches, matches);
-          throw new Error("Expected matches to be an array, got " + typeof matches);
-        }
-
-        list.innerHTML = "";
-        document.getElementById("match-count").textContent = matches.length;
-        console.log("List cleared, match count updated to:", matches.length);
-
-        // Update ticker dropdown options based on screen results
-        const tickerSelect = document.getElementById("ticker-select");
-        if (matches.length > 0 && (strategySelect.value || customDsl)) {
-          const currentVal = tickerSelect.value;
-          tickerSelect.innerHTML =
-            '<option value="">Select Ticker...</option>';
-          matches.forEach((item) => {
-            const opt = document.createElement("option");
-            opt.value = item.ticker;
-            opt.textContent = item.ticker;
-            tickerSelect.appendChild(opt);
-          });
-          if (
-            currentVal &&
-            matches.some((item) => item.ticker === currentVal)
-          ) {
-            tickerSelect.value = currentVal;
-          }
-        }
-
-        // Display errors if any
-        if (errors && errors.length > 0) {
-          errorSection.classList.remove("hidden");
-          document.getElementById("error-count").textContent =
-            rawData.total_errors || errors.length;
-          errorList.innerHTML = errors
-            .map(
-              (err) => `
-                        <div class="mb-1 border-b border-slate-50 pb-1">
-                            <span class="font-bold text-slate-700">${err.ticker}</span>: 
-                            <span class="text-red-400 capitalize">${err.error}</span>
-                        </div>
-                    `,
-            )
-            .join("");
-        } else {
-          errorSection.classList.add("hidden");
-        }
-
-        if (matches.length === 0) {
-          list.innerHTML =
-            '<div class="text-sm text-slate-400 italic p-4 text-center">No matching ETFs found for this strategy...</div>';
-        }
-
-        matches.forEach((item, idx) => {
-          try {
-            const card = document.createElement("div");
-            card.className =
-              "ticker-card p-3 bg-slate-50 border-l-4 border-indigo-500 rounded shadow-sm hover:shadow-md hover:bg-indigo-50 cursor-pointer transition-all";
-            card.onclick = () => loadChart(item.ticker);
-            const statusText = item.status || "TRENDING";
-            const statusColor =
-              item.status === "Entry Signal"
-                ? "text-emerald-500 animate-pulse font-bold"
-                : "text-indigo-600";
-
-            const closeVal = Number(item.close ?? 0);
-            const volumeVal = Number(item.volume ?? 0);
-            const returnPctVal = Number(item.return_pct ?? 0);
-            const changePctVal = Number(item.change_pct ?? 0);
-            const scoreVal = Number(item.score ?? 0);
-
-            const changeVal = Number.isFinite(changePctVal)
-              ? changePctVal.toFixed(2)
-              : "0.00";
-            const changeColor =
-              parseFloat(changeVal) >= 0 ? "text-emerald-500" : "text-rose-500";
-            const sign = parseFloat(changeVal) >= 0 ? "+" : "";
-
-            card.innerHTML = `
-                        <div class="flex justify-between items-start">
-                            <div class="flex flex-col">
-                                <div class="flex items-baseline gap-1.5">
-                                  <span class="font-bold text-slate-800 text-lg leading-none">${item.ticker}</span>
-                                  <span class="text-[10px] font-bold text-indigo-400">#${idx + 1}</span>
-                                </div>
-                                <span class="text-[10px] ${statusColor} mt-1 uppercase tracking-wider">${statusText}</span>
-                            </div>
-                            <div class="flex flex-col items-end">
-                              <span class="text-slate-800 font-bold font-mono">${closeVal.toFixed(2)}€</span>
-                                <span class="text-[10px] ${changeColor} font-mono">${sign}${changeVal}%</span>
-                            </div>
-                        </div>
-                        <div class="mt-2 pt-2 border-t border-slate-200/50 flex justify-between items-center">
-                            <div class="text-[10px] text-slate-400 font-semibold">
-                              ${(volumeVal / 1000).toFixed(0)}K VOLUME
-                            </div>
-                            <div class="text-[10px] font-bold text-indigo-600">
-                              ${(scoreVal * 100).toFixed(0)} pts
-                            </div>
-                        </div>
-                    `;
-            list.appendChild(card);
-            console.log(`Card ${idx} added for ${item.ticker}`);
-          } catch (cardErr) {
-            console.error(`Error processing card at index ${idx}:`, cardErr);
-            console.error("Item data:", item);
-          }
-        });
-        console.log("All cards processed successfully");
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        const errStack = err instanceof Error ? err.stack : "No stack trace";
-        console.error("=== SCREEN SCAN ERROR ===");
-        console.error("Message:", errMsg);
-        console.error("Stack:", errStack);
-        console.error("Full Error Object:", err);
-        if (list) {
-          list.innerHTML =
-            `<div class="text-xs text-red-500 p-2">Screen error: ${errMsg}<br/><span class="text-[9px] text-slate-500">Check console for details.</span></div>`;
-        }
-      } finally {
-        resetScanUI();
-      }
-    }
-
-    async function loadChart(ticker) {
-      console.log("loadChart starting for", ticker);
-      currentTicker = ticker;
-      document.getElementById("active-ticker-title").textContent =
-        `${ticker} - Supertrend breakdown analysis`;
-      document.getElementById("ticker-select").value = ticker;
-
-      const chartDiv = document.getElementById("plotly-chart");
-      chartDiv.innerHTML = `
-                <div class="flex flex-col items-center justify-center h-full">
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-                    <div id="loading-status" class="text-indigo-600 font-medium text-sm animate-pulse uppercase tracking-widest text-center">
-                        Fetching live data for ${ticker}...
-                    </div>
+      <div id="swarm-content" class="hidden grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-6">
+        <div class="space-y-4">
+          <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+            <span class="font-bold">Read the world:</span> every grid cell is projected onto a charged sphere. Large ticker balls repel each other as wealth-scaled positive charges; smaller virus-like agents move one local step after sensing nearby cells.
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Show</span>
+            <button id="swarm-filter-all" type="button" onclick="setSwarmFilter('All')"
+              class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+              All
+            </button>
+            <button id="swarm-filter-buy" type="button" onclick="setSwarmFilter('Buy')"
+              class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+              Buy
+            </button>
+            <button id="swarm-filter-watch" type="button" onclick="setSwarmFilter('Watch')"
+              class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+              Watch
+            </button>
+            <button id="swarm-filter-skip" type="button" onclick="setSwarmFilter('Skip')"
+              class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+              Skip
+            </button>
+          </div>
+          <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Timeline</div>
+                <div id="swarm-timeline-label" class="mt-1 text-sm font-semibold text-slate-700">Step 0 / 1000</div>
+              </div>
+              <div id="swarm-timeline-mode" class="text-xs font-bold uppercase tracking-wide text-violet-600">Stopped</div>
+            </div>
+            <input id="swarm-timeline-slider" type="range" min="0" max="1000" value="0" step="1"
+              oninput="setSwarmTimeline(Number(this.value), true)"
+              class="mt-3 w-full accent-violet-600">
+          </div>
+          <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Jump Cost</div>
+                <div id="swarm-jump-cost-label" class="mt-1 text-sm font-semibold text-slate-700">2.0x market friction</div>
+              </div>
+              <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Global</div>
+            </div>
+            <input id="swarm-jump-cost-slider" type="range" min="0.5" max="8" value="2" step="0.25"
+              oninput="setSwarmJumpCost(Number(this.value))"
+              class="mt-3 w-full accent-violet-600">
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Knowledge</div>
+                  <div id="swarm-sense-label" class="mt-1 text-sm font-semibold text-slate-700">Global ticker scan</div>
                 </div>
-            `;
+                <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Global</div>
+              </div>
+              <div class="mt-3 text-xs leading-relaxed text-slate-500">
+                Agents evaluate all real tickers using current timeline indicators, without seeing future returns.
+              </div>
+            </div>
+            <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Agents / Node</div>
+                  <div id="swarm-agents-per-node-label" class="mt-1 text-sm font-semibold text-slate-700">20 per alternating node</div>
+                </div>
+                <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Capped</div>
+              </div>
+              <input id="swarm-agents-per-node-slider" type="range" min="1" max="100" value="20" step="1"
+                oninput="setSwarmAgentsPerNode(Number(this.value))"
+                class="mt-3 w-full accent-violet-600">
+            </div>
+          </div>
+          <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Zoom</div>
+                <div id="swarm-zoom-label" class="mt-1 text-sm font-semibold text-slate-700">0.75x sphere projection</div>
+              </div>
+              <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Camera</div>
+            </div>
+            <input id="swarm-zoom-slider" type="range" min="0.35" max="2.2" value="0.75" step="0.05"
+              oninput="setSwarmZoom(Number(this.value))"
+              class="mt-3 w-full accent-violet-600">
+          </div>
+          <div class="overflow-hidden rounded-xl bg-white shadow border border-violet-100">
+            <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 flex items-center justify-between">
+              <span>Charged Sphere Projection</span>
+              <span id="swarm-world-caption" class="text-[11px] uppercase tracking-wide text-slate-400">Hover a node to inspect it</span>
+            </div>
+            <div id="swarm-canvas-wrap" class="relative w-full h-[640px] bg-slate-950">
+              <canvas id="swarm-canvas" class="absolute inset-0 h-full w-full"></canvas>
+            </div>
+          </div>
+        </div>
 
-      try {
-        const strategySelect = document.getElementById("strategy-select");
-        const strategyName = (strategySelect && strategySelect.value) ? strategySelect.value : currentStrategy;
-        const strategyPart = strategyName ? `&strategy=${encodeURIComponent(strategyName)}` : "";
-        const url = `/api/chart/${ticker}?days=${currentDays}${strategyPart}`;
-        console.info("loadChart request URL", url);
-        const resp = await fetch(url);
-        const responseData = await resp.json();
-        console.info("loadChart response status", resp.status);
+        <aside class="space-y-4">
+          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Ecosystem Stats</div>
+            <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
+              <div class="rounded-lg bg-violet-50 px-3 py-2">
+                <div class="text-[11px] uppercase tracking-wide text-violet-500 font-bold">Data As Of</div>
+                <div id="swarm-as-of" class="mt-1 text-lg font-bold text-slate-800">-</div>
+              </div>
+              <div class="rounded-lg bg-indigo-50 px-3 py-2">
+                <div class="text-[11px] uppercase tracking-wide text-indigo-500 font-bold">Ticker Nodes</div>
+                <div id="swarm-count" class="mt-1 text-lg font-bold text-slate-800">0</div>
+              </div>
+              <div class="rounded-lg bg-emerald-50 px-3 py-2">
+                <div class="text-[11px] uppercase tracking-wide text-emerald-500 font-bold">Agents</div>
+                <div id="swarm-bug-count" class="mt-1 text-lg font-bold text-slate-800">0</div>
+              </div>
+              <div class="rounded-lg bg-amber-50 px-3 py-2">
+                <div class="text-[11px] uppercase tracking-wide text-amber-500 font-bold">Avg Energy</div>
+                <div id="swarm-energy-avg" class="mt-1 text-lg font-bold text-slate-800">0.0</div>
+              </div>
+              <div class="rounded-lg bg-slate-50 px-3 py-2">
+                <div class="text-[11px] uppercase tracking-wide text-slate-400 font-bold">Visible Nodes</div>
+                <div id="swarm-visible-count" class="mt-1 text-xl font-bold text-slate-800">0</div>
+              </div>
+              <div class="rounded-lg bg-slate-50 px-3 py-2">
+                <div class="text-[11px] uppercase tracking-wide text-slate-400 font-bold">Generations</div>
+                <div id="swarm-generation-count" class="mt-1 text-xl font-bold text-slate-800">1</div>
+              </div>
+              <div class="rounded-lg bg-slate-50 px-3 py-2">
+                <div class="text-[11px] uppercase tracking-wide text-slate-400 font-bold">Births</div>
+                <div id="swarm-birth-count" class="mt-1 text-xl font-bold text-slate-800">0</div>
+              </div>
+              <div class="rounded-lg bg-slate-50 px-3 py-2">
+                <div class="text-[11px] uppercase tracking-wide text-slate-400 font-bold">Respawns</div>
+                <div id="swarm-death-count" class="mt-1 text-xl font-bold text-slate-800">0</div>
+              </div>
+            </div>
+          </div>
 
-        if (!resp.ok) throw new Error(responseData.detail || "Server error");
+          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Hovered Node</div>
+            <div id="swarm-hover" class="mt-3 text-sm text-slate-500">Move across the world to inspect ticker clusters.</div>
+          </div>
 
-        let figData = null;
-        if (responseData.figure) {
-          try {
-            figData = typeof responseData.figure === "string"
-              ? JSON.parse(responseData.figure)
-              : responseData.figure;
-          } catch (e) {
-            console.warn("Figure JSON parse failed, falling back to data/layout", e);
-          }
-        }
-        if (!figData || !figData.data || !figData.layout) {
-          figData = {
-            data: responseData.data || [],
-            layout: responseData.layout || {}
-          };
-        }
+          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Selected Agent</div>
+            <div id="swarm-agent-selected" class="mt-3 text-sm text-slate-500">Click an agent to inspect its mutable traits.</div>
+          </div>
 
-        console.info("loadChart payload summary", {
-          ticker,
-          traces: (figData.data || []).length,
-          layoutKeys: Object.keys(figData.layout || {}).length,
-        });
+          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Top Agents</div>
+              <div id="swarm-dna-save-status" class="text-[11px] font-bold text-slate-400">Autosaves to config</div>
+            </div>
+            <div id="swarm-top-agents" class="mt-3 text-sm text-slate-500">The ten most profitable agents appear when the timeline finishes.</div>
+          </div>
 
-        if (!figData.data || figData.data.length === 0) {
-          throw new Error("No chart traces returned by server.");
-        }
+          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Selected Node</div>
+              <button id="swarm-selected-open" type="button" onclick="openSelectedSwarmTicker()" disabled
+                class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">
+                Open Chart
+              </button>
+            </div>
+            <div id="swarm-selected" class="mt-3 text-sm text-slate-500">Click a ticker node to pin it here and jump into the Screener chart.</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
 
-        // Reset responsive layout
-        figData.layout.autosize = true;
-        figData.layout.width = undefined;
-        figData.layout.height = undefined;
-        if (!figData.layout.margin) {
-          figData.layout.margin = { l: 60, r: 20, t: 30, b: 80 };
-        }
-        figData.layout.paper_bgcolor = "#ffffff";
-        figData.layout.plot_bgcolor = "#ffffff";
+  <div id="tab-backtest" class="hidden">
+    <div class="p-6 space-y-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">Backtester</h2>
+          <p class="text-sm text-slate-500">Evaluate saved strategies or the current editor draft and refine them with ranked quality metrics.</p>
+        </div>
+        <div class="flex flex-col items-end gap-3">
+          <div class="inline-flex rounded-lg border border-slate-300 bg-white p-1 shadow-sm">
+            <button id="bt-source-saved" type="button" onclick="setBacktestSourceMode('saved')"
+              class="rounded-md px-3 py-2 text-sm font-bold bg-indigo-600 text-white">Saved Strategy</button>
+            <button id="bt-source-editor" type="button" onclick="setBacktestSourceMode('editor')"
+              class="rounded-md px-3 py-2 text-sm font-bold text-slate-600">Editor Draft</button>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm w-full max-w-sm">
+            <label for="backtest-since-days" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              Signal Window
+            </label>
+            <div class="mt-2 flex items-center gap-2">
+              <input id="backtest-since-days" type="number" min="1" step="1" placeholder="Auto"
+                class="w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono text-slate-800 outline-none focus:border-indigo-400">
+              <span class="text-xs text-slate-500">Blank uses `MAX_DAYS` from the DSL</span>
+            </div>
+          </div>
+          <button id="backtest-run-btn" onclick="loadBacktestMetrics()"
+            class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-emerald-500/60 transition-all">
+            Evaluate Strategy
+          </button>
+        </div>
+      </div>
 
-        // Preserve backend axis label visibility rules (e.g., bottom-only timeline).
-        // Only fill in minimal defaults when not provided.
-        Object.keys(figData.layout).forEach((key) => {
-          if (key.startsWith("xaxis")) {
-            if (figData.layout[key].visible === undefined) {
-              figData.layout[key].visible = true;
-            }
-            if (figData.layout[key].tickfont === undefined) {
-              figData.layout[key].tickfont = {
-                size: 11,
-                color: "#334155",
-              };
-            }
-          }
-        });
+      <div id="backtest-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+        Select a saved strategy or switch to Editor Draft to evaluate the current DSL in the GUI.
+      </div>
 
-        chartDiv.innerHTML = "";
-        await Plotly.newPlot(chartDiv, figData.data, figData.layout, {
-          responsive: true,
-          displayModeBar: false,
-          displaylogo: false,
-          scrollZoom: true,
-        });
+      <div id="backtest-content" class="hidden space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-emerald-500">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Strategy</div>
+            <div id="bt-strategy" class="mt-2 text-lg font-bold text-slate-800">-</div>
+          </div>
+          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-indigo-500">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Candidates</div>
+            <div id="bt-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
+          </div>
+          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-amber-500">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Best Quality</div>
+            <div id="bt-best-quality" class="mt-2 text-lg font-bold text-slate-800">0.00</div>
+          </div>
+          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-rose-500">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Avg Return</div>
+            <div id="bt-avg-return" class="mt-2 text-lg font-bold text-slate-800">0.00%</div>
+          </div>
+          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-cyan-500">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Avg Sharpe</div>
+            <div id="bt-avg-sharpe" class="mt-2 text-lg font-bold text-slate-800">0.00</div>
+          </div>
+        </div>
 
-        const toolsActions = document.getElementById("plotly-tools-actions");
-        if (toolsActions) {
-          toolsActions.innerHTML = "";
+        <div class="overflow-hidden rounded-xl bg-white shadow border border-slate-200">
+          <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-700">Quality Snapshot</div>
+          <div id="backtest-chart" class="w-full h-[360px]"></div>
+        </div>
 
-          const setActive = (mode) => {
-            toolsActions.querySelectorAll(".plotly-tool-btn[data-mode]").forEach((btn) => {
-              btn.classList.toggle("is-active", btn.dataset.mode === mode);
-            });
-          };
+        <div class="overflow-hidden rounded-xl bg-white shadow border border-slate-200">
+          <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-700">Top Ranked Results</div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-100 text-slate-600 uppercase text-xs tracking-wide">
+                <tr>
+                  <th class="px-4 py-3 text-left">Ticker</th>
+                  <th class="px-4 py-3 text-left">Quality</th>
+                  <th class="px-4 py-3 text-left">Return</th>
+                  <th class="px-4 py-3 text-left">Win Rate</th>
+                  <th class="px-4 py-3 text-left">Sharpe</th>
+                  <th class="px-4 py-3 text-left">PF</th>
+                  <th class="px-4 py-3 text-left">Max DD</th>
+                  <th class="px-4 py-3 text-left">Trades</th>
+                  <th class="px-4 py-3 text-left">Days Since Entry</th>
+                </tr>
+              </thead>
+              <tbody id="backtest-table-body" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-          const addBtn = (label, title, onClick, mode = null) => {
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "plotly-tool-btn";
-            btn.textContent = label;
-            btn.title = title;
-            if (mode) {
-              btn.dataset.mode = mode;
-            }
-            btn.addEventListener("click", onClick);
-            toolsActions.appendChild(btn);
-            return btn;
-          };
 
-          addBtn("Pan", "Pan chart", () => {
-            Plotly.relayout(chartDiv, { dragmode: "pan" });
-            setActive("pan");
-          }, "pan");
 
-          addBtn("Zoom", "Box zoom", () => {
-            Plotly.relayout(chartDiv, { dragmode: "zoom" });
-            setActive("zoom");
-          }, "zoom");
-
-          addBtn("Autoscale", "Autoscale axes", () => {
-            Plotly.relayout(chartDiv, { "xaxis.autorange": true, "yaxis.autorange": true });
-          });
-
-          addBtn("Reset", "Reset axes and zoom mode", () => {
-            Plotly.relayout(chartDiv, { "xaxis.autorange": true, "yaxis.autorange": true, dragmode: "zoom" });
-            setActive("zoom");
-          });
-
-          addBtn("PNG", "Download chart as PNG", () => {
-            Plotly.downloadImage(chartDiv, {
-              format: "png",
-              filename: `${ticker}_chart`,
-              width: chartDiv.clientWidth || 1400,
-              height: chartDiv.clientHeight || 900,
-              scale: 2,
-            });
-          });
-
-          setActive("zoom");
-        }
-
-        console.info("loadChart render complete", ticker);
-      } catch (err) {
-        console.error("loadChart error:", err);
-        chartDiv.innerHTML = `<div class="p-8 text-center text-red-500">${err.message}</div>`;
-      }
-    }
-
-    function setRange(days) {
-      currentDays = days;
-      if (currentTicker) loadChart(currentTicker);
-    }
-
-    document
-      .getElementById("ticker-select")
-      .addEventListener("change", (e) => {
-        if (e.target.value) loadChart(e.target.value);
-      });
-
-    document
-      .getElementById("strategy-select")
-      .addEventListener("change", (e) => {
-        updateEditorContent(e.target.value);
-        currentStrategy = e.target.value || "";
-        runScreen(); // Restore runScreen() on strategy change
-        if (currentTicker) {
-          loadChart(currentTicker);
-        }
-      });
-
-    // Initialize
-    (async function initializeDashboard() {
-      const restoredStrategy = await restoreLastCompletedStrategy();
-      if (restoredStrategy) {
-        console.info("Restored last completed strategy", restoredStrategy);
-      }
-      runScreen();
-    })();
-
-    function testMe() {
-      const dsl = document.getElementById("strategy-editor").value;
-      alert("Prototype Working!\n\nCurrent Editor Text:\n" + dsl);
-    }
-
-  </script>
+  <script src="/static/js/dashboard.js?v=20260501b"></script>
 
   <!-- ===============================================================
          Browser → Server log relay
@@ -1067,98 +685,7 @@ EXIT:    cross_down(close, ema_50)"></textarea>
          each entry to /api/log so it appears in the server-side debug
          log file alongside all Python / uvicorn log records.
     ================================================================ -->
-  <script>
-    (function () {
-      const LOG_ENDPOINT = "/api/log";
-      // Keep reference to original methods before we wrap them
-      const _orig = {
-        log: console.log.bind(console),
-        info: console.info.bind(console),
-        warn: console.warn.bind(console),
-        error: console.error.bind(console),
-        debug: console.debug.bind(console),
-      };
-
-      let _sending = false; // guard against recursive logging inside fetch()
-
-      function sendLog(level, args) {
-        if (_sending) return;
-        try {
-          const message = args
-            .map((a) => {
-              if (a instanceof Error) {
-                return `${a.name}: ${a.message}`;
-              }
-              if (typeof a === "object" && a !== null) {
-                try {
-                  return JSON.stringify(a, null, 2);
-                } catch (_) {
-                  return String(a);
-                }
-              }
-              return String(a);
-            })
-            .join(" ");
-
-          // Capture stack for errors
-          let stack = null;
-          if (level === "error") {
-            const errArg = args.find((a) => a instanceof Error);
-            if (errArg?.stack) {
-              stack = errArg.stack;
-            } else {
-              try { stack = new Error().stack; } catch (_) { }
-            }
-          }
-
-          _sending = true;
-          fetch(LOG_ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            // keepalive: true so the request survives page unload
-            keepalive: true,
-            body: JSON.stringify({
-              level,
-              message,
-              stack,
-              url: window.location.href,
-              line: "",
-            }),
-          }).finally(() => { _sending = false; });
-        } catch (_) {
-          _sending = false;
-        }
-      }
-
-      // Wrap each console method
-      ["log", "info", "warn", "error", "debug"].forEach((method) => {
-        console[method] = function (...args) {
-          _orig[method](...args); // still write to DevTools
-          sendLog(method === "log" ? "info" : method, args);
-        };
-      });
-
-      // Also capture uncaught JS errors
-      window.addEventListener("error", (event) => {
-        sendLog("error", [
-          `Uncaught ${event.message}`,
-          `at ${event.filename}:${event.lineno}:${event.colno}`,
-        ]);
-      });
-
-      // And unhandled promise rejections
-      window.addEventListener("unhandledrejection", (event) => {
-        sendLog("error", [
-          "Unhandled promise rejection:",
-          event.reason instanceof Error
-            ? event.reason.message
-            : String(event.reason),
-        ]);
-      });
-
-      _orig.info("[ETF-Logger] Browser console → /api/log relay active");
-    })();
-  </script>
+  <script src="/static/js/browser-log-relay.js?v=20260501b"></script>
 
   <!-- Modify Strategy Modal — direct body child so fixed+z-index always works -->
   <div id="modify-modal"
@@ -1207,3 +734,4 @@ EXIT:    cross_down(close, ema_50)"></textarea>
 </body>
 
 </html>
+

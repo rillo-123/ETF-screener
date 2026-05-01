@@ -1,11 +1,13 @@
 import json
-import pytest
+import sqlite3
+from unittest.mock import patch
+
 import numpy as np
 import pandas as pd
-from unittest.mock import patch
 from fastapi.testclient import TestClient
+
 from ETF_screener.dashboard.app_fast import app
-from ETF_screener.database import ETFDatabase
+from ETF_screener.indicators import add_indicators
 
 client = TestClient(app)
 
@@ -32,6 +34,88 @@ def _make_fake_ohlcv(ticker: str, n: int = 150) -> pd.DataFrame:
     )
 
 
+def test_tab_bar_visible():
+    """Ensure the dashboard exposes the primary workflow tabs."""
+    response = client.get("/")
+    assert response.status_code == 200
+    html = response.text
+    dashboard_js = client.get("/static/js/dashboard.js")
+    log_relay_js = client.get("/static/js/browser-log-relay.js")
+    assert dashboard_js.status_code == 200
+    assert log_relay_js.status_code == 200
+    dashboard_source = html + dashboard_js.text + log_relay_js.text
+    assert 'id="dashboard-tabs"' in html
+    assert ">Screener<" in html
+    assert ">Shortlist<" in html
+    assert ">Swarm<" in html
+    assert ">Backtester<" in html
+    assert ">Churner<" not in html
+    assert ">Discovery<" not in html
+    assert 'id="backtest-chart"' in html
+    assert 'id="backtest-table-body"' in html
+    assert "Signal Window" in html
+    assert 'id="shortlist-grid"' in html
+    assert 'id="swarm-canvas"' in html
+    assert 'id="swarm-timeline-slider"' in html
+    assert 'id="swarm-jump-cost-slider"' in html
+    assert "Global ticker scan" in html
+    assert 'id="swarm-agents-per-node-slider"' in html
+    assert 'id="swarm-zoom-slider"' in html
+    assert 'id="swarm-stop-btn"' in html
+    assert 'id="swarm-agent-selected"' in html
+    assert 'id="swarm-top-agents"' in html
+    assert 'id="shortlist-filter-buy"' in html
+    assert 'id="swarm-filter-buy"' in html
+    assert 'id="shortlist-filter-watch"' in html
+    assert 'id="shortlist-filter-skip"' in html
+    assert 'id="market-refresh-btn"' in html
+    assert "/api/market-status?stale_after_days=0" in dashboard_source
+    assert "force=true&stale_after_days=0" in dashboard_source
+    assert "/api/swarm-history" in dashboard_source
+    assert 'id="swarm-dna-save-status"' in html
+    assert "/static/js/dashboard.js" in html
+    assert "/static/js/browser-log-relay.js" in html
+    assert "supertrend_continuation" in html
+    assert "SWARM_DNA_SCHEMA_VERSION" in dashboard_source
+    assert "SWARM_DNA_CONFIG_PATH" in dashboard_source
+    assert "config/swarm_agent_dna.json" in dashboard_source
+    assert "behaviorModules" in dashboard_source
+    assert "ema_cross_up" in dashboard_source
+    assert "emaFastPeriod" in dashboard_source
+    assert "emaSlowPeriod" in dashboard_source
+    assert "fast_period" in dashboard_source
+    assert "slow_period" in dashboard_source
+    assert "autoSaveSwarmTopAgentDna" in dashboard_source
+    assert "/api/swarm-dna/save" in dashboard_source
+    assert "interpretSwarmDnaRules" in dashboard_source
+    assert "Investment rule interpretation" in dashboard_source
+    assert "SWARM_ANNUAL_INFLATION_RATE" in dashboard_source
+    assert "Export DNA" not in dashboard_source
+    assert "spawnLimit" in dashboard_source
+    assert "jumpCostSensitivity" in dashboard_source
+    assert "swarmJumpCostMultiplier" in dashboard_source
+    assert "getSwarmGlobalCandidateNodes" in dashboard_source
+    assert "stableSwarmSphereVector" in dashboard_source
+    assert "SWARM_SPHERE_REPULSION_SAMPLE" in dashboard_source
+    assert "setSwarmZoom" in dashboard_source
+    assert "DUMMY-R" not in dashboard_source
+    assert "wealth-scaled positive charges" in dashboard_source
+    assert "updateFixedSwarmNodeWorth" in dashboard_source
+    assert "fixed ticker map" not in dashboard_source
+    assert "childHeadStart" in dashboard_source
+    assert "getSwarmAgentRadius" in dashboard_source
+    assert "getSwarmTickerDrawRadius" in dashboard_source
+    assert "SWARM_MAX_AGENTS = 5000" in dashboard_source
+    assert "swarmCompletedAgents" in dashboard_source
+    assert "virus-like agents" in dashboard_source
+    assert "getSwarmAgentHeading" in dashboard_source
+    assert "startSwarmPlayback" in dashboard_source
+    assert "ensureSwarmAnimationLoop" in dashboard_source
+    assert "swarmLoadingPromise" in dashboard_source
+    assert "Saved Strategy" in html
+    assert "Editor Draft" in html
+
+
 def test_api_status():
     """Verify the root endpoint loads."""
     response = client.get("/")
@@ -46,17 +130,585 @@ def test_screen_endpoint():
     assert isinstance(data, dict)
     assert "matches" in data
     assert isinstance(data["matches"], list)
-    # If the DB has data, we should get some records
     if len(data["matches"]) > 0:
         assert "ticker" in data["matches"][0]
         assert "close" in data["matches"][0]
 
 
+def test_screen_endpoint_refreshes_on_gui_request(monkeypatch):
+    captured = {"called": False}
+
+    def fake_refresh():
+        captured["called"] = True
+        return {"refreshed": 1}
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._refresh_market_data_for_gui",
+        fake_refresh,
+    )
+
+    response = client.get("/api/screen?refresh=true")
+    assert response.status_code == 200
+    assert captured["called"] is True
+
+
+def test_market_status_endpoint(monkeypatch):
+    captured = {}
+
+    class FakeRefresher:
+        def __init__(self, db_path=None):
+            self.db_path = db_path
+
+        def get_status(self, stale_after_days=3):
+            captured["stale_after_days"] = stale_after_days
+            return {
+                "today": "2026-04-23",
+                "latest_market_date": "2026-04-15",
+                "latest_shortlist_date": "2026-04-15",
+                "latest_shortlist_updated_at": "2026-04-23 19:27:36",
+                "days_stale": 8,
+                "is_stale": True,
+                "tracked_tickers": 10,
+                "missing_tickers": 2,
+                "stale_tickers": 8,
+                "missing_examples": ["AAA.DE"],
+                "stale_examples": ["BBB.DE"],
+            }
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.MarketDataRefresher",
+        FakeRefresher,
+    )
+
+    response = client.get("/api/market-status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["days_stale"] == 8
+    assert data["is_stale"] is True
+    assert data["latest_market_date"] == "2026-04-15"
+    assert captured["stale_after_days"] == 0
+
+
+def test_market_refresh_endpoint(monkeypatch):
+    captured = {}
+
+    class FakeRefresher:
+        def __init__(self, db_path=None):
+            self.db_path = db_path
+
+        def refresh_market_data(
+            self,
+            depth=400,
+            stale_after_days=3,
+            force=False,
+            max_workers=8,
+            rebuild_shortlist=True,
+            warmup_days=90,
+        ):
+            captured.update(
+                {
+                    "depth": depth,
+                    "stale_after_days": stale_after_days,
+                    "force": force,
+                    "max_workers": max_workers,
+                    "rebuild_shortlist": rebuild_shortlist,
+                }
+            )
+            return {
+                "today": "2026-04-23",
+                "latest_market_date": "2026-04-23",
+                "latest_shortlist_date": "2026-04-23",
+                "latest_shortlist_updated_at": "2026-04-23 21:00:00",
+                "days_stale": 0,
+                "is_stale": False,
+                "tracked_tickers": 10,
+                "missing_tickers": 0,
+                "stale_tickers": 0,
+                "requested": 8,
+                "refreshed": 8,
+                "failed": 0,
+                "shortlist_rebuilt": True,
+                "errors": [],
+            }
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.MarketDataRefresher",
+        FakeRefresher,
+    )
+
+    response = client.post("/api/market-data/refresh")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["refreshed"] == 8
+    assert data["shortlist_rebuilt"] is True
+    assert data["latest_market_date"] == "2026-04-23"
+    assert captured["force"] is True
+    assert captured["stale_after_days"] == 0
+    assert captured["rebuild_shortlist"] is True
+
+
+def test_swarm_world_endpoint(monkeypatch):
+    fake_df = pd.DataFrame(
+        [
+            {
+                "ticker": "EUNL.DE",
+                "name": "iShares Core MSCI World UCITS ETF",
+                "issuer": "iShares",
+                "asset_class": "Equity",
+                "region": "Global",
+                "label": "Buy",
+                "volume": 750000,
+                "recent_entry_days": 2,
+                "product_score": 84.0,
+                "exposure_score": 80.0,
+                "technical_score": 72.0,
+                "final_score": 78.4,
+                "energy": 82.5,
+                "momentum_score": 77.1,
+                "freshness_score": 85.0,
+                "grid_row": 2,
+                "grid_col": 4,
+                "x": 1220.4,
+                "y": 210.0,
+                "radius": 9.5,
+                "color": "#10b981",
+                "world_version": "swarm_v3_grid",
+                "components_json": '{"style": "Core Broad Market"}',
+                "as_of_date": "2026-04-23",
+                "updated_at": "2026-04-23 22:10:00",
+            }
+        ]
+    )
+
+    class FakeSwarmEngine:
+        def __init__(self, db_path=None):
+            self.db_path = db_path
+            self.WORLD_WIDTH = 1600.0
+            self.WORLD_HEIGHT = 920.0
+            self.ARTIFACT_VERSION = "swarm_v3_grid"
+
+        def grid_dimensions(self, node_count):
+            return 6, 3
+
+        def get_world(self, limit=None, label=None, refresh=False):
+            return fake_df
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.SwarmWorldEngine",
+        FakeSwarmEngine,
+    )
+
+    response = client.get("/api/swarm-world")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] == 1
+    assert data["world"]["width"] > 0
+    assert data["world"]["layout"] == "grid"
+    assert data["world"]["columns"] == 6
+    assert data["world"]["rows"] == 3
+    assert data["world"]["cell_width"] > 0
+    assert data["nodes"][0]["ticker"] == "EUNL.DE"
+    assert data["nodes"][0]["energy"] == 82.5
+    assert data["nodes"][0]["row"] == 2
+    assert data["nodes"][0]["col"] == 4
+    assert data["nodes"][0]["is_dummy"] is False
+    assert data["nodes"][0]["world_version"] == "swarm_v3_grid"
+
+
+def test_swarm_history_endpoint_returns_cached_close_history(monkeypatch):
+    fake_df = pd.DataFrame(
+        [
+            {"ticker": "AAA.DE"},
+            {"ticker": "BBB.DE"},
+        ]
+    )
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    conn.execute(
+        """
+        CREATE TABLE etf_data (
+            ticker TEXT,
+            date TEXT,
+            close REAL,
+            dividends REAL
+        )
+        """
+    )
+    conn.executemany(
+        "INSERT INTO etf_data (ticker, date, close, dividends) VALUES (?, ?, ?, ?)",
+        [
+            ("AAA.DE", "2026-04-20", 10.0, 0.0),
+            ("AAA.DE", "2026-04-21", 10.5, 0.0),
+            ("AAA.DE", "2026-04-22", 11.0, 0.25),
+            ("BBB.DE", "2026-04-21", 20.0, 0.0),
+            ("BBB.DE", "2026-04-22", 19.5, 0.0),
+        ],
+    )
+    conn.commit()
+
+    class FakeDB:
+        db_path = ":memory:"
+
+        def _get_connection(self):
+            return conn
+
+    class FakeSwarmEngine:
+        def __init__(self, db_path=None):
+            self.db_path = db_path
+
+        def get_world(self, limit=None, label=None, refresh=False):
+            return fake_df.head(limit)
+
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", lambda: FakeDB())
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.SwarmWorldEngine",
+        FakeSwarmEngine,
+    )
+
+    response = client.get("/api/swarm-history?days=2&limit=2")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["days"] == 2
+    assert data["requested_tickers"] == 2
+    assert data["count"] == 2
+    assert data["as_of_date"] == "2026-04-22"
+    assert data["history"]["AAA.DE"]["dates"] == ["2026-04-21", "2026-04-22"]
+    assert data["history"]["AAA.DE"]["closes"] == [10.5, 11.0]
+    assert data["history"]["AAA.DE"]["dividends"] == [0.0, 0.25]
+    assert data["history"]["BBB.DE"]["closes"] == [20.0, 19.5]
+    assert data["history"]["BBB.DE"]["dividends"] == [0.0, 0.0]
+
+
+def test_swarm_dna_save_endpoint_writes_config(monkeypatch, tmp_path):
+    target_path = tmp_path / "config" / "swarm_agent_dna.json"
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.SWARM_DNA_CONFIG_PATH",
+        target_path,
+    )
+
+    payload = {
+        "schema_version": "swarm_agent_dna_v2",
+        "created_at": "2026-04-26T12:00:00.000Z",
+        "world_version": "swarm_v3_grid",
+        "as_of_date": "2026-04-24",
+        "simulation": {
+            "steps": 250,
+            "max_steps": 250,
+            "filter": "All",
+            "visible_node_count": 12,
+            "starting_energy": 10000,
+            "jump_cost_multiplier": 2,
+            "history_days": 420,
+            "history_ticker_count": 12,
+        },
+        "top_agents": [
+            {
+                "rank": 1,
+                "id": "AAA.DE-1-test",
+                "generation": 3,
+                "energy": 12500,
+                "profit": 2500,
+                "age": 42,
+                "target_ticker": "AAA.DE",
+                "learned_ticker_count": 4,
+                "dna": {
+                    "schema_version": "swarm_agent_dna_v2",
+                    "ema_fast_period": 30,
+                    "ema_slow_period": 50,
+                    "rsi_period": 14,
+                    "rsi_low": 35,
+                    "rsi_high": 70,
+                    "behavior_modules": [
+                        {
+                            "type": "ema_cross_up",
+                            "fast_period": 30,
+                            "slow_period": 50,
+                            "stay_weight": 0.2,
+                            "jump_weight": 1.1,
+                        },
+                        {
+                            "type": "ema_cross_down",
+                            "fast_period": 30,
+                            "slow_period": 50,
+                            "stay_weight": -0.8,
+                            "jump_weight": 0.4,
+                        },
+                    ],
+                    "mutation_rate": 0.04,
+                    "spawn_limit": 15000,
+                    "jump_cost_sensitivity": 1.2,
+                    "exploration_bias": 0.3,
+                    "metabolism": 1.0,
+                    "speed": 1.0,
+                },
+                "rules": [
+                    "Hold winners while EMA 30 stays constructive against EMA 50; jump only when a global ticker setup clears friction.",
+                    "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+                ],
+            }
+        ],
+    }
+
+    response = client.post("/api/swarm-dna/save", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["agent_count"] == 1
+    assert data["path"].replace("\\", "/").endswith("config/swarm_agent_dna.json")
+
+    saved = json.loads(target_path.read_text(encoding="utf-8"))
+    assert saved["schema_version"] == "swarm_agent_dna_v2"
+    assert saved["saved_by"] == "dashboard_swarm_auto_save"
+    assert saved["saved_at"]
+    assert "dividends as part of total return" in saved["top_agents"][0]["rules"][1]
+    assert saved["top_agents"][0]["dna"]["ema_fast_period"] == 30
+    assert saved["top_agents"][0]["dna"]["behavior_modules"][0]["slow_period"] == 50
+
+
+def test_backtest_endpoint_returns_ranked_metrics(monkeypatch, tmp_path):
+    strategies_dir = tmp_path / "strategies"
+    strategies_dir.mkdir()
+    (strategies_dir / "demo.dsl").write_text(
+        "TRIGGER: close > ema_20\nEXIT: close < ema_20\n", encoding="utf-8"
+    )
+
+    fake_df = pd.DataFrame(
+        [
+            {
+                "Ticker": "AAA.DE",
+                "Strategy": "demo",
+                "Quality Score": 12.34,
+                "Return (%)": 18.5,
+                "Win Rate (%)": 62.0,
+                "Profit Factor": 1.8,
+                "Sharpe": 1.4,
+                "Max DD (%)": 8.1,
+                "Trades": 7,
+                "Days Since Entry": 3,
+            }
+        ]
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies",
+        lambda strategy_path=None, dsl_content=None, strategy_name=None: fake_df,
+    )
+
+    response = client.get("/api/backtest?strategy=demo")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["strategy_name"] == "demo"
+    assert data["source_type"] == "saved"
+    assert data["summary"]["count"] == 1
+    assert data["summary"]["avg_sharpe"] == 1.4
+    assert data["rows"][0]["ticker"] == "AAA.DE"
+    assert data["rows"][0]["quality_score"] == 12.34
+    assert data["chart"]["data"][0]["type"] == "bar"
+
+
+def test_backtest_endpoint_prefers_editor_dsl(monkeypatch, tmp_path):
+    strategies_dir = tmp_path / "strategies"
+    strategies_dir.mkdir()
+    (strategies_dir / "saved.dsl").write_text(
+        "TRIGGER: close > ema_20\nEXIT: close < ema_20\n", encoding="utf-8"
+    )
+
+    fake_df = pd.DataFrame(
+        [
+            {
+                "Ticker": "BBB.DE",
+                "Strategy": "Editor Draft",
+                "Quality Score": 9.87,
+                "Return (%)": 6.5,
+                "Win Rate (%)": 55.0,
+                "Profit Factor": 1.4,
+                "Sharpe": 1.1,
+                "Max DD (%)": 4.2,
+                "Trades": 5,
+                "Days Since Entry": 8,
+            }
+        ]
+    )
+    captured = {}
+
+    def fake_evaluate(strategy_path=None, dsl_content=None, strategy_name=None):
+        captured["strategy_path"] = strategy_path
+        captured["dsl_content"] = dsl_content
+        captured["strategy_name"] = strategy_name
+        return fake_df
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies",
+        fake_evaluate,
+    )
+
+    response = client.get(
+        "/api/backtest?strategy=saved&dsl_content=TRIGGER%3A%20close%20%3E%20ema_50"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert captured["dsl_content"] == "TRIGGER: close > ema_50"
+    assert captured["strategy_path"] is None
+    assert captured["strategy_name"] == "saved"
+    assert data["strategy_name"] == "saved"
+    assert data["source_type"] == "editor"
+    assert data["rows"][0]["ticker"] == "BBB.DE"
+
+
+def test_backtest_endpoint_forwards_signal_days(monkeypatch, tmp_path):
+    strategies_dir = tmp_path / "strategies"
+    strategies_dir.mkdir()
+    (strategies_dir / "age.dsl").write_text(
+        "MAX_DAYS: 12\nTRIGGER: close > ema_20\nEXIT: close < ema_20\n",
+        encoding="utf-8",
+    )
+
+    fake_df = pd.DataFrame(
+        [
+            {
+                "Ticker": "CCC.DE",
+                "Strategy": "age",
+                "Quality Score": 7.77,
+                "Return (%)": 4.4,
+                "Win Rate (%)": 58.0,
+                "Profit Factor": 1.2,
+                "Sharpe": 0.9,
+                "Max DD (%)": 3.1,
+                "Trades": 4,
+                "Days Since Entry": 5,
+            }
+        ]
+    )
+    captured = {}
+
+    def fake_evaluate(strategy_path=None, dsl_content=None, strategy_name=None, since_days=None):
+        captured["strategy_path"] = strategy_path
+        captured["dsl_content"] = dsl_content
+        captured["strategy_name"] = strategy_name
+        captured["since_days"] = since_days
+        return fake_df
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies",
+        fake_evaluate,
+    )
+
+    response = client.get("/api/backtest?strategy=age&signal_days=30")
+    assert response.status_code == 200
+    data = response.json()
+    assert captured["since_days"] == 30
+    assert captured["strategy_path"].replace("\\", "/").endswith("strategies/age.dsl")
+    assert data["rows"][0]["ticker"] == "CCC.DE"
+
+
+def test_backtest_endpoint_refreshes_on_gui_request(monkeypatch, tmp_path):
+    strategies_dir = tmp_path / "strategies"
+    strategies_dir.mkdir()
+    (strategies_dir / "gui.dsl").write_text(
+        "TRIGGER: close > ema_20\nEXIT: close < ema_20\n",
+        encoding="utf-8",
+    )
+
+    fake_df = pd.DataFrame(
+        [
+            {
+                "Ticker": "EEE.DE",
+                "Strategy": "gui",
+                "Quality Score": 5.55,
+                "Return (%)": 2.2,
+                "Win Rate (%)": 49.0,
+                "Profit Factor": 1.0,
+                "Sharpe": 0.6,
+                "Max DD (%)": 2.1,
+                "Trades": 2,
+                "Days Since Entry": 1,
+            }
+        ]
+    )
+    captured = {"refreshed": False}
+
+    def fake_refresh():
+        captured["refreshed"] = True
+        return {"refreshed": 1}
+
+    def fake_evaluate(strategy_path=None, dsl_content=None, strategy_name=None, since_days=None):
+        return fake_df
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._refresh_market_data_for_gui",
+        fake_refresh,
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies",
+        fake_evaluate,
+    )
+
+    response = client.get("/api/backtest?strategy=gui&refresh=true")
+    assert response.status_code == 200
+    assert captured["refreshed"] is True
+
+
+def test_backtest_endpoint_still_accepts_since_days_alias(monkeypatch, tmp_path):
+    strategies_dir = tmp_path / "strategies"
+    strategies_dir.mkdir()
+    (strategies_dir / "alias.dsl").write_text(
+        "MAX_DAYS: 12\nTRIGGER: close > ema_20\nEXIT: close < ema_20\n",
+        encoding="utf-8",
+    )
+
+    fake_df = pd.DataFrame(
+        [
+            {
+                "Ticker": "DDD.DE",
+                "Strategy": "alias",
+                "Quality Score": 6.66,
+                "Return (%)": 3.3,
+                "Win Rate (%)": 51.0,
+                "Profit Factor": 1.1,
+                "Sharpe": 0.7,
+                "Max DD (%)": 2.9,
+                "Trades": 3,
+                "Days Since Entry": 4,
+            }
+        ]
+    )
+    captured = {}
+
+    def fake_evaluate(strategy_path=None, dsl_content=None, strategy_name=None, since_days=None):
+        captured["since_days"] = since_days
+        return fake_df
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies",
+        fake_evaluate,
+    )
+
+    response = client.get("/api/backtest?strategy=alias&since_days=14")
+    assert response.status_code == 200
+    assert captured["since_days"] == 14
+
+
+def test_backtest_endpoint_returns_empty_without_strategy():
+    response = client.get("/api/backtest")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["strategy_name"] == ""
+    assert data["source_type"] == "saved"
+    assert data["summary"]["count"] == 0
+    assert data["summary"]["avg_sharpe"] == 0.0
+    assert data["rows"] == []
+    assert data["chart"] == {"data": [], "layout": {}}
+
+
 def test_get_chart_valid_ticker():
     """Verify we can get chart data and that the figure contains expected visual data."""
     with patch(
-        "ETF_screener.dashboard.app_fast.fetcher.fetch_historical_data",
-        return_value=_make_fake_ohlcv("DTE.DE"),
+        "ETF_screener.dashboard.app_fast.MarketDataRefresher.refresh_ticker_data",
+        return_value=add_indicators(_make_fake_ohlcv("DTE.DE")),
     ):
         response = client.get("/api/chart/DTE.DE?days=30")
     assert response.status_code == 200
@@ -64,40 +716,36 @@ def test_get_chart_valid_ticker():
     assert "figure" in data
 
     fig = json.loads(data["figure"])
+    assert "data" in fig
+    assert "layout" in fig
 
-    # Structural checks
-    assert "data" in fig, "Plotly figure missing data traces"
-    assert "layout" in fig, "Plotly figure missing layout"
-
-    # Data quality checks (Ensuring it's not just an empty canvas)
-    # Most Candlestick or Scatter plots will have a 'y' array
     trace_has_data = any(
         len(trace.get("y", [])) > 0 or len(trace.get("close", [])) > 0
         for trace in fig["data"]
     )
     assert trace_has_data, "Chart traces are present but contain no data points"
 
-    # Check if Supertrend traces are present (identifiable by name or metadata)
-    # The plotter uses "ST Support" and "ST Resistance" names
     st_present = any("ST " in str(trace.get("name", "")) for trace in fig["data"])
-    # We don't strictly assert this yet as some tickers might have insufficient data for indicators,
-    # but we print it for test visibility.
     print(f"\nSupertrend indicator found: {st_present}")
 
 
 def test_on_demand_fetch_persists():
     """Verify that fetching a new ticker via API actually saves it to the database."""
-    ticker = "SAP.DE"  # Choose a ticker likely not in the short-running test DB
+    ticker = "SAP.DE"
+    enriched = add_indicators(_make_fake_ohlcv(ticker))
+
+    def fake_refresh(self, ticker, depth=400, warmup_days=90, min_existing_rows=100):
+        self.db.insert_dataframe(enriched, ticker)
+        self.storage.save_etf_data(enriched, ticker)
+        return enriched
 
     with patch(
-        "ETF_screener.dashboard.app_fast.fetcher.fetch_historical_data",
-        return_value=_make_fake_ohlcv(ticker),
+        "ETF_screener.dashboard.app_fast.MarketDataRefresher.refresh_ticker_data",
+        fake_refresh,
     ):
-        # 1. Fetch via API
         response = client.get(f"/api/chart/{ticker}?days=30")
     assert response.status_code == 200
 
-    # 2. Verify directly in DB
     from ETF_screener.dashboard.app_fast import get_db
 
     db = get_db()
@@ -109,5 +757,174 @@ def test_database_path_consistency():
     from ETF_screener.dashboard.app_fast import get_db
 
     db = get_db()
-    # Check if the path is explicitly set to data/etfs.db
-    assert str(db.db_path).replace("\\", "/").endswith("data/etfs.db")
+    expected_path = "data/etf_db/etfs.db"
+    assert str(db.db_path).replace("\\", "/").endswith(expected_path), (
+        f"Expected DB path to end with {expected_path}, got {db.db_path}"
+    )
+
+
+def _make_recent_entry_result(age: int = 2) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Date": pd.date_range(end="2024-01-05", periods=5, freq="B"),
+            "close": [9.0, 10.0, 11.0, 12.0, 13.0],
+            "close_d1": [8.0, 9.0, 10.0, 11.0, 12.0],
+            "ema_20": [10.0, 10.0, 10.0, 10.0, 10.0],
+            "ema_20_d1": [10.0, 10.0, 10.0, 10.0, 10.0],
+            "volume": [1000.0, 1100.0, 1200.0, 1300.0, 1400.0],
+            "signal": [0, 0, 1 if age == 2 else 0, 0, 0],
+            "exit_condition": [False, False, False, False, False],
+        }
+    )
+
+
+def test_screen_endpoint_uses_max_days_from_dsl(monkeypatch):
+    class FakeDB:
+        def _get_connection(self):
+            return object()
+
+    class FakeBacktester:
+        def __init__(self):
+            self.scripted_strategy = object()
+
+        def run_parallel_backtest(
+            self,
+            tickers,
+            strategy_func,
+            days=365,
+            strategy_kwargs=None,
+        ):
+            return [
+                {
+                    "ticker": "AAA.DE",
+                    "df": _make_recent_entry_result(age=2),
+                    "total_return_pct": 7.5,
+                }
+            ]
+
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", lambda: FakeDB())
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.pd.read_sql_query",
+        lambda query, conn: pd.DataFrame({"ticker": ["AAA.DE"]}),
+    )
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.Backtester", FakeBacktester)
+
+    dsl = """
+MAX_DAYS: 3
+BEGIN SETUP
+FILTER: close > ema_20
+END
+BEGIN TRIGGER
+FILTER: close > ema_20 and close_d1 <= ema_20_d1
+END
+BEGIN EXIT
+EXIT: close < ema_20
+END
+"""
+
+    response = client.get("/api/screen", params={"dsl_content": dsl})
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["matches"][0]["ticker"] == "AAA.DE"
+    assert data["matches"][0]["days_since_entry"] == 2
+    assert data["matches"][0]["status"] == "Recent Entry (2d)"
+
+
+def test_screen_endpoint_stays_latest_only_without_max_days(monkeypatch):
+    class FakeDB:
+        def _get_connection(self):
+            return object()
+
+    class FakeBacktester:
+        def __init__(self):
+            self.scripted_strategy = object()
+
+        def run_parallel_backtest(
+            self,
+            tickers,
+            strategy_func,
+            days=365,
+            strategy_kwargs=None,
+        ):
+            return [
+                {
+                    "ticker": "AAA.DE",
+                    "df": _make_recent_entry_result(age=2),
+                    "total_return_pct": 7.5,
+                }
+            ]
+
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", lambda: FakeDB())
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.pd.read_sql_query",
+        lambda query, conn: pd.DataFrame({"ticker": ["AAA.DE"]}),
+    )
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.Backtester", FakeBacktester)
+
+    dsl = """
+BEGIN SETUP
+FILTER: close > ema_20
+END
+BEGIN TRIGGER
+FILTER: close > ema_20 and close_d1 <= ema_20_d1
+END
+BEGIN EXIT
+EXIT: close < ema_20
+END
+"""
+
+    response = client.get("/api/screen", params={"dsl_content": dsl})
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["matches"] == []
+
+
+def test_shortlist_endpoint_returns_cached_rows(monkeypatch):
+    fake_df = pd.DataFrame(
+        [
+            {
+                "ticker": "EUNL.DE",
+                "name": "iShares Core MSCI World UCITS ETF",
+                "label": "Buy",
+                "issuer": "iShares",
+                "asset_class": "Equity",
+                "region": "Global",
+                "close": 102.55,
+                "volume": 750000,
+                "recent_entry_days": 3,
+                "product_score": 84.0,
+                "exposure_score": 80.0,
+                "technical_score": 72.0,
+                "final_score": 78.4,
+                "reasons_json": '["Trusted issuer: iShares", "Price above EMA 50"]',
+                "components_json": '{"style": "Core Broad Market"}',
+                "as_of_date": "2024-04-30",
+                "updated_at": "2026-04-23 21:00:00",
+            }
+        ]
+    )
+
+    class FakeEngine:
+        def __init__(self, db_path=None):
+            self.db_path = db_path
+
+        def get_shortlist(self, limit=50, label=None, refresh=False):
+            return fake_df
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.ETFShortlistEngine",
+        FakeEngine,
+    )
+
+    response = client.get("/api/shortlist?limit=5")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] == 1
+    assert data["labels"]["Buy"] == 1
+    assert data["rows"][0]["ticker"] == "EUNL.DE"
+    assert data["rows"][0]["reasons"] == [
+        "Trusted issuer: iShares",
+        "Price above EMA 50",
+    ]

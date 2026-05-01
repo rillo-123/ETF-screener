@@ -1,7 +1,7 @@
 {
     "layout": {
-        "left_gutter_x": -0.22,
-        "left_margin": 300
+        "left_gutter_x": -0.28,
+        "left_margin": 220
     },
     "aggregate": {
         "fill_mode": "context_and_trigger",

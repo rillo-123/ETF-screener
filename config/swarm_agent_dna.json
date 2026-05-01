@@ -1,0 +1,630 @@
+{
+  "schema_version": "swarm_agent_dna_v2",
+  "created_at": "2026-04-28T20:05:14.883Z",
+  "world_version": "swarm_v3_grid",
+  "as_of_date": "2026-04-15",
+  "simulation": {
+    "steps": 419,
+    "max_steps": 419,
+    "filter": "All",
+    "visible_node_count": 2968,
+    "starting_energy": 10000,
+    "jump_cost_multiplier": 2,
+    "history_days": 420,
+    "history_ticker_count": 900
+  },
+  "top_agents": [
+    {
+      "rank": 1,
+      "id": "CTO.DE-1-jm2eki",
+      "generation": 1,
+      "energy": 1.9470475108297158e+23,
+      "profit": 1.9470475108297158e+23,
+      "age": 3687.1999999998943,
+      "target_ticker": "EDES.DE",
+      "learned_ticker_count": 13,
+      "dna": {
+        "schema_version": "swarm_agent_dna_v2",
+        "ema_fast_period": 47,
+        "ema_slow_period": 55,
+        "rsi_period": 31,
+        "rsi_low": 22,
+        "rsi_high": 67,
+        "behavior_modules": [
+          {
+            "type": "ema_cross_up",
+            "stay_weight": -0.22476165132352743,
+            "jump_weight": 0.8245557764637034,
+            "fast_period": 47,
+            "slow_period": 55
+          },
+          {
+            "type": "ema_cross_down",
+            "stay_weight": -0.8251548093991828,
+            "jump_weight": 0.513902702340745,
+            "fast_period": 47,
+            "slow_period": 55
+          },
+          {
+            "type": "rsi_low",
+            "stay_weight": 0.35159299444291525,
+            "jump_weight": 0.17644803885163643,
+            "period": 31,
+            "threshold": 22
+          },
+          {
+            "type": "rsi_high",
+            "stay_weight": -0.3060682995551241,
+            "jump_weight": 0.4289480321868404,
+            "period": 31,
+            "threshold": 67
+          }
+        ],
+        "mutation_rate": 0.03342349907516431,
+        "spawn_limit": 12753.67368636222,
+        "jump_cost_sensitivity": 1.3825261579706456,
+        "exploration_bias": 0.34939108691092474,
+        "metabolism": 0.45,
+        "speed": 0.940642246022966
+      },
+      "rules": [
+        "Hold winners while EMA 47 stays constructive against EMA 55; jump only when a global ticker setup clears friction.",
+        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+        "Use RSI 22-67 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
+        "Prefer known assets with positive memory over novelty."
+      ]
+    },
+    {
+      "rank": 2,
+      "id": "EMKX.DE-1-aml79u",
+      "generation": 1,
+      "energy": 5.0894873171904365e+22,
+      "profit": 5.0894873171904365e+22,
+      "age": 3687.1999999998943,
+      "target_ticker": "EDES.DE",
+      "learned_ticker_count": 31,
+      "dna": {
+        "schema_version": "swarm_agent_dna_v2",
+        "ema_fast_period": 91,
+        "ema_slow_period": 95,
+        "rsi_period": 33,
+        "rsi_low": 48,
+        "rsi_high": 79,
+        "behavior_modules": [
+          {
+            "type": "ema_cross_up",
+            "stay_weight": -0.2385408526186643,
+            "jump_weight": 0.7281053039130297,
+            "fast_period": 91,
+            "slow_period": 95
+          },
+          {
+            "type": "ema_cross_down",
+            "stay_weight": -0.9183828609507032,
+            "jump_weight": 0.5032682351849433,
+            "fast_period": 91,
+            "slow_period": 95
+          },
+          {
+            "type": "rsi_low",
+            "stay_weight": 0.2700013145049944,
+            "jump_weight": 0.09746458114326739,
+            "period": 33,
+            "threshold": 48
+          },
+          {
+            "type": "rsi_high",
+            "stay_weight": -0.38134335197147085,
+            "jump_weight": 0.4766412957550788,
+            "period": 33,
+            "threshold": 79
+          }
+        ],
+        "mutation_rate": 0.07632547749488074,
+        "spawn_limit": 15079.188342491752,
+        "jump_cost_sensitivity": 0.4026583351147654,
+        "exploration_bias": 1.3359131484036166,
+        "metabolism": 1.5345770950343691,
+        "speed": 1.2248949658428756
+      },
+      "rules": [
+        "Hold winners while EMA 91 stays constructive against EMA 95; jump only when a global ticker setup clears friction.",
+        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+        "Use RSI 48-79 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move readily when a global alternative looks better after transaction and jump friction.",
+        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
+      ]
+    },
+    {
+      "rank": 3,
+      "id": "0Q3.DE-1-sphmz6",
+      "generation": 1,
+      "energy": 3.7076564529307028e+22,
+      "profit": 3.7076564529307028e+22,
+      "age": 3687.1999999998943,
+      "target_ticker": "EDES.DE",
+      "learned_ticker_count": 26,
+      "dna": {
+        "schema_version": "swarm_agent_dna_v2",
+        "ema_fast_period": 82,
+        "ema_slow_period": 236,
+        "rsi_period": 27,
+        "rsi_low": 45,
+        "rsi_high": 86,
+        "behavior_modules": [
+          {
+            "type": "ema_cross_up",
+            "stay_weight": -0.16796726596043993,
+            "jump_weight": 0.8405229075864232,
+            "fast_period": 82,
+            "slow_period": 236
+          },
+          {
+            "type": "ema_cross_down",
+            "stay_weight": -0.9075193025500635,
+            "jump_weight": 0.408211400461603,
+            "fast_period": 82,
+            "slow_period": 236
+          },
+          {
+            "type": "rsi_low",
+            "stay_weight": 0.4250974657593437,
+            "jump_weight": 0.1435131129165934,
+            "period": 27,
+            "threshold": 45
+          },
+          {
+            "type": "rsi_high",
+            "stay_weight": -0.3521597736454411,
+            "jump_weight": 0.4495585501394672,
+            "period": 27,
+            "threshold": 86
+          }
+        ],
+        "mutation_rate": 0.052784264507291075,
+        "spawn_limit": 12418.03438218878,
+        "jump_cost_sensitivity": 1.0112490740506181,
+        "exploration_bias": 0.9483835728992818,
+        "metabolism": 0.8578108318999379,
+        "speed": 1.547811560944932
+      },
+      "rules": [
+        "Hold winners while EMA 82 stays constructive against EMA 236; jump only when a global ticker setup clears friction.",
+        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+        "Use RSI 45-86 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move readily when a global alternative looks better after transaction and jump friction.",
+        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
+      ]
+    },
+    {
+      "rank": 4,
+      "id": "BST.DE-1-58daoy",
+      "generation": 1,
+      "energy": 3.2777629052551043e+22,
+      "profit": 3.2777629052551043e+22,
+      "age": 3687.1999999998943,
+      "target_ticker": "EDES.DE",
+      "learned_ticker_count": 27,
+      "dna": {
+        "schema_version": "swarm_agent_dna_v2",
+        "ema_fast_period": 87,
+        "ema_slow_period": 165,
+        "rsi_period": 34,
+        "rsi_low": 22,
+        "rsi_high": 84,
+        "behavior_modules": [
+          {
+            "type": "ema_cross_up",
+            "stay_weight": -0.19634980171247052,
+            "jump_weight": 0.8543592271926745,
+            "fast_period": 87,
+            "slow_period": 165
+          },
+          {
+            "type": "ema_cross_down",
+            "stay_weight": -0.8601436976227397,
+            "jump_weight": 0.46912064478174,
+            "fast_period": 87,
+            "slow_period": 165
+          },
+          {
+            "type": "rsi_low",
+            "stay_weight": 0.3735081857281256,
+            "jump_weight": 0.17435013196106405,
+            "period": 34,
+            "threshold": 22
+          },
+          {
+            "type": "rsi_high",
+            "stay_weight": -0.3554912714826367,
+            "jump_weight": 0.4487940483202587,
+            "period": 34,
+            "threshold": 84
+          }
+        ],
+        "mutation_rate": 0.03054358502922013,
+        "spawn_limit": 22000,
+        "jump_cost_sensitivity": 0.9385405923532207,
+        "exploration_bias": 0.7947829002110914,
+        "metabolism": 0.6616682862913914,
+        "speed": 1.0521829176827384
+      },
+      "rules": [
+        "Hold winners while EMA 87 stays constructive against EMA 165; jump only when a global ticker setup clears friction.",
+        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+        "Use RSI 22-84 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move readily when a global alternative looks better after transaction and jump friction.",
+        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
+      ]
+    },
+    {
+      "rank": 5,
+      "id": "RHO.DE-1-0ng8l5",
+      "generation": 1,
+      "energy": 3.0444107317813774e+22,
+      "profit": 3.0444107317813774e+22,
+      "age": 3687.1999999998943,
+      "target_ticker": "EDES.DE",
+      "learned_ticker_count": 26,
+      "dna": {
+        "schema_version": "swarm_agent_dna_v2",
+        "ema_fast_period": 96,
+        "ema_slow_period": 123,
+        "rsi_period": 21,
+        "rsi_low": 24,
+        "rsi_high": 76,
+        "behavior_modules": [
+          {
+            "type": "ema_cross_up",
+            "stay_weight": -0.18498660586743515,
+            "jump_weight": 0.9296533016551238,
+            "fast_period": 96,
+            "slow_period": 123
+          },
+          {
+            "type": "ema_cross_down",
+            "stay_weight": -0.85340661102625,
+            "jump_weight": 0.5286807143140057,
+            "fast_period": 96,
+            "slow_period": 123
+          },
+          {
+            "type": "rsi_low",
+            "stay_weight": 0.27395813168310856,
+            "jump_weight": 0.23266506331603126,
+            "period": 21,
+            "threshold": 24
+          },
+          {
+            "type": "rsi_high",
+            "stay_weight": -0.4576860268478565,
+            "jump_weight": 0.48611273048566206,
+            "period": 21,
+            "threshold": 76
+          }
+        ],
+        "mutation_rate": 0.05558646313341288,
+        "spawn_limit": 20505.884937343562,
+        "jump_cost_sensitivity": 1.4296411179629718,
+        "exploration_bias": 1.0316035194936297,
+        "metabolism": 0.45,
+        "speed": 1.8
+      },
+      "rules": [
+        "Hold winners while EMA 96 stays constructive against EMA 123; jump only when a global ticker setup clears friction.",
+        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+        "Use RSI 24-76 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
+        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
+      ]
+    },
+    {
+      "rank": 6,
+      "id": "SPPX.DE-1-1dxss5",
+      "generation": 1,
+      "energy": 2.9688509078450475e+22,
+      "profit": 2.9688509078450475e+22,
+      "age": 3687.1999999998943,
+      "target_ticker": "EDES.DE",
+      "learned_ticker_count": 24,
+      "dna": {
+        "schema_version": "swarm_agent_dna_v2",
+        "ema_fast_period": 85,
+        "ema_slow_period": 165,
+        "rsi_period": 12,
+        "rsi_low": 42,
+        "rsi_high": 86,
+        "behavior_modules": [
+          {
+            "type": "ema_cross_up",
+            "stay_weight": -0.15630069131618413,
+            "jump_weight": 0.8126200251960588,
+            "fast_period": 85,
+            "slow_period": 165
+          },
+          {
+            "type": "ema_cross_down",
+            "stay_weight": -0.8279275931060914,
+            "jump_weight": 0.4585455914089001,
+            "fast_period": 85,
+            "slow_period": 165
+          },
+          {
+            "type": "rsi_low",
+            "stay_weight": 0.2900274146422684,
+            "jump_weight": 0.1387441524698737,
+            "period": 12,
+            "threshold": 42
+          },
+          {
+            "type": "rsi_high",
+            "stay_weight": -0.37084577257140616,
+            "jump_weight": 0.4568475330969832,
+            "period": 12,
+            "threshold": 86
+          }
+        ],
+        "mutation_rate": 0.05990248278921013,
+        "spawn_limit": 22000,
+        "jump_cost_sensitivity": 1.4035916854452213,
+        "exploration_bias": 1.4,
+        "metabolism": 1.1691546056108513,
+        "speed": 0.9514186632342292
+      },
+      "rules": [
+        "Hold winners while EMA 85 stays constructive against EMA 165; jump only when a global ticker setup clears friction.",
+        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+        "Use RSI 42-86 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
+        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
+      ]
+    },
+    {
+      "rank": 7,
+      "id": "EUNK.DE-1-sz4zkf",
+      "generation": 1,
+      "energy": 2.7195813283820302e+22,
+      "profit": 2.7195813283820302e+22,
+      "age": 3687.1999999998943,
+      "target_ticker": "EDES.DE",
+      "learned_ticker_count": 23,
+      "dna": {
+        "schema_version": "swarm_agent_dna_v2",
+        "ema_fast_period": 61,
+        "ema_slow_period": 186,
+        "rsi_period": 34,
+        "rsi_low": 31,
+        "rsi_high": 68,
+        "behavior_modules": [
+          {
+            "type": "ema_cross_up",
+            "stay_weight": -0.051104407399845744,
+            "jump_weight": 0.7347385926502756,
+            "fast_period": 61,
+            "slow_period": 186
+          },
+          {
+            "type": "ema_cross_down",
+            "stay_weight": -0.8670011261110631,
+            "jump_weight": 0.5402108994780067,
+            "fast_period": 61,
+            "slow_period": 186
+          },
+          {
+            "type": "rsi_low",
+            "stay_weight": 0.35789507920152425,
+            "jump_weight": 0.2625686447155523,
+            "period": 34,
+            "threshold": 31
+          },
+          {
+            "type": "rsi_high",
+            "stay_weight": -0.2591338499041128,
+            "jump_weight": 0.4438427229894989,
+            "period": 34,
+            "threshold": 68
+          }
+        ],
+        "mutation_rate": 0.0709601147654222,
+        "spawn_limit": 16693.258683779197,
+        "jump_cost_sensitivity": 1.3563942481582738,
+        "exploration_bias": 0.9931318023886377,
+        "metabolism": 0.6146218719131237,
+        "speed": 1.4418654040152736
+      },
+      "rules": [
+        "Hold winners while EMA 61 stays constructive against EMA 186; jump only when a global ticker setup clears friction.",
+        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+        "Use RSI 31-68 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
+        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
+      ]
+    },
+    {
+      "rank": 8,
+      "id": "SPFH.DE-1-jrqs9c",
+      "generation": 1,
+      "energy": 2.6664148524115465e+22,
+      "profit": 2.6664148524115465e+22,
+      "age": 3687.1999999998943,
+      "target_ticker": "EDES.DE",
+      "learned_ticker_count": 29,
+      "dna": {
+        "schema_version": "swarm_agent_dna_v2",
+        "ema_fast_period": 99,
+        "ema_slow_period": 179,
+        "rsi_period": 27,
+        "rsi_low": 24,
+        "rsi_high": 82,
+        "behavior_modules": [
+          {
+            "type": "ema_cross_up",
+            "stay_weight": -0.02981036954097091,
+            "jump_weight": 0.8561720942010842,
+            "fast_period": 99,
+            "slow_period": 179
+          },
+          {
+            "type": "ema_cross_down",
+            "stay_weight": -0.6884046780528574,
+            "jump_weight": 0.384023514341597,
+            "fast_period": 99,
+            "slow_period": 179
+          },
+          {
+            "type": "rsi_low",
+            "stay_weight": 0.47053560709415393,
+            "jump_weight": 0.15227410142065034,
+            "period": 27,
+            "threshold": 24
+          },
+          {
+            "type": "rsi_high",
+            "stay_weight": -0.2281089967951274,
+            "jump_weight": 0.33131335429449804,
+            "period": 27,
+            "threshold": 82
+          }
+        ],
+        "mutation_rate": 0.057248386731935455,
+        "spawn_limit": 13690.210470491855,
+        "jump_cost_sensitivity": 1.3735737086015922,
+        "exploration_bias": 1.0904365982453081,
+        "metabolism": 0.5798673901867551,
+        "speed": 1.5267137096543466
+      },
+      "rules": [
+        "Hold winners while EMA 99 stays constructive against EMA 179; jump only when a global ticker setup clears friction.",
+        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+        "Use RSI 24-82 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
+        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
+      ]
+    },
+    {
+      "rank": 9,
+      "id": "IS3S.DE-1-a7mbx6",
+      "generation": 1,
+      "energy": 1.2780537327511381e+22,
+      "profit": 1.2780537327511381e+22,
+      "age": 3687.1999999998943,
+      "target_ticker": "EDES.DE",
+      "learned_ticker_count": 21,
+      "dna": {
+        "schema_version": "swarm_agent_dna_v2",
+        "ema_fast_period": 109,
+        "ema_slow_period": 150,
+        "rsi_period": 27,
+        "rsi_low": 24,
+        "rsi_high": 85,
+        "behavior_modules": [
+          {
+            "type": "ema_cross_up",
+            "stay_weight": -0.10723614277860172,
+            "jump_weight": 0.7578765338385078,
+            "fast_period": 109,
+            "slow_period": 150
+          },
+          {
+            "type": "ema_cross_down",
+            "stay_weight": -0.8965915450594436,
+            "jump_weight": 0.4793387083443517,
+            "fast_period": 109,
+            "slow_period": 150
+          },
+          {
+            "type": "rsi_low",
+            "stay_weight": 0.2653859737106396,
+            "jump_weight": 0.25425244618366977,
+            "period": 27,
+            "threshold": 24
+          },
+          {
+            "type": "rsi_high",
+            "stay_weight": -0.3711213781798647,
+            "jump_weight": 0.48655665016378785,
+            "period": 27,
+            "threshold": 85
+          }
+        ],
+        "mutation_rate": 0.04774108183451288,
+        "spawn_limit": 21758.309575754865,
+        "jump_cost_sensitivity": 1.683827416876382,
+        "exploration_bias": 1.0419089187095665,
+        "metabolism": 0.67890254661969,
+        "speed": 0.9385409555603714
+      },
+      "rules": [
+        "Hold winners while EMA 109 stays constructive against EMA 150; jump only when a global ticker setup clears friction.",
+        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+        "Use RSI 24-85 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
+        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
+      ]
+    },
+    {
+      "rank": 10,
+      "id": "6TVL.DE-1-5t7th6",
+      "generation": 1,
+      "energy": 1.2497836011576665e+22,
+      "profit": 1.2497836011576665e+22,
+      "age": 3687.1999999998943,
+      "target_ticker": "EDES.DE",
+      "learned_ticker_count": 24,
+      "dna": {
+        "schema_version": "swarm_agent_dna_v2",
+        "ema_fast_period": 19,
+        "ema_slow_period": 231,
+        "rsi_period": 34,
+        "rsi_low": 23,
+        "rsi_high": 81,
+        "behavior_modules": [
+          {
+            "type": "ema_cross_up",
+            "stay_weight": -0.28267508594571905,
+            "jump_weight": 0.6931126259491266,
+            "fast_period": 19,
+            "slow_period": 231
+          },
+          {
+            "type": "ema_cross_down",
+            "stay_weight": -0.8900916574596506,
+            "jump_weight": 0.4078732209750225,
+            "fast_period": 19,
+            "slow_period": 231
+          },
+          {
+            "type": "rsi_low",
+            "stay_weight": 0.21663522174483507,
+            "jump_weight": 0.29939266618331534,
+            "period": 34,
+            "threshold": 23
+          },
+          {
+            "type": "rsi_high",
+            "stay_weight": -0.4005998459765308,
+            "jump_weight": 0.5152043455591342,
+            "period": 34,
+            "threshold": 81
+          }
+        ],
+        "mutation_rate": 0.07779501948536556,
+        "spawn_limit": 14521.320466185905,
+        "jump_cost_sensitivity": 1.0284195302103007,
+        "exploration_bias": 1.4,
+        "metabolism": 1.3150131310945394,
+        "speed": 0.7370628637379795
+      },
+      "rules": [
+        "Hold winners while EMA 19 stays constructive against EMA 231; jump only when a global ticker setup clears friction.",
+        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+        "Use RSI 23-81 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move readily when a global alternative looks better after transaction and jump friction.",
+        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
+      ]
+    }
+  ],
+  "saved_at": "2026-04-28T20:05:14.887733+00:00",
+  "saved_by": "dashboard_swarm_auto_save"
+}

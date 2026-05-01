@@ -3,7 +3,7 @@ param(
     [string[]]$ManualSymbols,
     
     [string]$TickerFilter = "",
-    [string]$Format = "svg",
+    [string]$Format = "html",
     [int]$Lookback = 50,
     [int]$MaxTickers = 10,
     [switch]$Clean = $true,

@@ -63,6 +63,7 @@ logs/*.txt
 logs/*.out.txt
 logs/test_results_*
 logs/vulture_report*.txt
+src/ETF_screener/scripts/logs/
 _diag_out.txt
 _full_test_output.txt
 _vulture_wrapper_output.txt

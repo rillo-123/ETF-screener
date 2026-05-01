@@ -41,6 +41,7 @@ from ETF_screener.indicators import (
 from ETF_screener.hotlist import generate_hotlist
 from ETF_screener.plotter_plotly import InteractivePlotter
 from ETF_screener.screener import ETFScreener
+from ETF_screener.dsl_parser import parse_strategy_scripts
 
 from ETF_screener.strategy_manager import CachedStrategyManager
 
@@ -508,6 +509,7 @@ def screen_etfs(
         else:
 
             # Load all ETFs from config/etfs.json (preferred) or data/etfs.json (fallback)
+            # NOTE: Update test_results references to new folder if used elsewhere in this file
             etfs_file = Path("config/etfs.json")
             if not etfs_file.exists():
                 etfs_file = Path(data_dir) / "etfs.json"
@@ -914,36 +916,7 @@ def screen_etfs(
                 with open(strat_file, "r") as f:  # type: ignore[assignment]
                     content = f.read()  # type: ignore[attr-defined]
 
-                # DSL parsing - improved to filter out comments and extract terms
-                lines = [line.split("#")[0].strip() for line in content.split("\n")]
-                clean_content = "\n".join([ln for ln in lines if ln])
-
-                entry_script = ""
-                exit_script = ""
-
-                # Check for explicit sections
-                has_sections = any(
-                    re.match(r"^(trigger|filter|entry|exit):", ln, re.I) for ln in lines
-                )
-
-                if has_sections:
-                    # Collect all entry-related terms (trigger, filter, entry)
-                    entry_terms = []
-                    for line in lines:
-                        if not line:
-                            continue
-                        m = re.match(r"^(trigger|filter|entry):\s*(.*)", line, re.I)
-                        if m:
-                            entry_terms.append(f"({m.group(2).strip()})")
-                        elif re.match(r"^exit:\s*(.*)", line, re.I):
-                            exit_script = (
-                                re.match(r"^exit:\s*(.*)", line, re.I).group(1).strip()  # type: ignore[union-attr]
-                            )
-
-                    if entry_terms:
-                        entry_script = " & ".join(entry_terms)
-                else:
-                    entry_script = clean_content
+                entry_script, exit_script = parse_strategy_scripts(content)
 
                 filtered_results = []
                 bt = Backtester(db_path=db.db_path)
@@ -972,7 +945,7 @@ def screen_etfs(
                             df,
                             ticker,
                             entry_script=entry_script,
-                            exit_script=exit_script or "close < ema(50)",
+                            exit_script=exit_script,
                             manager=manager,
                         )
 
@@ -1253,8 +1226,14 @@ def refresh_database(
 
         tickers = extractor.extract_etf_tickers()
 
+        if not tickers and extractor.working_etfs:
+            print(
+                "[WARN] CSV ticker list was empty; using validated tickers from config/etfs.json."
+            )
+            tickers = dict(extractor.working_etfs)
+
         if not tickers:
-            print("[ERROR] No tickers found in CSV. Exiting.")
+            print("[ERROR] No tickers available for refresh. Exiting.")
             return
 
         # Load blacklist

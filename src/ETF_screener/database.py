@@ -1,3 +1,4 @@
+from ETF_screener.config_loader import get_paths
 """SQLite database interface for ETF data persistence."""
 
 import sqlite3
@@ -10,21 +11,53 @@ import pandas as pd
 class ETFDatabase:
     """SQLite database for storing and querying ETF data."""
 
-    def __init__(self, db_path: str = "data/etfs.db"):
+    def __init__(self, db_path: str = None):
         """
         Initialize database connection.
 
         Args:
-            db_path: Path to SQLite database file
+            db_path: Path to SQLite database file (default: data/etf_db/etfs.db)
         """
+        if db_path is None:
+            db_path = get_paths()["data"]["etf_db"]
         self.db_path = Path(db_path)
         self.connection: Optional[sqlite3.Connection] = None
         self._init_db()
 
+    def _connect(self) -> sqlite3.Connection:
+        """Open a SQLite connection with conservative concurrency settings."""
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.OperationalError:
+            # Another connection may already hold the database lock during startup.
+            # Fall back to the default journal mode and rely on the busy timeout.
+            pass
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        return conn
+
+    @staticmethod
+    def _ensure_columns(
+        cursor: sqlite3.Cursor,
+        table_name: str,
+        columns: dict[str, str],
+    ) -> None:
+        """Add missing columns for lightweight local schema upgrades."""
+        existing = {
+            str(row[1])
+            for row in cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
+        }
+        for column_name, column_type in columns.items():
+            if column_name not in existing:
+                cursor.execute(
+                    f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+                )
+
     def _init_db(self) -> None:
         """Initialize database with schema."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
 
         # Create ETF data table with proper indexing
@@ -38,6 +71,7 @@ class ETFDatabase:
                 high REAL,
                 low REAL,
                 close REAL,
+                dividends REAL DEFAULT 0,
                 volume INTEGER,
                 ema_50 REAL,
                 supertrend REAL,
@@ -49,6 +83,96 @@ class ETFDatabase:
             )
             """
         )
+        self._ensure_columns(
+            cursor,
+            "etf_data",
+            {
+                "dividends": "REAL DEFAULT 0",
+            },
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS etf_metadata (
+                ticker TEXT PRIMARY KEY,
+                name TEXT,
+                issuer TEXT,
+                asset_class TEXT,
+                region TEXT,
+                style TEXT,
+                is_ucits INTEGER DEFAULT 0,
+                is_leveraged INTEGER DEFAULT 0,
+                is_inverse INTEGER DEFAULT 0,
+                source TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS etf_shortlist_artifacts (
+                ticker TEXT PRIMARY KEY,
+                as_of_date TEXT NOT NULL,
+                name TEXT,
+                issuer TEXT,
+                asset_class TEXT,
+                region TEXT,
+                close REAL,
+                volume INTEGER,
+                recent_entry_days INTEGER,
+                product_score REAL,
+                exposure_score REAL,
+                technical_score REAL,
+                final_score REAL,
+                label TEXT,
+                reasons_json TEXT,
+                components_json TEXT,
+                artifact_version TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS swarm_world_artifacts (
+                ticker TEXT PRIMARY KEY,
+                as_of_date TEXT NOT NULL,
+                name TEXT,
+                issuer TEXT,
+                asset_class TEXT,
+                region TEXT,
+                label TEXT,
+                volume INTEGER,
+                recent_entry_days INTEGER,
+                product_score REAL,
+                exposure_score REAL,
+                technical_score REAL,
+                final_score REAL,
+                energy REAL,
+                momentum_score REAL,
+                freshness_score REAL,
+                grid_row INTEGER,
+                grid_col INTEGER,
+                x REAL,
+                y REAL,
+                radius REAL,
+                color TEXT,
+                components_json TEXT,
+                world_version TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        self._ensure_columns(
+            cursor,
+            "swarm_world_artifacts",
+            {
+                "grid_row": "INTEGER",
+                "grid_col": "INTEGER",
+            },
+        )
 
         # Create indices for efficient querying
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_ticker ON etf_data(ticker)")
@@ -57,6 +181,27 @@ class ETFDatabase:
             "CREATE INDEX IF NOT EXISTS idx_ticker_date ON etf_data(ticker, date)"
         )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_volume ON etf_data(volume)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_etf_metadata_region ON etf_metadata(region)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_shortlist_label ON etf_shortlist_artifacts(label)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_shortlist_score ON etf_shortlist_artifacts(final_score DESC)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_shortlist_asof ON etf_shortlist_artifacts(as_of_date)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_swarm_label ON swarm_world_artifacts(label)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_swarm_energy ON swarm_world_artifacts(energy DESC)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_swarm_asof ON swarm_world_artifacts(as_of_date)"
+        )
 
         conn.commit()
         conn.close()
@@ -64,7 +209,7 @@ class ETFDatabase:
     def _get_connection(self) -> sqlite3.Connection:
         """Get database connection."""
         if self.connection is None:
-            self.connection = sqlite3.connect(self.db_path)
+            self.connection = self._connect()
             self.connection.row_factory = sqlite3.Row
         return self.connection
 
@@ -105,10 +250,22 @@ class ETFDatabase:
 
         cursor.execute(
             """
-            INSERT OR IGNORE INTO etf_data 
-            (ticker, date, open, high, low, close, volume, ema_50, supertrend, 
+            INSERT INTO etf_data
+            (ticker, date, open, high, low, close, dividends, volume, ema_50, supertrend,
              st_upper, st_lower, signal)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ticker, date) DO UPDATE SET
+                open = excluded.open,
+                high = excluded.high,
+                low = excluded.low,
+                close = excluded.close,
+                dividends = excluded.dividends,
+                volume = excluded.volume,
+                ema_50 = excluded.ema_50,
+                supertrend = excluded.supertrend,
+                st_upper = excluded.st_upper,
+                st_lower = excluded.st_lower,
+                signal = excluded.signal
             """,
             (
                 ticker.upper(),
@@ -117,6 +274,7 @@ class ETFDatabase:
                 high,
                 low,
                 close,
+                0.0,
                 volume,
                 ema_50,
                 supertrend,
@@ -161,6 +319,7 @@ class ETFDatabase:
                     row.get("High"),
                     row.get("Low"),
                     row.get("Close"),
+                    row.get("Dividends", row.get("dividends", 0.0)) or 0.0,
                     row.get("Volume", 0),
                     row.get("EMA_50"),
                     row.get("Supertrend"),
@@ -172,10 +331,22 @@ class ETFDatabase:
 
         cursor.executemany(
             """
-            INSERT OR IGNORE INTO etf_data 
-            (ticker, date, open, high, low, close, volume, ema_50, supertrend, 
+            INSERT INTO etf_data
+            (ticker, date, open, high, low, close, dividends, volume, ema_50, supertrend,
              st_upper, st_lower, signal)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ticker, date) DO UPDATE SET
+                open = excluded.open,
+                high = excluded.high,
+                low = excluded.low,
+                close = excluded.close,
+                dividends = excluded.dividends,
+                volume = excluded.volume,
+                ema_50 = excluded.ema_50,
+                supertrend = excluded.supertrend,
+                st_upper = excluded.st_upper,
+                st_lower = excluded.st_lower,
+                signal = excluded.signal
             """,
             data_to_insert,
         )
@@ -271,6 +442,64 @@ class ETFDatabase:
         )
         result = cursor.fetchone()
         return result[0] if result and result[0] else None
+
+    def get_latest_market_date(self) -> Optional[str]:
+        """Get the latest trading date stored across the ETF universe."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(date) FROM etf_data")
+        result = cursor.fetchone()
+        return result[0] if result and result[0] else None
+
+    def get_latest_shortlist_date(self) -> Optional[str]:
+        """Get the latest artifact date stored for shortlist snapshots."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(as_of_date) FROM etf_shortlist_artifacts")
+        result = cursor.fetchone()
+        return result[0] if result and result[0] else None
+
+    def get_latest_shortlist_updated_at(self) -> Optional[str]:
+        """Get the last write timestamp for shortlist artifacts."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(updated_at) FROM etf_shortlist_artifacts")
+        result = cursor.fetchone()
+        return result[0] if result and result[0] else None
+
+    def get_latest_swarm_world_date(self) -> Optional[str]:
+        """Get the latest artifact date stored for swarm world snapshots."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(as_of_date) FROM swarm_world_artifacts")
+        result = cursor.fetchone()
+        return result[0] if result and result[0] else None
+
+    def get_latest_swarm_world_updated_at(self) -> Optional[str]:
+        """Get the last write timestamp for swarm world artifacts."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(updated_at) FROM swarm_world_artifacts")
+        result = cursor.fetchone()
+        return result[0] if result and result[0] else None
+
+    def get_ticker_latest_dates(self) -> dict[str, str]:
+        """Return the most recent stored market date for each ticker."""
+        conn = self._get_connection()
+        rows = conn.execute(
+            """
+            SELECT ticker, MAX(date) AS latest_date
+            FROM etf_data
+            GROUP BY ticker
+            """
+        ).fetchall()
+        return {
+            str(row["ticker"] if isinstance(row, sqlite3.Row) else row[0]).upper(): str(
+                row["latest_date"] if isinstance(row, sqlite3.Row) else row[1]
+            )
+            for row in rows
+            if (row["latest_date"] if isinstance(row, sqlite3.Row) else row[1])
+        }
 
     def get_ticker_data(self, ticker: str, days: int = 60) -> pd.DataFrame:
         """
@@ -413,6 +642,226 @@ class ETFDatabase:
 
         df = pd.read_sql_query(query, conn, params=[min_volume])
         return df
+
+    def upsert_etf_metadata(self, rows: list[dict]) -> None:
+        """Insert or update ETF metadata rows used by the shortlist engine."""
+        if not rows:
+            return
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.executemany(
+            """
+            INSERT INTO etf_metadata (
+                ticker, name, issuer, asset_class, region, style,
+                is_ucits, is_leveraged, is_inverse, source
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ticker) DO UPDATE SET
+                name = excluded.name,
+                issuer = excluded.issuer,
+                asset_class = excluded.asset_class,
+                region = excluded.region,
+                style = excluded.style,
+                is_ucits = excluded.is_ucits,
+                is_leveraged = excluded.is_leveraged,
+                is_inverse = excluded.is_inverse,
+                source = excluded.source,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            [
+                (
+                    row["ticker"],
+                    row.get("name"),
+                    row.get("issuer"),
+                    row.get("asset_class"),
+                    row.get("region"),
+                    row.get("style"),
+                    int(bool(row.get("is_ucits"))),
+                    int(bool(row.get("is_leveraged"))),
+                    int(bool(row.get("is_inverse"))),
+                    row.get("source", "config/etfs.json"),
+                )
+                for row in rows
+            ],
+        )
+        conn.commit()
+
+    def upsert_shortlist_artifacts(self, rows: list[dict]) -> None:
+        """Insert or update shortlist snapshot rows."""
+        if not rows:
+            return
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.executemany(
+            """
+            INSERT INTO etf_shortlist_artifacts (
+                ticker, as_of_date, name, issuer, asset_class, region, close, volume,
+                recent_entry_days, product_score, exposure_score, technical_score,
+                final_score, label, reasons_json, components_json, artifact_version
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ticker) DO UPDATE SET
+                as_of_date = excluded.as_of_date,
+                name = excluded.name,
+                issuer = excluded.issuer,
+                asset_class = excluded.asset_class,
+                region = excluded.region,
+                close = excluded.close,
+                volume = excluded.volume,
+                recent_entry_days = excluded.recent_entry_days,
+                product_score = excluded.product_score,
+                exposure_score = excluded.exposure_score,
+                technical_score = excluded.technical_score,
+                final_score = excluded.final_score,
+                label = excluded.label,
+                reasons_json = excluded.reasons_json,
+                components_json = excluded.components_json,
+                artifact_version = excluded.artifact_version,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            [
+                (
+                    row["ticker"],
+                    row["as_of_date"],
+                    row.get("name"),
+                    row.get("issuer"),
+                    row.get("asset_class"),
+                    row.get("region"),
+                    row.get("close"),
+                    row.get("volume"),
+                    row.get("recent_entry_days"),
+                    row.get("product_score"),
+                    row.get("exposure_score"),
+                    row.get("technical_score"),
+                    row.get("final_score"),
+                    row.get("label"),
+                    row.get("reasons_json"),
+                    row.get("components_json"),
+                    row.get("artifact_version"),
+                )
+                for row in rows
+            ],
+        )
+        conn.commit()
+
+    def upsert_swarm_world_artifacts(self, rows: list[dict]) -> None:
+        """Insert or update swarm world snapshot rows."""
+        if not rows:
+            return
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.executemany(
+            """
+            INSERT INTO swarm_world_artifacts (
+                ticker, as_of_date, name, issuer, asset_class, region, label,
+                volume, recent_entry_days, product_score, exposure_score,
+                technical_score, final_score, energy, momentum_score,
+                freshness_score, grid_row, grid_col, x, y, radius, color,
+                components_json, world_version
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ticker) DO UPDATE SET
+                as_of_date = excluded.as_of_date,
+                name = excluded.name,
+                issuer = excluded.issuer,
+                asset_class = excluded.asset_class,
+                region = excluded.region,
+                label = excluded.label,
+                volume = excluded.volume,
+                recent_entry_days = excluded.recent_entry_days,
+                product_score = excluded.product_score,
+                exposure_score = excluded.exposure_score,
+                technical_score = excluded.technical_score,
+                final_score = excluded.final_score,
+                energy = excluded.energy,
+                momentum_score = excluded.momentum_score,
+                freshness_score = excluded.freshness_score,
+                grid_row = excluded.grid_row,
+                grid_col = excluded.grid_col,
+                x = excluded.x,
+                y = excluded.y,
+                radius = excluded.radius,
+                color = excluded.color,
+                components_json = excluded.components_json,
+                world_version = excluded.world_version,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            [
+                (
+                    row["ticker"],
+                    row["as_of_date"],
+                    row.get("name"),
+                    row.get("issuer"),
+                    row.get("asset_class"),
+                    row.get("region"),
+                    row.get("label"),
+                    row.get("volume"),
+                    row.get("recent_entry_days"),
+                    row.get("product_score"),
+                    row.get("exposure_score"),
+                    row.get("technical_score"),
+                    row.get("final_score"),
+                    row.get("energy"),
+                    row.get("momentum_score"),
+                    row.get("freshness_score"),
+                    row.get("row"),
+                    row.get("col"),
+                    row.get("x"),
+                    row.get("y"),
+                    row.get("radius"),
+                    row.get("color"),
+                    row.get("components_json"),
+                    row.get("world_version"),
+                )
+                for row in rows
+            ],
+        )
+        conn.commit()
+
+    def get_shortlist(
+        self, limit: Optional[int] = 50, label: Optional[str] = None
+    ) -> pd.DataFrame:
+        """Return the persisted shortlist snapshot sorted by recommendation quality."""
+        conn = self._get_connection()
+
+        query = (
+            "SELECT * FROM etf_shortlist_artifacts "
+            "WHERE (? IS NULL OR label = ?) "
+            "ORDER BY CASE label "
+            "WHEN 'Buy' THEN 0 "
+            "WHEN 'Watch' THEN 1 "
+            "ELSE 2 END, final_score DESC, ticker ASC"
+        )
+        params: list[object] = [label, label]
+
+        if limit is not None:
+            query += f" LIMIT {max(1, int(limit))}"
+
+        return pd.read_sql_query(query, conn, params=params)
+
+    def get_swarm_world(
+        self, limit: Optional[int] = None, label: Optional[str] = None
+    ) -> pd.DataFrame:
+        """Return the persisted swarm world snapshot sorted by ecosystem energy."""
+        conn = self._get_connection()
+
+        query = (
+            "SELECT * FROM swarm_world_artifacts "
+            "WHERE (? IS NULL OR label = ?) "
+            "ORDER BY CASE label "
+            "WHEN 'Buy' THEN 0 "
+            "WHEN 'Watch' THEN 1 "
+            "ELSE 2 END, energy DESC, final_score DESC, ticker ASC"
+        )
+        params: list[object] = [label, label]
+
+        if limit is not None:
+            query += f" LIMIT {max(1, int(limit))}"
+
+        return pd.read_sql_query(query, conn, params=params)
 
     def prune_old_data(self, days_to_keep: int = 365) -> int:
         """

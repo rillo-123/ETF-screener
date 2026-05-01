@@ -1,8 +1,10 @@
+from ETF_screener.config_loader import get_paths
 """Backtesting engine for ETF trading strategies."""
 
 import hashlib
 import logging
 import re
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -55,12 +57,15 @@ def _worker_run_remote(
 class Backtester:
     def __init__(
         self,
-        db_path="data/etfs.db",
+        db_path=None,
         initial_capital=10000.0,
         commission=5.0,
         slippage_pct=0.1,
     ):
-        self.db_path = db_path
+        if db_path is None:
+            self.db_path = get_paths()["data"]["etf_db"]
+        else:
+            self.db_path = db_path
         # self.db = ETFDatabase(db_path) # Removed to allow pickling for multiprocessing
         self.initial_capital = initial_capital
         self.commission = commission
@@ -94,7 +99,7 @@ class Backtester:
 
         # Determine if we should look for or save to a parquet cache
         # Cache key is based on ticker and strategy name if scripted
-        cache_dir = Path("data/cache")
+        cache_dir = Path(get_paths()["data"]["cache"])
         cache_path = None
         strategy_name = "unknown"
         if strategy_kwargs and "entry_script" in strategy_kwargs:
@@ -106,7 +111,7 @@ class Backtester:
             ).hexdigest()[:8]
             strategy_name = f"dsl_{strat_hash}"
             cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path = cache_dir / f"{ticker}_{strategy_name}_{days}.parquet"
+            cache_path = Path(get_paths()["data"]["parquet"]) / f"{ticker}_{strategy_name}_{days}.parquet"
 
         # Try loading from cache first
         if cache_path and cache_path.exists():
@@ -323,9 +328,30 @@ class Backtester:
             # Strip trailing _d[number] for indicator lookup
             base_c = re.sub(r"_d\d+$", "", c)
 
+            slope_flip_match = re.fullmatch(
+                r"(.+_slope)_cross_(up|down)", base_c
+            )
+            if slope_flip_match is not None:
+                slope_base, direction = slope_flip_match.groups()
+                ensure_indicator(slope_base)
+                if slope_base in df_eval.columns:
+                    slope_series = df_eval[slope_base]
+                    slope_sign = pd.Series(np.sign(slope_series), index=slope_series.index)
+                    prev_nonzero = slope_sign.replace(0, np.nan).ffill().shift(1)
+                    if direction == "up":
+                        df_eval[base_c] = (
+                            (slope_sign > 0) & (prev_nonzero < 0)
+                        ).fillna(False).astype(bool)
+                    else:
+                        df_eval[base_c] = (
+                            (slope_sign < 0) & (prev_nonzero > 0)
+                        ).fillna(False).astype(bool)
+                    forced_refresh_cols.add(base_c)
+                return
+
             # Slopes are derived values and must be recomputed from the current base series.
             # This avoids stale persisted columns (e.g. ema_200_slope accidentally matching ema_200).
-            if "_slope" in base_c:
+            if base_c.endswith("_slope"):
                 target_ind = base_c.replace("_slope", "")
                 ensure_indicator(target_ind)
                 if target_ind in df_eval.columns:
@@ -371,9 +397,7 @@ class Backtester:
                         rsi_period=int(parts[2]),
                         ema_period=int(parts[3]),
                     )
-                elif re.match(r"supertrend_\d+_\d+", base_c) or re.match(
-                    r"st_\d+_\d+", base_c
-                ):
+                elif re.fullmatch(r"(?:supertrend|st)_\d+_\d+", base_c):
                     # st_10_4 or supertrend_10_4
                     parts = base_c.split("_")
                     p = int(parts[1])
@@ -459,21 +483,53 @@ class Backtester:
                     df_eval[base_c] = (
                         df_eval["volume"].ewm(span=20, adjust=False).mean()
                     )
-                elif base_c == "st_10_4_is_green":
-                    # Hardcoded support for the user's current favorite indicator
-                    res = manager.get_indicator(
-                        df,
-                        ticker,
-                        calculate_supertrend,
-                        "supertrend_10_4.0",
-                        period=10,
-                        multiplier=4.0,
+                elif re.match(
+                    r"(?:st|supertrend)_\d+_\d+_is_(green|red|flat|near_flat)",
+                    base_c,
+                ):
+                    # Convenience support for Supertrend regime helpers, including flatness.
+                    st_match = re.fullmatch(
+                        r"((?:st|supertrend))_(\d+)_(\d+)_is_(green|red|flat|near_flat)",
+                        base_c,
                     )
-                    st_line = res[0] if isinstance(res, tuple) else res
-                    if st_line is not None:
-                        df_eval[base_c] = (df_eval["close"] > st_line).astype(float)
-                    else:
-                        df_eval[base_c] = 0.0
+                    if st_match is not None:
+                        _, period_s, mult_s, regime = st_match.groups()
+                        period = int(period_s)
+                        multiplier = float(mult_s)
+                        res = manager.get_indicator(
+                            df,
+                            ticker,
+                            calculate_supertrend,
+                            f"supertrend_{period}_{multiplier}",
+                            period=period,
+                            multiplier=multiplier,
+                        )
+                        st_line = res[0] if isinstance(res, tuple) else res
+                        if st_line is not None:
+                            if regime == "green":
+                                df_eval[base_c] = (df_eval["close"] > st_line).astype(
+                                    float
+                                )
+                            elif regime == "red":
+                                df_eval[base_c] = (df_eval["close"] < st_line).astype(
+                                    float
+                                )
+                            elif regime == "flat":
+                                df_eval[base_c] = (
+                                    st_line.diff().abs().le(1e-9).fillna(False).astype(float)
+                                )
+                            else:
+                                close_abs = df_eval["close"].abs().replace(0, np.nan)
+                                df_eval[base_c] = (
+                                    st_line.diff()
+                                    .abs()
+                                    .div(close_abs)
+                                    .le(0.001)
+                                    .fillna(False)
+                                    .astype(float)
+                                )
+                        else:
+                            df_eval[base_c] = 0.0
 
             # If it's a delayed primitive (e.g., ema_10_d1), create the shifted column
             # Special case for cross_up(a, b) and cross_down(a, b) which use _d1
@@ -653,6 +709,19 @@ class Backtester:
                 except KeyError:
                     pass
 
+
+        # Guard: skip empty or whitespace-only expressions
+        if not e_s or not e_s.strip():
+            logger.error("ERROR_IN_EVAL: Entry expression is empty after DSL parsing. Skipping ticker.")
+            logger.debug("TRANSFORMED ENTRY: %s", e_s)
+            logger.debug("TRANSFORMED EXIT:  %s", r_s)
+            return None
+        if not r_s or not r_s.strip():
+            logger.error("ERROR_IN_EVAL: Exit expression is empty after DSL parsing. Skipping ticker.")
+            logger.debug("TRANSFORMED ENTRY: %s", e_s)
+            logger.debug("TRANSFORMED EXIT:  %s", r_s)
+            return None
+
         try:
             # We use engine='python' and parser='python' to allow python-style keywords
             # and avoid conflicts with ticker symbols that are also pandas/numexpr keywords.
@@ -711,12 +780,23 @@ class Backtester:
         max_workers=None,
         show_progress=True,
         progress_label=None,
+        task_timeout_seconds=120,
     ):
         import concurrent.futures
+        import os
+        import time
 
         results = []
         total = len(tickers)
         desc = progress_label or getattr(base_strategy, "__name__", "Backtest")
+        if max_workers is None:
+            # The workload is mostly network/SQLite bound, so a small cap keeps
+            # the machine responsive and avoids swamping yfinance with too many
+            # concurrent workers.
+            max_workers = min(8, max(2, os.cpu_count() or 4))
+        logger.info(
+            "Parallel backtest using %d workers for %d tickers", max_workers, total
+        )
         tqdm_cls = None
         if show_progress:
             try:
@@ -725,14 +805,23 @@ class Backtester:
                 tqdm_cls = None
 
         pbar = (
-            tqdm_cls(total=total, desc=str(desc), unit="ticker", leave=False)
+            tqdm_cls(
+                total=total,
+                desc=str(desc),
+                unit="ticker",
+                leave=False,
+                file=sys.__stderr__,
+                dynamic_ncols=True,
+                mininterval=0.5,
+            )
             if (tqdm_cls and total > 0)
             else None
         )
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=max_workers
-        ) as executor:
-            task_dict = {
+        if show_progress and pbar is None:
+            logger.info("tqdm is unavailable; falling back to silent progress mode")
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+        try:
+            future_to_ticker = {
                 executor.submit(
                     _worker_run_remote,
                     t,
@@ -747,22 +836,61 @@ class Backtester:
                 ): t
                 for t in tickers
             }
+            running_times = {}
+            pending = set(future_to_ticker)
             completed = 0
-            next_report = 10
-            for future in concurrent.futures.as_completed(task_dict):
-                results.append(future.result())
-                completed += 1
+            while pending:
+                done, _ = concurrent.futures.wait(
+                    pending,
+                    timeout=1.0,
+                    return_when=concurrent.futures.FIRST_COMPLETED,
+                )
+                now = time.monotonic()
 
-                if pbar is not None:
-                    pbar.update(1)
-                    continue
+                for future in pending:
+                    if future.running() and future not in running_times:
+                        running_times[future] = now
 
-                # Plain line-based progress avoids CR-based rendering artifacts in pwsh.
-                pct = int((completed * 100) / total) if total else 100
-                if pct >= next_report or completed == total:
-                    print(f"Discovery: {pct}% ({completed}/{total})")
-                    while next_report <= pct:
-                        next_report += 10
+                for future in done:
+                    pending.discard(future)
+                    running_times.pop(future, None)
+                    ticker = future_to_ticker[future]
+                    try:
+                        results.append(future.result())
+                    except Exception as exc:
+                        results.append({"ticker": ticker, "error": str(exc)})
+                    completed += 1
+
+                    if pbar is not None:
+                        pbar.update(1)
+
+                if task_timeout_seconds is not None and pending:
+                    timed_out = [
+                        future
+                        for future in list(pending)
+                        if future in running_times
+                        and now - running_times[future] >= task_timeout_seconds
+                    ]
+                    for future in timed_out:
+                        pending.discard(future)
+                        running_times.pop(future, None)
+                        ticker = future_to_ticker[future]
+                        logger.warning(
+                            "Backtest timed out for %s after %.0f seconds",
+                            ticker,
+                            task_timeout_seconds,
+                        )
+                        results.append(
+                            {
+                                "ticker": ticker,
+                                "error": f"Timed out after {task_timeout_seconds} seconds",
+                            }
+                        )
+                        completed += 1
+                        if pbar is not None:
+                            pbar.update(1)
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
 
         if pbar is not None:
             pbar.close()
