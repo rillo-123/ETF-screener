@@ -1,13 +1,18 @@
 import glob
 import inspect
+import asyncio
+import hashlib
+import re
 from ETF_screener.config_loader import get_paths
 import json
 import logging as _logging_mod
 import math
+from functools import lru_cache
 from datetime import date, datetime, timezone
 import pandas as pd
 from typing import Optional
 from pathlib import Path
+from threading import Lock
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, Response, JSONResponse
@@ -24,6 +29,7 @@ from ETF_screener.swarm_world import SwarmWorldEngine
 from ETF_screener.scripts.churn_strategies import (
     evaluate_strategies,
     find_recent_entry_days,
+    filter_tickers_by_exchange_and_list,
     parse_dsl_content,
 )
 
@@ -44,6 +50,24 @@ logger = setup_logging()
 
 SWARM_DNA_SCHEMA_VERSION = "swarm_agent_dna_v2"
 SWARM_DNA_CONFIG_PATH = Path("config") / "swarm_agent_dna.json"
+CUSTOM_TICKER_LIST_SCHEMA_VERSION = "custom_ticker_lists_v3"
+CUSTOM_TICKER_LIST_CONFIG_PATH = Path("config") / "custom_ticker_list.json"
+CUSTOM_TICKER_LIST_DEFAULT_NAME = "My List"
+XETRA_METADATA_PATH = Path("config") / "xetra.json"
+SWEDEN_METADATA_PATH = Path("config") / "sweden.json"
+LEGACY_ETFS_METADATA_PATH = Path("config") / "etfs.json"
+BLACKLIST_PATH = Path("config") / "blacklist.json"
+_JOB_PROGRESS_LOCK = Lock()
+_JOB_PROGRESS_STATE: dict[str, object] = {
+    "job": None,
+    "phase": "idle",
+    "label": "Idle",
+    "detail": "",
+    "pct": 0.0,
+    "active": False,
+    "updated_at": None,
+    "error": None,
+}
 
 
 def _safe_float(val, default=None):
@@ -53,6 +77,91 @@ def _safe_float(val, default=None):
         return default if (math.isnan(f) or math.isinf(f)) else f
     except (TypeError, ValueError):
         return default
+
+
+def _load_metadata_file_map(path: Path) -> dict[str, dict[str, object]]:
+    """Load a ticker-to-metadata map from a config JSON file."""
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+    except Exception:
+        return {}
+
+    normalized: dict[str, dict[str, object]] = {}
+    if isinstance(raw, dict):
+        for ticker, info in raw.items():
+            if isinstance(info, dict):
+                payload = dict(info)
+            else:
+                payload = {"name": str(info)}
+            payload.setdefault("name", str(ticker))
+            normalized[str(ticker).upper()] = payload
+    return normalized
+
+
+def _set_job_progress(
+    job: str | None,
+    phase: str,
+    pct: float = 0.0,
+    label: str | None = None,
+    detail: str | None = None,
+    active: bool = True,
+    error: str | None = None,
+) -> None:
+    with _JOB_PROGRESS_LOCK:
+        _JOB_PROGRESS_STATE.update(
+            {
+                "job": job,
+                "phase": phase,
+                "label": label or str(job or "Job").replace("-", " ").title(),
+                "detail": detail or "",
+                "pct": max(0.0, min(100.0, float(pct))),
+                "active": active,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "error": error,
+            }
+        )
+
+
+def _clear_job_progress(job: str | None = None) -> None:
+    with _JOB_PROGRESS_LOCK:
+        if job is None or _JOB_PROGRESS_STATE.get("job") == job:
+            _JOB_PROGRESS_STATE.update(
+                {
+                    "job": None,
+                    "phase": "idle",
+                    "label": "Idle",
+                    "detail": "",
+                    "pct": 0.0,
+                    "active": False,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "error": None,
+                }
+            )
+
+
+def _update_job_progress(state: dict[str, object]) -> None:
+    """Apply a callback payload from long-running dashboard work."""
+    if not isinstance(state, dict):
+        return
+    job = str(state.get("job") or "dashboard")
+    phase = str(state.get("phase") or "working")
+    pct = _safe_float(state.get("pct"), 0.0) or 0.0
+    label = str(state.get("label") or "").strip() or None
+    detail = str(state.get("detail") or "").strip() or None
+    active = bool(state.get("active", True))
+    error = state.get("error")
+    _set_job_progress(
+        job,
+        phase,
+        pct=float(pct),
+        label=label,
+        detail=detail,
+        active=active,
+        error=str(error) if error else None,
+    )
 
 
 def _rank_matches(matches: list[dict]) -> list[dict]:
@@ -138,9 +247,230 @@ def load_strategy_content(name):
     return ""
 
 
+@lru_cache(maxsize=4)
+def _cached_dashboard_tickers(db_path: str, latest_market_date: str | None) -> tuple[str, ...]:
+    """Cache the home-page ticker list until market data advances."""
+    blacklist = _cached_blacklist_tickers()
+    with ETFDatabase(db_path=db_path) as db:
+        conn = db._get_connection()
+        tickers = pd.read_sql_query(
+            "SELECT DISTINCT ticker FROM etf_data ORDER BY ticker", conn
+        )["ticker"].tolist()
+        if not tickers:
+            for etf_path in (XETRA_METADATA_PATH, SWEDEN_METADATA_PATH, LEGACY_ETFS_METADATA_PATH):
+                tickers = sorted(_load_metadata_file_map(etf_path).keys())
+                if tickers:
+                    break
+        return tuple(
+            str(ticker)
+            for ticker in tickers
+            if str(ticker).upper() not in blacklist
+        )
+
+
+@lru_cache(maxsize=1)
+def _cached_etf_metadata_map() -> dict[str, dict[str, object]]:
+    """Load metadata from config/xetra.json, config/sweden.json, and config/etfs.json."""
+    normalized: dict[str, dict[str, object]] = {}
+    for etf_path in (XETRA_METADATA_PATH, SWEDEN_METADATA_PATH, LEGACY_ETFS_METADATA_PATH):
+        normalized.update(_load_metadata_file_map(etf_path))
+    return normalized
+
+
+@lru_cache(maxsize=1)
+def _cached_blacklist_tickers() -> set[str]:
+    """Load the configured blacklist once for dashboard universe filtering."""
+    if not BLACKLIST_PATH.exists():
+        return set()
+    try:
+        with open(BLACKLIST_PATH, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+    except Exception:
+        return set()
+
+    if isinstance(raw, dict):
+        return {str(ticker).upper() for ticker in raw.keys()}
+    if isinstance(raw, list):
+        return {str(ticker).upper() for ticker in raw}
+    return set()
+
+
+def _normalize_market_source(value: object | None) -> str:
+    cleaned = str(value or "xetra").strip().lower()
+    if cleaned in {"sweden", "stockholm", "stockholms", "se", "ss", "st"}:
+        return "sweden"
+    if cleaned in {"list", "chosen", "chosen_list", "custom"}:
+        return "list"
+    if cleaned in {"all_lists", "alllists", "all list", "all lists"}:
+        return "all_lists"
+    if cleaned in {"xetra", "germany", "de", "exchange", "all"}:
+        return "xetra"
+    return "xetra"
+
+
+def _market_source_config(source: object | None) -> tuple[Path, str]:
+    normalized = _normalize_market_source(source)
+    if normalized == "sweden":
+        return SWEDEN_METADATA_PATH, "active"
+    if normalized == "list":
+        return CUSTOM_TICKER_LIST_CONFIG_PATH, "active"
+    if normalized == "all_lists":
+        return CUSTOM_TICKER_LIST_CONFIG_PATH, "all"
+    return XETRA_METADATA_PATH, "active"
+
+
+def _ticker_exchange_bucket(
+    ticker: str,
+    label: str = "",
+    region: str = "",
+    market: str = "",
+) -> str:
+    upper_ticker = str(ticker or "").upper()
+    upper_label = str(label or "").upper()
+    upper_region = str(region or "").upper()
+    upper_market = str(market or "").upper()
+    if (
+        upper_market == "STO"
+        or upper_market == "SWEDEN"
+        or upper_ticker.endswith(".ST")
+        or upper_ticker.endswith(".SE")
+        or upper_ticker.endswith(".SS")
+        or "SWEDEN" in upper_region
+        or "STOCKHOLM" in upper_region
+        or "STOCKHOLM" in upper_label
+        or "SWED" in upper_label
+        or "SWE" in upper_ticker
+    ):
+        return "sweden"
+    if upper_ticker.endswith(".DE") or upper_ticker.endswith(".F") or "." not in upper_ticker:
+        return "xetra"
+    return "all"
+
+
+@lru_cache(maxsize=4)
+def _cached_dashboard_universe(
+    db_path: str, latest_market_date: str | None
+) -> tuple[dict[str, object], ...]:
+    """Cache the richer ticker universe for the modal builder."""
+    config_metadata = _cached_etf_metadata_map()
+    blacklist = _cached_blacklist_tickers()
+    rows: list[dict[str, object]] = []
+
+    with ETFDatabase(db_path=db_path) as db:
+        conn = db._get_connection()
+        ticker_rows = list(_cached_dashboard_tickers(db_path, latest_market_date))
+        try:
+            metadata_df = pd.read_sql_query(
+                "SELECT ticker, name, issuer, asset_class, region, country, market FROM etf_metadata",
+                conn,
+            )
+        except Exception:
+            metadata_df = pd.DataFrame()
+
+    metadata_map: dict[str, dict[str, object]] = {}
+    if not metadata_df.empty:
+        for _, row in metadata_df.iterrows():
+            ticker = str(row.get("ticker") or "").upper()
+            if not ticker:
+                continue
+            metadata_map[ticker] = {
+                "name": row.get("name"),
+                "issuer": row.get("issuer"),
+                "asset_class": row.get("asset_class"),
+                "region": row.get("region"),
+                "country": row.get("country"),
+                "market": row.get("market"),
+            }
+
+    ticker_rows = sorted(set(ticker_rows) | set(config_metadata.keys()) | set(metadata_map.keys()))
+
+    for ticker in ticker_rows:
+        ticker_key = str(ticker).upper()
+        if ticker_key in blacklist:
+            continue
+        meta = dict(config_metadata.get(ticker_key, {}))
+        meta.update(metadata_map.get(ticker_key, {}))
+        name = str(meta.get("name") or ticker_key)
+        issuer = str(meta.get("issuer") or "")
+        asset_class = str(meta.get("asset_class") or "")
+        region = str(meta.get("region") or meta.get("country") or "")
+        market = str(meta.get("market") or "")
+        rows.append(
+            {
+                "ticker": ticker_key,
+                "name": name,
+                "label": name,
+                "issuer": issuer,
+                "asset_class": asset_class,
+                "region": region,
+                "market": market,
+                "exchange": _ticker_exchange_bucket(ticker_key, name, region, market),
+            }
+        )
+
+    return tuple(rows)
+
+
+@lru_cache(maxsize=8)
+def _cached_screen_universe(db_path: str, latest_market_date: str | None) -> tuple[str, ...]:
+    """Cache the expensive ticker-universe query until market data advances."""
+    config_metadata = _cached_etf_metadata_map()
+    with ETFDatabase(db_path=db_path) as db:
+        conn = db._get_connection()
+        universe_query = """
+            WITH ranked AS (
+                SELECT
+                    ticker,
+                    date,
+                    volume,
+                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
+                FROM etf_data
+            ),
+            agg AS (
+                SELECT
+                    ticker,
+                    MAX(date) AS last_date,
+                    COUNT(*) AS total_rows,
+                    SUM(CASE WHEN volume > 0 THEN 1 ELSE 0 END) AS nonzero_volume_rows,
+                    SUM(CASE WHEN rn <= 30 THEN 1 ELSE 0 END) AS recent_rows,
+                    SUM(CASE WHEN rn <= 30 AND volume = 0 THEN 1 ELSE 0 END) AS recent_zero_volume_rows
+                FROM ranked
+                GROUP BY ticker
+            )
+            SELECT ticker
+            FROM agg
+            WHERE total_rows >= 50
+              AND nonzero_volume_rows >= 10
+              AND recent_rows >= 10
+              AND recent_zero_volume_rows < 2
+              AND last_date >= date('now', '-180 day')
+        """
+        universe_df = pd.read_sql_query(universe_query, conn)
+        return tuple(sorted(set(universe_df["ticker"].tolist()) | set(config_metadata.keys())))
+
+
 # Database access function (FastAPI style)
 def get_db():
     return ETFDatabase(db_path=get_paths()["data"]["etf_db"])
+
+
+def _latest_market_date_for(db) -> str | None:
+    """Return the latest market date when the DB implementation exposes it."""
+    getter = getattr(db, "get_latest_market_date", None)
+    if callable(getter):
+        try:
+            return getter()
+        except Exception:
+            return None
+    return None
+
+
+def _db_path_for(db) -> str:
+    """Return a usable database path for real and fake DB implementations."""
+    db_path = getattr(db, "db_path", None)
+    if db_path is not None:
+        return str(db_path)
+    return str(get_paths()["data"]["etf_db"])
 
 
 def _is_stale_date(raw_date: object, threshold_days: int = 0) -> bool:
@@ -151,6 +481,70 @@ def _is_stale_date(raw_date: object, threshold_days: int = 0) -> bool:
     except Exception:
         return True
     return (date.today() - latest_day).days > max(0, int(threshold_days))
+
+
+SCREEN_RESULT_CACHE_VERSION = "screen_result_v1"
+
+
+def _screen_cache_dir() -> Path:
+    cache_root = Path(get_paths()["data"]["cache"])
+    cache_dir = cache_root / "screen_requests"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _screen_request_signature(
+    *,
+    strategy_name: str,
+    strategy_text: str,
+    latest_market_date: str | None,
+    scan_scope: str | None,
+    exchange: str | None,
+    ticker_list: str | None,
+    tickers: list[str],
+    fallback_mode: bool,
+) -> str:
+    universe_blob = "|".join(str(ticker).upper() for ticker in tickers)
+    payload = {
+        "cache_version": SCREEN_RESULT_CACHE_VERSION,
+        "strategy_name": strategy_name,
+        "strategy_text_sha": hashlib.sha256(strategy_text.encode("utf-8")).hexdigest(),
+        "latest_market_date": latest_market_date or "",
+        "scan_scope": str(scan_scope or "").strip().lower(),
+        "exchange": str(exchange or "").strip().lower(),
+        "ticker_list_sha": hashlib.sha256(str(ticker_list or "").encode("utf-8")).hexdigest(),
+        "universe_sha": hashlib.sha256(universe_blob.encode("utf-8")).hexdigest(),
+        "fallback_mode": bool(fallback_mode),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+@lru_cache(maxsize=16)
+def _load_cached_screen_result(
+    cache_key: str, _cache_mtime_ns: int
+) -> dict | None:
+    cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
+    if not cache_path.exists():
+        return None
+    try:
+        cached = pd.read_pickle(cache_path)
+    except Exception:
+        return None
+    return cached if isinstance(cached, dict) else None
+
+
+def _save_cached_screen_result(cache_key: str, payload: dict) -> None:
+    cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
+    try:
+        pd.to_pickle(payload, cache_path)
+    except Exception:
+        try:
+            if cache_path.exists():
+                cache_path.unlink()
+        except Exception:
+            pass
 
 
 def _validate_swarm_dna_payload(payload: object) -> dict:
@@ -211,6 +605,195 @@ def _validate_swarm_dna_payload(payload: object) -> dict:
     return validated
 
 
+def _normalize_custom_ticker_list_value(value: object) -> list[str]:
+    """Return a stable, uppercase, de-duplicated ticker list from raw JSON input."""
+    if isinstance(value, dict):
+        value = value.get("tickers", [])
+
+    if value is None:
+        raw_items: list[object] = []
+    elif isinstance(value, str):
+        raw_items = re.split(r"[\s,;]+", value)
+    elif isinstance(value, (list, tuple, set)):
+        raw_items = list(value)
+    else:
+        raw_items = []
+
+    tickers: list[str] = []
+    seen: set[str] = set()
+    for item in raw_items:
+        ticker = str(item or "").strip().upper()
+        if not ticker or ticker in seen:
+            continue
+        seen.add(ticker)
+        tickers.append(ticker)
+    return tickers
+
+
+def _normalize_custom_ticker_list_name(value: object) -> str:
+    """Return a stable display name for the saved custom list."""
+    name = str(value or "").strip()
+    return name or CUSTOM_TICKER_LIST_DEFAULT_NAME
+
+
+def _normalize_custom_ticker_list_entry(
+    value: object,
+    fallback_name: str | None = None,
+) -> dict[str, object] | None:
+    """Normalize a single named ticker list entry."""
+    name = _normalize_custom_ticker_list_name(fallback_name)
+    tickers_source: object = []
+    if isinstance(value, dict):
+        name = _normalize_custom_ticker_list_name(
+            value.get("name")
+            or value.get("list_name")
+            or value.get("label")
+            or fallback_name
+        )
+        tickers_source = value.get("tickers", [])
+    else:
+        tickers_source = value
+
+    tickers = _normalize_custom_ticker_list_value(tickers_source)
+    if not tickers and not name:
+        return None
+    return {
+        "name": name,
+        "tickers": tickers,
+        "count": len(tickers),
+    }
+
+
+def _normalize_custom_ticker_lists_payload(payload: object) -> dict:
+    """Normalize the stored custom-list collection to a consistent structure."""
+    entries: list[dict[str, object]] = []
+    active_name = CUSTOM_TICKER_LIST_DEFAULT_NAME
+    updated_at = None
+
+    if isinstance(payload, dict):
+        updated_at = payload.get("updated_at")
+        active_list_name = None
+        active_list_value = payload.get("active_list")
+        if isinstance(active_list_value, dict):
+            active_list_name = active_list_value.get("name")
+        active_name = _normalize_custom_ticker_list_name(
+            payload.get("active_name")
+            or active_list_name
+            or payload.get("name")
+        )
+        raw_lists = payload.get("lists")
+        if isinstance(raw_lists, list):
+            for raw_entry in raw_lists:
+                entry = _normalize_custom_ticker_list_entry(raw_entry)
+                if entry and entry["name"] not in {item["name"] for item in entries}:
+                    entries.append(entry)
+        else:
+            entry = _normalize_custom_ticker_list_entry(
+                payload,
+                fallback_name=active_name,
+            )
+            if entry:
+                entries.append(entry)
+    elif isinstance(payload, (list, tuple, set, str)):
+        entry = _normalize_custom_ticker_list_entry(payload, fallback_name=active_name)
+        if entry:
+            entries.append(entry)
+
+    if not entries:
+        entries.append(
+            {
+                "name": CUSTOM_TICKER_LIST_DEFAULT_NAME,
+                "tickers": [],
+                "count": 0,
+            }
+        )
+
+    deduped: list[dict[str, object]] = []
+    seen_names: set[str] = set()
+    for entry in entries:
+        name = _normalize_custom_ticker_list_name(entry.get("name"))
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+        deduped.append(
+            {
+                "name": name,
+                "tickers": _normalize_custom_ticker_list_value(entry.get("tickers", [])),
+                "count": len(_normalize_custom_ticker_list_value(entry.get("tickers", []))),
+            }
+        )
+
+    active = next((entry for entry in deduped if entry["name"] == active_name), deduped[0])
+    total_unique: list[str] = []
+    seen_tickers: set[str] = set()
+    for entry in deduped:
+        for ticker in entry["tickers"]:
+            if ticker in seen_tickers:
+                continue
+            seen_tickers.add(ticker)
+            total_unique.append(ticker)
+
+    return {
+        "schema_version": CUSTOM_TICKER_LIST_SCHEMA_VERSION,
+        "updated_at": updated_at,
+        "active_name": active["name"],
+        "name": active["name"],
+        "tickers": list(active["tickers"]),
+        "count": len(active["tickers"]),
+        "active_list": dict(active),
+        "lists": deduped,
+        "list_count": len(deduped),
+        "total_count": len(total_unique),
+    }
+
+
+def _load_custom_ticker_list_payload() -> dict:
+    """Load the persisted custom ticker list JSON from config."""
+    if not CUSTOM_TICKER_LIST_CONFIG_PATH.exists():
+        return _normalize_custom_ticker_lists_payload({})
+
+    try:
+        with open(CUSTOM_TICKER_LIST_CONFIG_PATH, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except Exception as exc:
+        logger.warning("Failed to read custom ticker list JSON: %s", exc, exc_info=True)
+        fallback = _normalize_custom_ticker_lists_payload({})
+        fallback["error"] = "could_not_read"
+        return fallback
+
+    return _normalize_custom_ticker_lists_payload(payload)
+
+
+def _save_custom_ticker_list_payload(payload: object) -> dict:
+    """Persist the custom ticker list JSON to config."""
+    normalized_collection = _normalize_custom_ticker_lists_payload(payload)
+    CUSTOM_TICKER_LIST_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    saved_payload = {
+        "schema_version": CUSTOM_TICKER_LIST_SCHEMA_VERSION,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "active_name": normalized_collection["active_name"],
+        "name": normalized_collection["active_name"],
+        "count": normalized_collection["count"],
+        "tickers": normalized_collection["tickers"],
+        "active_list": normalized_collection["active_list"],
+        "lists": normalized_collection["lists"],
+        "list_count": normalized_collection["list_count"],
+        "total_count": normalized_collection["total_count"],
+    }
+    CUSTOM_TICKER_LIST_CONFIG_PATH.write_text(
+        json.dumps(saved_payload, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return saved_payload
+
+
+@app.get("/api/job-progress")
+async def job_progress():
+    """Return the latest dashboard job progress snapshot."""
+    with _JOB_PROGRESS_LOCK:
+        return dict(_JOB_PROGRESS_STATE)
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     """Suppress noisy favicon 404s until a real icon is added."""
@@ -221,18 +804,9 @@ async def favicon():
 async def index(request: Request):
     """Main dashboard page."""
     db = get_db()
-    conn = db._get_connection()
     try:
-        # Get all distinct tickers from DB OR from etfs.json if DB is fresh
-        tickers = pd.read_sql_query(
-            "SELECT DISTINCT ticker FROM etf_data ORDER BY ticker", conn
-        )["ticker"].tolist()
-        if not tickers:
-            # Fallback to etfs.json if DB is empty
-            etf_path = Path("config/etfs.json")
-            if etf_path.exists():
-                with open(etf_path, "r") as f:
-                    tickers = json.load(f).get("tickers", [])
+        latest_market_date = _latest_market_date_for(db)
+        tickers = list(_cached_dashboard_tickers(_db_path_for(db), latest_market_date))
     except Exception:
         tickers = []
 
@@ -263,10 +837,69 @@ async def get_strategy(name: str):
     return {"name": name, "content": content}
 
 
+@app.get("/api/ticker-universe")
+async def ticker_universe():
+    """Return the cached ticker universe with names for the list builder."""
+    db = get_db()
+    try:
+        latest_market_date = _latest_market_date_for(db)
+        items = list(_cached_dashboard_universe(_db_path_for(db), latest_market_date))
+    except Exception as exc:
+        logger.warning("Ticker universe endpoint fell back to empty payload: %s", exc, exc_info=True)
+        items = []
+
+    return {
+        "count": len(items),
+        "items": items,
+        "latest_market_date": _latest_market_date_for(db),
+    }
+
+
+@app.get("/api/custom-ticker-list")
+async def get_custom_ticker_list():
+    """Return the persisted custom ticker list for the list builder."""
+    return _load_custom_ticker_list_payload()
+
+
+@app.post("/api/custom-ticker-list")
+async def save_custom_ticker_list(request: Request):
+    """Persist a user-built ticker list to config/custom_ticker_list.json."""
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        logger.warning("Invalid custom ticker list JSON: %s", exc, exc_info=True)
+        raise HTTPException(status_code=400, detail="invalid json")
+
+    try:
+        saved = _save_custom_ticker_list_payload(payload)
+    except Exception as exc:
+        logger.error("Custom ticker list save failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {
+        "status": "success",
+        "schema_version": saved["schema_version"],
+        "active_name": saved["active_name"],
+        "name": saved["name"],
+        "count": saved["count"],
+        "updated_at": saved["updated_at"],
+        "tickers": saved["tickers"],
+        "lists": saved["lists"],
+        "list_count": saved["list_count"],
+        "total_count": saved["total_count"],
+        "path": str(CUSTOM_TICKER_LIST_CONFIG_PATH).replace("\\", "/"),
+    }
+
+
 @app.get("/api/market-status")
-def market_status(stale_after_days: int = 0):
+def market_status(stale_after_days: int = 0, source: Optional[str] = None):
     """Return freshness information about the underlying market data cache."""
-    refresher = MarketDataRefresher(db_path=str(get_db().db_path))
+    metadata_path, collection_mode = _market_source_config(source)
+    refresher = MarketDataRefresher(
+        db_path=str(get_db().db_path),
+        etfs_file=str(metadata_path),
+        collection_mode=collection_mode,
+    )
     try:
         return refresher.get_status(stale_after_days=stale_after_days)
     except Exception as e:
@@ -280,39 +913,85 @@ def refresh_market_data(
     stale_after_days: int = 0,
     depth: int = 400,
     max_workers: int = 8,
+    source: Optional[str] = None,
 ):
     """Refresh stale market data, then rebuild shortlist artifacts."""
     safe_depth = max(60, min(int(depth), 1500))
     safe_workers = max(1, min(int(max_workers), 16))
     safe_stale_after_days = max(0, min(int(stale_after_days), 30))
-    refresher = MarketDataRefresher(db_path=str(get_db().db_path))
+    metadata_path, collection_mode = _market_source_config(source)
+    refresher = MarketDataRefresher(
+        db_path=str(get_db().db_path),
+        etfs_file=str(metadata_path),
+        collection_mode=collection_mode,
+    )
     try:
-        return refresher.refresh_market_data(
-            depth=safe_depth,
-            stale_after_days=safe_stale_after_days,
-            force=force,
-            max_workers=safe_workers,
-            rebuild_shortlist=True,
+        refresh_kwargs = {
+            "depth": safe_depth,
+            "stale_after_days": safe_stale_after_days,
+            "force": force,
+            "max_workers": safe_workers,
+            "rebuild_shortlist": True,
+        }
+        if "progress_callback" in inspect.signature(refresher.refresh_market_data).parameters:
+            refresh_kwargs["progress_callback"] = _update_job_progress
+        _set_job_progress(
+            "market-refresh",
+            "starting",
+            pct=2.0,
+            label="Market Refresh",
+            detail="Preparing market refresh",
+            active=True,
         )
+        return refresher.refresh_market_data(**refresh_kwargs)
     except Exception as e:
+        _set_job_progress(
+            "market-refresh",
+            "failed",
+            pct=100.0,
+            label="Market Refresh",
+            detail=str(e),
+            active=False,
+            error=str(e),
+        )
         logger.error("Market refresh endpoint failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        _clear_job_progress("market-refresh")
 
 
-def _refresh_market_data_for_gui() -> dict[str, object] | None:
+def _refresh_market_data_for_gui(source: Optional[str] = None) -> dict[str, object] | None:
     """Top up market data for GUI-driven actions when a user asks for it."""
-    refresher = MarketDataRefresher(db_path=str(get_db().db_path))
+    metadata_path, collection_mode = _market_source_config(source)
+    refresher = MarketDataRefresher(
+        db_path=str(get_db().db_path),
+        etfs_file=str(metadata_path),
+        collection_mode=collection_mode,
+    )
     try:
-        return refresher.refresh_market_data(
-            depth=400,
-            stale_after_days=0,
-            force=False,
-            max_workers=8,
-            rebuild_shortlist=True,
+        refresh_kwargs = {
+            "depth": 400,
+            "stale_after_days": 0,
+            "force": False,
+            "max_workers": 8,
+            "rebuild_shortlist": True,
+        }
+        if "progress_callback" in inspect.signature(refresher.refresh_market_data).parameters:
+            refresh_kwargs["progress_callback"] = _update_job_progress
+        _set_job_progress(
+            "market-refresh",
+            "starting",
+            pct=2.0,
+            label="Market Refresh",
+            detail="Preparing market refresh",
+            active=True,
         )
+        return refresher.refresh_market_data(**refresh_kwargs)
     except Exception as e:
         logger.warning("GUI market refresh failed: %s", e, exc_info=True)
         return None
+    finally:
+        _clear_job_progress("market-refresh")
 
 
 @app.get("/api/shortlist")
@@ -643,6 +1322,9 @@ async def screen(
     strategy: Optional[str] = None,
     dsl_content: Optional[str] = None,
     refresh: bool = False,
+    scan_scope: Optional[str] = None,
+    exchange: Optional[str] = None,
+    ticker_list: Optional[str] = None,
 ):
     """Run a dynamic screen based on selected strategies or provided DSL."""
     logger.info("=== SCREEN ENDPOINT START ===")
@@ -652,10 +1334,22 @@ async def screen(
         "PROVIDED" if dsl_content else "NONE",
     )
     db = get_db()
+    latest_market_date = _latest_market_date_for(db)
+    db_path = _db_path_for(db)
+
+    _set_job_progress(
+        "screen",
+        "starting",
+        pct=0.0,
+        label="Screen",
+        detail="Preparing screen...",
+        active=True,
+    )
 
     try:
         if refresh:
-            _refresh_market_data_for_gui()
+            _refresh_market_data_for_gui(source=scan_scope or exchange)
+            latest_market_date = _latest_market_date_for(db)
 
         # Priority: 1. Provided DSL content (from Lab), 2. Named strategy (from dropdown)
         content = ""
@@ -671,6 +1365,31 @@ async def screen(
             )
 
         if not content:
+            cache_key = _screen_request_signature(
+                strategy_name="",
+                strategy_text="",
+                latest_market_date=latest_market_date,
+                scan_scope=scan_scope,
+                exchange=exchange,
+                ticker_list=ticker_list,
+                tickers=[],
+                fallback_mode=True,
+            )
+            cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
+            if not refresh and cache_path.exists():
+                cached_mtime_ns = cache_path.stat().st_mtime_ns
+                cached_payload = _load_cached_screen_result(cache_key, cached_mtime_ns)
+                if cached_payload is not None:
+                    _set_job_progress(
+                        "screen",
+                        "done",
+                        pct=100.0,
+                        label="Screen",
+                        detail="Loaded cached results",
+                        active=False,
+                    )
+                    return cached_payload
+
             logger.info("No strategy/DSL, using fallback basic trend screen")
             # Fallback to simple trend screen if no strategy found/selected
             conn = db._get_connection()
@@ -684,12 +1403,22 @@ async def screen(
             """
             df = pd.read_sql_query(query, conn)
             matches = _format_basic_screen_matches(df)
-            return {
+            payload = {
                 "matches": matches,
                 "errors": [],
                 "total_errors": 0,
                 "total_candidates": len(matches),
             }
+            _save_cached_screen_result(cache_key, payload)
+            _set_job_progress(
+                "screen",
+                "done",
+                pct=100.0,
+                label="Screen",
+                detail=f"{len(matches)} matches found",
+                active=False,
+            )
+            return payload
 
         strategy_spec = parse_dsl_content(content)
         final_entry = strategy_spec["entry"]
@@ -701,39 +1430,53 @@ async def screen(
             strategy_spec.get("max_days"),
         )
 
-        # Build a cleaner ticker universe so the backtester doesn't waste workers on stale symbols.
-        conn = db._get_connection()
-        universe_query = """
-            WITH ranked AS (
-                SELECT
-                    ticker,
-                    date,
-                    volume,
-                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
-                FROM etf_data
-            ),
-            agg AS (
-                SELECT
-                    ticker,
-                    MAX(date) AS last_date,
-                    COUNT(*) AS total_rows,
-                    SUM(CASE WHEN volume > 0 THEN 1 ELSE 0 END) AS nonzero_volume_rows,
-                    SUM(CASE WHEN rn <= 30 THEN 1 ELSE 0 END) AS recent_rows,
-                    SUM(CASE WHEN rn <= 30 AND volume = 0 THEN 1 ELSE 0 END) AS recent_zero_volume_rows
-                FROM ranked
-                GROUP BY ticker
-            )
-            SELECT ticker
-            FROM agg
-            WHERE total_rows >= 50
-              AND nonzero_volume_rows >= 10
-              AND recent_rows >= 10
-              AND recent_zero_volume_rows < 2
-              AND last_date >= date('now', '-180 day')
-        """
-        universe_df = pd.read_sql_query(universe_query, conn)
-        tickers = universe_df["ticker"].tolist()
+        tickers = list(_cached_screen_universe(db_path, latest_market_date))
+        tickers = filter_tickers_by_exchange_and_list(
+            tickers,
+            exchange=exchange,
+            ticker_list=ticker_list,
+            scan_scope=scan_scope,
+        )
         logger.info("Ticker universe built: %d tickers to screen", len(tickers))
+        if not tickers:
+            _set_job_progress(
+                "screen",
+                "done",
+                pct=100.0,
+                label="Screen",
+                detail="No tickers selected",
+                active=False,
+            )
+            return {
+                "matches": [],
+                "errors": [],
+                "total_errors": 0,
+                "total_candidates": 0,
+            }
+        cache_key = _screen_request_signature(
+            strategy_name=strategy or (strategy_spec.get("name") if isinstance(strategy_spec, dict) else ""),
+            strategy_text=content,
+            latest_market_date=latest_market_date,
+            scan_scope=scan_scope,
+            exchange=exchange,
+            ticker_list=ticker_list,
+            tickers=tickers,
+            fallback_mode=False,
+        )
+        cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
+        if not refresh and cache_path.exists():
+            cached_mtime_ns = cache_path.stat().st_mtime_ns
+            cached_payload = _load_cached_screen_result(cache_key, cached_mtime_ns)
+            if cached_payload is not None:
+                _set_job_progress(
+                    "screen",
+                    "done",
+                    pct=100.0,
+                    label="Screen",
+                    detail="Loaded cached results",
+                    active=False,
+                )
+                return cached_payload
         # Run backtest for current status
         bt = Backtester()
         logger.info("Starting parallel backtest for %d tickers", len(tickers))
@@ -747,7 +1490,14 @@ async def screen(
             run_kwargs["show_progress"] = True
         if "task_timeout_seconds" in inspect.signature(bt.run_parallel_backtest).parameters:
             run_kwargs["task_timeout_seconds"] = 45
-        results = bt.run_parallel_backtest(tickers, bt.scripted_strategy, **run_kwargs)
+        if "progress_callback" in inspect.signature(bt.run_parallel_backtest).parameters:
+            run_kwargs["progress_callback"] = _update_job_progress
+        results = await asyncio.to_thread(
+            bt.run_parallel_backtest,
+            tickers,
+            bt.scripted_strategy,
+            **run_kwargs,
+        )
         logger.info(
             "Backtest complete, processing %d results", len(results) if results else 0
         )
@@ -861,17 +1611,36 @@ async def screen(
         logger.info(
             "Screen complete. Matches: %d, Errors: %d", len(matches), len(errors)
         )
+        _set_job_progress(
+            "screen",
+            "done",
+            pct=100.0,
+            label="Screen",
+            detail=f"{len(matches)} matches found",
+            active=False,
+        )
 
         # Return matched ETFs along with errors for the UI
-        return {
+        payload = {
             "matches": matches,
             "errors": errors[:50],  # Limit errors returned to UI
             "total_errors": len(errors),
             "total_candidates": len(tickers),
         }
+        _save_cached_screen_result(cache_key, payload)
+        return payload
 
     except KeyboardInterrupt:
         logger.warning("Screen run interrupted by KeyboardInterrupt", exc_info=True)
+        _set_job_progress(
+            "screen",
+            "failed",
+            pct=100.0,
+            label="Screen",
+            detail="Screen run interrupted",
+            active=False,
+            error="Screen run interrupted",
+        )
         return JSONResponse(
             status_code=503,
             content={
@@ -883,6 +1652,15 @@ async def screen(
         )
     except Exception as e:
         logger.error("Screen endpoint failed: %s", str(e), exc_info=True)
+        _set_job_progress(
+            "screen",
+            "failed",
+            pct=100.0,
+            label="Screen",
+            detail=str(e),
+            active=False,
+            error=str(e),
+        )
         return JSONResponse(
             status_code=500,
             content={
@@ -902,6 +1680,9 @@ async def backtest_view(
     signal_days: Optional[int] = None,
     since_days: Optional[int] = None,
     refresh: bool = False,
+    scan_scope: Optional[str] = None,
+    exchange: Optional[str] = None,
+    ticker_list: Optional[str] = None,
 ):
     """Evaluate a saved strategy and return ranked quality metrics for the UI."""
     strategy_name = (strategy or "").strip()
@@ -910,6 +1691,14 @@ async def backtest_view(
     signal_window_days = signal_days if signal_days is not None else since_days
 
     if not strategy_name and not dsl_text:
+        _set_job_progress(
+            "backtest",
+            "done",
+            pct=100.0,
+            label="Backtest",
+            detail="No strategy selected",
+            active=False,
+        )
         return {
             "strategy_name": "",
             "source_type": source_type,
@@ -927,9 +1716,18 @@ async def backtest_view(
     if not dsl_text and not strat_path.exists():
         raise HTTPException(status_code=404, detail="Strategy not found")
 
+    _set_job_progress(
+        "backtest",
+        "starting",
+        pct=0.0,
+        label="Backtest",
+        detail="Preparing backtest...",
+        active=True,
+    )
+
     try:
         if refresh:
-            _refresh_market_data_for_gui()
+            _refresh_market_data_for_gui(source=scan_scope or exchange)
 
         evaluate_kwargs = {
             "strategy_path": (strat_path.as_posix() if not dsl_text else None),
@@ -938,12 +1736,37 @@ async def backtest_view(
         }
         if signal_window_days is not None:
             evaluate_kwargs["since_days"] = signal_window_days
-        df = evaluate_strategies(**evaluate_kwargs)
+        if scan_scope is not None:
+            evaluate_kwargs["scan_scope"] = scan_scope
+        if exchange is not None:
+            evaluate_kwargs["exchange"] = exchange
+        if ticker_list is not None:
+            evaluate_kwargs["ticker_list"] = ticker_list
+        if "progress_callback" in inspect.signature(evaluate_strategies).parameters:
+            evaluate_kwargs["progress_callback"] = _update_job_progress
+        df = await asyncio.to_thread(evaluate_strategies, **evaluate_kwargs)
     except Exception as e:
         logger.error("Backtest endpoint failed for %s: %s", strategy_name, e, exc_info=True)
+        _set_job_progress(
+            "backtest",
+            "failed",
+            pct=100.0,
+            label="Backtest",
+            detail=str(e),
+            active=False,
+            error=str(e),
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
     if df.empty:
+        _set_job_progress(
+            "backtest",
+            "done",
+            pct=100.0,
+            label="Backtest",
+            detail="No scored results",
+            active=False,
+        )
         return {
             "strategy_name": strategy_name or "Editor Draft",
             "source_type": source_type,
@@ -1000,6 +1823,15 @@ async def backtest_view(
             "yaxis": {"title": "Quality Score"},
         },
     }
+
+    _set_job_progress(
+        "backtest",
+        "done",
+        pct=100.0,
+        label="Backtest",
+        detail=f"{len(df)} rows scored",
+        active=False,
+    )
 
     return {
         "strategy_name": strategy_name or "Editor Draft",

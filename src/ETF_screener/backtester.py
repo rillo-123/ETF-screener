@@ -54,7 +54,35 @@ def _worker_run_remote(
     )
 
 
+def _worker_run_remote_scripted(
+    ticker,
+    db_path,
+    initial_capital,
+    commission,
+    slippage_pct,
+    days,
+    indicators_setup,
+    kwargs,
+):
+    """Process-safe worker for the common scripted-strategy path."""
+    bt = Backtester(
+        db_path=db_path,
+        initial_capital=initial_capital,
+        commission=commission,
+        slippage_pct=slippage_pct,
+    )
+    return bt.run_strategy(
+        ticker=ticker,
+        strategy_func=bt.scripted_strategy,
+        days=days,
+        indicators_setup=indicators_setup,
+        strategy_kwargs=kwargs,
+    )
+
+
 class Backtester:
+    RESULT_CACHE_VERSION = "backtest_result_v1"
+
     def __init__(
         self,
         db_path=None,
@@ -101,6 +129,7 @@ class Backtester:
         # Cache key is based on ticker and strategy name if scripted
         cache_dir = Path(get_paths()["data"]["cache"])
         cache_path = None
+        result_cache_path = None
         strategy_name = "unknown"
         if strategy_kwargs and "entry_script" in strategy_kwargs:
             # Create a unique hash for the strategy logic
@@ -111,15 +140,25 @@ class Backtester:
             ).hexdigest()[:8]
             strategy_name = f"dsl_{strat_hash}"
             cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path = Path(get_paths()["data"]["parquet"]) / f"{ticker}_{strategy_name}_{days}.parquet"
+            latest_date = db.get_latest_date(ticker) or "no_date"
+            cache_key = f"{ticker}_{strategy_name}_{days}_{latest_date}_{self.RESULT_CACHE_VERSION}"
+            cache_path = Path(get_paths()["data"]["parquet"]) / f"{cache_key}.parquet"
+            result_cache_path = cache_dir / f"{cache_key}.pkl"
 
         # Try loading from cache first
-        if cache_path and cache_path.exists():
+        if cache_path and result_cache_path and cache_path.exists() and result_cache_path.exists():
             try:
+                with result_cache_path.open("rb") as handle:
+                    cached_results = pd.read_pickle(handle)
+                if not isinstance(cached_results, dict):
+                    raise ValueError("Invalid result cache payload")
                 df = pd.read_parquet(cache_path)
-                # Verify it has enough data
                 if df is None or df.empty:
                     df = None
+                else:
+                    cached_results = dict(cached_results)
+                    cached_results["df"] = df
+                    return cached_results
             except Exception as e:
                 logger.warning("Failed to read cache %s: %s", cache_path, e)
                 df = None
@@ -189,16 +228,26 @@ class Backtester:
         if "signal" not in df.columns:
             return {"ticker": ticker, "error": "No signal col"}
 
+        # Pull the hot columns into arrays once so the simulation loop does not
+        # keep bouncing through pandas indexing machinery.
+        if "Date" in df.columns:
+            dates = pd.to_datetime(df["Date"], errors="coerce").to_numpy()
+        else:
+            dates = pd.to_datetime(df.get("date"), errors="coerce").to_numpy()
+
+        price_series = df["Close"] if "Close" in df.columns else df["close"]
+        prices = pd.to_numeric(price_series, errors="coerce").to_numpy(dtype="float64")
+        signals = pd.to_numeric(df["signal"], errors="coerce").fillna(0).astype(np.int8).to_numpy()
+        executed_signals = np.zeros(len(df), dtype=np.int8)
+
         capital = self.initial_capital
         position = 0
         trades = []
         equity = [capital]
         max_equity = self.initial_capital
         mdd = 0
-        price_col = "Close" if "Close" in df else "close"
-        for i in range(len(df)):
-            price = df.iloc[i][price_col]
-            signal = df.iloc[i]["signal"]
+        for i, price in enumerate(prices):
+            signal = signals[i]
             current_equity = capital + position * (price)
             equity.append(current_equity)
 
@@ -214,12 +263,8 @@ class Backtester:
                 capital -= self.commission
                 position = capital / buy_price
                 capital = 0
-                trades.append(
-                    {"type": "BUY", "date": df.iloc[i]["Date"], "price": buy_price}
-                )
-                df.at[i, "Signal"] = (
-                    1  # Update signal column to match true trade execution
-                )
+                trades.append({"type": "BUY", "date": dates[i], "price": buy_price})
+                executed_signals[i] = 1
             elif signal == -1 and position > 0:
                 sell_price = price * (1 - self.slippage_pct / 100)
                 capital = (position * sell_price) - self.commission
@@ -227,19 +272,20 @@ class Backtester:
                 trades.append(
                     {
                         "type": "SELL",
-                        "date": df.iloc[i]["Date"],
+                        "date": dates[i],
                         "price": sell_price,
                         "profit": (sell_price - trades[-1]["price"])
                         / trades[-1]["price"],
                     }
                 )
-                df.at[i, "Signal"] = (
-                    -1
-                )  # Update signal column to match true trade execution
+                executed_signals[i] = -1
             else:
-                df.at[i, "Signal"] = 0
+                executed_signals[i] = 0
 
-        final_val = capital + position * (df.iloc[-1][price_col])
+        df["Signal"] = executed_signals
+        df["signal"] = executed_signals
+
+        final_val = capital + position * prices[-1]
         closed_trades = [t for t in trades if t["type"] == "SELL"]
         win_rate = 0
         profit_factor = 0
@@ -288,6 +334,15 @@ class Backtester:
             for k, v in strategy_result_meta.items():
                 if k not in ["df"]:  # Don't overwrite the main df with metadata df
                     results[k] = v
+
+        if cache_path and result_cache_path and not df.empty:
+            try:
+                df.to_parquet(cache_path, compression="snappy")
+                cached_results = {k: v for k, v in results.items() if k != "df"}
+                with result_cache_path.open("wb") as handle:
+                    pd.to_pickle(cached_results, handle)
+            except Exception as e:
+                logger.warning("Failed to save result cache %s: %s", result_cache_path, e)
 
         return results
 
@@ -781,6 +836,7 @@ class Backtester:
         show_progress=True,
         progress_label=None,
         task_timeout_seconds=120,
+        progress_callback=None,
     ):
         import concurrent.futures
         import os
@@ -819,23 +875,52 @@ class Backtester:
         )
         if show_progress and pbar is None:
             logger.info("tqdm is unavailable; falling back to silent progress mode")
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+        if progress_callback is not None:
+            try:
+                progress_callback(
+                    {
+                        "job": "backtest",
+                        "phase": "starting",
+                        "pct": 2.0,
+                        "detail": f"Queueing {total} tickers",
+                        "label": progress_label or "Backtest",
+                        "active": True,
+                    }
+                )
+            except Exception:
+                pass
+        use_processes = False
+        if strategy_kwargs and "entry_script" in strategy_kwargs and "exit_script" in strategy_kwargs:
+            use_processes = True
+
+        executor_cls = (
+            concurrent.futures.ProcessPoolExecutor if use_processes else concurrent.futures.ThreadPoolExecutor
+        )
+        executor = executor_cls(max_workers=max_workers)
         try:
-            future_to_ticker = {
-                executor.submit(
-                    _worker_run_remote,
-                    t,
-                    self.db_path,
-                    self.initial_capital,
-                    self.commission,
-                    self.slippage_pct,
-                    base_strategy,
-                    days,
-                    indicators_setup,
-                    strategy_kwargs,
-                ): t
-                for t in tickers
-            }
+            worker = _worker_run_remote_scripted if use_processes else _worker_run_remote
+            worker_args = (
+                self.db_path,
+                self.initial_capital,
+                self.commission,
+                self.slippage_pct,
+                days,
+                indicators_setup,
+                strategy_kwargs,
+            )
+            future_to_ticker = {}
+            for t in tickers:
+                if use_processes:
+                    future = executor.submit(worker, t, *worker_args)
+                else:
+                    future = executor.submit(
+                        worker,
+                        t,
+                        *worker_args[:4],
+                        base_strategy,
+                        *worker_args[4:],
+                    )
+                future_to_ticker[future] = t
             running_times = {}
             pending = set(future_to_ticker)
             completed = 0
@@ -863,6 +948,21 @@ class Backtester:
 
                     if pbar is not None:
                         pbar.update(1)
+                    if progress_callback is not None:
+                        pct = 5.0 + ((completed / max(1, total)) * 88.0)
+                        try:
+                            progress_callback(
+                                {
+                                    "job": "backtest",
+                                    "phase": "running",
+                                    "pct": pct,
+                                    "detail": f"{completed}/{total} tickers complete",
+                                    "label": progress_label or "Backtest",
+                                    "active": True,
+                                }
+                            )
+                        except Exception:
+                            pass
 
                 if task_timeout_seconds is not None and pending:
                     timed_out = [
@@ -889,11 +989,40 @@ class Backtester:
                         completed += 1
                         if pbar is not None:
                             pbar.update(1)
+                        if progress_callback is not None:
+                            pct = 5.0 + ((completed / max(1, total)) * 88.0)
+                            try:
+                                progress_callback(
+                                    {
+                                        "job": "backtest",
+                                        "phase": "running",
+                                        "pct": pct,
+                                        "detail": f"{completed}/{total} tickers complete",
+                                        "label": progress_label or "Backtest",
+                                        "active": True,
+                                    }
+                                )
+                            except Exception:
+                                pass
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
 
         if pbar is not None:
             pbar.close()
+        if progress_callback is not None:
+            try:
+                progress_callback(
+                    {
+                        "job": "backtest",
+                        "phase": "done",
+                        "pct": 100.0,
+                        "detail": f"{completed}/{total} tickers complete",
+                        "label": progress_label or "Backtest",
+                        "active": False,
+                    }
+                )
+            except Exception:
+                pass
         return results
 
 

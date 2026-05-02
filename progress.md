@@ -1,5 +1,357 @@
 # Progress
 
+## 2026-05-02 22:09:18 +02:00
+
+- Tightened the Plotly ribbon chart gutter by lowering the shared left margin and moving the left-side ribbon labels slightly inward.
+- Updated `config/ribbon_settings.json` and the corresponding defaults in `src/ETF_screener/plotter_plotly.py` so the chart uses the more compact left spacing consistently.
+- Adjusted the plotter regression test to expect the new compact left margin.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_plotter_plotly.py tests\\test_dashboard_api.py -q`; all 52 tests passed.
+- Current status: the screener chart should sit noticeably farther left with less dead space while keeping the ribbon labels readable.
+- Next resume point: if you want it even tighter, we can trim the left gutter a bit more or make the ribbon label annotations slightly smaller.
+
+## 2026-05-02 22:06:21 +02:00
+
+- Folded `vulture` into the default `run_all_tests.ps1` path so a plain test run now covers both pytest and dead-code scanning.
+- Kept the repo-local `vulture_whitelist.py` in place so deliberate FastAPI route handlers and helper APIs stay out of the dead-code noise.
+- Verified `.\run_all_tests.ps1` now passes end-to-end with `118 passed` and a clean vulture run.
+- Current status: the default quality suite now checks both tests and dead-code coverage in one command.
+- Next resume point: if needed, we can add a small `-NoVulture` escape hatch later, but for now the default behavior matches the preference to keep vulture inside the main runner.
+
+## 2026-05-02 22:04:48 +02:00
+
+- Added `vulture_whitelist.py` to pin the deliberate FastAPI route handlers and public helper entrypoints that vulture cannot infer from static imports alone.
+- Fixed `run_all_tests.ps1` to use plain ASCII in its success and failure summaries so the nested Windows PowerShell invocation can parse it cleanly.
+- Restored the `lane_width` call path in `src/ETF_screener/plotter_plotly.py` so the chart tests and dashboard chart endpoint work again.
+- Verified the exact command `.\run_vulture.ps1 -RunTests -ExtraArgs "--exclude static/assets/js" -OutFile .\logs\vulture_report.log` now completes successfully with the nested test suite passing.
+- Current status: the repo-local vulture quality gate is green again, and the noisy framework false positives are covered by the whitelist file instead of failing the scan.
+- Next resume point: if we want to make the scan even cleaner, we can trim the whitelist or teach `run_vulture.ps1` to emit a shorter summary when the report is empty.
+
+## 2026-05-02 21:58:19 +02:00
+
+- Ran `vulture` across `src` and `tests`.
+- Fixed the real syntax issue it found in `src/ETF_screener/snippets.py` by restoring the missing `get_paths` import and correcting the constructor indentation.
+- Renamed a few intentionally unused cache-helper parameters and a test-local trace variable so they stop surfacing as avoidable noise.
+- `vulture` still reports many FastAPI route handlers and helper APIs as unused, but those are expected false positives because the framework wires them up dynamically.
+- Verified the cleaned files still parse with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\snippets.py src\\ETF_screener\\scripts\\churn_strategies.py src\\ETF_screener\\dashboard\\app_fast.py tests\\test_plotter_plotly.py tests\\test_dashboard_api.py tests\\test_churn_strategies.py`.
+- Current status: the dead-code scan is cleaner, and the only remaining `vulture` noise is mostly framework-driven false positives.
+- Next resume point: if you want, we can add a repo-local `vulture` ignore list for the deliberate FastAPI and utility surfaces so the scan output is much quieter.
+
+## 2026-05-02 21:54:45 +02:00
+
+- Added request-level caches for both the strategy evaluator and the screener in `src/ETF_screener/scripts/churn_strategies.py` and `src/ETF_screener/dashboard/app_fast.py`.
+- Cache keys now include the strategy text, source scope, selected list/exchange filters, latest market date, and the selected ticker universe, so identical consecutive GUI runs can hit the fast path.
+- Kept the existing per-ticker and per-strategy caches in place; this new layer sits above them so the whole result payload can be reused instead of just the individual ticker work.
+- Added regression tests proving the evaluator and screener only do the expensive backtest work once for identical repeated requests.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_churn_strategies.py tests\\test_dashboard_api.py -q`; all 30 tests passed.
+- Verified syntax with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\scripts\\churn_strategies.py src\\ETF_screener\\dashboard\\app_fast.py tests\\test_churn_strategies.py tests\\test_dashboard_api.py`.
+- Current status: identical consecutive screen/backtest runs should now feel noticeably snappier instead of taking the same time again.
+- Next resume point: if you want more speed, the next target would be reducing the first-run cost by precomputing the busiest strategy results in the background.
+
+## 2026-05-02 21:47:51 +02:00
+
+- Fixed the Plotly row calculation bug in `src/ETF_screener/plotter_plotly.py` where a stale `aggregated_row = 3 + num_ribbons` line was overwriting the correct bottom-row placement.
+- The aggregated buy/sell lane now sits on its own row below the last DSL ribbon, so `Trigger` and `Aggregated` no longer stack on the same vertical band.
+- Kept the strategy-referenced TA curve panels from the earlier patch, so the chart still shows the actual indicator curves the DSL uses.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_plotter_plotly.py tests\\test_dashboard_api.py -q`; all 51 tests passed.
+- Verified the rendered trace axis mapping in a quick local sample: `Context` on `y4`, `Trigger` on `y5`, and `Aggregated` on `y6`.
+- Current status: the chart layout is now correctly separated and the bottom summary lane is no longer colliding with the last ribbon.
+- Next resume point: if you want, we can still make the lane labels visually tighter or add a separator band between ribbon groups.
+
+## 2026-05-02 21:33:23 +02:00
+
+- Expanded the Plotly chart path in `src/ETF_screener/plotter_plotly.py` so strategy-referenced TA curves are no longer limited to just EMA and Supertrend overlays.
+- Added dedicated oscillator and momentum panels for referenced indicators such as RSI, MACD, Stochastic, TSI, ADX, slopes, and the volume EMA helper when those tokens appear in the DSL and the DataFrame has the columns.
+- Kept Supertrend overlay gating in place, but now it also recognizes plain `st_is_green` / `st_is_red` style references as a reason to draw the supertrend curve.
+- Verified syntax with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\plotter_plotly.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_plotter_plotly.py tests\\test_dashboard_api.py -q`; all 51 tests passed.
+- Current status: chart drill-down should now show the strategy's actual TA curves much more faithfully instead of only the old overlay subset.
+- Next resume point: if you want, we can tune the panel grouping or colors so dense strategies stay readable with fewer overlapping lines.
+
+## 2026-05-02 19:24:10 +02:00
+
+- Added copy buttons for the visible `strategy-select` dropdown in the top bar and the saved-list selector inside the list builder modal.
+- Added a reusable `copySelectText()` helper in `src/ETF_screener/dashboard/static/js/dashboard.js` so the selected option label can be copied to the clipboard.
+- Kept the browser-safe fallback path for clipboard access, with a toast if copying fails.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_market_data_service.py tests\\test_churn_strategies.py -q`; all 37 tests passed.
+- Verified syntax with `node --check src\\ETF_screener\\dashboard\\static\\js\\dashboard.js`.
+- Current status: the main dropdowns are now copy-friendly without changing the rest of the dashboard layout.
+- Next resume point: if you want, we can apply the same copy affordance to the hidden ticker dropdown or other picker-style controls.
+
+## 2026-05-02 19:16:11 +02:00
+
+- Read the dashboard logs and found the repeat Sweden failures were the same nine Yahoo-missing symbols: `BONAV-A.ST`, `CAT-A.ST`, `HAKI-A.ST`, `MANG.ST`, `MSON-A.ST`, `MTG-A.ST`, `SVOL-A.ST`, `VPLAY-A.ST`, and `WTW-A.ST`.
+- Added those symbols to `config/blacklist.json` so they are excluded from the dashboard universe, scan/backtest tickers, and market refresh tracking.
+- Updated `src/ETF_screener/dashboard/app_fast.py` and `src/ETF_screener/scripts/churn_strategies.py` to filter out blacklisted tickers before they reach the UI or the screen engine.
+- Fixed the browser screen loop in `src/ETF_screener/dashboard/static/js/dashboard.js` so `progInterval` is cleared safely without throwing a follow-up JavaScript error.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_market_data_service.py tests\\test_churn_strategies.py -q`; all 37 tests passed.
+- Verified syntax with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\scripts\\churn_strategies.py src\\ETF_screener\\market_data_service.py src\\ETF_screener\\yfinance_fetcher.py`.
+- Current status: the Swedish scan should stop surfacing those repeated failed-load entries from Yahoo, and the browser progress loop should stay clean.
+- Next resume point: if any Sweden symbols still fail, inspect the new logs for the exact remaining tickers and blacklist or remap only those.
+
+## 2026-05-02 19:08:11 +02:00
+
+- Switched `src/ETF_screener/market_data_service.py` to a sequential Sweden refresh path, because the full 406-name Stockholm burst was still producing too many load failures even after lowering concurrency.
+- Kept the retry/backoff layer in `src/ETF_screener/yfinance_fetcher.py` so individual symbols still get a couple of extra chances before being marked failed.
+- Left the source-aware market status and refresh plumbing in place so Sweden, Xetra, and saved lists still resolve the correct universe file.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_market_data_service.py -q`; all 34 tests passed.
+- Verified syntax with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\market_data_service.py src\\ETF_screener\\yfinance_fetcher.py src\\ETF_screener\\dashboard\\app_fast.py`.
+- Current status: Sweden refreshes should be much less likely to generate a wall of failures now that they run one ticker at a time.
+- Next resume point: if failures remain, inspect the specific tickers and decide whether a small blacklist or a symbol remap is needed.
+
+## 2026-05-02 19:05:12 +02:00
+
+- Added retry/backoff to `src/ETF_screener/yfinance_fetcher.py` so a temporary Yahoo failure has a second and third chance before a ticker is marked failed.
+- Lowered refresh concurrency for `config/sweden.json` inside `src/ETF_screener/market_data_service.py`, because the full 406-name Stockholm burst was likely tripping Yahoo rate limits.
+- Kept custom lists gentle too when they are small enough to refresh serially without needing the full worker pool.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_market_data_service.py -q`; all 34 tests passed.
+- Verified syntax with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\yfinance_fetcher.py src\\ETF_screener\\market_data_service.py src\\ETF_screener\\dashboard\\app_fast.py`.
+- Current status: Sweden refreshes should be much less likely to blow up into a wall of 406-style load failures.
+- Next resume point: if the problem still appears, we should inspect the exact failing symbols and decide whether to blacklist or special-case them.
+
+## 2026-05-02 18:57:51 +02:00
+
+- Made market freshness source-aware in `src/ETF_screener/dashboard/app_fast.py` so the selected scan source now resolves its own metadata file instead of always falling back to Xetra.
+- Extended `src/ETF_screener/market_data_service.py` to understand the custom multi-list JSON shape, including active-list and all-lists modes.
+- Updated `src/ETF_screener/dashboard/static/js/dashboard.js` to send the current scan source to `/api/market-status` and `/api/market-data/refresh`, and to say `Sweden`, `saved list`, or `all saved lists` in the refresh copy.
+- Routed the manual refresh button directly to the selected source instead of doing an extra freshness precheck first.
+- Kept `screen()` and `backtest_view()` tied to the active source when they request a GUI market top-up.
+- Added regression coverage for the new source-aware refresh plumbing and kept the market-data tests aligned with the current business-day behavior.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_market_data_service.py -q`; all 34 tests passed.
+- Verified syntax with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\market_data_service.py`.
+- Current status: Sweden and custom-list refreshes now report the right universe size instead of the default Xetra count.
+- Next resume point: decide whether the shortlist tab should also become source-aware, or leave it as the general ETF snapshot for now.
+
+## 2026-05-02 18:57:06 +02:00
+
+- Fixed the scan-source wiring so `Sweden` no longer falls back to the old Xetra exchange path.
+- Added `All Lists` to the source chooser and made the scan universe resolve directly from the selected source instead of a separate exchange dropdown.
+- Upgraded the saved-list store to a small collection model with an active list, so `My List` now means the selected list and the modal can switch between saved lists.
+- Added a saved-list selector inside the list builder modal, plus a multi-list save/load round-trip through `/api/custom-ticker-list`.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\scripts\\churn_strategies.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_churn_strategies.py -q`; all 31 tests passed.
+- Current status: the source chooser and list builder now match the requested model much more closely.
+- Next resume point: if you want, we can polish the list modal further by adding delete/duplicate buttons for saved lists.
+
+## 2026-05-02 18:46:07 +02:00
+
+- Swapped the source chooser from a dropdown to a compact button group so the scanner now reads `Xetra`, `Sweden`, or `My List` without adding another dropdown to the top bar.
+- Kept the list builder as a separate `Edit My List...` action, so the user still has one place to build the list and one place to choose the scan source.
+- The active source button now carries the visual emphasis, while the list builder button keeps showing the current saved list name and ticker count.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\scripts\\churn_strategies.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_churn_strategies.py -q`; all 31 tests passed.
+- Current status: the top bar should feel noticeably less crowded now that the scan source is a button group rather than another dropdown.
+- Next resume point: if you want, we can later make the active source button even more minimal by using icons or shorter labels.
+
+## 2026-05-02 18:41:16 +02:00
+
+- Simplified the top bar again so the scanner uses one source chooser with `Xetra`, `Sweden`, and `My List` instead of separate exchange and list scan controls.
+- Kept the list builder as a separate `Edit My List...` button, and made that button show the current saved list name and count.
+- The scan source now drives both the backend universe selection and the hidden ticker drill-down universe, so the UI stays consistent without an extra exchange dropdown.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\scripts\\churn_strategies.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_churn_strategies.py -q`; all 31 tests passed.
+- Current status: the scanning controls should feel simpler and more direct now that the source choice is a single control.
+- Next resume point: if you want, we can make the source chooser a segmented control instead of a dropdown next.
+
+## 2026-05-02 18:32:55 +02:00
+
+- Made the `Scan Scope` control visually prominent by wrapping it in a dedicated top-bar panel with a stronger accent, label, and helper text.
+- The selector now changes its accent styling based on whether it is set to `Entire Exchange` or `Chosen List`, so the current mode is easier to read at a glance.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py -q`; all 28 tests passed.
+- Current status: the scan-scope switch should now be much harder to miss in the toolbar.
+- Next resume point: if you want, we can make the scan-scope control even bolder by turning it into a segmented toggle instead of a dropdown.
+
+## 2026-05-02 18:31:19 +02:00
+
+- Added a sticky `Scan Scope` selector to the dashboard top bar so the screener can work either against the whole exchange or against the saved custom list.
+- Wired the new scope through `/api/screen` and `/api/backtest`, and updated the shared ticker filter helper so `list` mode uses only the chosen list while `exchange` mode uses the selected exchange bucket.
+- The top-bar exchange selector now gets disabled when the scan scope is set to `Chosen List`, which makes the active universe choice clearer in the UI.
+- If the user chooses list scope with no saved tickers yet, the dashboard opens the list builder instead of starting a meaningless empty scan.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\scripts\\churn_strategies.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_churn_strategies.py -q`; all 31 tests passed.
+- Current status: the scanner now has an explicit either/or universe selector, which should make the top bar much less ambiguous.
+- Next resume point: if you want, the next polish pass could make the scan-scope label more visual or add a tiny helper text under it.
+
+## 2026-05-02 18:17:14 +02:00
+
+- Added a `List Name` field to the custom list modal so the single saved list can now be named directly in the UI.
+- The saved custom-list JSON now stores both `name` and `tickers`, with `config/custom_ticker_list.json` bumped to `custom_ticker_list_v2`.
+- The sticky top-bar selector now uses the saved list name when it is available, so the visible label matches what you named it.
+- The backend save/load endpoints now round-trip the list name as part of the payload, while still accepting the older name-less format.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\plotter.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py -q`; all 26 tests passed.
+- Current status: the list workflow now supports both a custom ticker set and a human-readable name without adding a full multi-list manager.
+- Next resume point: if you want, we can make the list name update live in the sticky selector as you type, or keep it as a save-time change only.
+
+## 2026-05-02 18:13:48 +02:00
+
+- Replaced the small 64-name Swedish seed with a broader `config/sweden.json` and `config/sweden.csv` generated from the official Nasdaq Nordic Stockholm shares feed.
+- The new Sweden file now contains 406 symbols, keyed by yfinance-style tickers like `ABB.ST` and `VOLV-B.ST`, so the runtime lookup stays compatible with yfinance.
+- The dashboard universe merge and plotter lookup already consume `sweden.json`, so the Swedish selector and modal should now surface a much fuller market list.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\plotter.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py -q`; all 26 tests passed.
+- Current status: the Sweden selector should now feel like a real market universe instead of a tiny starter list.
+- Next resume point: if you want, we can still curate that 406-name feed down later, or add another quick filter for large caps versus smaller names.
+
+## 2026-05-02 18:04:32 +02:00
+
+- Added a dedicated Swedish universe seed in `config/sweden.csv` and `config/sweden.json`, built from `reference/swedish_equities_option_A.csv`.
+- Wired the dashboard metadata loader in `src/ETF_screener/dashboard/app_fast.py` to merge `sweden.json` alongside `xetra.json` and the legacy ETF metadata file.
+- The ticker universe endpoint now keeps Swedish entries in the modal universe even when they are not present in the local price database, and classifies them as `sweden` via the `STO` market flag.
+- Updated `src/ETF_screener/plotter.py` so Swedish tickers can resolve friendly names from `config/sweden.json` too.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\plotter.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py -q`; all 26 tests passed.
+- Current status: the Swedish picker now has a real curated source file instead of relying on suffix heuristics alone.
+- Next resume point: if you want the list to cover more than the current 64 Swedish names, we can extend `reference/swedish_equities_option_A.csv` or replace it with a broader market feed.
+
+## 2026-05-02 17:30:35 +02:00
+
+- Tweaked the builder to trust backend exchange metadata when it exists, which makes the Swedish filter more accurate for tickers that do not obviously reveal their market from the symbol alone.
+- The modal still searches company names, issuers, regions, and asset class, but the backend-provided exchange bucket now drives the filter when available.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\scripts\\churn_strategies.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_churn_strategies.py -q`; all 29 tests passed.
+- Current status: the list builder should feel smarter and more reliable for Swedish tickers specifically.
+- Next resume point: if you want, we can add named saved lists or a tiny issuer filter row inside the modal next.
+
+## 2026-05-02 17:29:44 +02:00
+
+- Expanded the list builder so the modal search now matches ticker, company name, issuer, asset class, and region instead of only terse ticker text.
+- Added a cached `/api/ticker-universe` endpoint that returns richer metadata for the modal, and rewired the frontend to load that universe once at startup.
+- The modal now shows the company name prominently, with ticker and issuer/region metadata underneath, which should be much more usable for Swedish exchange names.
+- Kept the saved list in `config/custom_ticker_list.json` and left the exchange filter intact, so the builder is still sticky but far easier to browse.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_churn_strategies.py -q`; all 29 tests passed.
+- Current status: the list builder is now both checkbox-based and metadata-aware, which should make the Swedish side much easier to manage.
+- Next resume point: if you want, the next polish step could be adding even richer filters like issuer chips or a saved “Sweden only” view in the modal.
+
+## 2026-05-02 17:16:31 +02:00
+
+- Replaced the freeform list prompt with a checkbox-based list builder modal that can search and filter tickers by exchange.
+- Added a real JSON-backed store at `config/custom_ticker_list.json`, with new `/api/custom-ticker-list` GET and POST endpoints in the dashboard backend.
+- The modal now loads the saved list from the server, lets you tick visible names into a draft, and saves the final selection back to config as the source of truth.
+- Kept localStorage only as a fallback cache, while the top bar still shows the sticky `My List` selector and `Edit My List...` entry.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\scripts\\churn_strategies.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_churn_strategies.py -q`; all 28 tests passed.
+- Current status: the list workflow is now much closer to a real builder and should feel snappier than the old prompt flow.
+- Next resume point: if you want, we can add named saved lists or a true multi-list manager after this single-list flow settles in.
+
+## 2026-05-02 17:07:52 +02:00
+
+- Reworked the list workflow so `Edit My List...` now opens a lightweight modal editor instead of a blocking browser prompt.
+- Kept `My List` as the sticky default top-bar choice, and made the modal show a live count plus a short preview of the current custom list.
+- The list selector still filters Screen and Backtest requests through the same shared universe params, but the editing path is now much less disruptive.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_js.py tests\\test_dashboard_api.py -q`; all 24 tests passed.
+- Current status: the list feature should feel snappier because editing no longer interrupts the page with a modal browser prompt.
+- Next resume point: if you want even more speed, we can add a true saved-list picker or a one-click clear action next.
+
+## 2026-05-02 15:16:22 +02:00
+
+- Removed the `All Tickers` option from the top-bar list selector so the chooser now stays minimal.
+- Kept `My List` as the default visible choice and `Edit My List...` as the only explicit list-management action.
+- The list selector still remains sticky, and a missing custom list will simply prompt when the user tries to define one.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_js.py tests\\test_dashboard_api.py -q`; all 24 tests passed.
+- Current status: the top bar is now exchange plus a lean list chooser, without the redundant all-tickers escape hatch.
+- Next resume point: if you want, we can make the list selector even more direct by turning `Edit My List...` into a small button beside `My List`.
+
+## 2026-05-02 15:13:26 +02:00
+
+- Changed dashboard startup to stay passive on refresh instead of auto-launching a scan, backtest, or market-top-up before the user clicks anything.
+- Kept the sticky exchange and custom list controls intact, but moved the startup path to a simple market-status read so the page waits for explicit input.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_js.py tests\\test_dashboard_api.py -q`; all 24 tests passed.
+- Current status: browser refresh should no longer kick off heavy scripts on its own.
+- Next resume point: if you still want any auto-status activity on load, we can make it read-only instead of starting work.
+
+## 2026-05-02 15:02:30 +02:00
+
+- Reworked the visible top bar so it now shows a sticky `Exchange` selector plus a sticky user-defined `List` selector instead of the old visible ticker picker.
+- Kept the ticker dropdown in the DOM as a hidden chart-drilldown control so the chart path still works, but removed it from the main top bar.
+- Wired the selected exchange and custom list into both `/api/screen` and `/api/backtest`, so the new controls actually filter the run universe.
+- Cleaned up the shared ticker-list helper in `src/ETF_screener/scripts/churn_strategies.py` and removed a redundant no-op filter call.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\scripts\\churn_strategies.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_churn_strategies.py -q`; all 27 tests passed.
+- Current status: the top bar now matches the requested exchange-plus-list selector model, and the selection should stay sticky across rerenders.
+- Next resume point: if the Swedish bucket still feels too thin, wire in a proper Sweden listings source instead of relying only on ticker suffixes.
+
+## 2026-05-02 14:53:27 +02:00
+
+- Added a sticky top-bar exchange selector in `src/ETF_screener/dashboard/templates/index.html` with `All Exchanges`, `Xetra / Germany`, and `Swedish Exchange`.
+- Added frontend persistence in `src/ETF_screener/dashboard/static/js/dashboard.js` so both the exchange filter and the ticker selector remember their values across chart loads and screener rerenders.
+- The ticker dropdown now re-renders from a cached universe instead of hard-resetting, so the chosen exchange stays put instead of jumping back.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py -q`; all 24 dashboard tests passed.
+- Current status: the top bar now has a persistent exchange control, and the ticker selector should no longer snap back on you.
+- Next resume point: if you want the Swedish bucket to show a fuller real universe, we can wire in a proper Sweden listings source next.
+
+## 2026-05-02 14:41:35 +02:00
+
+- Fixed the frontend job routing so the Screener listens to `screen` progress and the Backtester listens to `backtest` progress, instead of silently swapping the two.
+- This was the missing piece behind the GUI looking blank even though the terminal logs were moving.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py -q`; all 24 dashboard tests passed.
+- Current status: the next browser load should attach the global bar to the correct backend job.
+- Next resume point: if it still looks empty after a fresh reload, the next check is the browser console or the exact action being run.
+
+## 2026-05-02 14:41:35 +02:00
+
+- Fixed the GUI progress bar disappearing after a market-data top-up by reattaching the poller and re-showing the panel once Screen or Backtest resumes.
+- This matters because the nested market-refresh path was clearing the live poller before the main job could paint its own progress state.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py -q`; all 24 dashboard tests passed.
+- Current status: the GUI should now stay visible through the refresh transition and continue moving during the main job.
+- Next resume point: if you still see a blank area, we should inspect the browser console for a JS runtime error or verify the route the page is calling.
+
+## 2026-05-02 14:35:10 +02:00
+
+- Moved the heavy `screen()` and `backtest_view()` compute calls off the async event loop in `src/ETF_screener/dashboard/app_fast.py` so the browser can keep polling `/api/job-progress` while the terminal log progresses.
+- This fixed the "terminal moves but GUI bar is stuck" problem by letting the frontend fetch progress updates concurrently with the long-running screen/backtest request.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py -q`; all 24 dashboard tests passed.
+- Current status: the GUI should now see live progress movement instead of only the final result.
+- Next resume point: if the market-refresh route ever needs the same live-poll behavior, we can move more of that path off the event loop too.
+
+## 2026-05-02 14:28:45 +02:00
+
+- Added a real backend job-progress snapshot at `/api/job-progress` in `src/ETF_screener/dashboard/app_fast.py`.
+- Wired `screen()`, `backtest_view()`, and market refresh to publish progress state from the server, and made the frontend poll that snapshot for the global bar.
+- Kept the context bar local to the active action while the global bar now reflects actual server-side job state instead of a pure UI estimate.
+- Updated `src/ETF_screener/scripts/churn_strategies.py` so `evaluate_strategies()` can forward progress callbacks into the shared backtester path.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py tests\\test_churn_strategies.py -q`; all 27 tests passed.
+- Current status: the dashboard now has a real progress source for the global bar, not just fake animation.
+- Next resume point: decide whether any other long-running dashboard jobs should publish into `/api/job-progress`, or whether the current trio is enough for now.
+
+## 2026-05-02 14:15:27 +02:00
+
+- Reworked the top navigation progress area into two stacked bars in `src/ETF_screener/dashboard/templates/index.html`: a context bar for the active task and a global bar for broader dashboard state.
+- Added shared progress helpers in `src/ETF_screener/dashboard/static/js/dashboard.js` so Screener and Backtester flows can update the two bars consistently.
+- Kept the old scan area compact, but made the labels more explicit: `Screen` during screener runs, `Backtest` during backtests, and `Global` for the broader dashboard state.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_dashboard_js.py -q`; all 24 tests passed.
+- Current status: the GUI progress indicator is now more informative without adding a larger status system.
+- Next resume point: if you want even more clarity, we can feed the global bar from other long-running actions like market refresh or make it reflect backend phase changes more explicitly.
+
+## 2026-05-02 13:56:09 +02:00
+
+- Optimized `src/ETF_screener/backtester.py` in three layers: scripted backtests now use a process-safe worker path, the per-ticker simulation loop now operates on pre-extracted arrays, and completed scripted runs are cached by ticker, strategy hash, day count, latest ticker date, and a local cache version.
+- Repeat scripted backtests can now skip both the strategy evaluation phase and the simulation loop when the matching parquet and result cache files already exist.
+- The parallel backtest path still uses `ProcessPoolExecutor` for the common scripted-strategy case, while falling back to threads for generic strategies.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\backtester.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_backtester.py tests\\test_dashboard_api.py -q`; all 31 tests passed.
+- Current status: the heavy backtest path is faster and more process-friendly without changing the dashboard behavior.
+- Next resume point: benchmark the user-facing screen/backtest runtime, then decide whether more aggressive vectorization or caching is still worth it.
+
+## 2026-05-02 09:43:20 +02:00
+
+- Added a cached dashboard ticker list and a cached screen-universe helper in `src/ETF_screener/dashboard/app_fast.py`.
+- Both caches are keyed by the latest market date, so repeated index-page and `/api/screen` requests can reuse the same ticker lists until new market data arrives.
+- Updated `plan.md` to treat repeated screen/backtest reads as a performance target and to note the remaining heavy path.
+- Current status: the dashboard should stop rescanning `etf_data` for the home page and screen universe on every request.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py -q`; all 21 tests passed.
+- Next resume point: decide whether `/api/backtest` deserves the same latest-date cache treatment if it still repeats expensive universe scans.
+
+## 2026-05-02 13:44:47 +02:00
+
+- Added a cached strategy ticker-universe helper in `src/ETF_screener/scripts/churn_strategies.py`.
+- `evaluate_strategies()` and `churn_db()` now reuse the latest-market-date ticker cache, so they stop re-running the same full `etf_data` ticker scan on every call.
+- Verified with `.venv\\Scripts\\python.exe -m py_compile src\\ETF_screener\\dashboard\\app_fast.py src\\ETF_screener\\scripts\\churn_strategies.py`.
+- Verified with `.venv\\Scripts\\python.exe -m pytest tests\\test_dashboard_api.py tests\\test_churn_strategies.py -q`; all 24 tests passed.
+- Current status: the main request-path scans are now cached consistently across the dashboard and strategy helpers.
+- Next resume point: decide whether to attack the actual backtest compute loop next, or to prototype GPU/WebGL only in the browser-rendering layer where it can realistically help.
+
 ## 2026-04-28 21:47:42 +02:00
 
 - Fixed ticker nodes visually shrinking toward death during Swarm playback.

@@ -1,4 +1,40 @@
 {
+  "BONAV-A.ST": {
+    "status": "invalid",
+    "reason": "no Yahoo data"
+  },
+  "CAT-A.ST": {
+    "status": "invalid",
+    "reason": "no Yahoo data"
+  },
+  "HAKI-A.ST": {
+    "status": "invalid",
+    "reason": "no Yahoo data"
+  },
+  "MANG.ST": {
+    "status": "invalid",
+    "reason": "no Yahoo data"
+  },
+  "MSON-A.ST": {
+    "status": "invalid",
+    "reason": "no Yahoo data"
+  },
+  "MTG-A.ST": {
+    "status": "invalid",
+    "reason": "no Yahoo data"
+  },
+  "SVOL-A.ST": {
+    "status": "invalid",
+    "reason": "no Yahoo data"
+  },
+  "VPLAY-A.ST": {
+    "status": "invalid",
+    "reason": "no Yahoo data"
+  },
+  "WTW-A.ST": {
+    "status": "invalid",
+    "reason": "no Yahoo data"
+  },
   "C5ME.DE": {
     "status": "invalid",
     "reason": "zombie/low-liquidity"

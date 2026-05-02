@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 from ETF_screener.config_loader import get_paths
 from ETF_screener.backtester import (
     Backtester,
@@ -7,8 +10,120 @@ import os
 import argparse
 import re
 import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List
+
+BLACKLIST_PATH = Path("config") / "blacklist.json"
+STRATEGY_EVAL_CACHE_VERSION = "strategy_eval_v2"
+
+
+@lru_cache(maxsize=1)
+def _cached_blacklist_tickers() -> set[str]:
+    if not BLACKLIST_PATH.exists():
+        return set()
+    try:
+        with open(BLACKLIST_PATH, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+    except Exception:
+        return set()
+
+    if isinstance(raw, dict):
+        return {str(ticker).upper() for ticker in raw.keys()}
+    if isinstance(raw, list):
+        return {str(ticker).upper() for ticker in raw}
+    return set()
+
+
+def _strategy_eval_cache_dir() -> Path:
+    cache_root = Path(get_paths()["data"]["cache"])
+    cache_dir = cache_root / "strategy_eval"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _strategy_request_signature(
+    *,
+    strategy_path: str | None,
+    entry_script: str | None,
+    exit_script: str | None,
+    dsl_content: str | None,
+    strategy_name: str | None,
+    since_days: int | None,
+    exchange: str | None,
+    ticker_list: str | None,
+    scan_scope: str | None,
+    latest_market_date: str | None,
+    tickers: list[str] | tuple[str, ...],
+) -> str:
+    """Build a stable signature for strategy evaluation cache hits."""
+    strategy_text = ""
+    if dsl_content:
+        strategy_text = dsl_content
+    elif strategy_path:
+        path = Path(strategy_path)
+        if path.is_file():
+            try:
+                strategy_text = path.read_text(encoding="utf-8")
+            except Exception:
+                strategy_text = str(path)
+        elif path.exists():
+            try:
+                parts = []
+                for child in sorted(path.glob("*.dsl")):
+                    try:
+                        parts.append(child.read_text(encoding="utf-8"))
+                    except Exception:
+                        parts.append(child.name)
+                strategy_text = "\n".join(parts)
+            except Exception:
+                strategy_text = str(path)
+    elif entry_script or exit_script:
+        strategy_text = f"{entry_script or ''}\n---EXIT---\n{exit_script or ''}"
+
+    universe_blob = "|".join(str(ticker).upper() for ticker in tickers)
+    payload = {
+        "cache_version": STRATEGY_EVAL_CACHE_VERSION,
+        "strategy_name": strategy_name or "",
+        "strategy_text_sha": hashlib.sha256(strategy_text.encode("utf-8")).hexdigest(),
+        "since_days": since_days,
+        "exchange": str(exchange or "").strip().lower(),
+        "ticker_list_sha": hashlib.sha256(str(ticker_list or "").encode("utf-8")).hexdigest(),
+        "scan_scope": str(scan_scope or "").strip().lower(),
+        "latest_market_date": latest_market_date or "",
+        "universe_sha": hashlib.sha256(universe_blob.encode("utf-8")).hexdigest(),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+@lru_cache(maxsize=16)
+def _load_cached_strategy_eval(
+    cache_key: str, _cache_mtime_ns: int
+) -> pd.DataFrame | None:
+    cache_path = _strategy_eval_cache_dir() / f"{cache_key}.pkl"
+    if not cache_path.exists():
+        return None
+    try:
+        cached = pd.read_pickle(cache_path)
+    except Exception:
+        return None
+    if isinstance(cached, pd.DataFrame):
+        return cached
+    return None
+
+
+def _save_cached_strategy_eval(cache_key: str, df: pd.DataFrame) -> None:
+    cache_path = _strategy_eval_cache_dir() / f"{cache_key}.pkl"
+    try:
+        df.to_pickle(cache_path)
+    except Exception:
+        try:
+            if cache_path.exists():
+                cache_path.unlink()
+        except Exception:
+            pass
 
 
 def parse_dsl_content(content: str | None) -> dict:
@@ -349,18 +464,11 @@ def _load_strategy_specs(
     return strategies
 
 
-def evaluate_strategies(
-    entry_script: str | None = None,
-    exit_script: str | None = None,
-    ticker_filter: str | None = None,
-    strategy_path: str | None = None,
-    since_days: int | None = None,
-    dsl_content: str | None = None,
-    strategy_name: str | None = None,
-) -> pd.DataFrame:
-    """Run strategy scoring and return a ranked DataFrame without plotting side effects."""
-    backtester = Backtester()
-    conn = backtester.db._get_connection()
+@lru_cache(maxsize=8)
+def _cached_strategy_tickers(db_path: str, latest_market_date: str | None, ticker_filter: str | None) -> tuple[str, ...]:
+    """Cache the strategy-screen ticker universe until market data advances."""
+    db = Backtester(db_path=db_path).db
+    conn = db._get_connection()
     query = "SELECT DISTINCT ticker FROM etf_data"
 
     if ticker_filter:
@@ -370,6 +478,100 @@ def evaluate_strategies(
             query += f" WHERE ticker LIKE '{ticker_filter}%'"
 
     tickers = pd.read_sql_query(query, conn)["ticker"].tolist()
+    return tuple(str(ticker) for ticker in tickers)
+
+
+def filter_tickers_by_exchange_and_list(
+    tickers: list[str] | tuple[str, ...],
+    exchange: str | None = None,
+    ticker_list: str | None = None,
+    scan_scope: str | None = None,
+) -> list[str]:
+    """Filter a ticker universe by exchange bucket or an explicit user-defined list."""
+    blacklist = _cached_blacklist_tickers()
+    exchange_key = str(exchange or "all").strip().lower()
+    if exchange_key in {"", "all"}:
+        exchange_key = "all"
+    elif exchange_key in {"xetra", "de", "germany"}:
+        exchange_key = "xetra"
+    elif exchange_key in {"sweden", "swe", "stockholm", "se", "ss", "st"}:
+        exchange_key = "sweden"
+
+    scope_key = str(scan_scope or "exchange").strip().lower()
+    if scope_key in {"custom", "list", "selected", "chosen"}:
+        scope_key = "list"
+    elif scope_key in {"all_lists", "alllists", "all list", "all lists"}:
+        scope_key = "all_lists"
+    elif scope_key in {"xetra", "de", "germany"}:
+        scope_key = "xetra"
+        exchange_key = "xetra"
+    elif scope_key in {"sweden", "swe", "stockholm", "se", "ss", "st"}:
+        scope_key = "sweden"
+        exchange_key = "sweden"
+    else:
+        scope_key = "exchange"
+
+    explicit_list = []
+    if ticker_list:
+        # Accept comma, newline, or whitespace separated lists.
+        explicit_list = [
+            str(item).strip().upper()
+            for item in re.split(r"[\s,;]+", str(ticker_list))
+            if str(item).strip()
+        ]
+    explicit_set = set(explicit_list)
+
+    def matches_exchange(ticker: str) -> bool:
+        upper = str(ticker or "").upper()
+        if not upper:
+            return False
+        if scope_key in {"list", "all_lists"}:
+            return True
+        if exchange_key == "all":
+            return True
+        if exchange_key == "xetra":
+            return upper.endswith(".DE") or upper.endswith(".F") or "." not in upper
+        if exchange_key == "sweden":
+            return upper.endswith(".ST") or upper.endswith(".SE") or upper.endswith(".SS")
+        return True
+
+    filtered = [
+        str(ticker).upper()
+        for ticker in tickers
+        if matches_exchange(ticker) and str(ticker).upper() not in blacklist
+    ]
+    if scope_key in {"list", "all_lists"} and explicit_set:
+        filtered = [ticker for ticker in filtered if ticker in explicit_set]
+    elif scope_key in {"list", "all_lists"}:
+        return []
+    return filtered
+
+
+def evaluate_strategies(
+    entry_script: str | None = None,
+    exit_script: str | None = None,
+    ticker_filter: str | None = None,
+    strategy_path: str | None = None,
+    since_days: int | None = None,
+    dsl_content: str | None = None,
+    strategy_name: str | None = None,
+    exchange: str | None = None,
+    ticker_list: str | None = None,
+    scan_scope: str | None = None,
+    progress_callback=None,
+) -> pd.DataFrame:
+    """Run strategy scoring and return a ranked DataFrame without plotting side effects."""
+    backtester = Backtester()
+    latest_market_date = backtester.db.get_latest_market_date()
+    tickers = list(
+        _cached_strategy_tickers(str(backtester.db_path), latest_market_date, ticker_filter)
+    )
+    tickers = filter_tickers_by_exchange_and_list(
+        tickers,
+        exchange=exchange,
+        ticker_list=ticker_list,
+        scan_scope=scan_scope,
+    )
     strategies = _load_strategy_specs(
         backtester,
         strategy_path=strategy_path,
@@ -382,6 +584,40 @@ def evaluate_strategies(
     if not strategies:
         return pd.DataFrame()
 
+    cache_key = _strategy_request_signature(
+        strategy_path=strategy_path,
+        entry_script=entry_script,
+        exit_script=exit_script,
+        dsl_content=dsl_content,
+        strategy_name=strategy_name,
+        since_days=since_days,
+        exchange=exchange,
+        ticker_list=ticker_list,
+        scan_scope=scan_scope,
+        latest_market_date=latest_market_date,
+        tickers=tickers,
+    )
+    cache_path = _strategy_eval_cache_dir() / f"{cache_key}.pkl"
+    if cache_path.exists():
+        cached_mtime_ns = cache_path.stat().st_mtime_ns
+        cached_df = _load_cached_strategy_eval(cache_key, cached_mtime_ns)
+        if cached_df is not None:
+            if progress_callback is not None:
+                try:
+                    progress_callback(
+                        {
+                            "job": "backtest",
+                            "phase": "done",
+                            "pct": 100.0,
+                            "detail": f"Loaded cached results for {len(cached_df)} rows",
+                            "label": strategy_name or "Backtest",
+                            "active": False,
+                        }
+                    )
+                except Exception:
+                    pass
+            return cached_df.copy()
+
     all_results = []
     for strat in strategies:
         results = backtester.run_parallel_backtest(
@@ -391,6 +627,7 @@ def evaluate_strategies(
             strategy_kwargs=strat.get("kwargs"),
             show_progress=False,
             progress_label=f"{strat['name']} ({len(tickers)} tickers)",
+            progress_callback=progress_callback,
         )
         for res in results:
             if not res or "error" in res:
@@ -449,7 +686,9 @@ def evaluate_strategies(
     else:
         summary_df = summary_df.sort_values(by="Quality Score", ascending=False)
 
-    return summary_df.reset_index(drop=True)
+    summary_df = summary_df.reset_index(drop=True)
+    _save_cached_strategy_eval(cache_key, summary_df)
+    return summary_df
 
 
 def churn_db(
@@ -481,17 +720,10 @@ def churn_db(
                 print(f"Error deleting {file.name}: {e}")
 
     # Get all tickers from DB
-    conn = backtester.db._get_connection()
-    query = "SELECT DISTINCT ticker FROM etf_data"
-
-    if ticker_filter:
-        # Smart Filter: If it contains % or _, use as-is. Otherwise, add a trailing % for prefix matching.
-        if "%" in ticker_filter or "_" in ticker_filter:
-            query += f" WHERE ticker LIKE '{ticker_filter}'"
-        else:
-            query += f" WHERE ticker LIKE '{ticker_filter}%'"
-
-    tickers = pd.read_sql_query(query, conn)["ticker"].tolist()
+    latest_market_date = backtester.db.get_latest_market_date()
+    tickers = list(
+        _cached_strategy_tickers(str(backtester.db_path), latest_market_date, ticker_filter)
+    )
 
     strategies = _load_strategy_specs(
         backtester,

@@ -45,6 +45,12 @@ def test_tab_bar_visible():
     assert log_relay_js.status_code == 200
     dashboard_source = html + dashboard_js.text + log_relay_js.text
     assert 'id="dashboard-tabs"' in html
+    assert 'id="scan-source-toggle"' in html
+    assert 'id="scan-source-xetra"' in html
+    assert 'id="scan-source-sweden"' in html
+    assert 'id="scan-source-list"' in html
+    assert 'id="scan-source-all-lists"' in html
+    assert 'id="list-edit-btn"' in html
     assert ">Screener<" in html
     assert ">Shortlist<" in html
     assert ">Swarm<" in html
@@ -114,6 +120,11 @@ def test_tab_bar_visible():
     assert "swarmLoadingPromise" in dashboard_source
     assert "Saved Strategy" in html
     assert "Editor Draft" in html
+    assert 'id="list-modal"' in html
+    assert 'id="list-modal-grid"' in html
+    assert 'id="list-modal-search"' in html
+    assert 'id="list-modal-list-select"' in html
+    assert 'id="list-modal-name"' in html
 
 
 def test_api_status():
@@ -138,8 +149,9 @@ def test_screen_endpoint():
 def test_screen_endpoint_refreshes_on_gui_request(monkeypatch):
     captured = {"called": False}
 
-    def fake_refresh():
+    def fake_refresh(source=None, **kwargs):
         captured["called"] = True
+        captured["source"] = source
         return {"refreshed": 1}
 
     monkeypatch.setattr(
@@ -150,14 +162,219 @@ def test_screen_endpoint_refreshes_on_gui_request(monkeypatch):
     response = client.get("/api/screen?refresh=true")
     assert response.status_code == 200
     assert captured["called"] is True
+    assert captured["source"] is None
+
+
+def test_screen_endpoint_honors_scan_scope_list(monkeypatch, tmp_path):
+    captured = {}
+    cache_dir = None
+
+    class FakeDb:
+        db_path = "fake-db"
+
+        def get_latest_market_date(self):
+            return "2026-04-01"
+
+    class FakeBacktester:
+        def __init__(self):
+            self.db = FakeDb()
+            self.db_path = "fake-db"
+            self.scripted_strategy = lambda *args, **kwargs: None
+
+        def run_parallel_backtest(self, tickers, *args, **kwargs):
+            captured["backtest_tickers"] = list(tickers)
+            return []
+
+    def fake_get_db():
+        return FakeDb()
+
+    def fake_universe(db_path, latest_market_date):
+        captured["universe_args"] = (db_path, latest_market_date)
+        return ("AAA.DE", "BBB.ST", "CCC.DE")
+
+    def fake_filter(tickers, exchange=None, ticker_list=None, scan_scope=None):
+        captured["filter_args"] = {
+            "tickers": list(tickers),
+            "exchange": exchange,
+            "ticker_list": ticker_list,
+            "scan_scope": scan_scope,
+        }
+        return ["BBB.ST"] if scan_scope == "list" else list(tickers)
+
+    def fake_cache_dir():
+        nonlocal cache_dir
+        if cache_dir is None:
+            cache_dir = tmp_path / "screen_requests_scope"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", fake_get_db)
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast._cached_screen_universe", fake_universe)
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.filter_tickers_by_exchange_and_list", fake_filter)
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.Backtester", FakeBacktester)
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast._screen_cache_dir", fake_cache_dir)
+
+    response = client.get(
+        "/api/screen?scan_scope=list&ticker_list=BBB.ST&dsl_content=TRIGGER:%20close%20%3E%20ema_50"
+    )
+    assert response.status_code == 200
+    assert captured["filter_args"]["scan_scope"] == "list"
+    assert captured["filter_args"]["ticker_list"] == "BBB.ST"
+    assert captured["backtest_tickers"] == ["BBB.ST"]
+
+
+def test_screen_endpoint_reuses_cached_result(monkeypatch, tmp_path):
+    calls = {"run_parallel_backtest": 0}
+
+    class FakeDb:
+        db_path = "fake-db"
+
+        def get_latest_market_date(self):
+            return "2026-04-01"
+
+        def _get_connection(self):
+            raise AssertionError("fallback DB connection should not be used here")
+
+    class FakeBacktester:
+        def __init__(self, *args, **kwargs):
+            self.db_path = "fake-db"
+            self._db = FakeDb()
+            self.scripted_strategy = lambda *args, **kwargs: None
+
+        @property
+        def db(self):
+            return self._db
+
+        def run_parallel_backtest(self, tickers, *args, **kwargs):
+            calls["run_parallel_backtest"] += 1
+            df = pd.DataFrame(
+                {
+                    "close": [9.0, 10.0, 11.0, 12.0, 13.0],
+                    "close_d1": [8.0, 9.0, 10.0, 11.0, 12.0],
+                    "ema_20": [10.0] * 5,
+                    "ema_20_d1": [10.0] * 5,
+                    "signal": [0, 0, 1, 0, 0],
+                    "exit_condition": [False] * 5,
+                }
+            )
+            return [
+                {
+                    "ticker": tickers[0],
+                    "df": df,
+                    "total_return_pct": 2.5,
+                    "win_rate_pct": 50.0,
+                    "profit_factor": 1.1,
+                    "sharpe_ratio": 0.7,
+                    "max_drawdown_pct": 1.5,
+                    "num_trades": 1,
+                }
+            ]
+
+    def fake_get_db():
+        return FakeDb()
+
+    def fake_universe(db_path, latest_market_date):
+        return ("AAA.DE",)
+
+    def fake_filter(tickers, exchange=None, ticker_list=None, scan_scope=None):
+        return list(tickers)
+
+    def fake_cache_dir():
+        cache_dir = tmp_path / "screen_requests"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", fake_get_db)
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast._cached_screen_universe", fake_universe)
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.filter_tickers_by_exchange_and_list", fake_filter)
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.Backtester", FakeBacktester)
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast._screen_cache_dir", fake_cache_dir)
+
+    params = "dsl_content=TRIGGER:%20close%20%3E%20ema_20"
+    first = client.get(f"/api/screen?{params}")
+    second = client.get(f"/api/screen?{params}")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert calls["run_parallel_backtest"] == 1
+    assert first.json() == second.json()
+
+
+def test_backtest_endpoint_honors_scan_scope_list(monkeypatch):
+    captured = {}
+
+    def fake_evaluate_strategies(**kwargs):
+        captured.update(kwargs)
+        return pd.DataFrame()
+
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.evaluate_strategies", fake_evaluate_strategies)
+
+    response = client.get(
+        "/api/backtest?scan_scope=list&ticker_list=BBB.ST&dsl_content=TRIGGER:%20close%20%3E%20ema_50"
+    )
+    assert response.status_code == 200
+    assert captured["scan_scope"] == "list"
+    assert captured["ticker_list"] == "BBB.ST"
+
+
+def test_custom_ticker_list_api_roundtrip(monkeypatch, tmp_path):
+    config_path = tmp_path / "custom_ticker_list.json"
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.CUSTOM_TICKER_LIST_CONFIG_PATH",
+        config_path,
+    )
+
+    response = client.get("/api/custom-ticker-list")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["tickers"] == []
+    assert data["count"] == 0
+    assert data["name"] == "My List"
+    assert data["active_name"] == "My List"
+    assert data["lists"] == [{"name": "My List", "tickers": [], "count": 0}]
+
+    save_response = client.post(
+        "/api/custom-ticker-list",
+        json={"name": "Growth Basket", "tickers": ["msft", "aapl", "msft", "  nvda  "]},
+    )
+    assert save_response.status_code == 200
+    saved = save_response.json()
+    assert saved["count"] == 3
+    assert saved["name"] == "Growth Basket"
+    assert saved["active_name"] == "Growth Basket"
+    assert saved["tickers"] == ["MSFT", "AAPL", "NVDA"]
+    assert saved["lists"] == [{"name": "Growth Basket", "tickers": ["MSFT", "AAPL", "NVDA"], "count": 3}]
+    assert config_path.exists()
+
+    with open(config_path, "r", encoding="utf-8") as handle:
+        persisted = json.load(handle)
+    assert persisted["name"] == "Growth Basket"
+    assert persisted["tickers"] == ["MSFT", "AAPL", "NVDA"]
+
+
+def test_ticker_universe_api():
+    response = client.get("/api/ticker-universe")
+    assert response.status_code == 200
+    data = response.json()
+    assert "count" in data
+    assert "items" in data
+    assert isinstance(data["items"], list)
+    if data["items"]:
+        first = data["items"][0]
+        assert "ticker" in first
+        assert "name" in first
+        assert "label" in first
+        assert "exchange" in first
 
 
 def test_market_status_endpoint(monkeypatch):
     captured = {}
 
     class FakeRefresher:
-        def __init__(self, db_path=None):
+        def __init__(self, db_path=None, etfs_file=None, collection_mode=None, **kwargs):
             self.db_path = db_path
+            captured["etfs_file"] = etfs_file
+            captured["collection_mode"] = collection_mode
 
         def get_status(self, stale_after_days=3):
             captured["stale_after_days"] = stale_after_days
@@ -180,21 +397,25 @@ def test_market_status_endpoint(monkeypatch):
         FakeRefresher,
     )
 
-    response = client.get("/api/market-status")
+    response = client.get("/api/market-status?source=sweden")
     assert response.status_code == 200
     data = response.json()
     assert data["days_stale"] == 8
     assert data["is_stale"] is True
     assert data["latest_market_date"] == "2026-04-15"
     assert captured["stale_after_days"] == 0
+    assert str(captured["etfs_file"]).endswith("sweden.json")
+    assert captured["collection_mode"] == "active"
 
 
 def test_market_refresh_endpoint(monkeypatch):
     captured = {}
 
     class FakeRefresher:
-        def __init__(self, db_path=None):
+        def __init__(self, db_path=None, etfs_file=None, collection_mode=None, **kwargs):
             self.db_path = db_path
+            captured["etfs_file"] = etfs_file
+            captured["collection_mode"] = collection_mode
 
         def refresh_market_data(
             self,
@@ -236,7 +457,7 @@ def test_market_refresh_endpoint(monkeypatch):
         FakeRefresher,
     )
 
-    response = client.post("/api/market-data/refresh")
+    response = client.post("/api/market-data/refresh?source=sweden")
     assert response.status_code == 200
     data = response.json()
     assert data["refreshed"] == 8
@@ -245,6 +466,8 @@ def test_market_refresh_endpoint(monkeypatch):
     assert captured["force"] is True
     assert captured["stale_after_days"] == 0
     assert captured["rebuild_shortlist"] is True
+    assert str(captured["etfs_file"]).endswith("sweden.json")
+    assert captured["collection_mode"] == "active"
 
 
 def test_swarm_world_endpoint(monkeypatch):
@@ -629,8 +852,9 @@ def test_backtest_endpoint_refreshes_on_gui_request(monkeypatch, tmp_path):
     )
     captured = {"refreshed": False}
 
-    def fake_refresh():
+    def fake_refresh(source=None, **kwargs):
         captured["refreshed"] = True
+        captured["source"] = source
         return {"refreshed": 1}
 
     def fake_evaluate(strategy_path=None, dsl_content=None, strategy_name=None, since_days=None):
@@ -649,6 +873,7 @@ def test_backtest_endpoint_refreshes_on_gui_request(monkeypatch, tmp_path):
     response = client.get("/api/backtest?strategy=gui&refresh=true")
     assert response.status_code == 200
     assert captured["refreshed"] is True
+    assert captured["source"] is None
 
 
 def test_backtest_endpoint_still_accepts_since_days_alias(monkeypatch, tmp_path):

@@ -1,6 +1,7 @@
 """Fetch ETF data from Yahoo Finance API."""
 
 import logging
+import time
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -74,7 +75,14 @@ class YFinanceFetcher:
         else:
             resolved_start = resolved_end - timedelta(days=days)
 
-        df = self._fetch_yf(symbol, resolved_start, resolved_end)
+        df = pd.DataFrame()
+        attempts = 3
+        for attempt in range(attempts):
+            df = self._fetch_yf(symbol, resolved_start, resolved_end)
+            if not df.empty:
+                break
+            if attempt < attempts - 1:
+                time.sleep(0.5 * (attempt + 1))
 
         if df.empty:
             # Build a .F fallback symbol when the primary has a European suffix
@@ -86,7 +94,12 @@ class YFinanceFetcher:
                 logger.debug(
                     "No data for %s, retrying with fallback %s", symbol, fallback
                 )
-                df = self._fetch_yf(fallback, resolved_start, resolved_end)
+                for attempt in range(attempts):
+                    df = self._fetch_yf(fallback, resolved_start, resolved_end)
+                    if not df.empty:
+                        break
+                    if attempt < attempts - 1:
+                        time.sleep(0.5 * (attempt + 1))
 
         if df.empty:
             logger.warning(f"No data found for symbol: {symbol} (tried .DE and .F if applicable)")

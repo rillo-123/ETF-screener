@@ -94,6 +94,99 @@
       border-radius: 999px;
       padding: 2px 8px;
     }
+
+    #scan-scope-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 0.45rem 0.65rem;
+      border: 1px solid rgba(34, 211, 238, 0.35);
+      border-radius: 0.9rem;
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
+      box-shadow:
+        0 10px 24px rgba(15, 23, 42, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    #scan-scope-label {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: rgba(165, 243, 252, 0.95);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    #scan-scope-label::before {
+      content: "";
+      width: 0.45rem;
+      height: 0.45rem;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #22d3ee, #818cf8);
+      box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.14);
+      flex: 0 0 auto;
+    }
+
+    .scan-source-toggle {
+      display: inline-flex;
+      gap: 0.4rem;
+      padding: 0.35rem;
+      border-radius: 0.95rem;
+      border: 1px solid rgba(34, 211, 238, 0.28);
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.88));
+      box-shadow:
+        0 10px 24px rgba(15, 23, 42, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .scan-source-btn {
+      min-width: 92px;
+      border: 1px solid rgba(148, 163, 184, 0.32);
+      border-radius: 0.7rem;
+      padding: 0.55rem 0.75rem;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      color: #e2e8f0;
+      background: rgba(15, 23, 42, 0.78);
+      transition: transform 0.14s ease, border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+      text-transform: uppercase;
+    }
+
+    .scan-source-btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(226, 232, 240, 0.55);
+    }
+
+    .scan-source-btn.is-active[data-scope="xetra"] {
+      border-color: rgba(34, 211, 238, 0.7);
+      background: linear-gradient(180deg, rgba(15, 118, 110, 0.95), rgba(8, 145, 178, 0.92));
+      color: #ecfeff;
+      box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.15);
+    }
+
+    .scan-source-btn.is-active[data-scope="sweden"] {
+      border-color: rgba(74, 222, 128, 0.7);
+      background: linear-gradient(180deg, rgba(20, 83, 45, 0.95), rgba(21, 128, 61, 0.92));
+      color: #f0fdf4;
+      box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.15);
+    }
+
+    .scan-source-btn.is-active[data-scope="list"] {
+      border-color: rgba(168, 85, 247, 0.8);
+      background: linear-gradient(180deg, rgba(76, 29, 149, 0.98), rgba(91, 33, 182, 0.94));
+      color: #faf5ff;
+      box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.15);
+    }
+
+    #scan-scope-helper {
+      font-size: 10px;
+      line-height: 1.1;
+      color: rgba(203, 213, 225, 0.85);
+      letter-spacing: 0.02em;
+    }
   </style>
 </head>
 
@@ -118,13 +211,20 @@
             </svg>
             Labs
           </button>
-          <select id="strategy-select" onchange="updateEditorContent(this.value)"
-            class="bg-slate-800 text-white p-2 border border-l-0 border-indigo-500/50 min-w-[200px]">
-            <option value="">-- Select Screener Strategy --</option>
-            {% for strat in strategies %}
-            <option value="{{ strat }}">{{ strat }}</option>
-            {% endfor %}
-          </select>
+          <div class="flex items-center">
+            <select id="strategy-select" onchange="updateEditorContent(this.value)"
+              class="bg-slate-800 text-white p-2 border border-l-0 border-indigo-500/50 min-w-[200px]">
+              <option value="">-- Select Screener Strategy --</option>
+              {% for strat in strategies %}
+              <option value="{{ strat }}">{{ strat }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" onclick="copySelectText('strategy-select')"
+              class="ml-1 rounded-r-lg border border-indigo-500/50 bg-slate-700 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-100 hover:bg-slate-600"
+              title="Copy the selected strategy name">
+              Copy
+            </button>
+          </div>
           <button id="run-btn" onclick="runScreen()"
             class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2 px-3 border border-l-0 border-green-500/60 transition-all flex items-center whitespace-nowrap"
             title="Run the selected strategy in the Screener tab">
@@ -143,21 +243,41 @@
             </svg>
             Modify
           </button>
-          <div id="nav-scan-progress"
-            class="hidden ml-2 flex items-center gap-2 bg-slate-800/80 border border-indigo-500/30 rounded px-2 py-1">
-            <div class="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-              <div id="nav-scan-progress-bar" class="h-full bg-emerald-400 transition-all duration-300"
+        <div id="nav-scan-progress"
+            class="hidden ml-2 min-w-[250px] rounded-lg border border-indigo-500/30 bg-slate-800/90 px-2.5 py-1.5 shadow-sm">
+            <div class="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-slate-400">
+              <span id="nav-scan-context-label" class="font-bold text-emerald-200">Context</span>
+              <span id="nav-scan-context-text" class="font-bold text-emerald-100">0%</span>
+            </div>
+            <div class="h-1.5 w-full rounded-full overflow-hidden bg-slate-700">
+              <div id="nav-scan-context-bar" class="h-full bg-gradient-to-r from-emerald-400 to-teal-300 transition-all duration-300"
                 style="width: 0%"></div>
             </div>
-            <span id="nav-scan-progress-text" class="text-[10px] text-emerald-200 font-bold min-w-[64px] text-right">0%</span>
+            <div class="mt-1.5 flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-slate-400">
+              <span id="nav-scan-global-label" class="font-bold text-indigo-200">Global</span>
+              <span id="nav-scan-global-text" class="font-bold text-indigo-100">0%</span>
+            </div>
+            <div class="h-1.5 w-full rounded-full overflow-hidden bg-slate-700">
+              <div id="nav-scan-global-bar" class="h-full bg-gradient-to-r from-indigo-400 to-violet-300 transition-all duration-300"
+                style="width: 0%"></div>
+            </div>
           </div>
         </div>
-        <select id="ticker-select" class="bg-slate-800 text-white p-2 rounded-lg border border-indigo-500/50">
-          <option value="">Select Ticker...</option>
-          {% for ticker in tickers %}
-          <option value="{{ ticker }}">{{ ticker }}</option>
-          {% endfor %}
-        </select>
+        <div id="scan-scope-panel" title="Choose which source the scanner should use">
+          <div id="scan-scope-label">Scan Source</div>
+          <div class="scan-source-toggle" id="scan-source-toggle" role="group" aria-label="Scan source">
+            <button type="button" id="scan-source-xetra" class="scan-source-btn" data-scope="xetra" onclick="setScanSource('xetra')">Xetra</button>
+            <button type="button" id="scan-source-sweden" class="scan-source-btn" data-scope="sweden" onclick="setScanSource('sweden')">Sweden</button>
+            <button type="button" id="scan-source-list" class="scan-source-btn" data-scope="list" onclick="setScanSource('list')">My List</button>
+            <button type="button" id="scan-source-all-lists" class="scan-source-btn" data-scope="all_lists" onclick="setScanSource('all_lists')">All Lists</button>
+          </div>
+          <div id="scan-scope-helper">Pick the source the scanner should work on.</div>
+        </div>
+        <button id="list-edit-btn" type="button" onclick="openListEditorModal()"
+          class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg border border-indigo-500/50 min-w-[190px] text-left transition-colors"
+          title="Edit the saved custom list">
+          Edit My List...
+        </button>
         <div class="flex items-center gap-3">
         <div class="flex rounded-md shadow-sm" role="group">
           <button id="range-btn-1m" type="button" onclick="setRange(21)"
@@ -191,6 +311,15 @@
       </div>
     </div>
   </nav>
+
+  <div class="hidden">
+    <select id="ticker-select">
+      <option value="">Select Ticker...</option>
+      {% for ticker in tickers %}
+      <option value="{{ ticker }}">{{ ticker }}</option>
+      {% endfor %}
+    </select>
+  </div>
 
 
   <!-- Tab Bar -->
@@ -677,7 +806,7 @@
 
 
 
-  <script src="/static/js/dashboard.js?v=20260501b"></script>
+  <script src="/static/js/dashboard.js?v=20260502d"></script>
 
   <!-- ===============================================================
          Browser → Server log relay
@@ -685,7 +814,75 @@
          each entry to /api/log so it appears in the server-side debug
          log file alongside all Python / uvicorn log records.
     ================================================================ -->
-  <script src="/static/js/browser-log-relay.js?v=20260501b"></script>
+  <script src="/static/js/browser-log-relay.js?v=20260502d"></script>
+
+  <!-- List Editor Modal -->
+  <div id="list-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;align-items:center;justify-content:center;padding:1rem"
+    onclick="if(event.target===this)closeListEditorModal()">
+    <div
+      style="background:#0f172a;border:1px solid rgba(99,102,241,0.35);border-radius:0.75rem;width:100%;max-width:860px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 25px 50px rgba(0,0,0,0.45)">
+      <div style="padding:1rem 1.25rem;border-bottom:1px solid rgba(148,163,184,0.2);display:flex;align-items:center;justify-content:space-between;gap:1rem">
+        <div>
+          <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#93c5fd">Ticker List</div>
+          <div style="font-size:1rem;font-weight:700;color:#f8fafc">Build My List</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.25rem">
+          <div id="list-modal-count" style="font-size:0.75rem;font-weight:700;color:#cbd5e1;text-transform:uppercase;letter-spacing:0.08em">0 selected</div>
+          <div id="list-modal-visible-count" style="font-size:0.68rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.1em">0 visible</div>
+        </div>
+      </div>
+      <div style="padding:1rem 1.25rem 0.75rem;color:#cbd5e1;font-size:0.9rem;line-height:1.5">
+        Search by ticker, company name, issuer, or region, then tick the entries you want in your list. The list is saved as JSON in `config/`.
+      </div>
+      <div style="padding:0 1.25rem 0.85rem;display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center">
+        <div style="display:flex;flex-direction:column;gap:0.3rem;min-width:220px">
+          <label for="list-modal-list-select" style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8">Saved Lists</label>
+          <div style="display:flex;gap:0.35rem;align-items:center">
+            <select id="list-modal-list-select" onchange="setListBuilderList(this.value)"
+              style="flex:1;border-radius:0.55rem;border:1px solid rgba(148,163,184,0.35);background:#020617;color:#e2e8f0;padding:0.7rem 0.9rem;font-size:0.92rem;outline:none"></select>
+            <button type="button" onclick="copySelectText('list-modal-list-select')"
+              style="border-radius:0.55rem;border:1px solid rgba(99,102,241,0.35);background:#1e293b;color:#e2e8f0;font-weight:700;padding:0.7rem 0.85rem;font-size:0.78rem;letter-spacing:0.08em;text-transform:uppercase"
+              title="Copy the active saved list name">
+              Copy
+            </button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.3rem;min-width:220px;flex:1">
+          <label for="list-modal-name" style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8">List Name</label>
+          <input id="list-modal-name" type="text" placeholder="My Sweden Watchlist"
+            oninput="customTickerListName = this.value"
+            style="border-radius:0.55rem;border:1px solid rgba(148,163,184,0.35);background:#020617;color:#e2e8f0;padding:0.7rem 0.9rem;font-size:0.92rem;outline:none">
+        </div>
+      </div>
+      <div style="padding:0 1.25rem 0.9rem;display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center">
+        <input id="list-modal-search" type="text" placeholder="Search tickers..."
+          oninput="setListBuilderSearch(this.value)"
+          style="min-width:220px;flex:1;border-radius:0.55rem;border:1px solid rgba(148,163,184,0.35);background:#020617;color:#e2e8f0;padding:0.7rem 0.9rem;font-size:0.92rem;outline:none">
+        <button type="button" data-list-exchange="all" onclick="setListBuilderExchange('all')"
+          style="border-radius:999px;border:1px solid rgba(148,163,184,0.35);background:#e2e8f0;color:#0f172a;font-weight:700;padding:0.45rem 0.85rem">All</button>
+        <button type="button" data-list-exchange="xetra" onclick="setListBuilderExchange('xetra')"
+          style="border-radius:999px;border:1px solid rgba(148,163,184,0.35);background:#1e293b;color:#e2e8f0;font-weight:700;padding:0.45rem 0.85rem">Xetra</button>
+        <button type="button" data-list-exchange="sweden" onclick="setListBuilderExchange('sweden')"
+          style="border-radius:999px;border:1px solid rgba(148,163,184,0.35);background:#1e293b;color:#e2e8f0;font-weight:700;padding:0.45rem 0.85rem">Sweden</button>
+        <div style="flex-basis:100%;height:0"></div>
+        <button type="button" onclick="toggleVisibleListBuilderTickers(true)"
+          style="border-radius:0.5rem;border:1px solid rgba(99,102,241,0.35);background:#312e81;color:#e0e7ff;font-weight:700;padding:0.45rem 0.8rem">Select Visible</button>
+        <button type="button" onclick="toggleVisibleListBuilderTickers(false)"
+          style="border-radius:0.5rem;border:1px solid rgba(148,163,184,0.35);background:#1e293b;color:#e2e8f0;font-weight:700;padding:0.45rem 0.8rem">Clear Visible</button>
+        <div id="list-modal-preview" style="margin-left:auto;font-size:0.8rem;color:#94a3b8">My List: No custom tickers selected yet</div>
+      </div>
+      <div style="padding:0 1.25rem 1rem;overflow:hidden;display:flex;flex-direction:column;gap:0.75rem;flex:1">
+        <div id="list-modal-grid" style="overflow:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.55rem;padding-right:0.15rem"></div>
+      </div>
+      <div style="padding:0 1.25rem 1.25rem;display:flex;justify-content:flex-end;gap:0.65rem">
+        <button type="button" onclick="closeListEditorModal()"
+          style="border-radius:0.5rem;border:1px solid rgba(148,163,184,0.35);background:#1e293b;color:#e2e8f0;font-weight:700;padding:0.55rem 0.9rem">Cancel</button>
+        <button type="button" onclick="saveListEditor()"
+          style="border-radius:0.5rem;border:1px solid rgba(59,130,246,0.45);background:#2563eb;color:white;font-weight:700;padding:0.55rem 0.95rem">Apply List</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modify Strategy Modal — direct body child so fixed+z-index always works -->
   <div id="modify-modal"

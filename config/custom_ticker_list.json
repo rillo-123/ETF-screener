@@ -1,0 +1,49 @@
+{
+  "schema_version": "custom_ticker_lists_v3",
+  "updated_at": "2026-05-02T18:56:15+02:00",
+  "active_name": "SwedeBig",
+  "name": "SwedeBig",
+  "count": 8,
+  "tickers": [
+    "ABB.ST",
+    "ACAD.ST",
+    "ACRI-A.ST",
+    "ACTI.ST",
+    "ADDT-B.ST",
+    "AFRY.ST",
+    "ALFA.ST",
+    "ALIF-B.ST"
+  ],
+  "active_list": {
+    "name": "SwedeBig",
+    "tickers": [
+      "ABB.ST",
+      "ACAD.ST",
+      "ACRI-A.ST",
+      "ACTI.ST",
+      "ADDT-B.ST",
+      "AFRY.ST",
+      "ALFA.ST",
+      "ALIF-B.ST"
+    ],
+    "count": 8
+  },
+  "lists": [
+    {
+      "name": "SwedeBig",
+      "tickers": [
+        "ABB.ST",
+        "ACAD.ST",
+        "ACRI-A.ST",
+        "ACTI.ST",
+        "ADDT-B.ST",
+        "AFRY.ST",
+        "ALFA.ST",
+        "ALIF-B.ST"
+      ],
+      "count": 8
+    }
+  ],
+  "list_count": 1,
+  "total_count": 8
+}

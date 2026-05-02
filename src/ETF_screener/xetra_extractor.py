@@ -14,7 +14,7 @@ class XETRETFExtractor:
     def __init__(
         self,
         csv_file: str = "reference/t7-xetr-allTradableInstruments.csv",
-        etfs_file: str = "config/etfs.json",
+        etfs_file: str = "config/xetra.json",
         blacklist_file: str = "config/blacklist.json",
     ):
         """Initialize extractor."""
@@ -53,7 +53,7 @@ class XETRETFExtractor:
             if self.working_etfs:
                 print(
                     f"CSV file not found: {self.csv_file}. "
-                    "Falling back to validated tickers from config/etfs.json."
+                    "Falling back to validated tickers from config/xetra.json."
                 )
                 return {
                     str(ticker).upper(): str(

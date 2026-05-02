@@ -1,10 +1,10 @@
 # Plan
 
-Last updated: 2026-04-28 21:47:42 +02:00
+Last updated: 2026-05-02 22:09:18 +02:00
 
 ## Current objective
 
-Build an ETF-first dashboard that reuses cached artifacts for shortlist discovery, swarm exploration, and chart drill-down.
+Build an ETF-first dashboard that reuses cached artifacts for shortlist discovery, swarm exploration, chart drill-down, and repeated screen/backtest reads.
 
 ## Current state
 
@@ -28,6 +28,9 @@ Build an ETF-first dashboard that reuses cached artifacts for shortlist discover
 - The Swarm tab now describes agent knowledge as a global ticker scan; the old local sense knob has been removed from the GUI.
 - The Swarm tab now starts in a lighter browser-safe density mode: agents per alternating node defaults to `20`, with the hard `5000` ceiling still reachable at high slider values.
 - Tickers and agents now use different canvas marks: tickers stay as round nodes, while agents draw as directional wedge markers with small energy bars.
+- The repo-local vulture quality gate now has a whitelist file for deliberate FastAPI and helper entrypoints, and the nested Windows PowerShell test runner was adjusted to avoid Unicode parsing issues.
+- The default `run_all_tests.ps1` invocation now includes `vulture` so dead-code scanning is part of the main quality pass.
+- The Plotly ribbon chart now uses a slimmer shared left margin so the main graph sits farther left with less dead space.
 - Agent motion now uses direct global jumps between real tickers based on each agent's DNA criteria.
 - Swarm ticker balls are white/neutral, with radius proportional to `log10(simulated wealth)`; color no longer encodes simulated gain/loss or shortlist label.
 - Globe zoom now uses a smaller ticker draw radius than projected map zoom so thousands of white ticker balls remain distinct instead of merging into a few blobs.
@@ -45,12 +48,40 @@ Build an ETF-first dashboard that reuses cached artifacts for shortlist discover
 - The dashboard browser code has been moved out of the Jinja template into static files served from `/static/js/dashboard.js` and `/static/js/browser-log-relay.js`.
 - Dashboard inline handlers are explicitly exposed on `window`, and a Node-based JavaScript smoke test now verifies the Swarm tab switch path.
 - The top header controls are now explicitly treated as Screener-only controls, and strategy selection no longer auto-runs the screener.
+- The top bar now exposes a sticky `Exchange` selector plus a sticky user-defined `List` selector, while the old visible ticker selector has been tucked away for chart drill-down only.
+- The list selector was simplified again: `All Tickers` was removed, leaving `My List` as the default visible choice plus `Edit My List...`.
+- The list editor is now a lightweight modal instead of a blocking browser prompt, so editing a custom ticker list feels faster and less disruptive.
+- The list builder is now checkbox-based, can filter by exchange/search inside the modal, and persists the resulting ticker array as JSON in `config/custom_ticker_list.json`.
+- The custom list is now nameable: the modal includes a list-name field, and the saved JSON stores both `name` and `tickers`.
+- The top bar now has an explicit `Scan Source` button group with `Xetra`, `Sweden`, `My List`, and `All Lists`, so the screener can target one source at a time without a separate exchange/list chooser pair or another dropdown.
+- The list builder now includes a saved-list selector inside the modal, so `My List` works on the currently selected list while `All Lists` can scan the union of all saved lists.
+- The scan-source control is visually emphasized as the main mode switch in the top bar, with stronger panel styling and state-aware color accents.
+- The modal search now matches ticker, company name, issuer, asset class, and region, which makes terse Swedish tickers much easier to work with.
+- The Swedish universe now has a dedicated `config/sweden.json` and `config/sweden.csv`, generated from the official Nasdaq Nordic Stockholm shares feed, so the exchange selector can use a broader Stockholm stock list instead of guessing from suffixes.
+- The dashboard now exposes `/api/ticker-universe` as a cached metadata payload for the modal builder, so the browser can show the richer company labels without recomputing them on every open.
+- Exchange detection for the builder now prefers backend metadata when it is available, which helps the Swedish filter stay accurate for non-obvious tickers.
+- Screen and Backtest now both accept an explicit scan source plus the relevant filter inputs, so the visible top-bar controls can target `Xetra`, `Sweden`, the selected list, or the union of all lists directly.
+- Dashboard startup is now passive so refreshes do not auto-launch a scan or backtest before the user clicks a control.
 - The shortlist tab now supports explicit `All` / `Buy` / `Watch` / `Skip` filtering without refetching or recomputing the snapshot.
 - The dashboard now exposes market freshness status plus a `Refresh Market Data` path that refreshes stale tickers in parallel and rebuilds the shortlist afterward.
 - Market refresh now reuses existing local history and fetches only the missing delta plus an indicator warm-up window instead of re-downloading a full fixed history window for every stale ticker.
 - The chart drill-down now uses the same incremental ticker refresh path, so opening a stale chart tops up that ticker instead of forcing a full-history refill.
+- The chart drill-down now also plots the strategy-referenced TA curves themselves, not just the price overlay subset, so EMA, RSI, MACD, TSI, stochastic, slope, and volume-derived lines can appear in dedicated panels when the DSL uses them.
+- The chart drill-down now keeps the aggregated buy/sell lane on its own subplot row instead of accidentally overwriting the last ribbon row, so trigger and aggregated labels no longer stack on top of each other.
+- Repeated identical screen/backtest requests now have request-level result caches keyed by strategy text, filters, source scope, and latest market date, so consecutive GUI runs can return immediately instead of replaying the whole worker pool.
+- The repo has now been checked with `vulture`; the only remaining findings are mostly intentional FastAPI and utility false positives, plus a handful of legacy helper surfaces.
 - Market freshness now uses a stricter active-universe view: blacklisted/inactive tickers are ignored, missing/stale active tickers make the cache status stale, and a manual dashboard refresh tops up all active tickers with incremental fetches.
 - Chart drill-down now treats anything older than today's local date as stale so opened charts attempt to use the newest available daily bars.
+- The dashboard now caches the expensive screen-universe query and the home-page ticker list by latest market date so repeat reads stop rescanning `etf_data` on every request.
+- The strategy evaluation helpers now reuse the same latest-market-date ticker cache, so the backtest/browser paths avoid repeating the same full ticker scan.
+- `src/ETF_screener/backtester.py` now uses a process-safe scripted worker path plus a lower-overhead simulation loop so parallel backtests spend less time in pandas indexing.
+- `src/ETF_screener/backtester.py` now also caches completed scripted backtest results by ticker, strategy hash, day count, and latest ticker date so repeat runs can skip both strategy evaluation and the simulation loop.
+- The dashboard now exposes `/api/job-progress` and the global progress bar polls the backend so long-running Screen, Backtest, and Market Refresh jobs show actual server state instead of pure UI estimates.
+- The top nav progress area still uses two bars: a context bar for the active task and a global bar for broader dashboard state, but the global bar is now backend-driven.
+- The screen and backtest routes now run their heavy compute work off the event loop so the browser can keep polling progress while the terminal log continues to advance.
+- Screen and Backtest also reattach the poller after a market-data top-up so the progress bar does not disappear between the refresh phase and the main job.
+- The Screener and Backtester now both use the correct progress job names in the frontend, so the poller reads the matching backend state instead of silently ignoring it.
+- The top-bar now has a sticky exchange selector with an `All / Xetra / Sweden` filter, and the ticker selector remembers both the chosen exchange and ticker across rerenders.
 - Regression coverage now exists for shortlist artifact ranking, snapshot reuse, and the shortlist API contract.
 - `plan.md` and `progress.md` are now the repo-tracked resume surface for future work turns.
 
@@ -69,6 +100,12 @@ Build an ETF-first dashboard that reuses cached artifacts for shortlist discover
 - Keep Swarm simulation browser-side for now, but avoid letting the Jinja template become the application bundle; static JavaScript files are the baseline for the next modular split.
 - Keep the local dashboard runner watching `*.js` files now that browser code lives under `src/ETF_screener/dashboard/static/js`.
 - Prefer explicit user actions over auto-running scans when switching context or selecting a strategy.
+- Treat the top bar as the primary universe selector: exchange and user-defined list should stay sticky, and the chart ticker picker should remain a secondary hidden control.
+- Keep the list chooser minimal. If a custom list has not been defined, `My List` should remain the default visible option rather than offering an `All Tickers` escape hatch.
+- Prefer the lightweight list modal over browser prompts for editing ticker lists.
+- Treat `config/custom_ticker_list.json` as the source of truth for the user's saved ticker list, with localStorage only acting as a fallback cache.
+- Prefer company-name and issuer search in the list builder when tickers are terse, especially for the Swedish exchange.
+- Keep the list name alongside the tickers in `config/custom_ticker_list.json`; one named list is enough for now.
 - Model Swarm agents as small mutable genomes instead of hard-coded dots: indicator windows, thresholds, jump behavior, spawn limits, and mutation rate should all be traits.
 - Treat Swarm behavior as explicit DNA rule modules where parameters and action weights can mutate over generations.
 - Interpret EMA cross behavior as a true fast/slow EMA crossover, for example EMA 30 crossing EMA 50.
@@ -107,9 +144,22 @@ Build an ETF-first dashboard that reuses cached artifacts for shortlist discover
 - Decide whether market refresh should stay manual-only or whether we should offer an opt-in auto-refresh prompt when active-universe data is not at the latest available date.
 - Decide whether the strict local-date freshness threshold should later become exchange-calendar aware, especially around weekends and exchange holidays.
 - Add the next shortlist filters and sort controls in the UI: region, asset class, issuer, and freshness are the best follow-ups now that `Buy / Watch / Skip` is in place.
+- Keep the Swedish source files in sync if the underlying Nasdaq Nordic Stockholm feed changes, and decide later whether to widen or curate the current 406-name stock list.
+- Keep market status and refresh source-aware so the active source file drives the ticker count, refresh progress, and shortlist top-up messages.
+- Keep the Sweden refresh path gentle on Yahoo by using sequential refresh plus retry/backoff, since a full 406-name burst can trigger load failures.
+- Blacklist the specific Sweden tickers that Yahoo will not serve so they do not keep showing up as failed loads in screen/backtest runs.
+- Make the visible strategy and saved-list selectors copyable with a one-click clipboard action so the current selection is easier to share.
+- Consider adding saved named lists later if a single custom ticker set is not enough for the workflow.
 - Add the next Swarm layer: explicit pheromone fields, richer hover overlays, and controls for seeding a run from exported top-agent DNA.
 - Improve metadata quality beyond `config/etfs.json` heuristics so product scoring can include TER, fund size, domicile, and distribution policy later.
 - Decide whether the shortlist tab should open charts in-place later or keep using the current screener chart surface as the single drill-down.
+- Extend the same latest-market-date cache pattern to any remaining strategy-browser paths if they still repeat expensive universe scans.
+- Consider whether market refresh should stop hiding the progress area when it is nested under Screen or Backtest, or whether we want a separate nested-progress model.
+- Evaluate GPU acceleration only where it naturally fits: browser rendering, WebGL/WebGPU visualization, or very data-parallel simulation steps.
+- Benchmark whether the process-worker backtest path is fast enough; if not, the next step is a more aggressive indicator/trade-state vectorization pass.
+- Benchmark whether the scripted result cache removes enough repeat latency on the dashboard path, and only then consider deeper vectorization.
+- Keep the progress UI lightweight and expressive rather than introducing a heavier notification system.
+- Let the global progress bar represent any long-running dashboard operation, not just screener/backtester work.
 - Keep updating `plan.md` and `progress.md` on every future implementation turn when state changes meaningfully.
 
 ## Blockers and risks
@@ -125,5 +175,9 @@ Build an ETF-first dashboard that reuses cached artifacts for shortlist discover
 - Dividend history depends on yfinance action availability; missing dividends safely behave as zero dividends.
 - Full-universe market refresh can take time on a large Xetra universe, so we should be careful about turning it into an automatic page-load behavior.
 - Delta refresh is now much lighter on network usage, but a full-universe pass can still take noticeable time because thousands of tickers may each require a small incremental request.
+- Caching the screen universe reduces repeated reads, but the actual backtest workload is still intentionally heavy until we decide how much of it should be cached or precomputed.
+- GPU acceleration is not a good first fix for the current bottlenecks because the slowest pieces are still SQLite, yfinance, and per-ticker control flow rather than raw rasterization or matrix math.
+- Process workers help the scripted backtest path, but they still don’t change the fact that the underlying workload is intentionally heavy for large ticker sets.
+- The result cache is keyed by the latest ticker date so stale outputs should fall away automatically when fresh market data arrives.
 - A real browser automation harness is still absent; current JavaScript coverage is a lightweight Node fake-DOM smoke test plus syntax parsing.
 - Repo worktree already contains unrelated local changes, so edits should stay isolated to the new maintenance flow and docs.

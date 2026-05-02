@@ -38,7 +38,7 @@ class ETFShortlistEngine:
     ):
         self.db = ETFDatabase(db_path=db_path)
         self.storage = storage or ParquetStorage()
-        self.metadata_path = Path(metadata_path or "config/etfs.json")
+        self.metadata_path = Path(metadata_path or "config/xetra.json")
         self.metadata_map = self._load_metadata_map()
 
     def _load_metadata_map(self) -> dict[str, dict[str, Any]]:

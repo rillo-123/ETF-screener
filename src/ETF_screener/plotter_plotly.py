@@ -167,7 +167,9 @@ class InteractivePlotter:
         }
         return alias_map.get(cond, cond)
 
-    def _get_ribbon_layout(self, num_ribbons: int) -> dict:
+    def _get_ribbon_layout(
+        self, num_ribbons: int, num_strategy_panels: int = 0
+    ) -> dict:
         """Compute scalable panel/lane layout so all ribbons keep the same size."""
         cfg = RibbonLayoutConfig(
             price_panel_px=int(self._layout_numeric_setting("price_panel_px", 460)),
@@ -180,7 +182,10 @@ class InteractivePlotter:
         )
 
         lane_count = 1 + max(0, num_ribbons)  # aggregated lane + ribbon lanes
-        fixed_px = cfg.price_panel_px + cfg.volume_panel_px
+        strategy_panel_px = int(self._layout_numeric_setting("strategy_panel_px", 140))
+        fixed_px = cfg.price_panel_px + cfg.volume_panel_px + (
+            max(0, num_strategy_panels) * strategy_panel_px
+        )
         available_for_lanes = max(
             cfg.max_total_height_px - fixed_px, lane_count * cfg.min_lane_px
         )
@@ -189,7 +194,11 @@ class InteractivePlotter:
         )
 
         total_height_px = fixed_px + (lane_px * lane_count)
-        raw_heights = [cfg.price_panel_px, cfg.volume_panel_px] + [lane_px] * lane_count
+        raw_heights = (
+            [cfg.price_panel_px, cfg.volume_panel_px]
+            + [strategy_panel_px] * max(0, num_strategy_panels)
+            + [lane_px] * lane_count
+        )
         normalizer = float(sum(raw_heights)) if raw_heights else 1.0
         row_heights = [h / normalizer for h in raw_heights]
 
@@ -414,6 +423,149 @@ class InteractivePlotter:
 
         return sorted(specs)
 
+    def _extract_strategy_indicator_names(
+        self, strategy_content: str | None
+    ) -> list[str]:
+        """Extract plot-worthy indicator names referenced by the DSL."""
+        if not strategy_content:
+            return []
+
+        s = strategy_content.lower()
+        found: list[str] = []
+        seen: set[str] = set()
+
+        def add(name: str) -> None:
+            name = str(name).strip()
+            if not name or name in seen:
+                return
+            seen.add(name)
+            found.append(name)
+
+        for period in re.findall(r"\bema_(\d+)\b", s):
+            add(f"ema_{period}")
+
+        for period in re.findall(r"\brsi_(\d+)\b", s):
+            add(f"rsi_{period}")
+
+        if re.search(r"\brsi\b", s):
+            add("rsi")
+
+        for rsi_period, ema_period in re.findall(r"\brsi_ema_(\d+)_(\d+)\b", s):
+            add(f"rsi_ema_{rsi_period}_{ema_period}")
+
+        for period, mult in re.findall(
+            r"\b(?:st|supertrend)_(\d+)_(\d+(?:\.\d+)?)\b", s
+        ):
+            add(f"supertrend_{period}_{mult}")
+
+        for token in (
+            "macd",
+            "macd_signal",
+            "macd_hist",
+            "stoch_k",
+            "stoch_d",
+            "stoch_rsi_k",
+            "stoch_rsi_d",
+            "tsi",
+            "tsi_signal",
+            "adx",
+            "vol_ema_20",
+        ):
+            if re.search(rf"\b{re.escape(token)}\b", s):
+                add(token)
+
+        # Generic slope references are useful to visualize if the strategy uses them.
+        for slope_match in re.finditer(r"\b([a-z][a-z0-9_]*_slope)\b", s):
+            add(slope_match.group(1))
+
+        return found
+
+    def _find_column_case_insensitive(
+        self, df: pd.DataFrame, column_name: str
+    ) -> str | None:
+        """Return the actual DataFrame column matching `column_name`, ignoring case."""
+        if column_name in df.columns:
+            return column_name
+
+        lower_name = str(column_name).lower()
+        for col in df.columns:
+            if str(col).lower() == lower_name:
+                return col
+        return None
+
+    def _pretty_indicator_label(self, column_name: str) -> str:
+        """Convert an indicator column name into a readable legend label."""
+        name = str(column_name).strip()
+        if not name:
+            return "Indicator"
+
+        lower = name.lower()
+        if lower.startswith("supertrend_"):
+            parts = lower.split("_")
+            if len(parts) >= 3:
+                return f"Supertrend {parts[1]} {parts[2]}"
+        if lower.startswith("ema_"):
+            suffix = lower[4:].replace("_", " ")
+            return f"EMA {suffix}".strip()
+        if lower == "rsi":
+            return "RSI"
+        if lower.startswith("rsi_ema_"):
+            suffix = lower[8:].replace("_", " ")
+            return f"RSI EMA {suffix}".strip()
+        if lower.startswith("rsi_"):
+            suffix = lower[4:].replace("_", " ")
+            return f"RSI {suffix}".strip()
+        if lower == "macd":
+            return "MACD"
+        if lower == "macd_signal":
+            return "MACD Signal"
+        if lower == "macd_hist":
+            return "MACD Hist"
+        if lower.startswith("stoch_rsi_"):
+            suffix = lower[10:].replace("_", " ")
+            return f"Stoch RSI {suffix}".strip()
+        if lower.startswith("stoch_"):
+            suffix = lower[6:].replace("_", " ")
+            return f"Stoch {suffix}".strip()
+        if lower == "tsi":
+            return "TSI"
+        if lower == "tsi_signal":
+            return "TSI Signal"
+        if lower == "adx":
+            return "ADX"
+        if lower == "vol_ema_20":
+            return "Volume EMA 20"
+        if lower.endswith("_slope"):
+            return name.replace("_", " ").title()
+        return name.replace("_", " ").title()
+
+    def _classify_strategy_indicator(
+        self, column_name: str, series: pd.Series
+    ) -> str:
+        """Group indicator curves into reasonable subplot families."""
+        lower = str(column_name).lower()
+        if lower == "vol_ema_20":
+            return "volume"
+        if any(token in lower for token in ("rsi", "stoch", "adx")):
+            return "oscillator"
+        if any(token in lower for token in ("macd", "tsi", "_slope")):
+            return "momentum"
+
+        # Fallback by scale: bounded values fit better with oscillators, everything
+        # else goes into a separate momentum panel so it does not crush the price pane.
+        try:
+            numeric = pd.to_numeric(series, errors="coerce").dropna()
+        except Exception:
+            return "momentum"
+
+        if numeric.empty:
+            return "momentum"
+
+        max_abs = float(numeric.abs().max())
+        if max_abs <= 120.0:
+            return "oscillator"
+        return "momentum"
+
     def _compact_ribbon_label(self, label: str) -> str:
         # Convert DSL block names into readable left-gutter labels.
         words = str(label).replace("_", " ").strip().split()
@@ -504,7 +656,7 @@ class InteractivePlotter:
         mask,
         row: int,
         color: str,
-        lane_width: int,
+        _lane_width: int,
         name: str,
         hovertemplate: str | None,
         show_markers: bool = False,
@@ -738,6 +890,57 @@ class InteractivePlotter:
         if "Date" in df.columns:
             df["Date"] = pd.to_datetime(df["Date"])
 
+        strategy_indicator_names = self._extract_strategy_indicator_names(
+            strategy_content
+        )
+        overlay_names = {
+            *[
+                f"ema_{period}"
+                for period in self._extract_ema_periods(strategy_content)
+            ],
+            *[
+                f"supertrend_{period}_{mult}"
+                for period, mult in self._extract_supertrend_specs(strategy_content)
+            ],
+        }
+        strategy_panel_groups: list[dict] = []
+        panel_buckets: dict[str, list[dict]] = {
+            "oscillator": [],
+            "momentum": [],
+            "volume": [],
+        }
+        if strategy_content and strategy_content.strip():
+            seen_columns: set[str] = set()
+
+            for indicator_name in strategy_indicator_names:
+                if indicator_name in overlay_names:
+                    continue
+                column_name = self._find_column_case_insensitive(df, indicator_name)
+                if not column_name:
+                    # Some strategy helpers are derived at runtime and may not be
+                    # stored under the exact DSL token. Skip quietly if absent.
+                    continue
+                if column_name in seen_columns:
+                    continue
+
+                series = df[column_name]
+                if not pd.api.types.is_numeric_dtype(series):
+                    continue
+                if pd.api.types.is_bool_dtype(series):
+                    continue
+
+                family = self._classify_strategy_indicator(column_name, series)
+                label = self._pretty_indicator_label(column_name)
+                panel_buckets.setdefault(family, []).append(
+                    {"column": column_name, "label": label}
+                )
+                seen_columns.add(column_name)
+
+            for title, family in (("Oscillators", "oscillator"), ("Momentum", "momentum")):
+                items = panel_buckets.get(family, [])
+                if items:
+                    strategy_panel_groups.append({"title": title, "items": items})
+
         # Determine available ribbons.
         # Strategy-focused mode: when DSL is provided, use only DSL-derived ribbons.
         if strategy_content and strategy_content.strip():
@@ -911,19 +1114,27 @@ class InteractivePlotter:
             )
 
         num_ribbons = len(visible_ribbon_data)
-        layout_spec = self._get_ribbon_layout(num_ribbons)
+        num_strategy_panels = len(strategy_panel_groups)
+        layout_spec = self._get_ribbon_layout(num_ribbons, num_strategy_panels)
         row_heights = layout_spec["row_heights"]
         lane_line_width = layout_spec["lane_line_width"]
+
+        strategy_row_start = 3
+        ribbon_row_start = strategy_row_start + num_strategy_panels
+        aggregated_row = ribbon_row_start + num_ribbons
 
         # We start with a clean subplot setup
         # Reverting to shared_xaxes=True but we will FIX the layout naming issue
         fig = make_subplots(
-            rows=3 + num_ribbons,
+            rows=3 + num_strategy_panels + num_ribbons,
             cols=1,
             shared_xaxes=True,
             vertical_spacing=0.0,
             row_heights=row_heights,
-            subplot_titles=[f"{symbol} Analysis", "Volume", "Buy/Sell Conditions"]
+            subplot_titles=
+            [f"{symbol} Analysis", "Volume"]
+            + [panel["title"] for panel in strategy_panel_groups]
+            + ["Buy/Sell Conditions"]
             + [""] * num_ribbons,
         )
 
@@ -937,7 +1148,7 @@ class InteractivePlotter:
 
         # Fixed left gutter anchor so legend and ribbon labels are visually justified.
         # Tunable in config/ribbon_settings.json under layout.left_gutter_x.
-        left_gutter_x = self._layout_numeric_setting("left_gutter_x", -0.28)
+        left_gutter_x = self._layout_numeric_setting("left_gutter_x", -0.18)
 
         # 1. Price Chart (Candlestick)
         fig.add_trace(
@@ -981,9 +1192,85 @@ class InteractivePlotter:
                 col=1,
             )
 
+        # Add other TA curves that the strategy directly references, grouped into
+        # dedicated indicator panels so they remain readable.
+        strategy_curve_palette = [
+            "#7c3aed",
+            "#0891b2",
+            "#b45309",
+            "#be185d",
+            "#065f46",
+            "#1e40af",
+            "#4f46e5",
+            "#059669",
+        ]
+        volume_overlay_specs = panel_buckets.get("volume", [])
+        for panel_idx, panel in enumerate(strategy_panel_groups):
+            row = strategy_row_start + panel_idx
+            items = panel["items"]
+            for item_idx, item in enumerate(items):
+                col_name = item["column"]
+                if col_name not in df.columns:
+                    continue
+                color = strategy_curve_palette[
+                    (panel_idx + item_idx) % len(strategy_curve_palette)
+                ]
+                series = pd.to_numeric(df[col_name], errors="coerce")
+                if series.dropna().empty:
+                    continue
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=df["Date"],
+                        y=series,
+                        name=item["label"],
+                        mode="lines",
+                        line=dict(color=color, width=1.5),
+                        connectgaps=False,
+                    ),
+                    row=row,
+                    col=1,
+                )
+
+            if panel["title"].lower() == "oscillators":
+                fig.update_yaxes(
+                    range=[0, 100],
+                    row=row,
+                    col=1,
+                )
+                fig.add_hline(
+                    y=70,
+                    line=dict(color="#cbd5e1", width=1, dash="dot"),
+                    row=row,
+                    col=1,
+                )
+                fig.add_hline(
+                    y=30,
+                    line=dict(color="#cbd5e1", width=1, dash="dot"),
+                    row=row,
+                    col=1,
+                )
+            elif panel["title"].lower() == "momentum":
+                fig.add_hline(
+                    y=0,
+                    line=dict(color="#cbd5e1", width=1, dash="dot"),
+                    row=row,
+                    col=1,
+                )
+
         # Supertrend Price Overlay — single color-changing line, only when referenced by DSL.
         supertrend_specs = self._extract_supertrend_specs(strategy_content)
-        if supertrend_specs if strategy_content else True:
+        has_supertrend_reference = bool(
+            supertrend_specs
+            or (
+                strategy_content
+                and re.search(
+                    r"\bst(?:_|_is_|$)|\bsupertrend\b",
+                    strategy_content.lower(),
+                )
+            )
+        )
+        if not strategy_content or has_supertrend_reference:
             lower_col = next(
                 (c for c in df.columns if str(c).lower() == "st_lower"),
                 None,
@@ -1096,9 +1383,32 @@ class InteractivePlotter:
             col=1,
         )
 
+        for item_idx, item in enumerate(volume_overlay_specs):
+            col_name = item["column"]
+            if col_name not in df.columns:
+                continue
+            series = pd.to_numeric(df[col_name], errors="coerce")
+            if series.dropna().empty:
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=df["Date"],
+                    y=series,
+                    name=item["label"],
+                    mode="lines",
+                    line=dict(
+                        color=strategy_curve_palette[item_idx % len(strategy_curve_palette)],
+                        width=1.4,
+                    ),
+                    connectgaps=False,
+                ),
+                row=2,
+                col=1,
+            )
+
         # 3. Indicator Ribbons (layer lanes)
         for i, item in enumerate(visible_ribbon_data):
-            row = 3 + i
+            row = ribbon_row_start + i
             rib = item["ribbon"]
             label = rib.get("label", "Indicator")
             for overlay in item["display_overlays"]:
@@ -1108,7 +1418,7 @@ class InteractivePlotter:
                     mask=overlay["mask"],
                     row=row,
                     color=overlay["color"],
-                    lane_width=lane_line_width,
+                    _lane_width=lane_line_width,
                     name=overlay["name"],
                     hovertemplate=overlay["hovertemplate"],
                     show_markers=overlay["show_markers"],
@@ -1143,8 +1453,6 @@ class InteractivePlotter:
             )
 
         # Bottom-most lane: Aggregated state ribbon (single lane)
-        aggregated_row = 3 + num_ribbons
-
         agg_lane_min, agg_lane_max = 0.9, 1.1
         agg_lane_span = agg_lane_max - agg_lane_min
 
@@ -1193,7 +1501,7 @@ class InteractivePlotter:
         )
 
         # 4. Global configurations for all x-axes
-        bottom_row = 3 + num_ribbons
+        bottom_row = aggregated_row
 
         # Completely re-write the end of the method with dictionary-level precision
         fig_dict = fig.to_dict()
@@ -1211,7 +1519,7 @@ class InteractivePlotter:
                 layout[key]["type"] = "date"
                 layout[key]["tickformat"] = "%b %Y"
                 row_num = 1 if key == "xaxis" else int(key.replace("xaxis", ""))
-                is_ribbon_axis = row_num >= 3
+                is_ribbon_axis = row_num >= ribbon_row_start
                 layout[key]["showgrid"] = not is_ribbon_axis
                 layout[key]["gridcolor"] = "lightgray"
                 layout[key]["ticks"] = "outside" if is_bottom else ""
@@ -1223,7 +1531,7 @@ class InteractivePlotter:
         layout["xaxis_rangeslider_visible"] = False
         layout["hovermode"] = "x unified"
         # Tunable in config/ribbon_settings.json under layout.left_margin.
-        left_margin = int(self._layout_numeric_setting("left_margin", 220))
+        left_margin = int(self._layout_numeric_setting("left_margin", 160))
         layout["margin"] = dict(l=left_margin, r=20, t=50, b=80)
         layout["legend"] = dict(
             x=left_gutter_x,

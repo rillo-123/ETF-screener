@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -26,16 +27,18 @@ class MarketDataRefresher:
     def __init__(
         self,
         db_path: str | None = None,
-        etfs_file: str = "config/etfs.json",
+        etfs_file: str = "config/xetra.json",
         blacklist_file: str = "config/blacklist.json",
         fetcher: Optional[YFinanceFetcher] = None,
         storage: Optional[ParquetStorage] = None,
+        collection_mode: str = "active",
     ):
         self.db = ETFDatabase(db_path=db_path)
         self.etfs_file = Path(etfs_file)
         self.blacklist_file = Path(blacklist_file)
         self.fetcher = fetcher or YFinanceFetcher()
         self.storage = storage or ParquetStorage()
+        self.collection_mode = "all" if str(collection_mode).strip().lower() == "all" else "active"
 
     @staticmethod
     def _parse_day(raw: str | None) -> Optional[date]:
@@ -61,6 +64,25 @@ class MarketDataRefresher:
             return {str(ticker).upper() for ticker in raw}
         return set()
 
+    @staticmethod
+    def _normalize_ticker_values(raw: object) -> list[str]:
+        if raw is None:
+            return []
+        if isinstance(raw, dict):
+            values = list(raw.keys())
+        elif isinstance(raw, (list, tuple, set)):
+            values = list(raw)
+        elif isinstance(raw, str):
+            values = [item for item in raw.replace(";", ",").replace("\n", ",").split(",")]
+        else:
+            values = [raw]
+        tickers: list[str] = []
+        for item in values:
+            ticker = str(item).strip().upper()
+            if ticker:
+                tickers.append(ticker)
+        return tickers
+
     def _load_tracked_tickers(self) -> list[str]:
         blacklist = self._load_blacklist()
         tickers: set[str] = set()
@@ -68,6 +90,32 @@ class MarketDataRefresher:
             with open(self.etfs_file, "r", encoding="utf-8") as handle:
                 raw = json.load(handle)
             if isinstance(raw, dict):
+                if isinstance(raw.get("lists"), list):
+                    lists = raw.get("lists", [])
+                    if self.collection_mode == "all":
+                        for entry in lists:
+                            if isinstance(entry, dict):
+                                tickers.update(self._normalize_ticker_values(entry.get("tickers", [])))
+                            else:
+                                tickers.update(self._normalize_ticker_values(entry))
+                    else:
+                        active_name = str(raw.get("active_name") or raw.get("name") or "").strip()
+                        active_entry = None
+                        if active_name:
+                            for entry in lists:
+                                if not isinstance(entry, dict):
+                                    continue
+                                entry_name = str(entry.get("name") or "").strip()
+                                if entry_name == active_name:
+                                    active_entry = entry
+                                    break
+                        if active_entry is None and isinstance(raw.get("active_list"), dict):
+                            active_entry = raw.get("active_list")
+                        if active_entry is not None:
+                            tickers.update(self._normalize_ticker_values(active_entry.get("tickers", [])))
+                        else:
+                            tickers.update(self._normalize_ticker_values(raw.get("tickers", [])))
+                    return sorted(ticker for ticker in tickers if ticker not in blacklist)
                 if isinstance(raw.get("tickers"), list):
                     tickers.update(str(ticker).upper() for ticker in raw["tickers"])
                 else:
@@ -167,6 +215,35 @@ class MarketDataRefresher:
         enriched = add_indicators(merged)
         return ticker, enriched
 
+    @staticmethod
+    def _emit_progress(
+        progress_callback,
+        *,
+        job: str,
+        phase: str,
+        pct: float,
+        detail: str = "",
+        label: str | None = None,
+        active: bool = True,
+        error: str | None = None,
+    ) -> None:
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(
+                {
+                    "job": job,
+                    "phase": phase,
+                    "pct": pct,
+                    "detail": detail,
+                    "label": label or "Market Refresh",
+                    "active": active,
+                    "error": error,
+                }
+            )
+        except Exception:
+            pass
+
     def get_status(self, stale_after_days: int = 3) -> dict[str, Any]:
         tracked = self._load_tracked_tickers()
         blacklist = self._load_blacklist()
@@ -235,7 +312,18 @@ class MarketDataRefresher:
         max_workers: int = 8,
         rebuild_shortlist: bool = True,
         warmup_days: int = INDICATOR_WARMUP_DAYS,
+        progress_callback=None,
     ) -> dict[str, Any]:
+        job = "market-refresh"
+        self._emit_progress(
+            progress_callback,
+            job=job,
+            phase="planning",
+            pct=2.0,
+            detail="Scanning tracked tickers",
+            label="Market Refresh",
+            active=True,
+        )
         tracked = self._load_tracked_tickers()
         latest_by_ticker = self.db.get_ticker_latest_dates()
         today = date.today()
@@ -249,6 +337,15 @@ class MarketDataRefresher:
                 to_refresh.append(ticker)
 
         if not to_refresh:
+            self._emit_progress(
+                progress_callback,
+                job=job,
+                phase="done",
+                pct=100.0,
+                detail="Market data already fresh",
+                label="Market Refresh",
+                active=False,
+            )
             status = self.get_status(stale_after_days=stale_after_days)
             status.update(
                 {
@@ -261,24 +358,38 @@ class MarketDataRefresher:
             return status
 
         worker_count = min(max(1, int(max_workers)), max(2, os.cpu_count() or 4, 8))
+        source_name = self.etfs_file.name.lower()
+        sequential_refresh = False
+        if source_name == "sweden.json":
+            worker_count = 1
+            sequential_refresh = True
+        elif source_name == "custom_ticker_list.json" and len(to_refresh) <= 100:
+            worker_count = min(worker_count, 2)
+            sequential_refresh = True
         refreshed = 0
         failed = 0
         errors: list[dict[str, str]] = []
+        total = len(to_refresh)
+        completed = 0
 
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            futures = {
-                executor.submit(
-                    self._build_refresh_frame,
-                    ticker,
-                    depth,
-                    warmup_days,
-                ): ticker
-                for ticker in to_refresh
-            }
-            for future in as_completed(futures):
-                ticker = futures[future]
+        self._emit_progress(
+            progress_callback,
+            job=job,
+            phase="refreshing",
+            pct=5.0,
+            detail=f"Refreshing {total} tickers",
+            label="Market Refresh",
+            active=True,
+        )
+
+        if sequential_refresh:
+            for ticker in to_refresh:
                 try:
-                    symbol, df = future.result()
+                    symbol, df = self._build_refresh_frame(
+                        ticker,
+                        depth,
+                        warmup_days,
+                    )
                     if df is None or df.empty:
                         raise ValueError("No rows returned")
                     self.db.insert_dataframe(df, symbol)
@@ -287,9 +398,67 @@ class MarketDataRefresher:
                 except Exception as exc:
                     failed += 1
                     errors.append({"ticker": ticker, "error": str(exc)})
+                finally:
+                    completed += 1
+                    progress_pct = 5.0 + (completed / max(1, total)) * 75.0
+                    self._emit_progress(
+                        progress_callback,
+                        job=job,
+                        phase="refreshing",
+                        pct=progress_pct,
+                        detail=f"{completed}/{total} tickers processed",
+                        label="Market Refresh",
+                        active=True,
+                    )
+                    if completed < total:
+                        time.sleep(0.1)
+        else:
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                futures = {
+                    executor.submit(
+                        self._build_refresh_frame,
+                        ticker,
+                        depth,
+                        warmup_days,
+                    ): ticker
+                    for ticker in to_refresh
+                }
+                for future in as_completed(futures):
+                    ticker = futures[future]
+                    try:
+                        symbol, df = future.result()
+                        if df is None or df.empty:
+                            raise ValueError("No rows returned")
+                        self.db.insert_dataframe(df, symbol)
+                        self.storage.save_etf_data(df, symbol)
+                        refreshed += 1
+                    except Exception as exc:
+                        failed += 1
+                        errors.append({"ticker": ticker, "error": str(exc)})
+                    finally:
+                        completed += 1
+                        progress_pct = 5.0 + (completed / max(1, total)) * 75.0
+                        self._emit_progress(
+                            progress_callback,
+                            job=job,
+                            phase="refreshing",
+                            pct=progress_pct,
+                            detail=f"{completed}/{total} tickers processed",
+                            label="Market Refresh",
+                            active=True,
+                        )
 
         shortlist_rebuilt = False
         if rebuild_shortlist:
+            self._emit_progress(
+                progress_callback,
+                job=job,
+                phase="rebuilding-shortlist",
+                pct=88.0,
+                detail="Rebuilding shortlist artifacts",
+                label="Market Refresh",
+                active=True,
+            )
             engine = ETFShortlistEngine(
                 db_path=str(self.db.db_path),
                 metadata_path=str(self.etfs_file),
@@ -297,6 +466,15 @@ class MarketDataRefresher:
             )
             engine.build_shortlist(max_workers=max_workers)
             shortlist_rebuilt = True
+            self._emit_progress(
+                progress_callback,
+                job=job,
+                phase="rebuilding-shortlist",
+                pct=96.0,
+                detail="Shortlist rebuilt",
+                label="Market Refresh",
+                active=True,
+            )
 
         status = self.get_status(stale_after_days=stale_after_days)
         status.update(
@@ -307,5 +485,14 @@ class MarketDataRefresher:
                 "shortlist_rebuilt": shortlist_rebuilt,
                 "errors": errors[:25],
             }
+        )
+        self._emit_progress(
+            progress_callback,
+            job=job,
+            phase="done",
+            pct=100.0,
+            detail=f"{refreshed} refreshed, {failed} failed",
+            label="Market Refresh",
+            active=False,
         )
         return status

@@ -680,7 +680,7 @@ class ETFDatabase:
                     int(bool(row.get("is_ucits"))),
                     int(bool(row.get("is_leveraged"))),
                     int(bool(row.get("is_inverse"))),
-                    row.get("source", "config/etfs.json"),
+                    row.get("source", "config/xetra.json"),
                 )
                 for row in rows
             ],

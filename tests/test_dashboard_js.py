@@ -93,6 +93,10 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
           ok: true,
           json: async () => String(url).includes("swarm-world")
             ? {{ world: {{ layout: "grid", rows: 1, columns: 1, cell_width: 1, cell_height: 1 }}, nodes: [], count: 0 }}
+            : String(url).includes("ticker-universe")
+              ? {{ count: 0, items: [] }}
+              : String(url).includes("custom-ticker-list")
+                ? {{ count: 0, tickers: [] }}
             : String(url).includes("swarm-history")
               ? {{ histories: [], count: 0 }}
               : {{}},
@@ -224,7 +228,7 @@ def test_dashboard_js_persists_chart_range():
         }};
         global.fetch = async () => ({{
           ok: true,
-          json: async () => ({{ world: {{ layout: "grid", rows: 1, columns: 1, cell_width: 1, cell_height: 1 }}, nodes: [], count: 0 }}),
+          json: async () => ({{ count: 0, items: [], world: {{ layout: "grid", rows: 1, columns: 1, cell_width: 1, cell_height: 1 }}, nodes: [], count: 0 }}),
         }});
         global.requestAnimationFrame = () => 1;
         global.cancelAnimationFrame = () => {{}};
@@ -428,6 +432,24 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
                 as_of_date: "2026-04-29",
                 rows: [],
                 labels: {{ Buy: 0, Watch: 0, Skip: 0 }},
+              }}),
+            }};
+          }}
+          if (String(url).includes("/api/ticker-universe")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                count: 0,
+                items: [],
+              }}),
+            }};
+          }}
+          if (String(url).includes("/api/custom-ticker-list")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                count: 0,
+                tickers: [],
               }}),
             }};
           }}

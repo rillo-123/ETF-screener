@@ -16,7 +16,7 @@ FILTER: ema_20 > ema_50
 END
 
 BEGIN TRIGGER
-TRIGGER: close > ema_20 AND close_d1 <= ema_20_d1
+TRIGGER: close_d1 > ema_20 AND close <= ema_20
 END
 
 BEGIN QUALIFY

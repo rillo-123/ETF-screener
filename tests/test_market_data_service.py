@@ -141,12 +141,13 @@ def test_market_data_refresher_refreshes_and_rebuilds_shortlist(tmp_path, monkey
 
     result = refresher.refresh_market_data(force=True, max_workers=1)
     db = ETFDatabase(db_path=str(db_path))
+    latest_business_day = pd.bdate_range(end=pd.Timestamp(date.today()), periods=1)[0].date()
 
     assert result["refreshed"] == 1
     assert result["failed"] == 0
-    assert result["latest_market_date"] == date.today().isoformat()
+    assert result["latest_market_date"] == latest_business_day.isoformat()
     assert built["called"] is True
-    assert db.get_latest_market_date() == date.today().isoformat()
+    assert db.get_latest_market_date() == latest_business_day.isoformat()
     stored = db.get_etf_data("AAA.DE")
     assert "dividends" in stored.columns
     assert stored["dividends"].sum() == 0.15
@@ -265,11 +266,12 @@ def test_market_data_refresher_uses_delta_window_for_stale_ticker(tmp_path):
     )
 
     refreshed_df = refresher.refresh_ticker_data("AAA.DE", depth=400)
+    latest_business_day = pd.bdate_range(end=pd.Timestamp(date.today()), periods=1)[0].date()
 
     assert calls, "Expected an incremental fetch call"
     latest_existing_day = existing_df["Date"].max().date()
     assert calls[0]["start_date"] == latest_existing_day - timedelta(days=refresher.INDICATOR_WARMUP_DAYS)
-    assert refreshed_df["Date"].max().date() == date.today()
+    assert refreshed_df["Date"].max().date() == latest_business_day
     assert len(refreshed_df) > len(existing_df)
 
 
@@ -321,6 +323,7 @@ def test_market_data_refresher_preserves_timezone_aware_fresh_rows(tmp_path):
     )
 
     refreshed_df = refresher.refresh_ticker_data("AAA.DE", depth=30, warmup_days=10)
+    latest_business_day = pd.bdate_range(end=pd.Timestamp(date.today()), periods=1)[0].date()
 
-    assert refreshed_df["Date"].max().date() == date.today()
-    assert db.get_latest_date("AAA.DE") == date.today().isoformat()
+    assert refreshed_df["Date"].max().date() == latest_business_day
+    assert db.get_latest_date("AAA.DE") == latest_business_day.isoformat()

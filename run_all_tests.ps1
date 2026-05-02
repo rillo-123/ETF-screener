@@ -9,7 +9,7 @@ Also writes an analyzer companion log in logs/:
 	test_results_YYYYMMDD_HHMMSS.analyzer.log
 
 Usage:
-  .\run_all_tests.ps1                    # Run pytest only
+  .\run_all_tests.ps1                    # Run pytest + vulture
 	.\run_all_tests.ps1 -Parallel          # Run pytest in parallel (-n auto)
 	.\run_all_tests.ps1 -RandomOrder       # Randomize pytest order (pytest-randomly)
 	.\run_all_tests.ps1 -TimeoutSec 120    # Per-test timeout in seconds
@@ -20,7 +20,7 @@ Usage:
   .\run_all_tests.ps1 -Ruff              # Run pytest + ruff linter
   .\run_all_tests.ps1 -Mypy              # Run pytest + mypy type checker
   .\run_all_tests.ps1 -Coverage          # Run pytest with coverage report
-  .\run_all_tests.ps1 -Vulture           # Run pytest + vulture dead code detection
+  .\run_all_tests.ps1 -Vulture           # Legacy alias; vulture runs in the default suite
   .\run_all_tests.ps1 -Black             # Run black code formatter (check mode)
   .\run_all_tests.ps1 -Bandit            # Run bandit security scanner
 #>
@@ -174,7 +174,7 @@ Start-Transcript -Path $logFile -Append | Out-Null
 if ($Full -or $QualityGate -or $Ruff) { $progressTotal++ }
 if ($Full -or $QualityGate -or $Mypy) { $progressTotal++ }
 if ($Full -or $Coverage) { $progressTotal++ }
-if ($Full -or $QualityGate -or $Vulture) { $progressTotal++ }
+$progressTotal++
 if ($Full -or $QualityGate -or $Black) { $progressTotal++ }
 if ($Full -or $Bandit) { $progressTotal++ }
 
@@ -293,7 +293,8 @@ try {
 	}
 
 	# ===================== VULTURE (optional) =====================
-	if ($Full -or $QualityGate -or $Vulture) {
+	# Vulture is part of the default suite so dead-code coverage stays fresh on every run.
+	if ($true) {
 		Start-Section -Name "Running Vulture Dead Code Scanner" -Label "Running Vulture Dead Code Scanner..."
 
 		$vultureScript = Join-Path $root 'scripts\run_vulture.ps1'
@@ -373,12 +374,12 @@ try {
 	Write-Host ("="*60) -ForegroundColor $Cyan
 
 	if ($failedTests.Count -eq 0) {
-		Write-Host "[SUCCESS] All checks passed! ✓" -ForegroundColor $Green
+		Write-Host "[SUCCESS] All checks passed!" -ForegroundColor $Green
 		$exitCode = 0
 	} else {
 		Write-Host "[ATTENTION] Some checks had issues:" -ForegroundColor $Yellow
 		foreach ($failed in $failedTests) {
-			Write-Host "  • $failed" -ForegroundColor $Red
+			Write-Host "  - $failed" -ForegroundColor $Red
 		}
 		$exitCode = 1
 	}

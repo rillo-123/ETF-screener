@@ -63,11 +63,16 @@ class PortfolioPlotter:
             Path to saved plot
         """
         _ = figsize  # Mark figsize as intentionally unused
-        # Try to find a friendly name for the ticker from etfs.json
+        # Try to find a friendly name for the ticker from the metadata files.
         full_name = ""
         try:
-            etfs_file = Path("config/etfs.json")
-            if etfs_file.exists():
+            for etfs_file in (
+                Path("config/xetra.json"),
+                Path("config/sweden.json"),
+                Path("config/etfs.json"),
+            ):
+                if not etfs_file.exists():
+                    continue
                 with open(etfs_file, "r") as f:
                     etf_data = json.load(f)
                     # Support case-insensitive lookup
@@ -82,6 +87,8 @@ class PortfolioPlotter:
                                 if isinstance(v, dict):
                                     full_name = v.get("name", "")
                                 break
+                if full_name:
+                    break
         except Exception:
             pass
 

@@ -5,7 +5,7 @@
 
 BEGIN CONTEXT
 
-FILTER: ema_200_slope > 0
+FILTER: ema_100_slope > 0
 FILTER: was_true(st_10_4_is_red,1)
 END
 

@@ -39,6 +39,19 @@ let backtestSourceMode = "saved";
     let swarmZoomLevel = 0.75;
     let swarmCameraVector = { x: 0, y: 0, z: 1 };
     let marketDataAutoRefreshAttempted = false;
+    let tickerSelectUniverse = [];
+    let tickerUniverseLoadPromise = null;
+    let tickerSelectLastValue = "";
+    let tickerScanScope = "xetra";
+    let tickerListMode = "custom";
+    let customTickerLists = [];
+    let customTickerListActiveName = "My List";
+    let customTickerListName = "My List";
+    let customTickerList = [];
+    let customTickerListDraft = [];
+    let customTickerListDraftSourceName = "My List";
+    let listBuilderExchange = "all";
+    let listBuilderSearch = "";
     const SWARM_TIMELINE_MAX = 1000;
     const SWARM_HISTORY_DAYS = 420;
     const SWARM_HISTORY_LIMIT = 900;
@@ -54,11 +67,885 @@ let backtestSourceMode = "saved";
     const SWARM_SPHERE_REPULSION_LIMIT = 0.018;
     const SWARM_SPHERE_VELOCITY_LIMIT = 0.015;
     const SWARM_SPHERE_INITIAL_RELAX_STEPS = 18;
+    const LAST_TICKER_SELECT_KEY = "etf-discovery:last-ticker-select";
+    const LAST_EXCHANGE_SELECT_KEY = "etf-discovery:last-exchange-select";
+    const LAST_SCAN_SCOPE_KEY = "etf-discovery:last-scan-scope";
+    const LAST_LIST_MODE_KEY = "etf-discovery:last-list-mode";
+    const LAST_CUSTOM_LIST_KEY = "etf-discovery:last-custom-list";
+    const LAST_CUSTOM_LIST_NAME_KEY = "etf-discovery:last-custom-list-name";
 
     function getDashboardTabs() {
       return ["screener", "shortlist", "swarm", "backtest"]
         .map((name) => document.getElementById(`tab-${name}`))
         .filter(Boolean);
+    }
+
+    function readStickyValue(key, fallback = "") {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw === null || raw === undefined ? fallback : String(raw);
+      } catch (err) {
+        return fallback;
+      }
+    }
+
+    function writeStickyValue(key, value) {
+      try {
+        localStorage.setItem(key, String(value ?? ""));
+      } catch (err) {
+        // Ignore storage failures in restricted environments.
+      }
+    }
+
+    function normalizeExchangeFilter(value) {
+      const cleaned = String(value || "all").trim().toLowerCase();
+      if (["xetra", "germany", "de"].includes(cleaned)) {
+        return "xetra";
+      }
+      if (["sweden", "stockholm", "stockholms", "se", "ss", "st"].includes(cleaned)) {
+        return "sweden";
+      }
+      return "all";
+    }
+
+    function normalizeScanScope(value) {
+      const cleaned = String(value || "xetra").trim().toLowerCase();
+      if (["list", "chosen", "chosen_list", "custom"].includes(cleaned)) {
+        return "list";
+      }
+      if (["all_lists", "alllists", "all list", "all lists"].includes(cleaned)) {
+        return "all_lists";
+      }
+      if (["sweden", "stockholm", "stockholms", "se", "ss", "st"].includes(cleaned)) {
+        return "sweden";
+      }
+      if (["xetra", "germany", "de", "exchange", "all"].includes(cleaned)) {
+        return "xetra";
+      }
+      return "xetra";
+    }
+
+    function getSelectCopyText(select) {
+      if (!select) {
+        return "";
+      }
+      const option = select.selectedOptions && select.selectedOptions[0];
+      const text = String(
+        option && option.textContent ? option.textContent : select.value || "",
+      ).trim();
+      if (!text || text.startsWith("--")) {
+        return String(select.value || "").trim();
+      }
+      return text;
+    }
+
+    async function copyTextToClipboard(text) {
+      const cleaned = String(text || "").trim();
+      if (!cleaned) {
+        throw new Error("Nothing selected to copy");
+      }
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(cleaned);
+        return;
+      }
+
+      const temp = document.createElement("textarea");
+      temp.value = cleaned;
+      temp.setAttribute("readonly", "readonly");
+      temp.style.position = "fixed";
+      temp.style.left = "-9999px";
+      temp.style.top = "0";
+      document.body.appendChild(temp);
+      temp.focus();
+      temp.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(temp);
+      if (!ok) {
+        throw new Error("Clipboard copy failed");
+      }
+    }
+
+    async function copySelectText(selectId) {
+      const select = document.getElementById(selectId);
+      if (!select) {
+        showToast(`Could not find ${selectId}`, true);
+        return;
+      }
+      const text = getSelectCopyText(select);
+      if (!text) {
+        showToast("Nothing selected to copy", true);
+        return;
+      }
+      try {
+        await copyTextToClipboard(text);
+        showToast(`Copied: ${text}`);
+      } catch (err) {
+        showToast(`Copy failed: ${err.message || err}`, true);
+      }
+    }
+
+    function getTickerExchangeBucket(ticker, label = "") {
+      const upperTicker = String(ticker || "").toUpperCase();
+      const upperLabel = String(label || "").toUpperCase();
+      if (/\.(ST|SE|SS)$/.test(upperTicker) || upperLabel.includes("STOCKHOLM") || upperLabel.includes("SWED") || upperTicker.includes("SWE")) {
+        return "sweden";
+      }
+      if (/\.(DE|F)$/.test(upperTicker) || !upperTicker.includes(".")) {
+        return "xetra";
+      }
+      return "all";
+    }
+
+    function getTickerSelectNodes() {
+      return {
+        ticker: document.getElementById("ticker-select"),
+      };
+    }
+
+    function captureTickerSelectUniverse() {
+      const { ticker } = getTickerSelectNodes();
+      if (!ticker || tickerSelectUniverse.length > 0) {
+        return;
+      }
+      tickerSelectUniverse = Array.from(ticker.options)
+        .filter((option) => option && option.value)
+        .map((option) => ({
+          ticker: String(option.value).toUpperCase(),
+          label: String(option.textContent || option.value || "").trim(),
+          exchange: getTickerExchangeBucket(option.value, option.textContent || option.value),
+        }));
+    }
+
+    function setTickerSelectUniverse(items) {
+      tickerSelectUniverse = (Array.isArray(items) ? items : [])
+        .map((item) => {
+          if (typeof item === "string") {
+            return {
+              ticker: String(item).toUpperCase(),
+              label: String(item).toUpperCase(),
+              name: String(item).toUpperCase(),
+              issuer: "",
+              asset_class: "",
+              region: "",
+              exchange: getTickerExchangeBucket(item, item),
+            };
+          }
+          const ticker = String(item.ticker || item.value || item.symbol || "").toUpperCase();
+          const label = String(item.label || item.text || item.name || item.ticker || item.value || "").trim();
+          const exchange = normalizeExchangeFilter(item.exchange || getTickerExchangeBucket(item.ticker || item.value || item.symbol || "", item.label || item.text || item.name || ""));
+          return {
+            ticker,
+            label,
+            name: String(item.name || item.label || item.text || item.ticker || item.value || "").trim() || label || ticker,
+            issuer: String(item.issuer || "").trim(),
+            asset_class: String(item.asset_class || item.assetClass || "").trim(),
+            region: String(item.region || "").trim(),
+            exchange,
+          };
+        })
+        .filter((item) => item.ticker);
+    }
+
+    function getScopeTickers(scope) {
+      const normalized = normalizeScanScope(scope);
+      if (normalized === "list") {
+        return sortTickersByUniverse(customTickerList);
+      }
+      if (normalized === "all_lists") {
+        const sourceLists = Array.isArray(customTickerLists) && customTickerLists.length > 0
+          ? customTickerLists
+          : [{ name: customTickerListActiveName || customTickerListName, tickers: customTickerList }];
+        return sortTickersByUniverse(
+          sourceLists.flatMap((entry) => Array.isArray(entry.tickers) ? entry.tickers : [])
+        );
+      }
+      return [];
+    }
+
+    function getFilteredTickerUniverse() {
+      const scope = normalizeScanScope(tickerScanScope);
+      if (scope === "xetra" || scope === "sweden") {
+        return tickerSelectUniverse.filter((item) => item.exchange === scope);
+      }
+      const scopeTickers = new Set(getScopeTickers(scope));
+      if (scopeTickers.size === 0) {
+        return scope === "list" ? [] : tickerSelectUniverse;
+      }
+      return tickerSelectUniverse.filter((item) => scopeTickers.has(item.ticker));
+    }
+
+    function renderTickerSelectOptions({ preserveSelection = true } = {}) {
+      const { ticker } = getTickerSelectNodes();
+      if (!ticker) {
+        return;
+      }
+
+      captureTickerSelectUniverse();
+
+      const selectedTicker = preserveSelection
+        ? String(ticker.value || tickerSelectLastValue || readStickyValue(LAST_TICKER_SELECT_KEY, "")).toUpperCase()
+        : "";
+
+      const normalizedScope = normalizeScanScope(tickerScanScope);
+
+      const visible = getFilteredTickerUniverse();
+      ticker.innerHTML = "";
+
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      if (normalizedScope === "sweden") {
+        placeholder.textContent = visible.length > 0
+          ? "Select Swedish ticker..."
+          : "No Swedish exchange tickers loaded yet";
+      } else if (normalizedScope === "xetra") {
+        placeholder.textContent = "Select Xetra ticker...";
+      } else if (normalizedScope === "all_lists") {
+        placeholder.textContent = visible.length > 0
+          ? "Select ticker from all lists..."
+          : "No saved list tickers loaded yet";
+      } else if (normalizedScope === "list") {
+        placeholder.textContent = visible.length > 0
+          ? "Select ticker from My List..."
+          : "No saved list tickers loaded yet";
+      } else {
+        placeholder.textContent = "Select Ticker...";
+      }
+      ticker.appendChild(placeholder);
+
+      visible.forEach((item) => {
+        const opt = document.createElement("option");
+        opt.value = item.ticker;
+        opt.textContent = item.label || item.ticker;
+        ticker.appendChild(opt);
+      });
+
+      const hasSelectedTicker = selectedTicker && visible.some((item) => item.ticker === selectedTicker);
+      if (hasSelectedTicker) {
+        ticker.value = selectedTicker;
+      } else if (visible.length === 1) {
+        ticker.value = visible[0].ticker;
+      } else {
+        ticker.value = "";
+      }
+      ticker.disabled = (normalizedScope === "sweden" && visible.length === 0) || (normalizedScope === "all_lists" && visible.length === 0);
+      tickerSelectLastValue = ticker.value || "";
+      writeStickyValue(LAST_TICKER_SELECT_KEY, tickerSelectLastValue);
+    }
+
+    function storeTickerSelection(value) {
+      tickerSelectLastValue = String(value || "");
+      writeStickyValue(LAST_TICKER_SELECT_KEY, tickerSelectLastValue);
+    }
+
+    function parseTickerListText(text) {
+      return String(text || "")
+        .split(/[\s,;]+/)
+        .map((item) => item.trim().toUpperCase())
+        .filter(Boolean);
+    }
+
+    function normalizeListName(value) {
+      const name = String(value || "").trim();
+      return name || "My List";
+    }
+
+    function readCustomTickerList() {
+      return parseTickerListText(readStickyValue(LAST_CUSTOM_LIST_KEY, ""));
+    }
+
+    function readCustomTickerListName() {
+      return normalizeListName(customTickerListActiveName || readStickyValue(LAST_CUSTOM_LIST_NAME_KEY, "My List"));
+    }
+
+    function writeCustomTickerListName(name) {
+      customTickerListName = normalizeListName(name);
+      customTickerListActiveName = customTickerListName;
+      writeStickyValue(LAST_CUSTOM_LIST_NAME_KEY, customTickerListName);
+      return customTickerListName;
+    }
+
+    function writeCustomTickerList(tickers, name = customTickerListName) {
+      customTickerList = sortTickersByUniverse(tickers);
+      writeStickyValue(LAST_CUSTOM_LIST_KEY, customTickerList.join(","));
+      writeCustomTickerListName(name);
+      return customTickerList;
+    }
+
+    function normalizeCustomTickerListsPayload(payload) {
+      const rawLists = Array.isArray(payload?.lists) ? payload.lists : [];
+      const lists = [];
+      const seen = new Set();
+      const addEntry = (entry, fallbackName = "My List") => {
+        const name = normalizeListName(entry?.name || fallbackName);
+        const tickers = sortTickersByUniverse(entry?.tickers || []);
+        if (seen.has(name)) {
+          const idx = lists.findIndex((item) => item.name === name);
+          if (idx >= 0) {
+            lists[idx] = { name, tickers };
+          }
+        } else {
+          seen.add(name);
+          lists.push({ name, tickers });
+        }
+      };
+
+      if (rawLists.length > 0) {
+        rawLists.forEach((entry) => addEntry(entry));
+      } else if (Array.isArray(payload?.tickers) || typeof payload?.tickers === "string") {
+        addEntry({
+          name: payload?.name || payload?.active_name || "My List",
+          tickers: payload?.tickers || [],
+        });
+      }
+
+      if (lists.length === 0) {
+        lists.push({ name: "My List", tickers: [] });
+      }
+
+      const activeName = normalizeListName(
+        payload?.active_name || payload?.name || lists[0]?.name || "My List"
+      );
+      const activeList = lists.find((item) => item.name === activeName) || lists[0];
+      return {
+        lists,
+        activeName,
+        activeList: {
+          name: activeList.name,
+          tickers: sortTickersByUniverse(activeList.tickers),
+        },
+      };
+    }
+
+    function sortTickersByUniverse(tickers) {
+      const order = new Map(
+        tickerSelectUniverse.map((item, index) => [String(item.ticker || "").toUpperCase(), index])
+      );
+      return Array.from(new Set((Array.isArray(tickers) ? tickers : [])
+        .map((item) => String(item || "").trim().toUpperCase())
+        .filter(Boolean)))
+        .sort((a, b) => {
+          const aIndex = order.has(a) ? order.get(a) : Number.MAX_SAFE_INTEGER;
+          const bIndex = order.has(b) ? order.get(b) : Number.MAX_SAFE_INTEGER;
+          if (aIndex !== bIndex) {
+            return aIndex - bIndex;
+          }
+          return a.localeCompare(b);
+        });
+    }
+
+    function getTickerUniverseSearchText(item) {
+      return [
+        item.ticker,
+        item.label,
+        item.name,
+        item.issuer,
+        item.asset_class,
+        item.region,
+      ]
+        .map((part) => String(part || "").trim().toUpperCase())
+        .filter(Boolean)
+        .join(" ");
+    }
+
+    async function loadTickerUniverseFromServer() {
+      try {
+        const resp = await fetch("/api/ticker-universe", { cache: "no-store" });
+        if (!resp.ok) {
+          throw new Error(`status ${resp.status}`);
+        }
+        const data = await resp.json();
+        const items = Array.isArray(data.items)
+          ? data.items
+          : Array.isArray(data.tickers)
+            ? data.tickers
+            : [];
+        setTickerSelectUniverse(items);
+        renderTickerSelectOptions({ preserveSelection: true });
+        return tickerSelectUniverse;
+      } catch (err) {
+        console.warn("Falling back to hidden ticker select universe", err);
+        captureTickerSelectUniverse();
+        renderTickerSelectOptions({ preserveSelection: true });
+        return tickerSelectUniverse;
+      }
+    }
+
+    async function ensureTickerUniverseLoaded() {
+      if (!tickerUniverseLoadPromise) {
+        tickerUniverseLoadPromise = loadTickerUniverseFromServer();
+      }
+      return tickerUniverseLoadPromise;
+    }
+
+    function getAllCustomListTickers() {
+      const sourceLists = Array.isArray(customTickerLists) && customTickerLists.length > 0
+        ? customTickerLists
+        : [{ name: customTickerListActiveName || customTickerListName, tickers: customTickerList }];
+      return sortTickersByUniverse(
+        sourceLists.flatMap((entry) => Array.isArray(entry.tickers) ? entry.tickers : [])
+      );
+    }
+
+    function getCustomListEntryByName(name) {
+      const normalized = normalizeListName(name);
+      return (Array.isArray(customTickerLists) ? customTickerLists : []).find((entry) => normalizeListName(entry.name) === normalized) || null;
+    }
+
+    function upsertCustomListEntry(sourceName, nextName, tickers) {
+      const source = normalizeListName(sourceName);
+      const dest = normalizeListName(nextName);
+      const normalizedTickers = sortTickersByUniverse(tickers);
+      const nextLists = (Array.isArray(customTickerLists) ? customTickerLists : [])
+        .filter((entry) => {
+          const entryName = normalizeListName(entry.name);
+          if (source === "__new__") {
+            return entryName !== dest;
+          }
+          return entryName !== source && entryName !== dest;
+        })
+        .map((entry) => ({
+          name: normalizeListName(entry.name),
+          tickers: sortTickersByUniverse(entry.tickers || []),
+        }));
+      nextLists.push({ name: dest, tickers: normalizedTickers });
+      customTickerLists = nextLists;
+      customTickerListActiveName = dest;
+      customTickerListName = dest;
+      customTickerList = normalizedTickers;
+      return { lists: nextLists, active_name: dest, active_list: { name: dest, tickers: normalizedTickers } };
+    }
+
+    async function loadCustomTickerListFromServer() {
+      try {
+        const resp = await fetch("/api/custom-ticker-list", { cache: "no-store" });
+        if (!resp.ok) {
+          throw new Error(`status ${resp.status}`);
+        }
+        const data = await resp.json();
+        const normalized = normalizeCustomTickerListsPayload(data);
+        customTickerLists = normalized.lists;
+        customTickerListActiveName = normalized.activeName;
+        customTickerListName = normalized.activeName;
+        customTickerList = sortTickersByUniverse(normalized.activeList.tickers);
+        writeCustomTickerList(customTickerList, customTickerListActiveName);
+        return {
+          lists: normalized.lists,
+          active_name: normalized.activeName,
+          active_list: normalized.activeList,
+          tickers: customTickerList,
+          name: customTickerListActiveName,
+        };
+      } catch (err) {
+        console.warn("Falling back to locally cached ticker list", err);
+        const fallback = sortTickersByUniverse(readCustomTickerList());
+        const name = readCustomTickerListName();
+        customTickerLists = [{ name, tickers: fallback }];
+        customTickerListActiveName = name;
+        customTickerListName = name;
+        customTickerList = fallback;
+        writeCustomTickerList(fallback, name);
+        return {
+          lists: customTickerLists,
+          active_name: name,
+          active_list: { name, tickers: fallback },
+          tickers: fallback,
+          name,
+        };
+      }
+    }
+
+    async function persistCustomTickerListsToServer(collection) {
+      const normalizedLists = Array.isArray(collection?.lists) ? collection.lists : [];
+      const activeName = normalizeListName(collection?.active_name || collection?.name || customTickerListActiveName);
+      const normalizedCollection = normalizeCustomTickerListsPayload({
+        active_name: activeName,
+        lists: normalizedLists,
+      });
+      customTickerLists = normalizedCollection.lists;
+      customTickerListActiveName = normalizedCollection.activeName;
+      customTickerListName = normalizedCollection.activeName;
+      customTickerList = sortTickersByUniverse(normalizedCollection.activeList.tickers);
+      writeCustomTickerList(customTickerList, customTickerListActiveName);
+      try {
+        const resp = await fetch("/api/custom-ticker-list", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            schema_version: "custom_ticker_lists_v3",
+            active_name: normalizedCollection.activeName,
+            lists: normalizedCollection.lists,
+          }),
+        });
+        if (!resp.ok) {
+          throw new Error(`status ${resp.status}`);
+        }
+        const data = await resp.json();
+        const saved = normalizeCustomTickerListsPayload(data);
+        return {
+          lists: saved.lists,
+          tickers: sortTickersByUniverse(saved.activeList.tickers),
+          name: normalizeListName(data.active_name || data.name || normalizedCollection.activeName),
+          savedToServer: true,
+        };
+      } catch (err) {
+        console.warn("Could not persist custom ticker list to server", err);
+        return {
+          lists: normalizedCollection.lists,
+          tickers: sortTickersByUniverse(normalizedCollection.activeList.tickers),
+          name: normalizedCollection.activeName,
+          savedToServer: false,
+        };
+      }
+    }
+
+    function getListSelectNodes() {
+      return {
+        list: document.getElementById("list-select"),
+      };
+    }
+
+    function getScanSourceButtons() {
+      return {
+        xetra: document.getElementById("scan-source-xetra"),
+        sweden: document.getElementById("scan-source-sweden"),
+        list: document.getElementById("scan-source-list"),
+        all_lists: document.getElementById("scan-source-all-lists"),
+      };
+    }
+
+    function updateScanScopeChrome() {
+      const scopeButtons = getScanSourceButtons();
+      const normalized = normalizeScanScope(tickerScanScope);
+      tickerScanScope = normalized;
+      Object.entries(scopeButtons).forEach(([scope, button]) => {
+        if (!button) {
+          return;
+        }
+        const active = scope === normalized;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+      renderTickerSelectOptions({ preserveSelection: true });
+    }
+
+    async function applyScanScopeSelection(mode) {
+      const normalized = normalizeScanScope(mode);
+      tickerScanScope = normalized;
+      writeStickyValue(LAST_SCAN_SCOPE_KEY, normalized);
+      updateScanScopeChrome();
+      loadMarketStatus(normalized).catch((err) => {
+        console.warn("Could not refresh market status after scope change", err);
+      });
+      if ((normalized === "list" || normalized === "all_lists") && getScopeTickers(normalized).length === 0) {
+        await openListEditorModal();
+      }
+    }
+
+    function setScanSource(mode) {
+      return applyScanScopeSelection(mode);
+    }
+
+    function updateListSelectChrome() {
+      const activeName = normalizeListName(customTickerListActiveName || customTickerListName);
+      const customCount = customTickerList.length;
+      const editBtn = document.getElementById("list-edit-btn");
+      if (editBtn) {
+        editBtn.textContent = customCount > 0 ? `Edit ${activeName} (${customCount})` : `Edit ${activeName}...`;
+        editBtn.title = customCount > 0
+          ? `Edit the saved list ${activeName} (${customCount} tickers)`
+          : `Build the saved list ${activeName}`;
+      }
+    }
+
+    function getListBuilderListSelectNode() {
+      return document.getElementById("list-modal-list-select");
+    }
+
+    function updateListBuilderListSelector() {
+      const listSelect = getListBuilderListSelectNode();
+      if (!listSelect) {
+        return;
+      }
+      const activeName = normalizeListName(customTickerListDraftSourceName || customTickerListActiveName);
+      listSelect.innerHTML = "";
+
+      const entries = Array.isArray(customTickerLists) ? customTickerLists : [];
+      if (entries.length === 0) {
+        const option = document.createElement("option");
+        option.value = activeName;
+        option.textContent = activeName;
+        listSelect.appendChild(option);
+      } else {
+        entries.forEach((entry) => {
+          const option = document.createElement("option");
+          option.value = normalizeListName(entry.name);
+          option.textContent = normalizeListName(entry.name);
+          listSelect.appendChild(option);
+        });
+      }
+
+      const newOption = document.createElement("option");
+      newOption.value = "__new__";
+      newOption.textContent = "+ New List";
+      listSelect.appendChild(newOption);
+      listSelect.value = activeName;
+    }
+
+    async function openListEditorModal() {
+      await ensureTickerUniverseLoaded();
+      const modal = document.getElementById("list-modal");
+      if (!modal) {
+        return;
+      }
+
+      customTickerListDraftSourceName = normalizeListName(customTickerListActiveName || customTickerListName || readCustomTickerListName());
+      customTickerListDraft = sortTickersByUniverse(customTickerList);
+      customTickerListName = normalizeListName(customTickerListDraftSourceName);
+      listBuilderExchange = "all";
+      listBuilderSearch = "";
+      modal.style.display = "flex";
+      updateListBuilderListSelector();
+      renderListBuilderModal();
+      window.setTimeout(() => {
+        const searchInput = document.getElementById("list-modal-search");
+        if (searchInput) {
+          searchInput.focus();
+        }
+      }, 0);
+      tickerListMode = "custom";
+      writeStickyValue(LAST_LIST_MODE_KEY, tickerListMode);
+      updateListSelectChrome();
+    }
+
+    function closeListEditorModal() {
+      const modal = document.getElementById("list-modal");
+      if (modal) {
+        modal.style.display = "none";
+      }
+    }
+
+    function setListBuilderList(value) {
+      const normalized = normalizeListName(value);
+      if (normalized === "__new__") {
+        customTickerListDraftSourceName = "__new__";
+        customTickerListDraft = [];
+        customTickerListName = "My List";
+      } else {
+        const selected = getCustomListEntryByName(normalized);
+        customTickerListDraftSourceName = normalized;
+        customTickerListName = normalized;
+        customTickerListDraft = sortTickersByUniverse(selected ? selected.tickers : []);
+      }
+      updateListBuilderListSelector();
+      renderListBuilderModal();
+    }
+
+    function setListBuilderExchange(exchange) {
+      listBuilderExchange = normalizeExchangeFilter(exchange);
+      renderListBuilderModal();
+    }
+
+    function setListBuilderSearch(value) {
+      listBuilderSearch = String(value || "");
+      renderListBuilderModal();
+    }
+
+    function getListBuilderVisibleTickers() {
+      const search = String(listBuilderSearch || "").trim().toUpperCase();
+      const exchange = normalizeExchangeFilter(listBuilderExchange);
+      return tickerSelectUniverse.filter((item) => {
+        if (exchange !== "all" && item.exchange !== exchange) {
+          return false;
+        }
+        if (search && !getTickerUniverseSearchText(item).includes(search)) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    function syncListBuilderCount() {
+      const countLabel = document.getElementById("list-modal-count");
+      if (countLabel) {
+        countLabel.textContent = `${customTickerListDraft.length} selected`;
+      }
+    }
+
+    function syncListBuilderPreview() {
+      const previewLabel = document.getElementById("list-modal-preview");
+      if (previewLabel) {
+        const listName = normalizeListName(customTickerListName);
+        const tickersText = customTickerListDraft.length > 0
+          ? customTickerListDraft.slice(0, 6).join(", ") + (customTickerListDraft.length > 6 ? ", ..." : "")
+          : "No custom tickers selected yet";
+        previewLabel.textContent = `${listName}: ${tickersText}`;
+      }
+    }
+
+    function renderListBuilderModal() {
+      const grid = document.getElementById("list-modal-grid");
+      const visibleCountLabel = document.getElementById("list-modal-visible-count");
+      const searchInput = document.getElementById("list-modal-search");
+      const nameInput = document.getElementById("list-modal-name");
+      const listSelect = getListBuilderListSelectNode();
+      const exchangeButtons = document.querySelectorAll("[data-list-exchange]");
+      const visible = getListBuilderVisibleTickers();
+
+      if (searchInput && searchInput.value !== listBuilderSearch) {
+        searchInput.value = listBuilderSearch;
+      }
+      if (nameInput && nameInput.value !== normalizeListName(customTickerListName)) {
+        nameInput.value = normalizeListName(customTickerListName);
+      }
+      if (listSelect && listSelect.value !== normalizeListName(customTickerListDraftSourceName || customTickerListName)) {
+        updateListBuilderListSelector();
+      }
+      exchangeButtons.forEach((btn) => {
+        const btnExchange = normalizeExchangeFilter(btn.dataset.listExchange);
+        const active = btnExchange === normalizeExchangeFilter(listBuilderExchange);
+        btn.style.backgroundColor = active ? "#4f46e5" : "#1e293b";
+        btn.style.color = active ? "#ffffff" : "#e2e8f0";
+        btn.style.borderColor = active ? "rgba(165,180,252,0.9)" : "rgba(148,163,184,0.35)";
+      });
+      if (visibleCountLabel) {
+        visibleCountLabel.textContent = `${visible.length} visible`;
+      }
+      if (!grid) {
+        syncListBuilderCount();
+        syncListBuilderPreview();
+        return;
+      }
+
+      grid.innerHTML = "";
+      if (visible.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500";
+        empty.textContent = "No tickers match the current filter.";
+        grid.appendChild(empty);
+        syncListBuilderCount();
+        syncListBuilderPreview();
+        return;
+      }
+
+      visible.forEach((item) => {
+        const label = document.createElement("label");
+        label.className = "flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm hover:border-indigo-300";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500";
+        checkbox.value = item.ticker;
+        checkbox.checked = customTickerListDraft.includes(item.ticker);
+        checkbox.addEventListener("change", (event) => {
+          const ticker = String(event.target.value || "").toUpperCase();
+          if (event.target.checked) {
+            if (!customTickerListDraft.includes(ticker)) {
+              customTickerListDraft = sortTickersByUniverse([...customTickerListDraft, ticker]);
+            }
+          } else {
+            customTickerListDraft = customTickerListDraft.filter((value) => value !== ticker);
+          }
+          syncListBuilderCount();
+          syncListBuilderPreview();
+        });
+
+        const body = document.createElement("div");
+        body.className = "min-w-0 flex-1";
+
+        const topRow = document.createElement("div");
+        topRow.className = "flex items-center justify-between gap-3";
+
+        const tickerText = document.createElement("div");
+        tickerText.className = "truncate text-sm font-bold text-slate-800";
+        tickerText.textContent = item.label || item.name || item.ticker;
+
+        const badge = document.createElement("span");
+        badge.className = "rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500";
+        badge.textContent = item.ticker;
+
+        topRow.appendChild(tickerText);
+        topRow.appendChild(badge);
+        body.appendChild(topRow);
+
+        const sub = document.createElement("div");
+        sub.className = "mt-0.5 text-[11px] text-slate-500";
+        sub.textContent = [item.issuer, item.asset_class, item.region]
+          .map((part) => String(part || "").trim())
+          .filter(Boolean)
+          .join(" · ") || item.ticker;
+        body.appendChild(sub);
+
+        label.appendChild(checkbox);
+        label.appendChild(body);
+        grid.appendChild(label);
+      });
+
+      syncListBuilderCount();
+      syncListBuilderPreview();
+    }
+
+    function toggleVisibleListBuilderTickers(selectAll) {
+      const visible = getListBuilderVisibleTickers().map((item) => item.ticker);
+      const next = new Set(customTickerListDraft);
+      visible.forEach((ticker) => {
+        if (selectAll) {
+          next.add(ticker);
+        } else {
+          next.delete(ticker);
+        }
+      });
+      customTickerListDraft = sortTickersByUniverse(Array.from(next));
+      renderListBuilderModal();
+    }
+
+    async function saveListEditor() {
+      customTickerListDraft = sortTickersByUniverse(customTickerListDraft);
+      const nameInput = document.getElementById("list-modal-name");
+      const nextName = normalizeListName(nameInput ? nameInput.value : customTickerListName);
+      const savedCollection = upsertCustomListEntry(customTickerListDraftSourceName, nextName, customTickerListDraft);
+      const saved = await persistCustomTickerListsToServer(savedCollection);
+      customTickerLists = Array.isArray(saved.lists) ? saved.lists : customTickerLists;
+      customTickerList = sortTickersByUniverse(saved.tickers || []);
+      customTickerListName = normalizeListName(saved.name || nextName);
+      customTickerListActiveName = customTickerListName;
+      customTickerListDraftSourceName = customTickerListName;
+      tickerListMode = "custom";
+      writeStickyValue(LAST_LIST_MODE_KEY, tickerListMode);
+      updateListSelectChrome();
+      closeListEditorModal();
+      showToast(
+        saved.savedToServer
+          ? `Saved ${customTickerList.length} tickers to ${customTickerListName}`
+          : `Saved ${customTickerList.length} tickers locally as ${customTickerListName}, but could not update config JSON`,
+        !saved.savedToServer
+      );
+    }
+
+    function applyListSelectionMode(mode) {
+      const normalized = String(mode || "custom").trim().toLowerCase();
+      if (normalized === "edit") {
+        openListEditorModal();
+        return;
+      }
+
+      tickerListMode = "custom";
+      if (customTickerList.length === 0) {
+        openListEditorModal();
+        return;
+      }
+      writeStickyValue(LAST_LIST_MODE_KEY, tickerListMode);
+      updateListSelectChrome();
+    }
+
+    function getUniverseFilterParams() {
+      const params = new URLSearchParams();
+      const scope = normalizeScanScope(tickerScanScope);
+      params.set("scan_scope", scope);
+      const scopeTickers = getScopeTickers(scope);
+      if ((scope === "list" || scope === "all_lists") && scopeTickers.length > 0) {
+        params.set("ticker_list", scopeTickers.join(","));
+      }
+      return params;
     }
 
     const RANGE_PRESETS = [
@@ -2358,14 +3245,15 @@ let backtestSourceMode = "saved";
       }
     }
 
-    async function loadMarketStatus() {
+    async function loadMarketStatus(source = tickerScanScope) {
       const marketStatus = document.getElementById("shortlist-market-status");
       if (!marketStatus) {
         return null;
       }
 
       try {
-        const resp = await fetch("/api/market-status?stale_after_days=0");
+        const normalizedSource = normalizeScanScope(source);
+        const resp = await fetch(`/api/market-status?stale_after_days=0&source=${encodeURIComponent(normalizedSource)}`);
         const data = await resp.json();
         if (!resp.ok) {
           throw new Error(data.detail || "Market status request failed");
@@ -2387,7 +3275,7 @@ let backtestSourceMode = "saved";
     }
 
     async function ensureGuiMarketBackbone() {
-      const status = await loadMarketStatus();
+      const status = await loadMarketStatus(tickerScanScope);
       let refreshed = false;
       if (status && status.is_stale && !marketDataAutoRefreshAttempted) {
         marketDataAutoRefreshAttempted = true;
@@ -2438,10 +3326,58 @@ let backtestSourceMode = "saved";
     }
 
     async function refreshMarketData() {
+      const source = normalizeScanScope(tickerScanScope);
       const marketRefreshBtn = document.getElementById("market-refresh-btn");
       const shortlistRefreshBtn = document.getElementById("shortlist-refresh-btn");
       const marketStatus = document.getElementById("shortlist-market-status");
       const shortlistStatus = document.getElementById("shortlist-status");
+      let marketProgressInterval = null;
+      let marketPhase = "checking";
+      let marketProgress = 0;
+
+      const updateMarketProgress = (state) => {
+        setNavScanProgress({
+          show: true,
+          contextLabel: state.contextLabel || "Market",
+          contextText: state.contextText || "WORKING",
+          contextPct: state.contextPct ?? marketProgress,
+          contextWorking: state.contextWorking ?? true,
+        });
+      };
+
+      const startMarketProgress = () => {
+        if (marketProgressInterval) {
+          clearInterval(marketProgressInterval);
+        }
+        marketProgressInterval = setInterval(() => {
+          if (marketPhase === "checking") {
+            marketProgress = Math.min(22, marketProgress + 1.5);
+            updateMarketProgress({
+              contextLabel: "Market",
+              contextText: "Checking...",
+              contextPct: marketProgress,
+            });
+            return;
+          }
+          if (marketPhase === "refreshing") {
+            marketProgress = Math.min(88, marketProgress + Math.max(0.6, (88 - marketProgress) * 0.08));
+            updateMarketProgress({
+              contextLabel: "Market",
+              contextText: `${Math.round(marketProgress)}%`,
+              contextPct: marketProgress,
+            });
+            return;
+          }
+          if (marketPhase === "rebuilding") {
+            marketProgress = Math.min(96, marketProgress + Math.max(0.4, (96 - marketProgress) * 0.06));
+            updateMarketProgress({
+              contextLabel: "Market",
+              contextText: "Rebuilding...",
+              contextPct: marketProgress,
+            });
+          }
+        }, 320);
+      };
 
       if (marketRefreshBtn) {
         marketRefreshBtn.disabled = true;
@@ -2452,15 +3388,30 @@ let backtestSourceMode = "saved";
       }
       if (marketStatus) {
         marketStatus.className = "text-xs font-bold uppercase tracking-wide text-indigo-600";
-        marketStatus.textContent = "Topping up active market data and rebuilding shortlist...";
+        const sourceLabel = source === "sweden"
+          ? "Sweden"
+          : source === "list"
+          ? "saved list"
+          : source === "all_lists"
+          ? "all saved lists"
+          : "Xetra";
+        marketStatus.textContent = `Topping up ${sourceLabel} market data and rebuilding shortlist...`;
       }
       if (shortlistStatus) {
         shortlistStatus.textContent = "Waiting for fresh market data...";
       }
 
       try {
-        await ensureGuiMarketBackbone();
-        const resp = await fetch("/api/market-data/refresh?depth=400&max_workers=8&force=true&stale_after_days=0", {
+        updateMarketProgress({
+          contextLabel: "Market",
+          contextText: "Checking...",
+          contextPct: 0,
+          contextWorking: false,
+        });
+        startJobProgressPolling("market-refresh", "Global");
+        startMarketProgress();
+        marketPhase = "refreshing";
+        const resp = await fetch(`/api/market-data/refresh?depth=400&max_workers=8&force=true&stale_after_days=0&source=${encodeURIComponent(source)}`, {
           method: "POST",
         });
         const data = await resp.json();
@@ -2468,17 +3419,54 @@ let backtestSourceMode = "saved";
           throw new Error(data.detail || "Market refresh failed");
         }
 
+        marketPhase = "rebuilding";
+        updateMarketProgress({
+          contextLabel: "Market",
+          contextText: "Rebuilding...",
+          contextPct: 94,
+          contextWorking: true,
+        });
         shortlistLoaded = false;
         await loadMarketStatus();
         await loadShortlist(true);
+        marketPhase = "done";
+        updateMarketProgress({
+          contextLabel: "Market",
+          contextText: "100%",
+          contextPct: 100,
+          contextWorking: false,
+        });
         showToast(`Market refresh: ${Number(data.refreshed || 0)} updated, ${Number(data.failed || 0)} failed`);
       } catch (err) {
         if (marketStatus) {
           marketStatus.className = "text-xs font-bold uppercase tracking-wide text-rose-600";
           marketStatus.textContent = `Market refresh failed: ${err.message || err}`;
         }
+        marketPhase = "done";
+        updateMarketProgress({
+          contextLabel: "Market",
+          contextText: "FAILED",
+          contextPct: 100,
+          contextWorking: false,
+        });
         showToast(`Market refresh failed: ${err.message || err}`, true);
       } finally {
+        if (marketProgressInterval) {
+          clearInterval(marketProgressInterval);
+        }
+        marketProgressInterval = null;
+        stopJobProgressPolling();
+        setNavScanProgress({
+          show: false,
+          contextLabel: "Market",
+          contextText: "0%",
+          contextPct: 0,
+          contextWorking: false,
+          globalLabel: "Global",
+          globalText: "0%",
+          globalPct: 0,
+          globalWorking: false,
+        });
         if (marketRefreshBtn) {
           marketRefreshBtn.disabled = false;
           marketRefreshBtn.textContent = "Refresh Market Data";
@@ -2597,6 +3585,66 @@ let backtestSourceMode = "saved";
         setBacktestEmptyState("Editor Draft is selected, but the Labs editor is empty.");
         return;
       }
+      if ((normalizeScanScope(tickerScanScope) === "list" || normalizeScanScope(tickerScanScope) === "all_lists") && getScopeTickers(tickerScanScope).length === 0) {
+        await openListEditorModal();
+        setBacktestEmptyState("Choose some tickers for the saved list before running Backtester.");
+        return;
+      }
+
+      setNavScanProgress({
+        show: true,
+        contextLabel: "Screen",
+        contextText: "Backtest",
+        contextPct: 0,
+        contextWorking: false,
+      });
+      startJobProgressPolling("backtest", "Global");
+      setNavScanProgress({
+        show: true,
+        globalLabel: "Global",
+        globalText: "Preparing...",
+        globalPct: 0,
+        globalWorking: true,
+      });
+
+      let btFakeProg = 0;
+      let btWorkingPhase = false;
+      let btProgressInterval = null;
+      const startBacktestProgress = () => {
+        btProgressInterval = setInterval(() => {
+          const nodes = getNavScanProgressNodes();
+          if (!nodes.contextBar || !nodes.contextText) return;
+
+          if (btFakeProg < 90) {
+            btFakeProg = Math.min(90, btFakeProg + Math.max(0.45, (90 - btFakeProg) * 0.1));
+            setNavScanProgress({
+              contextLabel: "Backtest",
+              contextText: `${Math.round(btFakeProg)}%`,
+              contextPct: btFakeProg,
+            });
+            return;
+          }
+
+          if (!btWorkingPhase) {
+            btWorkingPhase = true;
+            setNavScanProgress({
+              contextLabel: "Backtest",
+              contextText: "WORKING",
+              contextPct: 90,
+              contextWorking: true,
+            });
+          }
+
+          const contextPulse = 88 + Math.round(4 * (0.5 + 0.5 * Math.sin(Date.now() / 400)));
+          setNavScanProgress({
+            contextLabel: "Backtest",
+            contextText: "WORKING",
+            contextPct: contextPulse,
+            contextWorking: true,
+          });
+        }, 300);
+      };
+      startBacktestProgress();
 
       setBacktestEmptyState(`Evaluating ${backtestSourceMode === 'editor' ? 'Editor Draft' : strategyName}...`);
       runBtn.disabled = true;
@@ -2604,7 +3652,24 @@ let backtestSourceMode = "saved";
 
       try {
         await ensureGuiMarketBackbone();
+        startJobProgressPolling("backtest", "Global");
+        setNavScanProgress({
+          show: true,
+          contextLabel: "Backtest",
+          contextText: "Queued...",
+          contextPct: 1,
+          contextWorking: true,
+          globalLabel: "Global",
+          globalText: "Waiting...",
+          globalPct: 0,
+          globalWorking: true,
+        });
         let url = `/api/backtest?limit=25`;
+        const universeParams = getUniverseFilterParams();
+        const universeQuery = universeParams.toString();
+        if (universeQuery) {
+          url += `&${universeQuery}`;
+        }
         if (signalDays !== null) {
           url += `&signal_days=${encodeURIComponent(String(signalDays))}`;
         }
@@ -2670,21 +3735,69 @@ let backtestSourceMode = "saved";
 
         document.getElementById("backtest-empty").classList.add("hidden");
         content.classList.remove("hidden");
+        if (btProgressInterval) clearInterval(btProgressInterval);
+        btProgressInterval = null;
+        setNavScanProgress({
+          contextLabel: "Backtest",
+          contextText: "100%",
+          contextPct: 100,
+          contextWorking: false,
+          globalLabel: "Global",
+          globalText: "100%",
+          globalPct: 100,
+          globalWorking: false,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (err) {
+        if (btProgressInterval) clearInterval(btProgressInterval);
+        btProgressInterval = null;
         setBacktestEmptyState(`Backtest error: ${err.message || err}`);
+        setNavScanProgress({
+          contextLabel: "Backtest",
+          contextText: "FAILED",
+          contextPct: 100,
+          contextWorking: false,
+          globalLabel: "Global",
+          globalText: "FAILED",
+          globalPct: 100,
+          globalWorking: false,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 250));
       } finally {
+        if (btProgressInterval) clearInterval(btProgressInterval);
+        btProgressInterval = null;
+        stopJobProgressPolling();
+        resetScanUI();
         runBtn.disabled = false;
         runBtn.textContent = "Evaluate Strategy";
       }
     }
     // Show default tab on load
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
       console.log('[TABBAR] Tab bar rendered');
       fetch('/api/log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ level: 'info', message: '[TABBAR] Tab bar rendered' })
       });
+      tickerScanScope = normalizeScanScope(readStickyValue(LAST_SCAN_SCOPE_KEY, "xetra"));
+      updateScanScopeChrome();
+      updateListSelectChrome();
+      await ensureTickerUniverseLoaded();
+      const loadedList = await loadCustomTickerListFromServer();
+      customTickerLists = Array.isArray(loadedList.lists) ? loadedList.lists : [];
+      customTickerListActiveName = normalizeListName(loadedList.active_name || loadedList.name || readCustomTickerListName());
+      customTickerList = Array.isArray(loadedList.tickers) ? loadedList.tickers : [];
+      customTickerListName = customTickerListActiveName;
+      updateListSelectChrome();
+      const tickerSelect = document.getElementById("ticker-select");
+      if (tickerSelect) {
+        tickerSelectLastValue = readStickyValue(LAST_TICKER_SELECT_KEY, tickerSelect.value || "");
+        renderTickerSelectOptions({ preserveSelection: true });
+        tickerSelect.addEventListener("change", (event) => {
+          storeTickerSelection(event.target.value);
+        });
+      }
       const swarmCanvas = document.getElementById("swarm-canvas");
       if (swarmCanvas) {
         swarmCanvas.addEventListener("mousemove", (event) => {
@@ -2729,6 +3842,8 @@ let backtestSourceMode = "saved";
     let currentStrategy = "";
     let sourceStrategyName = ""; // tracks what strategy is being modified
     let scanAbortController = null;
+    let navScanProgressPoller = null;
+    let navScanProgressJob = null;
     const LAST_COMPLETED_STRATEGY_KEY = "etf-discovery:last-completed-strategy";
 
     // --- Console Log Capture System ---
@@ -3038,20 +4153,152 @@ let backtestSourceMode = "saved";
       }
     }
 
+    function stopJobProgressPolling() {
+      if (navScanProgressPoller) {
+        clearInterval(navScanProgressPoller);
+      }
+      navScanProgressPoller = null;
+      navScanProgressJob = null;
+    }
+
+    function applyJobProgressSnapshot(snapshot, expectedJob = navScanProgressJob) {
+      if (!snapshot || typeof snapshot !== "object") {
+        return false;
+      }
+
+      const job = String(snapshot.job || "");
+      const phase = String(snapshot.phase || "idle");
+      const active = Boolean(snapshot.active);
+      const pctValue = Number(snapshot.pct);
+      const pct = Number.isFinite(pctValue) ? Math.max(0, Math.min(100, pctValue)) : 0;
+
+      if (!job || !active) {
+        return false;
+      }
+      if (expectedJob && job !== expectedJob) {
+        return false;
+      }
+
+      const label = String(snapshot.label || navScanProgressJob || "Global");
+      const detail = String(snapshot.detail || "").trim();
+      const text = detail || (
+        phase === "done"
+          ? "Done"
+          : phase === "failed"
+            ? "Failed"
+            : `${Math.round(pct)}%`
+      );
+      setNavScanProgress({
+        show: true,
+        globalLabel: label,
+        globalText: text,
+        globalPct: pct,
+        globalWorking: active && phase !== "done" && phase !== "failed",
+      });
+
+      return !active && (phase === "done" || phase === "failed");
+    }
+
+    function startJobProgressPolling(expectedJob, fallbackLabel = "Global") {
+      stopJobProgressPolling();
+      navScanProgressJob = expectedJob;
+
+      const poll = async () => {
+        try {
+          const resp = await fetch("/api/job-progress", { cache: "no-store" });
+          if (!resp.ok) {
+            return;
+          }
+          const snapshot = await resp.json();
+          const done = applyJobProgressSnapshot(snapshot, expectedJob);
+          if (done && snapshot && snapshot.job === expectedJob) {
+            stopJobProgressPolling();
+          }
+        } catch (err) {
+          console.warn("Job progress poll failed", err);
+        }
+      };
+
+      setNavScanProgress({
+        show: true,
+        globalLabel: fallbackLabel,
+        globalText: "Waiting...",
+        globalPct: 0,
+        globalWorking: true,
+      });
+      poll();
+      navScanProgressPoller = setInterval(poll, 350);
+    }
+
+    function getNavScanProgressNodes() {
+      return {
+        panel: document.getElementById("nav-scan-progress"),
+        contextBar: document.getElementById("nav-scan-context-bar"),
+        contextText: document.getElementById("nav-scan-context-text"),
+        contextLabel: document.getElementById("nav-scan-context-label"),
+        globalBar: document.getElementById("nav-scan-global-bar"),
+        globalText: document.getElementById("nav-scan-global-text"),
+        globalLabel: document.getElementById("nav-scan-global-label"),
+      };
+    }
+
+    function setNavScanProgress(state = {}) {
+      const nodes = getNavScanProgressNodes();
+      const show = state.show;
+      if (show === true && nodes.panel) {
+        nodes.panel.classList.remove("hidden");
+      } else if (show === false && nodes.panel) {
+        nodes.panel.classList.add("hidden");
+      }
+
+      if (state.contextLabel && nodes.contextLabel) {
+        nodes.contextLabel.textContent = state.contextLabel;
+      }
+      if (state.contextText && nodes.contextText) {
+        nodes.contextText.textContent = state.contextText;
+      }
+      if (state.contextPct !== undefined && nodes.contextBar) {
+        const pct = Math.max(0, Math.min(100, Number(state.contextPct) || 0));
+        nodes.contextBar.style.width = `${pct}%`;
+      }
+      if (state.contextWorking !== undefined && nodes.contextBar) {
+        nodes.contextBar.classList.toggle("animate-pulse", Boolean(state.contextWorking));
+      }
+
+      if (state.globalLabel && nodes.globalLabel) {
+        nodes.globalLabel.textContent = state.globalLabel;
+      }
+      if (state.globalText && nodes.globalText) {
+        nodes.globalText.textContent = state.globalText;
+      }
+      if (state.globalPct !== undefined && nodes.globalBar) {
+        const pct = Math.max(0, Math.min(100, Number(state.globalPct) || 0));
+        nodes.globalBar.style.width = `${pct}%`;
+      }
+      if (state.globalWorking !== undefined && nodes.globalBar) {
+        nodes.globalBar.classList.toggle("animate-pulse", Boolean(state.globalWorking));
+      }
+    }
+
     function resetScanUI() {
       const spinner = document.getElementById("loading-spinner");
       const scanBtn = document.getElementById("scan-btn");
       const runBtn = document.getElementById("run-btn");
       const list = document.getElementById("ticker-list");
-      const navProgress = document.getElementById("nav-scan-progress");
-      const navProgressBar = document.getElementById("nav-scan-progress-bar");
-      const navProgressText = document.getElementById("nav-scan-progress-text");
 
+      stopJobProgressPolling();
       if (spinner) spinner.classList.add("hidden");
-      if (navProgress) navProgress.classList.add("hidden");
-      if (navProgressBar) navProgressBar.style.width = "0%";
-      if (navProgressBar) navProgressBar.classList.remove("animate-pulse");
-      if (navProgressText) navProgressText.textContent = "0%";
+      setNavScanProgress({
+        show: false,
+        contextLabel: "Context",
+        contextText: "0%",
+        contextPct: 0,
+        contextWorking: false,
+        globalLabel: "Global",
+        globalText: "0%",
+        globalPct: 0,
+        globalWorking: false,
+      });
 
       if (scanBtn) {
         scanBtn.textContent = "Run Scanner";
@@ -3084,17 +4331,31 @@ let backtestSourceMode = "saved";
       const strategySelect = document.getElementById("strategy-select");
       const errorSection = document.getElementById("error-section");
       const errorList = document.getElementById("error-list");
-      const navProgress = document.getElementById("nav-scan-progress");
-      const navProgressBar = document.getElementById("nav-scan-progress-bar");
-      const navProgressText = document.getElementById("nav-scan-progress-text");
+
+      if ((normalizeScanScope(tickerScanScope) === "list" || normalizeScanScope(tickerScanScope) === "all_lists") && getScopeTickers(tickerScanScope).length === 0) {
+        await openListEditorModal();
+        return;
+      }
 
       // Set up abortion
       scanAbortController = new AbortController();
 
       if (spinner) spinner.classList.remove("hidden");
-      if (navProgress) navProgress.classList.remove("hidden");
-      if (navProgressBar) navProgressBar.style.width = "0%";
-      if (navProgressText) navProgressText.textContent = "0%";
+      setNavScanProgress({
+        show: true,
+        contextLabel: "Screen",
+        contextText: "Starting...",
+        contextPct: 0,
+        contextWorking: false,
+      });
+      startJobProgressPolling("screen", "Global");
+      setNavScanProgress({
+        show: true,
+        globalLabel: "Global",
+        globalText: "Preparing...",
+        globalPct: 0,
+        globalWorking: true,
+      });
 
       if (scanBtn) {
         scanBtn.textContent = "Scanning...";
@@ -3120,13 +4381,30 @@ let backtestSourceMode = "saved";
 
       try {
         await ensureGuiMarketBackbone();
+        startJobProgressPolling("screen", "Global");
+        setNavScanProgress({
+          show: true,
+          contextLabel: "Screen",
+          contextText: "Queued...",
+          contextPct: 1,
+          contextWorking: true,
+          globalLabel: "Global",
+          globalText: "Waiting...",
+          globalPct: 0,
+          globalWorking: true,
+        });
         let url = "/api/screen";
+        const universeParams = getUniverseFilterParams();
+        const universeQuery = universeParams.toString();
+        if (universeQuery) {
+          url += `?${universeQuery}`;
+        }
         if (customDsl) {
-          url += `?dsl_content=${encodeURIComponent(customDsl)}`;
+          url += `${universeQuery ? "&" : "?"}dsl_content=${encodeURIComponent(customDsl)}`;
           strategySelect.value = "";
           currentStrategy = "";
         } else if (strategySelect.value) {
-          url += `?strategy=${strategySelect.value}`;
+          url += `${universeQuery ? "&" : "?"}strategy=${strategySelect.value}`;
           currentStrategy = strategySelect.value;
         } else {
           currentStrategy = "";
@@ -3142,34 +4420,45 @@ let backtestSourceMode = "saved";
         let progInterval = null;
         const startProgress = () => {
           progInterval = setInterval(() => {
-            if (!navProgressBar || !navProgressText) return;
+            const nodes = getNavScanProgressNodes();
+            if (!nodes.contextBar || !nodes.contextText) return;
 
             if (fakeProg < 90) {
               fakeProg = Math.min(90, fakeProg + Math.max(0.5, (90 - fakeProg) * 0.12));
-              navProgressBar.style.width = `${Math.round(fakeProg)}%`;
-              navProgressText.textContent = `${Math.round(fakeProg)}%`;
+              setNavScanProgress({
+                contextLabel: "Screen",
+                contextText: `${Math.round(fakeProg)}%`,
+                contextPct: fakeProg,
+              });
               return;
             }
 
             if (!isWorkingPhase) {
               isWorkingPhase = true;
-              navProgressText.textContent = "WORKING";
-              navProgressBar.classList.add("animate-pulse");
+              setNavScanProgress({
+                contextLabel: "Screen",
+                contextText: "WORKING",
+                contextPct: 90,
+                contextWorking: true,
+              });
             }
 
             const pulse = 88 + Math.round(4 * (0.5 + 0.5 * Math.sin(Date.now() / 350)));
-            navProgressBar.style.width = `${pulse}%`;
-            navProgressText.textContent = "WORKING";
+            setNavScanProgress({
+              contextLabel: "Screen",
+              contextText: "WORKING",
+              contextPct: pulse,
+              contextWorking: true,
+            });
           }, 300);
         };
         startProgress();
 
         let resp = null;
         let rawData = null;
+        try {
           resp = await fetch(url, { signal: scanAbortController.signal });
           console.log("Fetch response status:", resp.status, "URL:", url);
-          if (progInterval) clearInterval(progInterval);
-          progInterval = null;
 
           rawData = await resp.json();
           if (!resp.ok) {
@@ -3178,9 +4467,16 @@ let backtestSourceMode = "saved";
           console.log("JSON parsed successfully. Data keys:", Object.keys(rawData));
 
           // Complete the bar
-          if (navProgressBar) navProgressBar.style.width = "100%";
-          if (navProgressText) navProgressText.textContent = "100%";
-          if (navProgressBar) navProgressBar.classList.remove("animate-pulse");
+          setNavScanProgress({
+            contextLabel: "Screen",
+            contextText: "100%",
+            contextPct: 100,
+            contextWorking: false,
+            globalLabel: "Global",
+            globalText: "100%",
+            globalPct: 100,
+            globalWorking: false,
+          });
 
           // Small delay to let user see 100%
           await new Promise(r => setTimeout(r, 500));
@@ -3205,24 +4501,13 @@ let backtestSourceMode = "saved";
           document.getElementById("match-count").textContent = matches.length;
           console.log("List cleared, match count updated to:", matches.length);
 
-          // Update ticker dropdown options based on screen results
-          const tickerSelect = document.getElementById("ticker-select");
+          // Update ticker dropdown options based on screen results.
           if (matches.length > 0 && (strategySelect.value || customDsl)) {
-            const currentVal = tickerSelect.value;
-            tickerSelect.innerHTML =
-              '<option value="">Select Ticker...</option>';
-            matches.forEach((item) => {
-              const opt = document.createElement("option");
-              opt.value = item.ticker;
-              opt.textContent = item.ticker;
-              tickerSelect.appendChild(opt);
-            });
-            if (
-              currentVal &&
-              matches.some((item) => item.ticker === currentVal)
-            ) {
-              tickerSelect.value = currentVal;
-            }
+            setTickerSelectUniverse(matches.map((item) => ({
+              ticker: item.ticker,
+              label: item.ticker,
+            })));
+            renderTickerSelectOptions({ preserveSelection: true });
           }
 
           // Display errors if any
@@ -3305,6 +4590,10 @@ let backtestSourceMode = "saved";
             }
           });
           console.log("All cards processed successfully");
+        } finally {
+          if (progInterval) clearInterval(progInterval);
+          progInterval = null;
+        }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         const errStack = err instanceof Error ? err.stack : "No stack trace";
@@ -3316,8 +4605,12 @@ let backtestSourceMode = "saved";
           list.innerHTML =
             `<div class="text-xs text-red-500 p-2">Screen error: ${errMsg}<br/><span class="text-[9px] text-slate-500">Check console for details.</span></div>`;
         }
-      } finally {
-        if (progInterval) clearInterval(progInterval);
+        setNavScanProgress({
+          globalLabel: "Global",
+          globalText: "FAILED",
+          globalPct: 100,
+          globalWorking: false,
+        });
         resetScanUI();
       }
     }
@@ -3325,9 +4618,13 @@ let backtestSourceMode = "saved";
     async function loadChart(ticker) {
       console.log("loadChart starting for", ticker);
       currentTicker = ticker;
+      storeTickerSelection(ticker);
       // Set the label dynamically after fetching chart data
 
-      document.getElementById("ticker-select").value = ticker;
+      const tickerSelect = document.getElementById("ticker-select");
+      if (tickerSelect) {
+        tickerSelect.value = ticker;
+      }
 
       const chartDiv = document.getElementById("plotly-chart");
       chartDiv.innerHTML = `
@@ -3490,6 +4787,7 @@ let backtestSourceMode = "saved";
     document
       .getElementById("ticker-select")
       .addEventListener("change", (e) => {
+        storeTickerSelection(e.target.value);
         if (e.target.value) loadChart(e.target.value);
       });
 
@@ -3511,7 +4809,7 @@ let backtestSourceMode = "saved";
         currentDays = restoredDays;
       }
       updateRangeChrome();
-      await ensureFreshMarketData();
+      await loadMarketStatus();
     })();
 
     function testMe() {
@@ -3522,19 +4820,27 @@ let backtestSourceMode = "saved";
     Object.assign(window, {
       applyDsl,
       closeModifyModal,
+      closeListEditorModal,
+      openListEditorModal,
       loadBacktestMetrics,
       loadShortlist,
       loadSwarmWorld,
+      saveListEditor,
       modifyStrategy,
       openSelectedSwarmTicker,
       refreshMarketData,
       ensureFreshMarketData,
+      copySelectText,
       resetSwarmSimulation,
       runScreen,
       saveAsStrategy,
       saveFromModal,
       saveStrategy,
       setBacktestSourceMode,
+      setListBuilderExchange,
+      setListBuilderSearch,
+      setListBuilderList,
+      setScanSource,
       setRange,
       dashboardReadyPromise,
       setShortlistFilter,
@@ -3548,5 +4854,6 @@ let backtestSourceMode = "saved";
       stopSwarmPlayback,
       testMe,
       toggleStrategyPanel,
+      toggleVisibleListBuilderTickers,
       toggleSwarmPlayback,
     });

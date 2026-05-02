@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from ETF_screener.plotter_plotly import InteractivePlotter
+from ETF_screener.indicators import add_indicators
 
 
 def _trace_y(trace_dict):
@@ -104,7 +105,7 @@ END
     assert label.xanchor == "left"
     assert label.align == "left"
     assert label.font.size == 10
-    assert fig.layout.margin.l == 220
+    assert fig.layout.margin.l == 160
     assert float(label.x) == float(fig.layout.legend.x)
     assert fig.layout.legend.xanchor == "left"
 
@@ -546,7 +547,7 @@ END
         if getattr(t, "name", "").startswith("Trigger")
         and getattr(t, "type", "") == "bar"
     )
-    aggregated_trace = next(
+    _aggregated_trace = next(
         t for t in fig.data if getattr(t, "name", "") == "Aggregated"
     )
 
@@ -1088,3 +1089,40 @@ END
     assert not st_traces, (
         "Supertrend overlay should NOT be drawn when the strategy does not reference supertrend"
     )
+
+
+def test_strategy_curves_include_referenced_ta_panels():
+    dates = pd.date_range(start="2024-01-01", periods=80)
+    close = np.linspace(100.0, 130.0, len(dates))
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.full(len(dates), 100000.0),
+        }
+    )
+    df = add_indicators(df)
+
+    strategy_content = """
+BEGIN CONTEXT
+FILTER: RSI > 50
+FILTER: MACD > MACD_Signal
+FILTER: TSI > TSI_Signal
+FILTER: EMA_50 > Close
+END
+"""
+
+    fig = InteractivePlotter().create_plot(
+        df, "TEST", strategy_content=strategy_content
+    )
+
+    trace_names = {str(getattr(trace, "name", "")) for trace in fig.data}
+    assert "RSI" in trace_names
+    assert "MACD" in trace_names
+    assert "MACD Signal" in trace_names
+    assert "TSI" in trace_names
+    assert "TSI Signal" in trace_names
+    assert any(name.startswith("EMA 50") for name in trace_names)

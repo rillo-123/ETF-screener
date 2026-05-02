@@ -19,6 +19,7 @@ from typing import Iterator, Callable, Any
 import pandas as pd
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from ETF_screener.config_loader import get_paths
 from ETF_screener.database import ETFDatabase
 from ETF_screener.indicators import add_indicators
 from ETF_screener.yfinance_fetcher import YFinanceFetcher
@@ -43,9 +44,9 @@ class Snippet:
             db_path: Path to SQLite database
             auto_fetch: If True, automatically fetch from yfinance on cache miss (default True)
         """
-            if db_path is None:
-                db_path = get_paths()["data"]["etf_db"]
-            self.db = ETFDatabase(db_path=db_path)
+        if db_path is None:
+            db_path = get_paths()["data"]["etf_db"]
+        self.db = ETFDatabase(db_path=db_path)
         self.auto_fetch = auto_fetch
         self.fetcher = YFinanceFetcher() if auto_fetch else None
 
