@@ -125,65 +125,6 @@ let backtestSourceMode = "saved";
       return "xetra";
     }
 
-    function getSelectCopyText(select) {
-      if (!select) {
-        return "";
-      }
-      const option = select.selectedOptions && select.selectedOptions[0];
-      const text = String(
-        option && option.textContent ? option.textContent : select.value || "",
-      ).trim();
-      if (!text || text.startsWith("--")) {
-        return String(select.value || "").trim();
-      }
-      return text;
-    }
-
-    async function copyTextToClipboard(text) {
-      const cleaned = String(text || "").trim();
-      if (!cleaned) {
-        throw new Error("Nothing selected to copy");
-      }
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(cleaned);
-        return;
-      }
-
-      const temp = document.createElement("textarea");
-      temp.value = cleaned;
-      temp.setAttribute("readonly", "readonly");
-      temp.style.position = "fixed";
-      temp.style.left = "-9999px";
-      temp.style.top = "0";
-      document.body.appendChild(temp);
-      temp.focus();
-      temp.select();
-      const ok = document.execCommand("copy");
-      document.body.removeChild(temp);
-      if (!ok) {
-        throw new Error("Clipboard copy failed");
-      }
-    }
-
-    async function copySelectText(selectId) {
-      const select = document.getElementById(selectId);
-      if (!select) {
-        showToast(`Could not find ${selectId}`, true);
-        return;
-      }
-      const text = getSelectCopyText(select);
-      if (!text) {
-        showToast("Nothing selected to copy", true);
-        return;
-      }
-      try {
-        await copyTextToClipboard(text);
-        showToast(`Copied: ${text}`);
-      } catch (err) {
-        showToast(`Copy failed: ${err.message || err}`, true);
-      }
-    }
-
     function getTickerExchangeBucket(ticker, label = "") {
       const upperTicker = String(ticker || "").toUpperCase();
       const upperLabel = String(label || "").toUpperCase();
@@ -4025,7 +3966,7 @@ let backtestSourceMode = "saved";
       }
     }
 
-    // Opens a simple modal with the strategy DSL ready to edit.
+    // Opens the modify modal for the current strategy or visible draft.
     async function modifyStrategy() {
       const strategySelect = document.getElementById("strategy-select");
       const strategyName = strategySelect ? strategySelect.value : "";
@@ -4830,7 +4771,6 @@ let backtestSourceMode = "saved";
       openSelectedSwarmTicker,
       refreshMarketData,
       ensureFreshMarketData,
-      copySelectText,
       resetSwarmSimulation,
       runScreen,
       saveAsStrategy,

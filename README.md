@@ -43,7 +43,7 @@ The main PowerShell entry surface lives at the repo root so you can launch commo
 ```
 
 These root scripts forward into the underlying `scripts/` implementations where applicable.
-Use `.\update-devtools.ps1` to upgrade stable VS Code and refresh installed extensions from the CLI.
+Use `.\update-devtools.ps1` to install or upgrade stable VS Code or VS Code Insiders and refresh the matching CLI extensions.
 
 ### Get Finnhub API Key
 

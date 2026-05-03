@@ -1,5 +1,6 @@
 import pandas as pd
 
+from ETF_screener.backtester import Backtester
 from ETF_screener.scripts.churn_strategies import (
     evaluate_strategies,
     find_recent_entry_days,
@@ -31,6 +32,63 @@ END
     assert "(close > ema_200)" in parsed["filter"]
     assert "(rsi_14 > 50)" in parsed["filter"]
     assert parsed["exit"] == "(close < ema_50)"
+
+
+def test_ema_breakout_fanout_strategy_requires_widening_gaps():
+    bt = Backtester()
+    strategy_path = "strategies/ema_breakout_fanout.dsl"
+    with open(strategy_path, "r", encoding="utf-8") as handle:
+        parsed = parse_dsl_content(handle.read())
+
+    assert parsed["max_days"] == 20
+    assert "cross_up(close, ema_30)" in parsed["trigger"]
+    assert "(ema_30 - ema_50) > (ema_30_d1 - ema_50_d1)" in parsed["filter"]
+
+    dates = pd.date_range(start="2024-01-01", periods=8)
+    close = pd.Series([97.5, 97.8, 98.2, 98.8, 99.4, 100.0, 101.0, 102.0])
+
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "close": close,
+            "open": close,
+            "high": close + 1.0,
+            "low": close - 1.0,
+            "volume": [100000.0] * 8,
+            "ema_30": [98.0, 98.4, 98.8, 99.2, 99.7, 100.2, 100.8, 101.5],
+            "ema_50": [97.0, 97.2, 97.4, 97.7, 98.0, 98.4, 98.8, 99.2],
+            "ema_100": [96.0, 96.1, 96.2, 96.4, 96.6, 96.8, 97.0, 97.2],
+            "ema_200": [94.0, 94.1, 94.2, 94.3, 94.4, 94.5, 94.6, 94.7],
+        }
+    )
+
+    res = bt.scripted_strategy(df, "TEST", parsed["entry"], parsed["exit"])
+    df_out = res["df"] if isinstance(res, dict) else res
+
+    assert df_out is not None
+    sig_col = "signal" if "signal" in df_out.columns else "Signal"
+    assert sig_col in df_out.columns
+    assert int(df_out[sig_col].fillna(0).sum()) >= 1
+    assert df_out[sig_col].iloc[6] == 1
+
+
+def test_epi_a_st_fanout_phase_flags_jan_20_2026():
+    bt = Backtester()
+    with open("strategies/epi_a_st_fanout_phase.dsl", "r", encoding="utf-8") as handle:
+        parsed = parse_dsl_content(handle.read())
+
+    df = pd.read_parquet("data/parquet/epi-a.st_data.parquet").rename(
+        columns=lambda c: c.lower()
+    )
+    df["Date"] = pd.to_datetime(df["date"])
+
+    res = bt.scripted_strategy(df, "EPI-A.ST", parsed["entry"], parsed["exit"])
+    df_out = res["df"] if isinstance(res, dict) else res
+
+    assert df_out is not None
+    jan20 = df_out[df_out["Date"].dt.strftime("%Y-%m-%d") == "2026-01-20"].iloc[0]
+    assert bool(jan20["entry_condition"]) is True
+    assert int(jan20["signal"]) == 1
 
 
 def test_find_recent_entry_days_returns_surviving_age():

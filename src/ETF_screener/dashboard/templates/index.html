@@ -201,40 +201,18 @@
           Screener controls
         </div>
         <div id="nav-screener-controls" class="flex items-center space-x-4">
-        <div class="flex items-center">
+          <div class="flex items-center">
           <button onclick="toggleStrategyPanel()"
-            class="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-l-lg border border-indigo-500/50 flex items-center transition-all">
-            <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            class="h-10 bg-indigo-600 hover:bg-indigo-700 text-white px-3 rounded-l-lg border border-indigo-500/50 flex items-center transition-all">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
               </path>
             </svg>
             Labs
           </button>
-          <div class="flex items-center">
-            <select id="strategy-select" onchange="updateEditorContent(this.value)"
-              class="bg-slate-800 text-white p-2 border border-l-0 border-indigo-500/50 min-w-[200px]">
-              <option value="">-- Select Screener Strategy --</option>
-              {% for strat in strategies %}
-              <option value="{{ strat }}">{{ strat }}</option>
-              {% endfor %}
-            </select>
-            <button type="button" onclick="copySelectText('strategy-select')"
-              class="ml-1 rounded-r-lg border border-indigo-500/50 bg-slate-700 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-100 hover:bg-slate-600"
-              title="Copy the selected strategy name">
-              Copy
-            </button>
-          </div>
-          <button id="run-btn" onclick="runScreen()"
-            class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2 px-3 border border-l-0 border-green-500/60 transition-all flex items-center whitespace-nowrap"
-            title="Run the selected strategy in the Screener tab">
-            <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M5 3l14 9-14 9V3z" />
-            </svg>
-            Run Screener
-          </button>
           <button id="modify-btn" onclick="modifyStrategy()"
-            class="bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold py-2 px-3 rounded-r-lg border border-amber-400/60 transition-all flex items-center whitespace-nowrap"
+            class="h-10 bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold px-3 border border-l-0 border-amber-400/60 transition-all flex items-center whitespace-nowrap"
             title="Open strategy in editor to modify and save as a new file">
             <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -242,6 +220,21 @@
               </path>
             </svg>
             Modify
+          </button>
+          <select id="strategy-select" onchange="updateEditorContent(this.value)"
+            class="h-10 bg-slate-800 text-white px-3 border border-l-0 border-indigo-500/50 min-w-[200px]">
+            <option value="">-- Select Screener Strategy --</option>
+            {% for strat in strategies %}
+            <option value="{{ strat }}">{{ strat }}</option>
+            {% endfor %}
+          </select>
+          <button id="run-btn" onclick="runScreen()"
+            class="h-10 bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-3 border border-l-0 border-green-500/60 rounded-r-lg transition-all flex items-center whitespace-nowrap"
+            title="Run the selected strategy in the Screener tab">
+            <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M5 3l14 9-14 9V3z" />
+            </svg>
+            Run Screener
           </button>
         <div id="nav-scan-progress"
             class="hidden ml-2 min-w-[250px] rounded-lg border border-indigo-500/30 bg-slate-800/90 px-2.5 py-1.5 shadow-sm">

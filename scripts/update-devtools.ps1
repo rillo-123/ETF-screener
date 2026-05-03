@@ -1,6 +1,29 @@
 $ErrorActionPreference = "Stop"
 
-$vsCodeWingetId = "Microsoft.VisualStudioCode"
+$vsCodeChannels = @(
+    [pscustomobject]@{
+        Name         = "Stable"
+        WingetId     = "Microsoft.VisualStudioCode"
+        CodeCommand  = "code"
+        ProcessNames = @("Code")
+        FallbackPaths = @(
+            (Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code\Code.exe"),
+            (Join-Path $env:ProgramFiles "Microsoft VS Code\Code.exe"),
+            (Join-Path ${env:ProgramFiles(x86)} "Microsoft VS Code\Code.exe")
+        )
+    },
+    [pscustomobject]@{
+        Name         = "Insiders"
+        WingetId     = "Microsoft.VisualStudioCode.Insiders"
+        CodeCommand  = "code-insiders"
+        ProcessNames = @("Code - Insiders")
+        FallbackPaths = @(
+            (Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code Insiders\Code - Insiders.exe"),
+            (Join-Path $env:ProgramFiles "Microsoft VS Code Insiders\Code - Insiders.exe"),
+            (Join-Path ${env:ProgramFiles(x86)} "Microsoft VS Code Insiders\Code - Insiders.exe")
+        )
+    }
+)
 
 function Get-ToolCommand {
     param([Parameter(Mandatory = $true)][string]$Name)
@@ -48,6 +71,26 @@ function Invoke-CodeCli {
     )
 
     return Invoke-ExternalTool -CommandPath $CodePath -Arguments $Arguments
+}
+
+function Resolve-VsCodeCliPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$CommandName,
+        [string[]]$FallbackPaths = @()
+    )
+
+    $command = Get-ToolCommand -Name $CommandName
+    if ($command) {
+        return $command.Source
+    }
+
+    foreach ($fallbackPath in $FallbackPaths) {
+        if ($fallbackPath -and (Test-Path $fallbackPath)) {
+            return $fallbackPath
+        }
+    }
+
+    return $null
 }
 
 function Write-ExternalOutput {
@@ -116,7 +159,14 @@ function Get-WingetPackageRecord {
 }
 
 function Get-RunningVsCodeProcess {
-    return @(Get-Process -Name "Code" -ErrorAction SilentlyContinue)
+    param([string[]]$ProcessNames = @("Code"))
+
+    $processes = @()
+    foreach ($processName in $ProcessNames) {
+        $processes += @(Get-Process -Name $processName -ErrorAction SilentlyContinue)
+    }
+
+    return @($processes)
 }
 
 function Get-ExtensionUpdateErrors {
@@ -134,8 +184,7 @@ function Get-ExtensionUpdateErrors {
 
 function Invoke-UpdateDevtools {
     $overallSuccess = $true
-    $vsCodeStatus = "Not run"
-    $extensionStatus = "Not run"
+    $channelStatuses = @()
 
     Write-Host "--- Devtools Maintenance ---" -ForegroundColor Cyan
 
@@ -145,86 +194,119 @@ function Invoke-UpdateDevtools {
         return 1
     }
 
-    Write-Host "Checking stable VS Code installation..." -ForegroundColor Cyan
-    $listResult = Invoke-WingetCli -Arguments @("list", "--id", $vsCodeWingetId, "--exact")
-    $packageRecord = Get-WingetPackageRecord -Output $listResult.Output -PackageId $vsCodeWingetId
-    $vsCodeWasRunning = (Get-RunningVsCodeProcess).Count -gt 0
+    foreach ($channel in $vsCodeChannels) {
+        $appStatus = "Not run"
+        $extensionStatus = "Not run"
 
-    if (-not $packageRecord) {
-        $overallSuccess = $false
-        $vsCodeStatus = "Stable VS Code not found via winget"
-        Write-Host "Stable VS Code ($vsCodeWingetId) was not found via winget; skipping the app upgrade step." -ForegroundColor Yellow
-        if ($listResult.Output.Count -gt 0) {
-            Write-ExternalOutput -Lines $listResult.Output
-        }
-    } elseif ($packageRecord.Available) {
-        if ($vsCodeWasRunning) {
-            Write-Host "VS Code appears to be running; the upgrade may be blocked until it is closed." -ForegroundColor Yellow
-        }
+        Write-Host "Checking $($channel.Name) VS Code installation..." -ForegroundColor Cyan
+        $listResult = Invoke-WingetCli -Arguments @("list", "--id", $channel.WingetId, "--exact")
+        $packageRecord = Get-WingetPackageRecord -Output $listResult.Output -PackageId $channel.WingetId
+        $vsCodeWasRunning = (Get-RunningVsCodeProcess -ProcessNames $channel.ProcessNames).Count -gt 0
 
-        Write-Host "Upgrading VS Code from $($packageRecord.Version) to $($packageRecord.Available)..." -ForegroundColor Cyan
-        $upgradeResult = Invoke-WingetCli -Arguments @(
-            "upgrade",
-            "--id", $vsCodeWingetId,
-            "--exact",
-            "--source", "winget",
-            "--accept-source-agreements",
-            "--accept-package-agreements"
-        )
-
-        if ($upgradeResult.Output.Count -gt 0) {
-            Write-ExternalOutput -Lines $upgradeResult.Output
-        }
-
-        if ($upgradeResult.ExitCode -eq 0) {
-            $vsCodeStatus = "Updated to $($packageRecord.Available)"
-            Write-Host "VS Code upgrade completed." -ForegroundColor Green
-        } else {
-            $overallSuccess = $false
-            $vsCodeStatus = "Upgrade failed (exit code $($upgradeResult.ExitCode))"
-            Write-Host "VS Code upgrade failed." -ForegroundColor Yellow
-            if ($vsCodeWasRunning) {
-                Write-Host "VS Code was running during the failed upgrade. Close it and retry if the installer was blocked." -ForegroundColor Yellow
+        if (-not $packageRecord) {
+            if ($listResult.Output.Count -gt 0) {
+                Write-ExternalOutput -Lines $listResult.Output
             }
-        }
-    } else {
-        $currentVersion = if ($packageRecord.Version) { $packageRecord.Version } else { "unknown" }
-        $vsCodeStatus = "Already current ($currentVersion)"
-        Write-Host "VS Code $currentVersion is already up to date." -ForegroundColor Green
-    }
 
-    Write-Host "Resolving the VS Code CLI..." -ForegroundColor Cyan
-    $codeCommand = Get-ToolCommand -Name "code"
-    if (-not $codeCommand) {
-        $overallSuccess = $false
-        $extensionStatus = "code CLI not found"
-        Write-Host "The code CLI is not available; cannot update installed extensions." -ForegroundColor Yellow
-    } else {
-        Write-Host "Updating installed VS Code extensions..." -ForegroundColor Cyan
-        $extensionResult = Invoke-CodeCli -CodePath $codeCommand.Source -Arguments @("--update-extensions")
-        $extensionErrors = Get-ExtensionUpdateErrors -Output $extensionResult.Output
+            Write-Host "$($channel.Name) VS Code ($($channel.WingetId)) was not found via winget; installing it now..." -ForegroundColor Yellow
+            $installResult = Invoke-WingetCli -Arguments @(
+                "install",
+                "--id", $channel.WingetId,
+                "--exact",
+                "--source", "winget",
+                "--accept-source-agreements",
+                "--accept-package-agreements"
+            )
 
-        if ($extensionResult.Output.Count -gt 0) {
-            Write-ExternalOutput -Lines $extensionResult.Output
-        }
+            if ($installResult.Output.Count -gt 0) {
+                Write-ExternalOutput -Lines $installResult.Output
+            }
 
-        if ($extensionResult.ExitCode -eq 0 -and $extensionErrors.Count -eq 0) {
-            $extensionStatus = "Extension update completed"
-            Write-Host "VS Code extension update completed." -ForegroundColor Green
-        } else {
-            $overallSuccess = $false
-            if ($extensionErrors.Count -gt 0) {
-                $extensionStatus = "Extension update reported $($extensionErrors.Count) error(s)"
+            if ($installResult.ExitCode -eq 0) {
+                $appStatus = "Installed"
+                Write-Host "$($channel.Name) VS Code installation completed." -ForegroundColor Green
             } else {
-                $extensionStatus = "Extension update failed (exit code $($extensionResult.ExitCode))"
+                $overallSuccess = $false
+                $appStatus = "Install failed (exit code $($installResult.ExitCode))"
+                Write-Host "$($channel.Name) VS Code installation failed." -ForegroundColor Yellow
             }
-            Write-Host "VS Code extension update failed." -ForegroundColor Yellow
+        } elseif ($packageRecord.Available) {
+            if ($vsCodeWasRunning) {
+                Write-Host "$($channel.Name) VS Code appears to be running; the upgrade may be blocked until it is closed." -ForegroundColor Yellow
+            }
+
+            Write-Host "Upgrading $($channel.Name) VS Code from $($packageRecord.Version) to $($packageRecord.Available)..." -ForegroundColor Cyan
+            $upgradeResult = Invoke-WingetCli -Arguments @(
+                "upgrade",
+                "--id", $channel.WingetId,
+                "--exact",
+                "--source", "winget",
+                "--accept-source-agreements",
+                "--accept-package-agreements"
+            )
+
+            if ($upgradeResult.Output.Count -gt 0) {
+                Write-ExternalOutput -Lines $upgradeResult.Output
+            }
+
+            if ($upgradeResult.ExitCode -eq 0) {
+                $appStatus = "Updated to $($packageRecord.Available)"
+                Write-Host "$($channel.Name) VS Code upgrade completed." -ForegroundColor Green
+            } else {
+                $overallSuccess = $false
+                $appStatus = "Upgrade failed (exit code $($upgradeResult.ExitCode))"
+                Write-Host "$($channel.Name) VS Code upgrade failed." -ForegroundColor Yellow
+                if ($vsCodeWasRunning) {
+                    Write-Host "$($channel.Name) VS Code was running during the failed upgrade. Close it and retry if the installer was blocked." -ForegroundColor Yellow
+                }
+            }
+        } else {
+            $currentVersion = if ($packageRecord.Version) { $packageRecord.Version } else { "unknown" }
+            $appStatus = "Already current ($currentVersion)"
+            Write-Host "$($channel.Name) VS Code $currentVersion is already up to date." -ForegroundColor Green
+        }
+
+        Write-Host "Resolving the $($channel.Name) VS Code CLI..." -ForegroundColor Cyan
+        $codeCommandPath = Resolve-VsCodeCliPath -CommandName $channel.CodeCommand -FallbackPaths $channel.FallbackPaths
+        if (-not $codeCommandPath) {
+            $overallSuccess = $false
+            $extensionStatus = "CLI not found"
+            Write-Host "The $($channel.CodeCommand) CLI is not available; cannot update installed extensions." -ForegroundColor Yellow
+        } else {
+            Write-Host "Updating installed $($channel.Name) VS Code extensions..." -ForegroundColor Cyan
+            $extensionResult = Invoke-CodeCli -CodePath $codeCommandPath -Arguments @("--update-extensions")
+            $extensionErrors = Get-ExtensionUpdateErrors -Output $extensionResult.Output
+
+            if ($extensionResult.Output.Count -gt 0) {
+                Write-ExternalOutput -Lines $extensionResult.Output
+            }
+
+            if ($extensionResult.ExitCode -eq 0 -and $extensionErrors.Count -eq 0) {
+                $extensionStatus = "Extension update completed"
+                Write-Host "$($channel.Name) VS Code extension update completed." -ForegroundColor Green
+            } else {
+                $overallSuccess = $false
+                if ($extensionErrors.Count -gt 0) {
+                    $extensionStatus = "Extension update reported $($extensionErrors.Count) error(s)"
+                } else {
+                    $extensionStatus = "Extension update failed (exit code $($extensionResult.ExitCode))"
+                }
+                Write-Host "$($channel.Name) VS Code extension update failed." -ForegroundColor Yellow
+            }
+        }
+
+        $channelStatuses += [pscustomobject]@{
+            Name       = $channel.Name
+            AppStatus  = $appStatus
+            Extensions = $extensionStatus
         }
     }
 
     Write-Host "Summary:" -ForegroundColor Cyan
-    Write-Host "  VS Code:    $vsCodeStatus"
-    Write-Host "  Extensions: $extensionStatus"
+    foreach ($channelStatus in $channelStatuses) {
+        Write-Host "  $($channelStatus.Name): $($channelStatus.AppStatus)"
+        Write-Host "    Extensions: $($channelStatus.Extensions)"
+    }
 
     if ($overallSuccess) {
         Write-Host "Devtools maintenance completed successfully." -ForegroundColor Green
