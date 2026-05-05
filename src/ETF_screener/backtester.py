@@ -1,4 +1,5 @@
 from ETF_screener.config_loader import get_paths
+
 """Backtesting engine for ETF trading strategies."""
 
 import hashlib
@@ -146,7 +147,12 @@ class Backtester:
             result_cache_path = cache_dir / f"{cache_key}.pkl"
 
         # Try loading from cache first
-        if cache_path and result_cache_path and cache_path.exists() and result_cache_path.exists():
+        if (
+            cache_path
+            and result_cache_path
+            and cache_path.exists()
+            and result_cache_path.exists()
+        ):
             try:
                 with result_cache_path.open("rb") as handle:
                     cached_results = pd.read_pickle(handle)
@@ -237,7 +243,12 @@ class Backtester:
 
         price_series = df["Close"] if "Close" in df.columns else df["close"]
         prices = pd.to_numeric(price_series, errors="coerce").to_numpy(dtype="float64")
-        signals = pd.to_numeric(df["signal"], errors="coerce").fillna(0).astype(np.int8).to_numpy()
+        signals = (
+            pd.to_numeric(df["signal"], errors="coerce")
+            .fillna(0)
+            .astype(np.int8)
+            .to_numpy()
+        )
         executed_signals = np.zeros(len(df), dtype=np.int8)
 
         capital = self.initial_capital
@@ -342,7 +353,9 @@ class Backtester:
                 with result_cache_path.open("wb") as handle:
                     pd.to_pickle(cached_results, handle)
             except Exception as e:
-                logger.warning("Failed to save result cache %s: %s", result_cache_path, e)
+                logger.warning(
+                    "Failed to save result cache %s: %s", result_cache_path, e
+                )
 
         return results
 
@@ -383,24 +396,28 @@ class Backtester:
             # Strip trailing _d[number] for indicator lookup
             base_c = re.sub(r"_d\d+$", "", c)
 
-            slope_flip_match = re.fullmatch(
-                r"(.+_slope)_cross_(up|down)", base_c
-            )
+            slope_flip_match = re.fullmatch(r"(.+_slope)_cross_(up|down)", base_c)
             if slope_flip_match is not None:
                 slope_base, direction = slope_flip_match.groups()
                 ensure_indicator(slope_base)
                 if slope_base in df_eval.columns:
                     slope_series = df_eval[slope_base]
-                    slope_sign = pd.Series(np.sign(slope_series), index=slope_series.index)
+                    slope_sign = pd.Series(
+                        np.sign(slope_series), index=slope_series.index
+                    )
                     prev_nonzero = slope_sign.replace(0, np.nan).ffill().shift(1)
                     if direction == "up":
                         df_eval[base_c] = (
-                            (slope_sign > 0) & (prev_nonzero < 0)
-                        ).fillna(False).astype(bool)
+                            ((slope_sign > 0) & (prev_nonzero < 0))
+                            .fillna(False)
+                            .astype(bool)
+                        )
                     else:
                         df_eval[base_c] = (
-                            (slope_sign < 0) & (prev_nonzero > 0)
-                        ).fillna(False).astype(bool)
+                            ((slope_sign < 0) & (prev_nonzero > 0))
+                            .fillna(False)
+                            .astype(bool)
+                        )
                     forced_refresh_cols.add(base_c)
                 return
 
@@ -571,7 +588,11 @@ class Backtester:
                                 )
                             elif regime == "flat":
                                 df_eval[base_c] = (
-                                    st_line.diff().abs().le(1e-9).fillna(False).astype(float)
+                                    st_line.diff()
+                                    .abs()
+                                    .le(1e-9)
+                                    .fillna(False)
+                                    .astype(float)
                                 )
                             else:
                                 close_abs = df_eval["close"].abs().replace(0, np.nan)
@@ -624,6 +645,8 @@ class Backtester:
                         "cross_up",
                         "cross_down",
                         "was_true",
+                        "within",
+                        "between",
                     ]:
                         return word
                     if word.isdigit():
@@ -634,6 +657,33 @@ class Backtester:
                     return f"{word}_d{delay}"
 
                 return re.sub(r"([a-z][a-z0-9_]*)\b", repl, expr)
+
+            def _split_args(raw: str) -> list[str]:
+                parts: list[str] = []
+                depth = 0
+                buf: list[str] = []
+                for ch in raw:
+                    if ch == "," and depth == 0:
+                        item = "".join(buf).strip()
+                        if item:
+                            parts.append(item)
+                        buf = []
+                        continue
+                    if ch == "(":
+                        depth += 1
+                    elif ch == ")" and depth > 0:
+                        depth -= 1
+                    buf.append(ch)
+                item = "".join(buf).strip()
+                if item:
+                    parts.append(item)
+                return parts
+
+            def _parse_bound(token: str) -> int:
+                cleaned = token.strip().lower()
+                if cleaned == "now":
+                    return 0
+                return max(0, int(cleaned))
 
             # 3. Expansion helpers
             def handle_cross(m):
@@ -649,14 +699,42 @@ class Backtester:
 
             def handle_wt(m):
                 content = m.group(0).split("(", 1)[1].rsplit(")", 1)[0]
-                parts = content.split(",", 1)
+                parts = _split_args(content)
+                if len(parts) < 2:
+                    return "False"
                 e, d = parts[0].strip(), parts[1].strip()
                 # Check for nested logic or simple name
                 return f"({_shift(e, int(d))})"
 
+            def handle_within(m):
+                content = m.group(0).split("(", 1)[1].rsplit(")", 1)[0]
+                parts = _split_args(content)
+                if len(parts) < 2:
+                    return "False"
+                expr = parts[0].strip()
+                if len(parts) == 2:
+                    start, end = 0, _parse_bound(parts[1])
+                else:
+                    start, end = sorted(
+                        (_parse_bound(parts[1]), _parse_bound(parts[2]))
+                    )
+                if end < start:
+                    return "False"
+                lookbacks = range(start, end + 1)
+                terms = [
+                    f"({expr})" if delay == 0 else f"({_shift(expr, delay)})"
+                    for delay in lookbacks
+                ]
+                return f"({' | '.join(terms)})"
+
             s = re.sub(r"\bcross_up\s*\((?:[^()]+|\([^()]*\))+\)", handle_cross, s)
             s = re.sub(r"\bcross_down\s*\((?:[^()]+|\([^()]*\))+\)", handle_cross, s)
             s = re.sub(r"\bwas_true\s*\((?:[^()]+|\([^()]*\))+\)", handle_wt, s)
+            s = re.sub(
+                r"\b(?:within|between)\s*\((?:[^()]+|\([^()]*\))+\)",
+                handle_within,
+                s,
+            )
 
             # 4. Final Cleanup
             s = s.lower()
@@ -764,15 +842,18 @@ class Backtester:
                 except KeyError:
                     pass
 
-
         # Guard: skip empty or whitespace-only expressions
         if not e_s or not e_s.strip():
-            logger.error("ERROR_IN_EVAL: Entry expression is empty after DSL parsing. Skipping ticker.")
+            logger.error(
+                "ERROR_IN_EVAL: Entry expression is empty after DSL parsing. Skipping ticker."
+            )
             logger.debug("TRANSFORMED ENTRY: %s", e_s)
             logger.debug("TRANSFORMED EXIT:  %s", r_s)
             return None
         if not r_s or not r_s.strip():
-            logger.error("ERROR_IN_EVAL: Exit expression is empty after DSL parsing. Skipping ticker.")
+            logger.error(
+                "ERROR_IN_EVAL: Exit expression is empty after DSL parsing. Skipping ticker."
+            )
             logger.debug("TRANSFORMED ENTRY: %s", e_s)
             logger.debug("TRANSFORMED EXIT:  %s", r_s)
             return None
@@ -890,15 +971,23 @@ class Backtester:
             except Exception:
                 pass
         use_processes = False
-        if strategy_kwargs and "entry_script" in strategy_kwargs and "exit_script" in strategy_kwargs:
+        if (
+            strategy_kwargs
+            and "entry_script" in strategy_kwargs
+            and "exit_script" in strategy_kwargs
+        ):
             use_processes = True
 
         executor_cls = (
-            concurrent.futures.ProcessPoolExecutor if use_processes else concurrent.futures.ThreadPoolExecutor
+            concurrent.futures.ProcessPoolExecutor
+            if use_processes
+            else concurrent.futures.ThreadPoolExecutor
         )
         executor = executor_cls(max_workers=max_workers)
         try:
-            worker = _worker_run_remote_scripted if use_processes else _worker_run_remote
+            worker = (
+                _worker_run_remote_scripted if use_processes else _worker_run_remote
+            )
             worker_args = (
                 self.db_path,
                 self.initial_capital,

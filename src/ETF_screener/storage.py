@@ -1,4 +1,5 @@
 from ETF_screener.config_loader import get_paths
+
 """Data storage utilities for parquet files."""
 
 from pathlib import Path

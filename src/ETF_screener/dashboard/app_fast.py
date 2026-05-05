@@ -1,14 +1,13 @@
-import glob
 import inspect
 import asyncio
 import hashlib
 import re
-from ETF_screener.config_loader import get_paths
 import json
 import logging as _logging_mod
 import math
 from functools import lru_cache
 from datetime import date, datetime, timezone
+from io import StringIO
 import pandas as pd
 from typing import Optional
 from pathlib import Path
@@ -21,6 +20,7 @@ from fastapi.templating import Jinja2Templates
 
 from ETF_screener.database import ETFDatabase
 from ETF_screener.backtester import Backtester
+from ETF_screener.config_loader import get_paths
 from ETF_screener.dsl_parser import parse_strategy_scripts
 from ETF_screener.logging_setup import setup_logging, get_log_file
 from ETF_screener.market_data_service import MarketDataRefresher
@@ -57,6 +57,7 @@ XETRA_METADATA_PATH = Path("config") / "xetra.json"
 SWEDEN_METADATA_PATH = Path("config") / "sweden.json"
 LEGACY_ETFS_METADATA_PATH = Path("config") / "etfs.json"
 BLACKLIST_PATH = Path("config") / "blacklist.json"
+SCREEN_EXPORTS_DIR = Path("data") / "exports"
 _JOB_PROGRESS_LOCK = Lock()
 _JOB_PROGRESS_STATE: dict[str, object] = {
     "job": None,
@@ -248,7 +249,9 @@ def load_strategy_content(name):
 
 
 @lru_cache(maxsize=4)
-def _cached_dashboard_tickers(db_path: str, latest_market_date: str | None) -> tuple[str, ...]:
+def _cached_dashboard_tickers(
+    db_path: str, latest_market_date: str | None
+) -> tuple[str, ...]:
     """Cache the home-page ticker list until market data advances."""
     blacklist = _cached_blacklist_tickers()
     with ETFDatabase(db_path=db_path) as db:
@@ -257,14 +260,16 @@ def _cached_dashboard_tickers(db_path: str, latest_market_date: str | None) -> t
             "SELECT DISTINCT ticker FROM etf_data ORDER BY ticker", conn
         )["ticker"].tolist()
         if not tickers:
-            for etf_path in (XETRA_METADATA_PATH, SWEDEN_METADATA_PATH, LEGACY_ETFS_METADATA_PATH):
+            for etf_path in (
+                XETRA_METADATA_PATH,
+                SWEDEN_METADATA_PATH,
+                LEGACY_ETFS_METADATA_PATH,
+            ):
                 tickers = sorted(_load_metadata_file_map(etf_path).keys())
                 if tickers:
                     break
         return tuple(
-            str(ticker)
-            for ticker in tickers
-            if str(ticker).upper() not in blacklist
+            str(ticker) for ticker in tickers if str(ticker).upper() not in blacklist
         )
 
 
@@ -272,7 +277,11 @@ def _cached_dashboard_tickers(db_path: str, latest_market_date: str | None) -> t
 def _cached_etf_metadata_map() -> dict[str, dict[str, object]]:
     """Load metadata from config/xetra.json, config/sweden.json, and config/etfs.json."""
     normalized: dict[str, dict[str, object]] = {}
-    for etf_path in (XETRA_METADATA_PATH, SWEDEN_METADATA_PATH, LEGACY_ETFS_METADATA_PATH):
+    for etf_path in (
+        XETRA_METADATA_PATH,
+        SWEDEN_METADATA_PATH,
+        LEGACY_ETFS_METADATA_PATH,
+    ):
         normalized.update(_load_metadata_file_map(etf_path))
     return normalized
 
@@ -293,6 +302,69 @@ def _cached_blacklist_tickers() -> set[str]:
     if isinstance(raw, list):
         return {str(ticker).upper() for ticker in raw}
     return set()
+
+
+def _screen_exports_dir() -> Path:
+    SCREEN_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    return SCREEN_EXPORTS_DIR
+
+
+def _build_top_matches_export_frame(
+    matches: list[dict[str, object]],
+    *,
+    strategy_name: str = "",
+    scan_scope: str = "",
+    exchange: str = "",
+    ticker_list: str = "",
+) -> pd.DataFrame:
+    """Convert screen matches into a stable CSV layout."""
+    rows: list[dict[str, object]] = []
+    for idx, match in enumerate(matches, start=1):
+        rows.append(
+            {
+                "rank": idx,
+                "ticker": str(match.get("ticker") or "").upper(),
+                "status": str(match.get("status") or ""),
+                "close": _safe_float(match.get("close"), 0.0),
+                "volume": _safe_float(match.get("volume"), 0.0),
+                "return_pct": _safe_float(match.get("return_pct"), 0.0),
+                "change_pct": _safe_float(match.get("change_pct"), 0.0),
+                "ema_50_slope": _safe_float(match.get("ema_50_slope"), 0.0),
+                "days_since_entry": int(match.get("days_since_entry") or 0),
+                "score": _safe_float(match.get("score"), 0.0),
+                "strategy": strategy_name,
+                "scan_scope": scan_scope,
+                "exchange": exchange,
+                "ticker_list": ticker_list,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _write_top_matches_csv(
+    matches: list[dict[str, object]],
+    *,
+    strategy_name: str = "",
+    scan_scope: str = "",
+    exchange: str = "",
+    ticker_list: str = "",
+) -> Path:
+    export_dir = _screen_exports_dir()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_strategy = (
+        re.sub(r"[^A-Za-z0-9._-]+", "_", strategy_name or "screen").strip("_")
+        or "screen"
+    )
+    csv_path = export_dir / f"top_matches_{safe_strategy}_{timestamp}.csv"
+    frame = _build_top_matches_export_frame(
+        matches,
+        strategy_name=strategy_name,
+        scan_scope=scan_scope,
+        exchange=exchange,
+        ticker_list=ticker_list,
+    )
+    frame.to_csv(csv_path, index=False)
+    return csv_path
 
 
 def _normalize_market_source(value: object | None) -> str:
@@ -342,7 +414,11 @@ def _ticker_exchange_bucket(
         or "SWE" in upper_ticker
     ):
         return "sweden"
-    if upper_ticker.endswith(".DE") or upper_ticker.endswith(".F") or "." not in upper_ticker:
+    if (
+        upper_ticker.endswith(".DE")
+        or upper_ticker.endswith(".F")
+        or "." not in upper_ticker
+    ):
         return "xetra"
     return "all"
 
@@ -382,7 +458,9 @@ def _cached_dashboard_universe(
                 "market": row.get("market"),
             }
 
-    ticker_rows = sorted(set(ticker_rows) | set(config_metadata.keys()) | set(metadata_map.keys()))
+    ticker_rows = sorted(
+        set(ticker_rows) | set(config_metadata.keys()) | set(metadata_map.keys())
+    )
 
     for ticker in ticker_rows:
         ticker_key = str(ticker).upper()
@@ -412,9 +490,11 @@ def _cached_dashboard_universe(
 
 
 @lru_cache(maxsize=8)
-def _cached_screen_universe(db_path: str, latest_market_date: str | None) -> tuple[str, ...]:
+def _cached_screen_universe(
+    db_path: str, latest_market_date: str | None
+) -> tuple[str, ...]:
     """Cache the expensive ticker-universe query until market data advances."""
-    config_metadata = _cached_etf_metadata_map()
+    blacklist = _cached_blacklist_tickers()
     with ETFDatabase(db_path=db_path) as db:
         conn = db._get_connection()
         universe_query = """
@@ -446,7 +526,13 @@ def _cached_screen_universe(db_path: str, latest_market_date: str | None) -> tup
               AND last_date >= date('now', '-180 day')
         """
         universe_df = pd.read_sql_query(universe_query, conn)
-        return tuple(sorted(set(universe_df["ticker"].tolist()) | set(config_metadata.keys())))
+        return tuple(
+            sorted(
+                str(ticker).upper()
+                for ticker in universe_df["ticker"].tolist()
+                if str(ticker).upper() not in blacklist
+            )
+        )
 
 
 # Database access function (FastAPI style)
@@ -512,7 +598,9 @@ def _screen_request_signature(
         "latest_market_date": latest_market_date or "",
         "scan_scope": str(scan_scope or "").strip().lower(),
         "exchange": str(exchange or "").strip().lower(),
-        "ticker_list_sha": hashlib.sha256(str(ticker_list or "").encode("utf-8")).hexdigest(),
+        "ticker_list_sha": hashlib.sha256(
+            str(ticker_list or "").encode("utf-8")
+        ).hexdigest(),
         "universe_sha": hashlib.sha256(universe_blob.encode("utf-8")).hexdigest(),
         "fallback_mode": bool(fallback_mode),
     }
@@ -522,9 +610,7 @@ def _screen_request_signature(
 
 
 @lru_cache(maxsize=16)
-def _load_cached_screen_result(
-    cache_key: str, _cache_mtime_ns: int
-) -> dict | None:
+def _load_cached_screen_result(cache_key: str, _cache_mtime_ns: int) -> dict | None:
     cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
     if not cache_path.exists():
         return None
@@ -550,7 +636,9 @@ def _save_cached_screen_result(cache_key: str, payload: dict) -> None:
 def _validate_swarm_dna_payload(payload: object) -> dict:
     """Validate the browser-generated Swarm DNA payload before writing config."""
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="Swarm DNA payload must be an object")
+        raise HTTPException(
+            status_code=400, detail="Swarm DNA payload must be an object"
+        )
 
     if payload.get("schema_version") != SWARM_DNA_SCHEMA_VERSION:
         raise HTTPException(
@@ -560,16 +648,22 @@ def _validate_swarm_dna_payload(payload: object) -> dict:
 
     top_agents = payload.get("top_agents")
     if not isinstance(top_agents, list) or not top_agents:
-        raise HTTPException(status_code=400, detail="top_agents must be a non-empty list")
+        raise HTTPException(
+            status_code=400, detail="top_agents must be a non-empty list"
+        )
     if len(top_agents) > 50:
         raise HTTPException(status_code=400, detail="top_agents is unexpectedly large")
 
     for idx, agent in enumerate(top_agents):
         if not isinstance(agent, dict):
-            raise HTTPException(status_code=400, detail=f"top_agents[{idx}] must be an object")
+            raise HTTPException(
+                status_code=400, detail=f"top_agents[{idx}] must be an object"
+            )
         dna = agent.get("dna")
         if not isinstance(dna, dict):
-            raise HTTPException(status_code=400, detail=f"top_agents[{idx}].dna is required")
+            raise HTTPException(
+                status_code=400, detail=f"top_agents[{idx}].dna is required"
+            )
         if dna.get("schema_version") != SWARM_DNA_SCHEMA_VERSION:
             raise HTTPException(
                 status_code=400,
@@ -677,9 +771,7 @@ def _normalize_custom_ticker_lists_payload(payload: object) -> dict:
         if isinstance(active_list_value, dict):
             active_list_name = active_list_value.get("name")
         active_name = _normalize_custom_ticker_list_name(
-            payload.get("active_name")
-            or active_list_name
-            or payload.get("name")
+            payload.get("active_name") or active_list_name or payload.get("name")
         )
         raw_lists = payload.get("lists")
         if isinstance(raw_lists, list):
@@ -718,12 +810,18 @@ def _normalize_custom_ticker_lists_payload(payload: object) -> dict:
         deduped.append(
             {
                 "name": name,
-                "tickers": _normalize_custom_ticker_list_value(entry.get("tickers", [])),
-                "count": len(_normalize_custom_ticker_list_value(entry.get("tickers", []))),
+                "tickers": _normalize_custom_ticker_list_value(
+                    entry.get("tickers", [])
+                ),
+                "count": len(
+                    _normalize_custom_ticker_list_value(entry.get("tickers", []))
+                ),
             }
         )
 
-    active = next((entry for entry in deduped if entry["name"] == active_name), deduped[0])
+    active = next(
+        (entry for entry in deduped if entry["name"] == active_name), deduped[0]
+    )
     total_unique: list[str] = []
     seen_tickers: set[str] = set()
     for entry in deduped:
@@ -845,7 +943,11 @@ async def ticker_universe():
         latest_market_date = _latest_market_date_for(db)
         items = list(_cached_dashboard_universe(_db_path_for(db), latest_market_date))
     except Exception as exc:
-        logger.warning("Ticker universe endpoint fell back to empty payload: %s", exc, exc_info=True)
+        logger.warning(
+            "Ticker universe endpoint fell back to empty payload: %s",
+            exc,
+            exc_info=True,
+        )
         items = []
 
     return {
@@ -933,7 +1035,10 @@ def refresh_market_data(
             "max_workers": safe_workers,
             "rebuild_shortlist": True,
         }
-        if "progress_callback" in inspect.signature(refresher.refresh_market_data).parameters:
+        if (
+            "progress_callback"
+            in inspect.signature(refresher.refresh_market_data).parameters
+        ):
             refresh_kwargs["progress_callback"] = _update_job_progress
         _set_job_progress(
             "market-refresh",
@@ -960,7 +1065,9 @@ def refresh_market_data(
         _clear_job_progress("market-refresh")
 
 
-def _refresh_market_data_for_gui(source: Optional[str] = None) -> dict[str, object] | None:
+def _refresh_market_data_for_gui(
+    source: Optional[str] = None,
+) -> dict[str, object] | None:
     """Top up market data for GUI-driven actions when a user asks for it."""
     metadata_path, collection_mode = _market_source_config(source)
     refresher = MarketDataRefresher(
@@ -976,7 +1083,10 @@ def _refresh_market_data_for_gui(source: Optional[str] = None) -> dict[str, obje
             "max_workers": 8,
             "rebuild_shortlist": True,
         }
-        if "progress_callback" in inspect.signature(refresher.refresh_market_data).parameters:
+        if (
+            "progress_callback"
+            in inspect.signature(refresher.refresh_market_data).parameters
+        ):
             refresh_kwargs["progress_callback"] = _update_job_progress
         _set_job_progress(
             "market-refresh",
@@ -1111,12 +1221,20 @@ async def swarm_world(
                     else None
                 ),
                 "product_score": round(float(row.get("product_score", 0.0) or 0.0), 2),
-                "exposure_score": round(float(row.get("exposure_score", 0.0) or 0.0), 2),
-                "technical_score": round(float(row.get("technical_score", 0.0) or 0.0), 2),
+                "exposure_score": round(
+                    float(row.get("exposure_score", 0.0) or 0.0), 2
+                ),
+                "technical_score": round(
+                    float(row.get("technical_score", 0.0) or 0.0), 2
+                ),
                 "final_score": round(float(row.get("final_score", 0.0) or 0.0), 2),
                 "energy": round(float(row.get("energy", 0.0) or 0.0), 2),
-                "momentum_score": round(float(row.get("momentum_score", 0.0) or 0.0), 2),
-                "freshness_score": round(float(row.get("freshness_score", 0.0) or 0.0), 2),
+                "momentum_score": round(
+                    float(row.get("momentum_score", 0.0) or 0.0), 2
+                ),
+                "freshness_score": round(
+                    float(row.get("freshness_score", 0.0) or 0.0), 2
+                ),
                 "row": int(row.get("grid_row", row.get("row", 0)) or 0),
                 "col": int(row.get("grid_col", row.get("col", 0)) or 0),
                 "x": round(float(row.get("x", 0.0) or 0.0), 2),
@@ -1201,10 +1319,13 @@ async def swarm_history(days: int = 420, limit: Optional[int] = 5000):
     frames = []
     conn = db._get_connection()
     etf_data_columns = {
-        str(row[1])
-        for row in conn.execute("PRAGMA table_info(etf_data)").fetchall()
+        str(row[1]) for row in conn.execute("PRAGMA table_info(etf_data)").fetchall()
     }
-    dividends_expr = "COALESCE(dividends, 0) AS dividends" if "dividends" in etf_data_columns else "0.0 AS dividends"
+    dividends_expr = (
+        "COALESCE(dividends, 0) AS dividends"
+        if "dividends" in etf_data_columns
+        else "0.0 AS dividends"
+    )
     chunk_size = 750
     for start in range(0, len(tickers), chunk_size):
         chunk = tickers[start : start + chunk_size]
@@ -1243,7 +1364,9 @@ async def swarm_history(days: int = 420, limit: Optional[int] = 5000):
             ]
             dividends = [
                 round(float(value or 0.0), 6)
-                for value in clean_group.get("dividends", pd.Series(dtype=float)).fillna(0.0).tolist()
+                for value in clean_group.get("dividends", pd.Series(dtype=float))
+                .fillna(0.0)
+                .tolist()
             ]
             if closes:
                 history[str(ticker)] = {
@@ -1454,7 +1577,8 @@ async def screen(
                 "total_candidates": 0,
             }
         cache_key = _screen_request_signature(
-            strategy_name=strategy or (strategy_spec.get("name") if isinstance(strategy_spec, dict) else ""),
+            strategy_name=strategy
+            or (strategy_spec.get("name") if isinstance(strategy_spec, dict) else ""),
             strategy_text=content,
             latest_market_date=latest_market_date,
             scan_scope=scan_scope,
@@ -1488,9 +1612,15 @@ async def screen(
             run_kwargs["max_workers"] = 8
         if "show_progress" in inspect.signature(bt.run_parallel_backtest).parameters:
             run_kwargs["show_progress"] = True
-        if "task_timeout_seconds" in inspect.signature(bt.run_parallel_backtest).parameters:
+        if (
+            "task_timeout_seconds"
+            in inspect.signature(bt.run_parallel_backtest).parameters
+        ):
             run_kwargs["task_timeout_seconds"] = 45
-        if "progress_callback" in inspect.signature(bt.run_parallel_backtest).parameters:
+        if (
+            "progress_callback"
+            in inspect.signature(bt.run_parallel_backtest).parameters
+        ):
             run_kwargs["progress_callback"] = _update_job_progress
         results = await asyncio.to_thread(
             bt.run_parallel_backtest,
@@ -1672,6 +1802,63 @@ async def screen(
         )
 
 
+@app.post("/api/screen/export")
+async def export_screen_results(request: Request):
+    """Write the current top matches to CSV and return it as a download."""
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {exc}")
+
+    matches = payload.get("matches")
+    if not isinstance(matches, list) or not matches:
+        raise HTTPException(status_code=400, detail="matches must be a non-empty array")
+
+    normalized_matches: list[dict[str, object]] = []
+    for item in matches:
+        if isinstance(item, dict):
+            normalized_matches.append(item)
+
+    if not normalized_matches:
+        raise HTTPException(status_code=400, detail="matches must contain objects")
+
+    strategy_name = str(
+        payload.get("strategy_name") or payload.get("strategy") or "Top Matches"
+    ).strip()
+    scan_scope = str(payload.get("scan_scope") or "").strip()
+    exchange = str(payload.get("exchange") or "").strip()
+    ticker_list = str(payload.get("ticker_list") or "").strip()
+
+    csv_path = _write_top_matches_csv(
+        normalized_matches,
+        strategy_name=strategy_name,
+        scan_scope=scan_scope,
+        exchange=exchange,
+        ticker_list=ticker_list,
+    )
+    frame = _build_top_matches_export_frame(
+        normalized_matches,
+        strategy_name=strategy_name,
+        scan_scope=scan_scope,
+        exchange=exchange,
+        ticker_list=ticker_list,
+    )
+    csv_buffer = StringIO()
+    frame.to_csv(csv_buffer, index=False)
+    csv_text = csv_buffer.getvalue()
+
+    download_name = csv_path.name
+    logger.info("Top matches exported to %s", csv_path)
+    return Response(
+        content=csv_text,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{download_name}"',
+            "X-Export-Path": str(csv_path),
+        },
+    )
+
+
 @app.get("/api/backtest")
 async def backtest_view(
     strategy: Optional[str] = None,
@@ -1746,7 +1933,9 @@ async def backtest_view(
             evaluate_kwargs["progress_callback"] = _update_job_progress
         df = await asyncio.to_thread(evaluate_strategies, **evaluate_kwargs)
     except Exception as e:
-        logger.error("Backtest endpoint failed for %s: %s", strategy_name, e, exc_info=True)
+        logger.error(
+            "Backtest endpoint failed for %s: %s", strategy_name, e, exc_info=True
+        )
         _set_job_progress(
             "backtest",
             "failed",
@@ -1857,6 +2046,8 @@ async def get_chart(
     """Generate and return an interactive chart for a ticker. Fetches if missing."""
     db = get_db()
     ticker = ticker.upper()
+    blacklist = _cached_blacklist_tickers()
+    is_blacklisted = ticker in blacklist
 
     # 1. Try to get data from database
     conn = db._get_connection()
@@ -1874,7 +2065,9 @@ async def get_chart(
 
     # 2. If data is missing, too sparse, or stale, fetch it.
     # Keep at least 100 bars so indicator warmup stays reliable for EMA50 and ATR.
-    if df.empty or len(df) < 100 or _is_stale_date(latest_cached_day, threshold_days=0):
+    if not is_blacklisted and (
+        df.empty or len(df) < 100 or _is_stale_date(latest_cached_day, threshold_days=0)
+    ):
         logger.info(
             "Cache refresh for %s (count=%d, latest=%s). Fetching from Yahoo Finance...",
             ticker,
@@ -1908,6 +2101,11 @@ async def get_chart(
             raise HTTPException(
                 status_code=404, detail=f"Data fetch failed for {ticker}: {str(e)}"
             )
+    elif is_blacklisted and df.empty:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Ticker {ticker} is blacklisted and has no cached data",
+        )
 
     if df.empty:
         raise HTTPException(
@@ -1993,9 +2191,7 @@ async def get_chart(
         local_df["Date"] = pd.to_datetime(local_df["Date"], errors="coerce")
         dates = [d.isoformat() if pd.notna(d) else None for d in local_df["Date"]]
         close = (
-            pd.to_numeric(local_df.get("Close"), errors="coerce")
-            .fillna(0.0)
-            .tolist()
+            pd.to_numeric(local_df.get("Close"), errors="coerce").fillna(0.0).tolist()
         )
         data = [
             {

@@ -88,7 +88,9 @@ def _strategy_request_signature(
         "strategy_text_sha": hashlib.sha256(strategy_text.encode("utf-8")).hexdigest(),
         "since_days": since_days,
         "exchange": str(exchange or "").strip().lower(),
-        "ticker_list_sha": hashlib.sha256(str(ticker_list or "").encode("utf-8")).hexdigest(),
+        "ticker_list_sha": hashlib.sha256(
+            str(ticker_list or "").encode("utf-8")
+        ).hexdigest(),
         "scan_scope": str(scan_scope or "").strip().lower(),
         "latest_market_date": latest_market_date or "",
         "universe_sha": hashlib.sha256(universe_blob.encode("utf-8")).hexdigest(),
@@ -206,7 +208,9 @@ def parse_dsl_content(content: str | None) -> dict:
             current_block_raw = None
             continue
 
-        section = re.match(r"^(TRIGGER|FILTER|ENTRY|EXIT):\s*(.+)$", line, re.IGNORECASE)
+        section = re.match(
+            r"^(TRIGGER|FILTER|ENTRY|EXIT):\s*(.+)$", line, re.IGNORECASE
+        )
         if not section:
             continue
 
@@ -286,6 +290,33 @@ def _prepare_scan_expression(expr: str) -> str:
         flags=re.IGNORECASE,
     )
 
+    def split_args(raw: str) -> list[str]:
+        parts: list[str] = []
+        depth = 0
+        buf: list[str] = []
+        for ch in raw:
+            if ch == "," and depth == 0:
+                item = "".join(buf).strip()
+                if item:
+                    parts.append(item)
+                buf = []
+                continue
+            if ch == "(":
+                depth += 1
+            elif ch == ")" and depth > 0:
+                depth -= 1
+            buf.append(ch)
+        item = "".join(buf).strip()
+        if item:
+            parts.append(item)
+        return parts
+
+    def parse_bound(token: str) -> int:
+        cleaned = token.strip().lower()
+        if cleaned == "now":
+            return 0
+        return max(0, int(cleaned))
+
     def d_sub(match):
         return f"{match.group(1)}_d{match.group(2)}"
 
@@ -300,6 +331,31 @@ def _prepare_scan_expression(expr: str) -> str:
     s = re.sub(
         r"was_true\(([^,]+),\s*(\d+)\)",
         shift_cond,
+        s,
+        flags=re.IGNORECASE,
+    )
+
+    def within_cond(match):
+        content = match.group(0).split("(", 1)[1].rsplit(")", 1)[0]
+        parts = split_args(content)
+        if len(parts) < 2:
+            return "False"
+        condition = parts[0].strip()
+        if len(parts) == 2:
+            start, end = 0, parse_bound(parts[1])
+        else:
+            start, end = sorted((parse_bound(parts[1]), parse_bound(parts[2])))
+        if end < start:
+            return "False"
+        terms = [
+            condition if delay == 0 else f"{condition}_d{delay}"
+            for delay in range(start, end + 1)
+        ]
+        return f"({' or '.join(terms)})"
+
+    s = re.sub(
+        r"(?:within|between)\((?:[^()]+|\([^()]*\))+\)",
+        within_cond,
         s,
         flags=re.IGNORECASE,
     )
@@ -465,7 +521,9 @@ def _load_strategy_specs(
 
 
 @lru_cache(maxsize=8)
-def _cached_strategy_tickers(db_path: str, latest_market_date: str | None, ticker_filter: str | None) -> tuple[str, ...]:
+def _cached_strategy_tickers(
+    db_path: str, latest_market_date: str | None, ticker_filter: str | None
+) -> tuple[str, ...]:
     """Cache the strategy-screen ticker universe until market data advances."""
     db = Backtester(db_path=db_path).db
     conn = db._get_connection()
@@ -532,7 +590,9 @@ def filter_tickers_by_exchange_and_list(
         if exchange_key == "xetra":
             return upper.endswith(".DE") or upper.endswith(".F") or "." not in upper
         if exchange_key == "sweden":
-            return upper.endswith(".ST") or upper.endswith(".SE") or upper.endswith(".SS")
+            return (
+                upper.endswith(".ST") or upper.endswith(".SE") or upper.endswith(".SS")
+            )
         return True
 
     filtered = [
@@ -564,7 +624,9 @@ def evaluate_strategies(
     backtester = Backtester()
     latest_market_date = backtester.db.get_latest_market_date()
     tickers = list(
-        _cached_strategy_tickers(str(backtester.db_path), latest_market_date, ticker_filter)
+        _cached_strategy_tickers(
+            str(backtester.db_path), latest_market_date, ticker_filter
+        )
     )
     tickers = filter_tickers_by_exchange_and_list(
         tickers,
@@ -722,7 +784,9 @@ def churn_db(
     # Get all tickers from DB
     latest_market_date = backtester.db.get_latest_market_date()
     tickers = list(
-        _cached_strategy_tickers(str(backtester.db_path), latest_market_date, ticker_filter)
+        _cached_strategy_tickers(
+            str(backtester.db_path), latest_market_date, ticker_filter
+        )
     )
 
     strategies = _load_strategy_specs(
@@ -786,7 +850,10 @@ def churn_db(
                     else since_days if since_days is not None else strategy_max_days
                 )
 
-                if max_allowed_days is not None and recent_days_value > max_allowed_days:
+                if (
+                    max_allowed_days is not None
+                    and recent_days_value > max_allowed_days
+                ):
                     continue
 
                 all_results.append(
@@ -996,7 +1063,9 @@ def churn_db(
 
         # Save to CSV with 2 decimal precision (keeps full precision in memory/code)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_name = f"{get_paths()['data']['discovery']}/discovery_results_{timestamp}.csv"
+        output_name = (
+            f"{get_paths()['data']['discovery']}/discovery_results_{timestamp}.csv"
+        )
 
         # Exclude the bulky 'df' column from CSV output for better compatibility with Spreadsheet tools
         cols_to_save = [c for c in summary_df.columns if c != "df"]
@@ -1008,13 +1077,15 @@ def churn_db(
 
         # Also maintain a symlink-like constant copy for the PS1 script if needed
         clean_df[cols_to_save].to_csv(
-            f"{get_paths()['data']['discovery']}/multi_strategy_results.csv", index=False, float_format="%.2f"
+            f"{get_paths()['data']['discovery']}/multi_strategy_results.csv",
+            index=False,
+            float_format="%.2f",
         )
 
         # Keep only the 3 most recent discovery CSV files to save space
         try:
             history_files = sorted(
-                Path(get_paths()['data']['discovery']).glob("discovery_results_*.csv"),
+                Path(get_paths()["data"]["discovery"]).glob("discovery_results_*.csv"),
                 key=os.path.getmtime,
                 reverse=True,
             )
@@ -1028,7 +1099,9 @@ def churn_db(
         # Also save to "custom_script_results.csv" for run_custom_backtest.ps1 compatibility
         if not strategy_path:
             clean_df[cols_to_save].to_csv(
-                f"{get_paths()['data']['discovery']}/custom_script_results.csv", index=False, float_format="%.2f"
+                f"{get_paths()['data']['discovery']}/custom_script_results.csv",
+                index=False,
+                float_format="%.2f",
             )
 
         print(f"\nFull results saved to {output_name}")

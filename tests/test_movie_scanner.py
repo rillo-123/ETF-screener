@@ -28,4 +28,3 @@ def test_resolve_strategy_signal_window_uses_config_when_strategy_has_no_cap():
     strategy = {"max_days": None}
 
     assert resolve_strategy_signal_window(strategy, configured_signal_days=50) == 50
-

@@ -1,13 +1,16 @@
 # Plan
 
-Last updated: 2026-05-02 22:09:18 +02:00
+Last updated: 2026-05-05 20:37:56 +02:00
 
 ## Current objective
 
-Build an ETF-first dashboard that reuses cached artifacts for shortlist discovery, swarm exploration, chart drill-down, and repeated screen/backtest reads.
+End-of-day workflow completed successfully with no auto-fixes required.
 
 ## Current state
 
+- -Summary
+- -Summary
+- The end-of-day workflow now updates `plan.md` and `progress.md` before staging, committing, and pushing so the resume docs stay in lockstep with the final branch state.
 - The database now has dedicated `etf_metadata` and `etf_shortlist_artifacts` tables for persisted shortlist state.
 - `src/ETF_screener/shortlist_engine.py` now builds a reusable shortlist snapshot from cached parquet first, DB fallback second, and analyzes the universe in parallel threads.
 - The shortlist engine scores each ticker across product, exposure, and technical state, then persists `Buy` / `Watch` / `Skip` artifacts with reason strings and score components.
@@ -31,6 +34,7 @@ Build an ETF-first dashboard that reuses cached artifacts for shortlist discover
 - The repo-local vulture quality gate now has a whitelist file for deliberate FastAPI and helper entrypoints, and the nested Windows PowerShell test runner was adjusted to avoid Unicode parsing issues.
 - The default `run_all_tests.ps1` invocation now includes `vulture` so dead-code scanning is part of the main quality pass.
 - The Plotly ribbon chart now uses a slimmer shared left margin so the main graph sits farther left with less dead space.
+- The repo now has an end-of-day workflow wrapper, `workflow_end_of_day.ps1`, that runs the test suite, applies light auto-fixes when needed, and handles commit/push for the current branch.
 - Agent motion now uses direct global jumps between real tickers based on each agent's DNA criteria.
 - Swarm ticker balls are white/neutral, with radius proportional to `log10(simulated wealth)`; color no longer encodes simulated gain/loss or shortlist label.
 - Globe zoom now uses a smaller ticker draw radius than projected map zoom so thousands of white ticker balls remain distinct instead of merging into a few blobs.
@@ -87,6 +91,8 @@ Build an ETF-first dashboard that reuses cached artifacts for shortlist discover
 
 ## Locked decisions
 
+- -NextResumePoint
+- -Summary
 - Prefer cached artifacts over request-time recomputation whenever the snapshot is fresh.
 - Distinguish clearly between `data as of` and `computed at`; rebuilding the shortlist alone should never pretend to make stale market data fresh.
 - Use parallel threads for per-ticker shortlist analysis because this path is mostly storage reads plus moderate indicator work.
@@ -158,6 +164,7 @@ Build an ETF-first dashboard that reuses cached artifacts for shortlist discover
 - Evaluate GPU acceleration only where it naturally fits: browser rendering, WebGL/WebGPU visualization, or very data-parallel simulation steps.
 - Benchmark whether the process-worker backtest path is fast enough; if not, the next step is a more aggressive indicator/trade-state vectorization pass.
 - Benchmark whether the scripted result cache removes enough repeat latency on the dashboard path, and only then consider deeper vectorization.
+- Exercise `workflow_end_of_day.ps1` against a real branch state, then decide whether it should grow a dry-run mode or extra commit filters for generated artifacts.
 - Keep the progress UI lightweight and expressive rather than introducing a heavier notification system.
 - Let the global progress bar represent any long-running dashboard operation, not just screener/backtester work.
 - Keep updating `plan.md` and `progress.md` on every future implementation turn when state changes meaningfully.

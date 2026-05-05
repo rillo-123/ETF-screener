@@ -1,11 +1,13 @@
 import json
 import sqlite3
+from io import StringIO
 from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 from fastapi.testclient import TestClient
 
+from ETF_screener.dashboard import app_fast
 from ETF_screener.dashboard.app_fast import app
 from ETF_screener.indicators import add_indicators
 
@@ -75,6 +77,7 @@ def test_tab_bar_visible():
     assert 'id="shortlist-filter-watch"' in html
     assert 'id="shortlist-filter-skip"' in html
     assert 'id="market-refresh-btn"' in html
+    assert 'id="export-matches-btn"' in html
     assert "/api/market-status?stale_after_days=0" in dashboard_source
     assert "force=true&stale_after_days=0" in dashboard_source
     assert "/api/swarm-history" in dashboard_source
@@ -114,6 +117,7 @@ def test_tab_bar_visible():
     assert "SWARM_MAX_AGENTS = 5000" in dashboard_source
     assert "swarmCompletedAgents" in dashboard_source
     assert "virus-like agents" in dashboard_source
+    assert "exportTopMatches" in dashboard_source
     assert "getSwarmAgentHeading" in dashboard_source
     assert "startSwarmPlayback" in dashboard_source
     assert "ensureSwarmAnimationLoop" in dashboard_source
@@ -165,6 +169,44 @@ def test_screen_endpoint_refreshes_on_gui_request(monkeypatch):
     assert captured["source"] is None
 
 
+def test_cached_screen_universe_uses_db_backed_tickers_only(monkeypatch):
+    app_fast._cached_screen_universe.cache_clear()
+
+    class FakeDb:
+        def _get_connection(self):
+            return object()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, _tb):
+            return False
+
+    def fake_read_sql_query(query, conn):
+        return pd.DataFrame({"ticker": ["AAA.DE", "BBB.DE", "CCC.ST"]})
+
+    def fail_if_metadata_loaded():
+        raise AssertionError("screen universe should not depend on metadata keys")
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.ETFDatabase", lambda db_path=None: FakeDb()
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.pd.read_sql_query", fake_read_sql_query
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._cached_blacklist_tickers", lambda: {"BBB.DE"}
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._cached_etf_metadata_map",
+        fail_if_metadata_loaded,
+    )
+
+    result = app_fast._cached_screen_universe("fake-db", "2026-04-01")
+
+    assert result == ("AAA.DE", "CCC.ST")
+
+
 def test_screen_endpoint_honors_scan_scope_list(monkeypatch, tmp_path):
     captured = {}
     cache_dir = None
@@ -209,10 +251,17 @@ def test_screen_endpoint_honors_scan_scope_list(monkeypatch, tmp_path):
         return cache_dir
 
     monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", fake_get_db)
-    monkeypatch.setattr("ETF_screener.dashboard.app_fast._cached_screen_universe", fake_universe)
-    monkeypatch.setattr("ETF_screener.dashboard.app_fast.filter_tickers_by_exchange_and_list", fake_filter)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._cached_screen_universe", fake_universe
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.filter_tickers_by_exchange_and_list",
+        fake_filter,
+    )
     monkeypatch.setattr("ETF_screener.dashboard.app_fast.Backtester", FakeBacktester)
-    monkeypatch.setattr("ETF_screener.dashboard.app_fast._screen_cache_dir", fake_cache_dir)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._screen_cache_dir", fake_cache_dir
+    )
 
     response = client.get(
         "/api/screen?scan_scope=list&ticker_list=BBB.ST&dsl_content=TRIGGER:%20close%20%3E%20ema_50"
@@ -221,6 +270,56 @@ def test_screen_endpoint_honors_scan_scope_list(monkeypatch, tmp_path):
     assert captured["filter_args"]["scan_scope"] == "list"
     assert captured["filter_args"]["ticker_list"] == "BBB.ST"
     assert captured["backtest_tickers"] == ["BBB.ST"]
+
+
+def test_screen_export_endpoint_writes_csv(monkeypatch, tmp_path):
+    export_dir = tmp_path / "exports"
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.SCREEN_EXPORTS_DIR", export_dir
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._write_top_matches_csv",
+        lambda *args, **kwargs: export_dir / "top_matches_demo.csv",
+    )
+
+    response = client.post(
+        "/api/screen/export",
+        json={
+            "strategy_name": "demo",
+            "scan_scope": "xetra",
+            "matches": [
+                {
+                    "ticker": "AAA.DE",
+                    "status": "Entry Signal",
+                    "close": 12.34,
+                    "volume": 123456,
+                    "return_pct": 4.5,
+                    "change_pct": 1.2,
+                    "ema_50_slope": 0.33,
+                    "days_since_entry": 0,
+                    "score": 0.88,
+                },
+                {
+                    "ticker": "BBB.DE",
+                    "status": "Recent Entry (2d)",
+                    "close": 23.45,
+                    "volume": 234567,
+                    "return_pct": 6.7,
+                    "change_pct": -0.4,
+                    "ema_50_slope": 0.21,
+                    "days_since_entry": 2,
+                    "score": 0.76,
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "attachment;" in response.headers["content-disposition"]
+    exported = pd.read_csv(StringIO(response.text))
+    assert exported["ticker"].tolist() == ["AAA.DE", "BBB.DE"]
+    assert exported["rank"].tolist() == [1, 2]
 
 
 def test_screen_endpoint_reuses_cached_result(monkeypatch, tmp_path):
@@ -285,10 +384,17 @@ def test_screen_endpoint_reuses_cached_result(monkeypatch, tmp_path):
         return cache_dir
 
     monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", fake_get_db)
-    monkeypatch.setattr("ETF_screener.dashboard.app_fast._cached_screen_universe", fake_universe)
-    monkeypatch.setattr("ETF_screener.dashboard.app_fast.filter_tickers_by_exchange_and_list", fake_filter)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._cached_screen_universe", fake_universe
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.filter_tickers_by_exchange_and_list",
+        fake_filter,
+    )
     monkeypatch.setattr("ETF_screener.dashboard.app_fast.Backtester", FakeBacktester)
-    monkeypatch.setattr("ETF_screener.dashboard.app_fast._screen_cache_dir", fake_cache_dir)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._screen_cache_dir", fake_cache_dir
+    )
 
     params = "dsl_content=TRIGGER:%20close%20%3E%20ema_20"
     first = client.get(f"/api/screen?{params}")
@@ -307,7 +413,9 @@ def test_backtest_endpoint_honors_scan_scope_list(monkeypatch):
         captured.update(kwargs)
         return pd.DataFrame()
 
-    monkeypatch.setattr("ETF_screener.dashboard.app_fast.evaluate_strategies", fake_evaluate_strategies)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies", fake_evaluate_strategies
+    )
 
     response = client.get(
         "/api/backtest?scan_scope=list&ticker_list=BBB.ST&dsl_content=TRIGGER:%20close%20%3E%20ema_50"
@@ -343,7 +451,9 @@ def test_custom_ticker_list_api_roundtrip(monkeypatch, tmp_path):
     assert saved["name"] == "Growth Basket"
     assert saved["active_name"] == "Growth Basket"
     assert saved["tickers"] == ["MSFT", "AAPL", "NVDA"]
-    assert saved["lists"] == [{"name": "Growth Basket", "tickers": ["MSFT", "AAPL", "NVDA"], "count": 3}]
+    assert saved["lists"] == [
+        {"name": "Growth Basket", "tickers": ["MSFT", "AAPL", "NVDA"], "count": 3}
+    ]
     assert config_path.exists()
 
     with open(config_path, "r", encoding="utf-8") as handle:
@@ -371,7 +481,9 @@ def test_market_status_endpoint(monkeypatch):
     captured = {}
 
     class FakeRefresher:
-        def __init__(self, db_path=None, etfs_file=None, collection_mode=None, **kwargs):
+        def __init__(
+            self, db_path=None, etfs_file=None, collection_mode=None, **kwargs
+        ):
             self.db_path = db_path
             captured["etfs_file"] = etfs_file
             captured["collection_mode"] = collection_mode
@@ -412,7 +524,9 @@ def test_market_refresh_endpoint(monkeypatch):
     captured = {}
 
     class FakeRefresher:
-        def __init__(self, db_path=None, etfs_file=None, collection_mode=None, **kwargs):
+        def __init__(
+            self, db_path=None, etfs_file=None, collection_mode=None, **kwargs
+        ):
             self.db_path = db_path
             captured["etfs_file"] = etfs_file
             captured["collection_mode"] = collection_mode
@@ -546,16 +660,14 @@ def test_swarm_history_endpoint_returns_cached_close_history(monkeypatch):
         ]
     )
     conn = sqlite3.connect(":memory:", check_same_thread=False)
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE etf_data (
             ticker TEXT,
             date TEXT,
             close REAL,
             dividends REAL
         )
-        """
-    )
+        """)
     conn.executemany(
         "INSERT INTO etf_data (ticker, date, close, dividends) VALUES (?, ?, ?, ?)",
         [
@@ -805,7 +917,9 @@ def test_backtest_endpoint_forwards_signal_days(monkeypatch, tmp_path):
     )
     captured = {}
 
-    def fake_evaluate(strategy_path=None, dsl_content=None, strategy_name=None, since_days=None):
+    def fake_evaluate(
+        strategy_path=None, dsl_content=None, strategy_name=None, since_days=None
+    ):
         captured["strategy_path"] = strategy_path
         captured["dsl_content"] = dsl_content
         captured["strategy_name"] = strategy_name
@@ -857,7 +971,9 @@ def test_backtest_endpoint_refreshes_on_gui_request(monkeypatch, tmp_path):
         captured["source"] = source
         return {"refreshed": 1}
 
-    def fake_evaluate(strategy_path=None, dsl_content=None, strategy_name=None, since_days=None):
+    def fake_evaluate(
+        strategy_path=None, dsl_content=None, strategy_name=None, since_days=None
+    ):
         return fake_df
 
     monkeypatch.chdir(tmp_path)
@@ -902,7 +1018,9 @@ def test_backtest_endpoint_still_accepts_since_days_alias(monkeypatch, tmp_path)
     )
     captured = {}
 
-    def fake_evaluate(strategy_path=None, dsl_content=None, strategy_name=None, since_days=None):
+    def fake_evaluate(
+        strategy_path=None, dsl_content=None, strategy_name=None, since_days=None
+    ):
         captured["since_days"] = since_days
         return fake_df
 
@@ -983,9 +1101,9 @@ def test_database_path_consistency():
 
     db = get_db()
     expected_path = "data/etf_db/etfs.db"
-    assert str(db.db_path).replace("\\", "/").endswith(expected_path), (
-        f"Expected DB path to end with {expected_path}, got {db.db_path}"
-    )
+    assert (
+        str(db.db_path).replace("\\", "/").endswith(expected_path)
+    ), f"Expected DB path to end with {expected_path}, got {db.db_path}"
 
 
 def _make_recent_entry_result(age: int = 2) -> pd.DataFrame:

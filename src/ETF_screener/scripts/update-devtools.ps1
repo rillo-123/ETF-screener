@@ -73,6 +73,167 @@ function Invoke-CodeCli {
     return Invoke-ExternalTool -CommandPath $CodePath -Arguments $Arguments
 }
 
+function Test-IsAdministrator {
+    try {
+        $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
+        return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {
+        return $false
+    }
+}
+
+function Get-PwshInfo {
+    $pwshCommand = Get-Command pwsh -ErrorAction SilentlyContinue
+    if (-not $pwshCommand) {
+        return [pscustomobject]@{
+            IsInstalled = $false
+            Path = $null
+            Version = $null
+            InstallType = "missing"
+        }
+    }
+
+    $pwshPath = $pwshCommand.Source
+    $pwshVersion = $null
+    try {
+        $versionText = (& $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>$null |
+            Select-Object -First 1).Trim()
+        if ($versionText) {
+            $pwshVersion = [version]$versionText
+        }
+    } catch {
+        $pwshVersion = $null
+    }
+
+    $installType = "other"
+    $programFilesPath = [System.IO.Path]::GetFullPath($Env:ProgramFiles)
+    $machinePwshRoot = Join-Path $programFilesPath "PowerShell"
+    $windowsAppsRoot = Join-Path $programFilesPath "WindowsApps"
+    $dotnetToolsRoot = [System.IO.Path]::GetFullPath((Join-Path $HOME ".dotnet\tools"))
+
+    if ($pwshPath.StartsWith($dotnetToolsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $installType = "dotnet-tool"
+    } elseif ($pwshPath.StartsWith($windowsAppsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $installType = "msix"
+    } elseif ($pwshPath.StartsWith($machinePwshRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $installType = "msi"
+    }
+
+    return [pscustomobject]@{
+        IsInstalled = $true
+        Path = $pwshPath
+        Version = $pwshVersion
+        InstallType = $installType
+    }
+}
+
+function Get-LatestPwshVersionFromWinget {
+    try {
+        $searchResult = Invoke-WingetCli -Arguments @(
+            "search",
+            "--id", "Microsoft.PowerShell",
+            "--exact",
+            "--source", "winget",
+            "--accept-source-agreements"
+        )
+
+        foreach ($line in $searchResult.Output) {
+            if ($line -match 'Microsoft\.PowerShell\s+([0-9][0-9A-Za-z\.\-]+)\s*$') {
+                return [version]$matches[1]
+            }
+        }
+    } catch {
+        return $null
+    }
+
+    return $null
+}
+
+function Invoke-PwshMaintenance {
+    $result = [pscustomobject]@{
+        Success = $true
+        Status  = "Not run"
+    }
+
+    Write-Host "Checking PowerShell (pwsh) installation..." -ForegroundColor Cyan
+
+    $pwshInfo = Get-PwshInfo
+    $latestVersion = Get-LatestPwshVersionFromWinget
+    if ($null -eq $latestVersion) {
+        Write-Host "Could not determine the latest PowerShell version from winget." -ForegroundColor Yellow
+        $result.Success = $false
+        $result.Status = "Could not determine latest version"
+        return $result
+    }
+
+    if ($pwshInfo.Version -and $pwshInfo.Version -ge $latestVersion) {
+        Write-Host "PowerShell $($pwshInfo.Version) is already up to date." -ForegroundColor Green
+        $result.Status = "Already current ($($pwshInfo.Version))"
+        return $result
+    }
+
+    if ($pwshInfo.IsInstalled) {
+        $detectedVersion = if ($pwshInfo.Version) { $pwshInfo.Version.ToString() } else { "unknown" }
+        Write-Host "PowerShell $detectedVersion detected at $($pwshInfo.Path); latest is $latestVersion" -ForegroundColor Cyan
+    } else {
+        Write-Host "PowerShell (pwsh) is not installed; latest is $latestVersion" -ForegroundColor Cyan
+    }
+
+    switch ($pwshInfo.InstallType) {
+        "dotnet-tool" {
+            Write-Host "pwsh is installed as a .NET global tool; update it with: dotnet tool update --global PowerShell" -ForegroundColor Yellow
+            $result.Status = "Skipped (.NET global tool)"
+            return $result
+        }
+        "other" {
+            if ($pwshInfo.IsInstalled) {
+                Write-Host "pwsh is not in a standard winget-managed location; continuing without auto-update" -ForegroundColor Yellow
+                $result.Status = "Skipped (unsupported install)"
+                return $result
+            }
+        }
+    }
+
+    if ($pwshInfo.IsInstalled -and $pwshInfo.InstallType -eq "msi" -and -not (Test-IsAdministrator)) {
+        Write-Host "This pwsh install uses a machine-wide MSI path. Re-run an elevated shell to update it automatically." -ForegroundColor Yellow
+        $result.Status = "Skipped (requires administrator)"
+        return $result
+    }
+
+    $wingetArgs = @(
+        if ($pwshInfo.IsInstalled) { "upgrade" } else { "install" }
+        "--id", "Microsoft.PowerShell"
+        "--exact"
+        "--source", "winget"
+        "--accept-source-agreements"
+        "--accept-package-agreements"
+        "--silent"
+        "--disable-interactivity"
+    )
+
+    if (-not $pwshInfo.IsInstalled) {
+        $wingetArgs += @("--scope", "user")
+    }
+
+    Write-Host "$(if ($pwshInfo.IsInstalled) { 'Updating' } else { 'Installing' }) PowerShell via winget..." -ForegroundColor Cyan
+    $wingetResult = Invoke-WingetCli -Arguments $wingetArgs
+    if ($wingetResult.Output.Count -gt 0) {
+        Write-ExternalOutput -Lines $wingetResult.Output
+    }
+
+    if ($wingetResult.ExitCode -eq 0) {
+        Write-Host "PowerShell update complete. Start a new shell to use version $latestVersion." -ForegroundColor Green
+        $result.Status = "$(if ($pwshInfo.IsInstalled) { 'Updated' } else { 'Installed' }) to $latestVersion"
+    } else {
+        Write-Host "PowerShell update did not complete (winget exit code $($wingetResult.ExitCode)); continuing with the current shell" -ForegroundColor Yellow
+        $result.Success = $false
+        $result.Status = "Update failed (exit code $($wingetResult.ExitCode))"
+    }
+
+    return $result
+}
+
 function Resolve-VsCodeCliPath {
     param(
         [Parameter(Mandatory = $true)][string]$CommandName,
@@ -185,6 +346,7 @@ function Get-ExtensionUpdateErrors {
 function Invoke-UpdateDevtools {
     $overallSuccess = $true
     $channelStatuses = @()
+    $pwshStatus = "Not run"
 
     Write-Host "--- Devtools Maintenance ---" -ForegroundColor Cyan
 
@@ -302,11 +464,18 @@ function Invoke-UpdateDevtools {
         }
     }
 
+    $pwshResult = Invoke-PwshMaintenance
+    $pwshStatus = $pwshResult.Status
+    if (-not $pwshResult.Success) {
+        $overallSuccess = $false
+    }
+
     Write-Host "Summary:" -ForegroundColor Cyan
     foreach ($channelStatus in $channelStatuses) {
         Write-Host "  $($channelStatus.Name): $($channelStatus.AppStatus)"
         Write-Host "    Extensions: $($channelStatus.Extensions)"
     }
+    Write-Host "  PowerShell: $pwshStatus"
 
     if ($overallSuccess) {
         Write-Host "Devtools maintenance completed successfully." -ForegroundColor Green

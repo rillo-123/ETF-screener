@@ -69,7 +69,9 @@ class YFinanceFetcher:
         Returns:
             DataFrame with columns: Date, Open, High, Low, Close, Volume, Dividends
         """
-        resolved_end = pd.to_datetime(end_date).to_pydatetime() if end_date else datetime.now()
+        resolved_end = (
+            pd.to_datetime(end_date).to_pydatetime() if end_date else datetime.now()
+        )
         if start_date is not None:
             resolved_start = pd.to_datetime(start_date).to_pydatetime()
         else:
@@ -102,7 +104,9 @@ class YFinanceFetcher:
                         time.sleep(0.5 * (attempt + 1))
 
         if df.empty:
-            logger.warning(f"No data found for symbol: {symbol} (tried .DE and .F if applicable)")
+            logger.warning(
+                f"No data found for symbol: {symbol} (tried .DE and .F if applicable)"
+            )
             raise ValueError(f"No data found for symbol: {symbol}")
 
         return df

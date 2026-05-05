@@ -94,3 +94,55 @@ class TestDSLRobustness:
         res = bt.scripted_strategy(trend_data, "TEST_COMPLEX", entry, exit_rule)
         df = res["df"] if isinstance(res, dict) else res
         assert "signal" in df.columns
+
+    @pytest.mark.parametrize(
+        "entry_rule",
+        [
+            "within(close < ema_20, 2, 3)",
+            "between(close < ema_20, 2, 3)",
+        ],
+    )
+    def test_interval_helpers_trigger_on_expected_bar(self, bt, entry_rule):
+        """Test interval-based lookbacks expand into the expected bar window."""
+        df = pd.DataFrame(
+            {
+                "Date": pd.date_range(start="2024-01-01", periods=5),
+                "open": [12, 12, 9, 12, 12],
+                "high": [13, 13, 10, 13, 13],
+                "low": [11, 11, 8, 11, 11],
+                "close": [12, 12, 9, 12, 12],
+                "volume": [1000, 1000, 1000, 1000, 1000],
+                "ema_20": [10, 10, 10, 10, 10],
+            }
+        )
+
+        res = bt.scripted_strategy(df, "TEST_INTERVAL", entry_rule, "False")
+        out = res["df"] if isinstance(res, dict) else res
+
+        assert out["signal"].tolist() == [0, 0, 0, 0, 1]
+
+    def test_between_now_alias_matches_numeric_zero(self, bt):
+        """Test that 'now' is accepted as the current bar offset."""
+        df = pd.DataFrame(
+            {
+                "Date": pd.date_range(start="2024-01-01", periods=4),
+                "open": [12, 12, 12, 9],
+                "high": [13, 13, 13, 10],
+                "low": [11, 11, 11, 8],
+                "close": [12, 12, 12, 9],
+                "volume": [1000, 1000, 1000, 1000],
+                "ema_20": [10, 10, 10, 10],
+            }
+        )
+
+        now_res = bt.scripted_strategy(
+            df, "TEST_NOW", "between(close < ema_20, 3, now)", "False"
+        )
+        zero_res = bt.scripted_strategy(
+            df, "TEST_ZERO", "between(close < ema_20, 0, 3)", "False"
+        )
+
+        now_df = now_res["df"] if isinstance(now_res, dict) else now_res
+        zero_df = zero_res["df"] if isinstance(zero_res, dict) else zero_res
+
+        assert now_df["signal"].tolist() == zero_df["signal"].tolist()

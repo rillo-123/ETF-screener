@@ -131,7 +131,9 @@ class InteractivePlotter:
             return "context and trigger"
 
         aggregate_cfg = self.ribbon_config.get("aggregate", {})
-        rules = aggregate_cfg.get("rules", []) if isinstance(aggregate_cfg, dict) else []
+        rules = (
+            aggregate_cfg.get("rules", []) if isinstance(aggregate_cfg, dict) else []
+        )
         if isinstance(rules, list):
             for rule in rules:
                 if not isinstance(rule, dict):
@@ -183,8 +185,10 @@ class InteractivePlotter:
 
         lane_count = 1 + max(0, num_ribbons)  # aggregated lane + ribbon lanes
         strategy_panel_px = int(self._layout_numeric_setting("strategy_panel_px", 140))
-        fixed_px = cfg.price_panel_px + cfg.volume_panel_px + (
-            max(0, num_strategy_panels) * strategy_panel_px
+        fixed_px = (
+            cfg.price_panel_px
+            + cfg.volume_panel_px
+            + (max(0, num_strategy_panels) * strategy_panel_px)
         )
         available_for_lanes = max(
             cfg.max_total_height_px - fixed_px, lane_count * cfg.min_lane_px
@@ -266,7 +270,9 @@ class InteractivePlotter:
                     )
                     merged_setup_idx = len(ribbons) - 1
                 else:
-                    existing = str(ribbons[merged_setup_idx].get("condition", "")).strip()
+                    existing = str(
+                        ribbons[merged_setup_idx].get("condition", "")
+                    ).strip()
                     ribbons[merged_setup_idx]["condition"] = " AND ".join(
                         part for part in [existing, merged_condition] if part
                     )
@@ -363,8 +369,8 @@ class InteractivePlotter:
         self, expression: str, lane_masks: dict[str, np.ndarray], length: int
     ) -> np.ndarray | None:
         """Evaluate an aggregate-style lane expression against numpy mask arrays."""
-        normalized_expr = str(expression or "").replace("_and_", " and ").replace(
-            "_or_", " or "
+        normalized_expr = (
+            str(expression or "").replace("_and_", " and ").replace("_or_", " or ")
         )
         normalized_expr = re.sub(r"\band\b", "&", normalized_expr)
         normalized_expr = re.sub(r"\bor\b", "|", normalized_expr)
@@ -539,9 +545,7 @@ class InteractivePlotter:
             return name.replace("_", " ").title()
         return name.replace("_", " ").title()
 
-    def _classify_strategy_indicator(
-        self, column_name: str, series: pd.Series
-    ) -> str:
+    def _classify_strategy_indicator(self, column_name: str, series: pd.Series) -> str:
         """Group indicator curves into reasonable subplot families."""
         lower = str(column_name).lower()
         if lower == "vol_ema_20":
@@ -711,6 +715,8 @@ class InteractivePlotter:
             "cross_up",
             "cross_down",
             "was_true",
+            "within",
+            "between",
         }
 
         def repl(m):
@@ -724,6 +730,33 @@ class InteractivePlotter:
             return f"{word}_d{delay}"
 
         return re.sub(r"([a-z][a-z0-9_]*)\b", repl, expr)
+
+    def _split_dsl_args(self, raw: str) -> list[str]:
+        parts: list[str] = []
+        depth = 0
+        buf: list[str] = []
+        for ch in raw:
+            if ch == "," and depth == 0:
+                item = "".join(buf).strip()
+                if item:
+                    parts.append(item)
+                buf = []
+                continue
+            if ch == "(":
+                depth += 1
+            elif ch == ")" and depth > 0:
+                depth -= 1
+            buf.append(ch)
+        item = "".join(buf).strip()
+        if item:
+            parts.append(item)
+        return parts
+
+    def _parse_interval_bound(self, token: str) -> int:
+        cleaned = token.strip().lower()
+        if cleaned == "now":
+            return 0
+        return max(0, int(cleaned))
 
     def _prepare_eval_columns(
         self, eval_df: pd.DataFrame, condition: str
@@ -773,9 +806,13 @@ class InteractivePlotter:
                 return
 
             if regime == "green":
-                eval_df[col_name] = ((eval_df["close"] > line).fillna(False)).astype(bool)
+                eval_df[col_name] = ((eval_df["close"] > line).fillna(False)).astype(
+                    bool
+                )
             elif regime == "red":
-                eval_df[col_name] = ((eval_df["close"] < line).fillna(False)).astype(bool)
+                eval_df[col_name] = ((eval_df["close"] < line).fillna(False)).astype(
+                    bool
+                )
             elif regime == "flat":
                 eval_df[col_name] = (
                     line.diff().abs().le(1e-9).fillna(False).astype(bool)
@@ -783,9 +820,12 @@ class InteractivePlotter:
             else:
                 close_abs = eval_df["close"].abs().replace(0, np.nan)
                 eval_df[col_name] = (
-                    line.diff().abs().div(close_abs).le(0.001).fillna(False).astype(
-                        bool
-                    )
+                    line.diff()
+                    .abs()
+                    .div(close_abs)
+                    .le(0.001)
+                    .fillna(False)
+                    .astype(bool)
                 )
 
         for w in words:
@@ -815,12 +855,16 @@ class InteractivePlotter:
                     prev_nonzero = slope_sign.replace(0, np.nan).ffill().shift(1)
                     if direction == "up":
                         eval_df[w] = (
-                            (slope_sign > 0) & (prev_nonzero < 0)
-                        ).fillna(False).astype(bool)
+                            ((slope_sign > 0) & (prev_nonzero < 0))
+                            .fillna(False)
+                            .astype(bool)
+                        )
                     else:
                         eval_df[w] = (
-                            (slope_sign < 0) & (prev_nonzero > 0)
-                        ).fillna(False).astype(bool)
+                            ((slope_sign < 0) & (prev_nonzero > 0))
+                            .fillna(False)
+                            .astype(bool)
+                        )
                 continue
 
             if w.endswith("_slope"):
@@ -848,6 +892,35 @@ class InteractivePlotter:
             return f"({self._shift_expr_symbols(expr, delay)})"
 
         s = re.sub(r"was_true\s*\(([^,]+),\s*(\d+)\s*\)", wt_repl, s)
+
+        def within_repl(m):
+            content = m.group(0).split("(", 1)[1].rsplit(")", 1)[0]
+            parts = self._split_dsl_args(content)
+            if len(parts) < 2:
+                return "False"
+            expr = parts[0].strip()
+            if len(parts) == 2:
+                start, end = 0, self._parse_interval_bound(parts[1])
+            else:
+                start, end = sorted(
+                    (
+                        self._parse_interval_bound(parts[1]),
+                        self._parse_interval_bound(parts[2]),
+                    )
+                )
+            if end < start:
+                return "False"
+            terms = [
+                (
+                    f"({expr})"
+                    if delay == 0
+                    else f"({self._shift_expr_symbols(expr, delay)})"
+                )
+                for delay in range(start, end + 1)
+            ]
+            return f"({' | '.join(terms)})"
+
+        s = re.sub(r"(?:within|between)\s*\((?:[^()]+|\([^()]*\))+\)", within_repl, s)
 
         def cross_up_repl(m):
             a = m.group(1).strip()
@@ -936,7 +1009,10 @@ class InteractivePlotter:
                 )
                 seen_columns.add(column_name)
 
-            for title, family in (("Oscillators", "oscillator"), ("Momentum", "momentum")):
+            for title, family in (
+                ("Oscillators", "oscillator"),
+                ("Momentum", "momentum"),
+            ):
                 items = panel_buckets.get(family, [])
                 if items:
                     strategy_panel_groups.append({"title": title, "items": items})
@@ -1131,8 +1207,7 @@ class InteractivePlotter:
             shared_xaxes=True,
             vertical_spacing=0.0,
             row_heights=row_heights,
-            subplot_titles=
-            [f"{symbol} Analysis", "Volume"]
+            subplot_titles=[f"{symbol} Analysis", "Volume"]
             + [panel["title"] for panel in strategy_panel_groups]
             + ["Buy/Sell Conditions"]
             + [""] * num_ribbons,
@@ -1280,11 +1355,7 @@ class InteractivePlotter:
                 None,
             )
             st_col = next(
-                (
-                    c
-                    for c in df.columns
-                    if str(c).lower() in {"supertrend", "st"}
-                ),
+                (c for c in df.columns if str(c).lower() in {"supertrend", "st"}),
                 None,
             )
 
@@ -1397,7 +1468,9 @@ class InteractivePlotter:
                     name=item["label"],
                     mode="lines",
                     line=dict(
-                        color=strategy_curve_palette[item_idx % len(strategy_curve_palette)],
+                        color=strategy_curve_palette[
+                            item_idx % len(strategy_curve_palette)
+                        ],
                         width=1.4,
                     ),
                     connectgaps=False,

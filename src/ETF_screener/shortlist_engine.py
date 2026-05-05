@@ -205,22 +205,36 @@ class ETFShortlistEngine:
     @staticmethod
     def _classify_asset_class(name: str) -> str:
         upper = name.upper()
-        if any(keyword in upper for keyword in ["BOND", "TREAS", "GILT", "CORP", "AGG"]):
+        if any(
+            keyword in upper for keyword in ["BOND", "TREAS", "GILT", "CORP", "AGG"]
+        ):
             return "Bond"
-        if any(keyword in upper for keyword in ["GOLD", "SILVER", "OIL", "COPPER", "ETC"]):
+        if any(
+            keyword in upper for keyword in ["GOLD", "SILVER", "OIL", "COPPER", "ETC"]
+        ):
             return "Commodity"
-        if any(keyword in upper for keyword in ["BITCOIN", "ETHEREUM", "CRYPTO", "DIGITAL"]):
+        if any(
+            keyword in upper for keyword in ["BITCOIN", "ETHEREUM", "CRYPTO", "DIGITAL"]
+        ):
             return "Crypto"
         return "Equity"
 
     @staticmethod
     def _classify_region(name: str) -> str:
         upper = name.upper()
-        if any(keyword in upper for keyword in ["WORLD", "ALL-WORLD", "ACWI", "MSCI AC"]):
+        if any(
+            keyword in upper for keyword in ["WORLD", "ALL-WORLD", "ACWI", "MSCI AC"]
+        ):
             return "Global"
-        if any(keyword in upper for keyword in ["S&P 500", "SP500", "USA", "US ", "NASDAQ", "RUSSELL"]):
+        if any(
+            keyword in upper
+            for keyword in ["S&P 500", "SP500", "USA", "US ", "NASDAQ", "RUSSELL"]
+        ):
             return "United States"
-        if any(keyword in upper for keyword in ["EUROPE", "STOXX", "EMU", "EURO ", "MSCI EUROPE"]):
+        if any(
+            keyword in upper
+            for keyword in ["EUROPE", "STOXX", "EMU", "EURO ", "MSCI EUROPE"]
+        ):
             return "Europe"
         if any(keyword in upper for keyword in ["DAX", "GERMANY", "GERMAN"]):
             return "Germany"
@@ -237,7 +251,9 @@ class ETFShortlistEngine:
     @staticmethod
     def _classify_style(name: str) -> str:
         upper = name.upper()
-        if any(keyword in upper for keyword in ["2X", "3X", "LEVDAX", "DAILY", "LEVER"]):
+        if any(
+            keyword in upper for keyword in ["2X", "3X", "LEVDAX", "DAILY", "LEVER"]
+        ):
             return "Leveraged"
         if any(keyword in upper for keyword in ["SHORT", "INVERSE", "BEAR"]):
             return "Inverse"
@@ -254,7 +270,9 @@ class ETFShortlistEngine:
             ]
         ):
             return "Core Broad Market"
-        if any(keyword in upper for keyword in ["DIVID", "VALUE", "QUALITY", "MIN VOL"]):
+        if any(
+            keyword in upper for keyword in ["DIVID", "VALUE", "QUALITY", "MIN VOL"]
+        ):
             return "Factor Income"
         if any(
             keyword in upper
@@ -294,7 +312,9 @@ class ETFShortlistEngine:
             "source": str(self.metadata_path),
         }
 
-    def _score_product(self, meta: dict[str, Any], volume: float) -> tuple[float, list[str]]:
+    def _score_product(
+        self, meta: dict[str, Any], volume: float
+    ) -> tuple[float, list[str]]:
         score = 50.0
         reasons: list[str] = []
 
@@ -436,7 +456,10 @@ class ETFShortlistEngine:
 
     @staticmethod
     def _label_row(
-        product_score: float, exposure_score: float, technical_score: float, final_score: float
+        product_score: float,
+        exposure_score: float,
+        technical_score: float,
+        final_score: float,
     ) -> str:
         if final_score >= 70 and product_score >= 55 and technical_score >= 60:
             return "Buy"
@@ -458,8 +481,8 @@ class ETFShortlistEngine:
 
         product_score, product_reasons = self._score_product(meta, volume)
         exposure_score, exposure_reasons = self._score_exposure(meta)
-        technical_score, technical_components, technical_reasons = self._score_technical(
-            df, recent_entry_days
+        technical_score, technical_components, technical_reasons = (
+            self._score_technical(df, recent_entry_days)
         )
         final_score = round(
             (0.40 * product_score) + (0.20 * exposure_score) + (0.40 * technical_score),

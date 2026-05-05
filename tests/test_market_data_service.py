@@ -4,6 +4,7 @@ from datetime import date, timedelta
 import pandas as pd
 
 from ETF_screener.database import ETFDatabase
+from ETF_screener.delisting_tracker import DelistingTracker
 from ETF_screener.indicators import add_indicators
 from ETF_screener.market_data_service import MarketDataRefresher
 from ETF_screener.storage import ParquetStorage
@@ -12,7 +13,9 @@ from ETF_screener.storage import ParquetStorage
 def test_market_data_refresher_status_marks_stale_data(tmp_path):
     db_path = tmp_path / "etfs.db"
     etfs_path = tmp_path / "etfs.json"
-    etfs_path.write_text(json.dumps({"AAA.DE": {"name": "Alpha ETF"}}), encoding="utf-8")
+    etfs_path.write_text(
+        json.dumps({"AAA.DE": {"name": "Alpha ETF"}}), encoding="utf-8"
+    )
 
     db = ETFDatabase(db_path=str(db_path))
     stale_day = (date.today() - timedelta(days=8)).isoformat()
@@ -97,13 +100,48 @@ def test_market_data_refresher_excludes_blacklisted_tickers(tmp_path):
     assert status["is_stale"] is False
 
 
+def test_delisting_tracker_promotes_missing_tickers_after_14_days(tmp_path):
+    blacklist_path = tmp_path / "blacklist.json"
+    missing_path = tmp_path / "delisting_state.json"
+    blacklist_path.write_text(json.dumps({}), encoding="utf-8")
+    missing_path.write_text(json.dumps({}), encoding="utf-8")
+
+    tracker = DelistingTracker(
+        blacklist_file=str(blacklist_path),
+        missing_file=str(missing_path),
+    )
+
+    tracker.mark_missing(
+        "AAA.DE",
+        reason="No data found during refresh",
+        observed_on=date.today() - timedelta(days=15),
+    )
+    promoted = tracker.promote_aged_missing(
+        threshold_days=14,
+        today=date.today(),
+    )
+
+    blacklist = tracker.load_blacklist()
+    missing = tracker.load_missing_state()
+
+    assert promoted == ["AAA.DE"]
+    assert "AAA.DE" in blacklist
+    assert blacklist["AAA.DE"]["status"] == "invalid"
+    assert blacklist["AAA.DE"]["reason"] == "No data found during refresh"
+    assert missing == {}
+
+
 def test_market_data_refresher_refreshes_and_rebuilds_shortlist(tmp_path, monkeypatch):
     db_path = tmp_path / "etfs.db"
     etfs_path = tmp_path / "etfs.json"
-    etfs_path.write_text(json.dumps({"AAA.DE": {"name": "Alpha ETF"}}), encoding="utf-8")
+    etfs_path.write_text(
+        json.dumps({"AAA.DE": {"name": "Alpha ETF"}}), encoding="utf-8"
+    )
 
     class FakeFetcher:
-        def fetch_historical_data(self, symbol, days=365, start_date=None, end_date=None):
+        def fetch_historical_data(
+            self, symbol, days=365, start_date=None, end_date=None
+        ):
             dates = pd.date_range(end=pd.Timestamp(date.today()), periods=5, freq="B")
             return pd.DataFrame(
                 {
@@ -141,7 +179,9 @@ def test_market_data_refresher_refreshes_and_rebuilds_shortlist(tmp_path, monkey
 
     result = refresher.refresh_market_data(force=True, max_workers=1)
     db = ETFDatabase(db_path=str(db_path))
-    latest_business_day = pd.bdate_range(end=pd.Timestamp(date.today()), periods=1)[0].date()
+    latest_business_day = pd.bdate_range(end=pd.Timestamp(date.today()), periods=1)[
+        0
+    ].date()
 
     assert result["refreshed"] == 1
     assert result["failed"] == 0
@@ -156,7 +196,9 @@ def test_market_data_refresher_refreshes_and_rebuilds_shortlist(tmp_path, monkey
 def test_market_data_refresher_zero_day_threshold_tops_up_yesterday(tmp_path):
     db_path = tmp_path / "etfs.db"
     etfs_path = tmp_path / "etfs.json"
-    etfs_path.write_text(json.dumps({"AAA.DE": {"name": "Alpha ETF"}}), encoding="utf-8")
+    etfs_path.write_text(
+        json.dumps({"AAA.DE": {"name": "Alpha ETF"}}), encoding="utf-8"
+    )
 
     yesterday = date.today() - timedelta(days=1)
     db = ETFDatabase(db_path=str(db_path))
@@ -177,7 +219,9 @@ def test_market_data_refresher_zero_day_threshold_tops_up_yesterday(tmp_path):
     calls = []
 
     class FakeFetcher:
-        def fetch_historical_data(self, symbol, days=365, start_date=None, end_date=None):
+        def fetch_historical_data(
+            self, symbol, days=365, start_date=None, end_date=None
+        ):
             calls.append(symbol)
             return pd.DataFrame(
                 {
@@ -213,7 +257,9 @@ def test_market_data_refresher_zero_day_threshold_tops_up_yesterday(tmp_path):
 def test_market_data_refresher_uses_delta_window_for_stale_ticker(tmp_path):
     db_path = tmp_path / "etfs.db"
     etfs_path = tmp_path / "etfs.json"
-    etfs_path.write_text(json.dumps({"AAA.DE": {"name": "Alpha ETF"}}), encoding="utf-8")
+    etfs_path.write_text(
+        json.dumps({"AAA.DE": {"name": "Alpha ETF"}}), encoding="utf-8"
+    )
 
     stale_end = date.today() - timedelta(days=8)
     existing_dates = pd.date_range(end=pd.Timestamp(stale_end), periods=120, freq="B")
@@ -238,15 +284,21 @@ def test_market_data_refresher_uses_delta_window_for_stale_ticker(tmp_path):
     calls = []
 
     class FakeFetcher:
-        def fetch_historical_data(self, symbol, days=365, start_date=None, end_date=None):
+        def fetch_historical_data(
+            self, symbol, days=365, start_date=None, end_date=None
+        ):
             calls.append(
                 {
                     "symbol": symbol,
                     "days": days,
-                    "start_date": pd.to_datetime(start_date).date() if start_date else None,
+                    "start_date": (
+                        pd.to_datetime(start_date).date() if start_date else None
+                    ),
                 }
             )
-            fresh_dates = pd.date_range(start=pd.Timestamp(start_date), end=pd.Timestamp(date.today()), freq="B")
+            fresh_dates = pd.date_range(
+                start=pd.Timestamp(start_date), end=pd.Timestamp(date.today()), freq="B"
+            )
             return pd.DataFrame(
                 {
                     "Date": fresh_dates,
@@ -266,11 +318,15 @@ def test_market_data_refresher_uses_delta_window_for_stale_ticker(tmp_path):
     )
 
     refreshed_df = refresher.refresh_ticker_data("AAA.DE", depth=400)
-    latest_business_day = pd.bdate_range(end=pd.Timestamp(date.today()), periods=1)[0].date()
+    latest_business_day = pd.bdate_range(end=pd.Timestamp(date.today()), periods=1)[
+        0
+    ].date()
 
     assert calls, "Expected an incremental fetch call"
     latest_existing_day = existing_df["Date"].max().date()
-    assert calls[0]["start_date"] == latest_existing_day - timedelta(days=refresher.INDICATOR_WARMUP_DAYS)
+    assert calls[0]["start_date"] == latest_existing_day - timedelta(
+        days=refresher.INDICATOR_WARMUP_DAYS
+    )
     assert refreshed_df["Date"].max().date() == latest_business_day
     assert len(refreshed_df) > len(existing_df)
 
@@ -278,9 +334,13 @@ def test_market_data_refresher_uses_delta_window_for_stale_ticker(tmp_path):
 def test_market_data_refresher_preserves_timezone_aware_fresh_rows(tmp_path):
     db_path = tmp_path / "etfs.db"
     etfs_path = tmp_path / "etfs.json"
-    etfs_path.write_text(json.dumps({"AAA.DE": {"name": "Alpha ETF"}}), encoding="utf-8")
+    etfs_path.write_text(
+        json.dumps({"AAA.DE": {"name": "Alpha ETF"}}), encoding="utf-8"
+    )
 
-    existing_dates = pd.date_range(end=pd.Timestamp(date.today() - timedelta(days=2)), periods=5, freq="B")
+    existing_dates = pd.date_range(
+        end=pd.Timestamp(date.today() - timedelta(days=2)), periods=5, freq="B"
+    )
     existing_df = pd.DataFrame(
         {
             "Date": existing_dates,
@@ -298,9 +358,13 @@ def test_market_data_refresher_preserves_timezone_aware_fresh_rows(tmp_path):
     storage.save_etf_data(existing_df, "AAA.DE")
 
     class FakeFetcher:
-        def fetch_historical_data(self, symbol, days=365, start_date=None, end_date=None):
+        def fetch_historical_data(
+            self, symbol, days=365, start_date=None, end_date=None
+        ):
             fresh_dates = pd.date_range(
-                start=pd.Timestamp(date.today() - timedelta(days=2), tz="Europe/Berlin"),
+                start=pd.Timestamp(
+                    date.today() - timedelta(days=2), tz="Europe/Berlin"
+                ),
                 end=pd.Timestamp(date.today(), tz="Europe/Berlin"),
                 freq="B",
             )
@@ -323,7 +387,9 @@ def test_market_data_refresher_preserves_timezone_aware_fresh_rows(tmp_path):
     )
 
     refreshed_df = refresher.refresh_ticker_data("AAA.DE", depth=30, warmup_days=10)
-    latest_business_day = pd.bdate_range(end=pd.Timestamp(date.today()), periods=1)[0].date()
+    latest_business_day = pd.bdate_range(end=pd.Timestamp(date.today()), periods=1)[
+        0
+    ].date()
 
     assert refreshed_df["Date"].max().date() == latest_business_day
     assert db.get_latest_date("AAA.DE") == latest_business_day.isoformat()

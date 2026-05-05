@@ -201,9 +201,9 @@
           Screener controls
         </div>
         <div id="nav-screener-controls" class="flex items-center space-x-4">
-          <div class="flex items-center">
+          <div class="flex items-center h-10">
           <button onclick="toggleStrategyPanel()"
-            class="h-10 bg-indigo-600 hover:bg-indigo-700 text-white px-3 rounded-l-lg border border-indigo-500/50 flex items-center transition-all">
+            class="h-10 bg-indigo-600 hover:bg-indigo-700 text-white px-3 rounded-l-lg border border-indigo-500/50 flex items-center justify-center leading-none transition-all">
             <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
@@ -212,7 +212,7 @@
             Labs
           </button>
           <button id="modify-btn" onclick="modifyStrategy()"
-            class="h-10 bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold px-3 border border-l-0 border-amber-400/60 transition-all flex items-center whitespace-nowrap"
+            class="h-10 bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold px-3 border border-l-0 border-amber-400/60 transition-all flex items-center justify-center leading-none whitespace-nowrap"
             title="Open strategy in editor to modify and save as a new file">
             <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -222,14 +222,14 @@
             Modify
           </button>
           <select id="strategy-select" onchange="updateEditorContent(this.value)"
-            class="h-10 bg-slate-800 text-white px-3 border border-l-0 border-indigo-500/50 min-w-[200px]">
+            class="h-10 bg-slate-800 text-white px-3 border border-l-0 border-indigo-500/50 min-w-[200px] leading-none">
             <option value="">-- Select Screener Strategy --</option>
             {% for strat in strategies %}
             <option value="{{ strat }}">{{ strat }}</option>
             {% endfor %}
           </select>
           <button id="run-btn" onclick="runScreen()"
-            class="h-10 bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-3 border border-l-0 border-green-500/60 rounded-r-lg transition-all flex items-center whitespace-nowrap"
+            class="h-10 bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-3 border border-l-0 border-green-500/60 rounded-r-lg transition-all flex items-center justify-center leading-none whitespace-nowrap"
             title="Run the selected strategy in the Screener tab">
             <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24">
               <path d="M5 3l14 9-14 9V3z" />
@@ -335,7 +335,14 @@
         <div class="bg-white shadow-xl rounded-xl p-4 overflow-hidden max-h-[65vh] border-t-4 border-indigo-500 flex flex-col">
           <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
             Top Matches
-            <span id="match-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">0</span>
+            <div class="flex items-center gap-2">
+              <button id="export-matches-btn" type="button" onclick="exportTopMatches()"
+                class="text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-600 text-white border border-emerald-500/60 hover:bg-emerald-500 transition-colors"
+                title="Create and download a CSV of the current top matches">
+                Export CSV
+              </button>
+              <span id="match-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">0</span>
+            </div>
           </h2>
           <div id="ticker-list" class="space-y-2 pb-6 overflow-y-auto flex-1 h-full">
             <!-- Ticker list items will appear here -->

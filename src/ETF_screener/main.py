@@ -31,6 +31,7 @@ from ETF_screener.data_fetcher import FinnhubFetcher
 from ETF_screener.database import ETFDatabase
 from ETF_screener.backtester import Backtester
 from ETF_screener.etf_discovery import ETFDiscovery
+from ETF_screener.delisting_tracker import DelistingTracker
 
 from ETF_screener.indicators import (
     add_indicators,
@@ -1236,8 +1237,15 @@ def refresh_database(
             print("[ERROR] No tickers available for refresh. Exiting.")
             return
 
-        # Load blacklist
-        raw_blacklist = extractor.blacklist if hasattr(extractor, "blacklist") else {}
+        # Load blacklist and promote any long-lived missing symbols first.
+        tracker = DelistingTracker(blacklist_file=blacklist_file)
+        promoted = tracker.promote_aged_missing(threshold_days=14)
+        if promoted:
+            print(
+                f"[INFO] Promoted {len(promoted)} missing tickers to blacklist after 14 days of non-existence."
+            )
+        raw_blacklist = tracker.load_blacklist()
+        extractor.blacklist = dict(raw_blacklist)
         blacklist = {str(k).upper(): v for k, v in raw_blacklist.items()}
 
         # Filter out blacklisted tickers (unless --include-blacklist)
@@ -1332,10 +1340,14 @@ def refresh_database(
                 except ValueError as e:
                     if "No data found for symbol" in str(e):
                         pbar.write(f"[ERROR] No data found for {ticker}")
-                        # Blacklist if it's a new or problematic ticker to speed up future refreshes
-                        extractor.add_to_blacklist(
+                        tracker.mark_missing(
                             ticker, reason="No data found during refresh"
                         )
+                        promoted = tracker.promote_aged_missing(threshold_days=14)
+                        if ticker.upper() in promoted:
+                            pbar.write(
+                                f"[INFO] {ticker} has been missing for 14+ days and was promoted to blacklist."
+                            )
                         failed += 1
                         continue
                     else:
@@ -1343,23 +1355,29 @@ def refresh_database(
 
                 if df is None or df.empty:
                     pbar.write(f"[ERROR] No data found for {ticker}")
-                    extractor.add_to_blacklist(
-                        ticker, reason="No data found during refresh"
-                    )
+                    tracker.mark_missing(ticker, reason="No data found during refresh")
+                    promoted = tracker.promote_aged_missing(threshold_days=14)
+                    if ticker.upper() in promoted:
+                        pbar.write(
+                            f"[INFO] {ticker} has been missing for 14+ days and was promoted to blacklist."
+                        )
                     failed += 1
                     continue
 
-                # Check for "stale" or delisted data (more than 5 days old)
+                # Check for stale data that may indicate a delisted symbol.
                 from datetime import date
 
                 latest_date = df["Date"].max().date()
-                if (date.today() - latest_date).days > 5:
+                if (date.today() - latest_date).days > 14:
                     pbar.write(
-                        f"[WARN] {ticker} data is stale (Latest date: {latest_date}). Adding to blacklist."
+                        f"[WARN] {ticker} data is stale (Latest date: {latest_date}). Promoting to blacklist if it remains stale."
                     )
-                    extractor.add_to_blacklist(
-                        ticker, reason="Stale data (likely delisted)"
-                    )
+                    tracker.mark_missing(ticker, reason="Stale data (likely delisted)")
+                    promoted = tracker.promote_aged_missing(threshold_days=14)
+                    if ticker.upper() in promoted:
+                        pbar.write(
+                            f"[INFO] {ticker} stale data exceeded 14 days and was promoted to blacklist."
+                        )
                     skipped += 1
                     continue
 

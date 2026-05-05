@@ -13,6 +13,7 @@ from typing import Any, Optional
 import pandas as pd
 
 from ETF_screener.database import ETFDatabase
+from ETF_screener.delisting_tracker import DelistingTracker
 from ETF_screener.indicators import add_indicators
 from ETF_screener.shortlist_engine import ETFShortlistEngine
 from ETF_screener.storage import ParquetStorage
@@ -36,9 +37,12 @@ class MarketDataRefresher:
         self.db = ETFDatabase(db_path=db_path)
         self.etfs_file = Path(etfs_file)
         self.blacklist_file = Path(blacklist_file)
+        self.delisting_tracker = DelistingTracker(blacklist_file=self.blacklist_file)
         self.fetcher = fetcher or YFinanceFetcher()
         self.storage = storage or ParquetStorage()
-        self.collection_mode = "all" if str(collection_mode).strip().lower() == "all" else "active"
+        self.collection_mode = (
+            "all" if str(collection_mode).strip().lower() == "all" else "active"
+        )
 
     @staticmethod
     def _parse_day(raw: str | None) -> Optional[date]:
@@ -73,7 +77,9 @@ class MarketDataRefresher:
         elif isinstance(raw, (list, tuple, set)):
             values = list(raw)
         elif isinstance(raw, str):
-            values = [item for item in raw.replace(";", ",").replace("\n", ",").split(",")]
+            values = [
+                item for item in raw.replace(";", ",").replace("\n", ",").split(",")
+            ]
         else:
             values = [raw]
         tickers: list[str] = []
@@ -95,11 +101,17 @@ class MarketDataRefresher:
                     if self.collection_mode == "all":
                         for entry in lists:
                             if isinstance(entry, dict):
-                                tickers.update(self._normalize_ticker_values(entry.get("tickers", [])))
+                                tickers.update(
+                                    self._normalize_ticker_values(
+                                        entry.get("tickers", [])
+                                    )
+                                )
                             else:
                                 tickers.update(self._normalize_ticker_values(entry))
                     else:
-                        active_name = str(raw.get("active_name") or raw.get("name") or "").strip()
+                        active_name = str(
+                            raw.get("active_name") or raw.get("name") or ""
+                        ).strip()
                         active_entry = None
                         if active_name:
                             for entry in lists:
@@ -109,13 +121,23 @@ class MarketDataRefresher:
                                 if entry_name == active_name:
                                     active_entry = entry
                                     break
-                        if active_entry is None and isinstance(raw.get("active_list"), dict):
+                        if active_entry is None and isinstance(
+                            raw.get("active_list"), dict
+                        ):
                             active_entry = raw.get("active_list")
                         if active_entry is not None:
-                            tickers.update(self._normalize_ticker_values(active_entry.get("tickers", [])))
+                            tickers.update(
+                                self._normalize_ticker_values(
+                                    active_entry.get("tickers", [])
+                                )
+                            )
                         else:
-                            tickers.update(self._normalize_ticker_values(raw.get("tickers", [])))
-                    return sorted(ticker for ticker in tickers if ticker not in blacklist)
+                            tickers.update(
+                                self._normalize_ticker_values(raw.get("tickers", []))
+                            )
+                    return sorted(
+                        ticker for ticker in tickers if ticker not in blacklist
+                    )
                 if isinstance(raw.get("tickers"), list):
                     tickers.update(str(ticker).upper() for ticker in raw["tickers"])
                 else:
@@ -142,7 +164,9 @@ class MarketDataRefresher:
     @staticmethod
     def _normalize_price_frame(df: pd.DataFrame) -> pd.DataFrame:
         if df is None or df.empty:
-            return pd.DataFrame(columns=["Date", "Open", "High", "Low", "Close", "Volume"])
+            return pd.DataFrame(
+                columns=["Date", "Open", "High", "Low", "Close", "Volume"]
+            )
 
         normalized = df.copy()
         normalized = normalized.rename(
@@ -171,10 +195,18 @@ class MarketDataRefresher:
 
         normalized["Date"] = normalized["Date"].map(_coerce_date)
         normalized = normalized.dropna(subset=["Date"])
-        normalized = normalized[["Date", "Open", "High", "Low", "Close", "Volume", "Dividends"]]
-        normalized = normalized.sort_values("Date").drop_duplicates(subset=["Date"], keep="last")
-        normalized["Volume"] = pd.to_numeric(normalized["Volume"], errors="coerce").fillna(0)
-        normalized["Dividends"] = pd.to_numeric(normalized["Dividends"], errors="coerce").fillna(0)
+        normalized = normalized[
+            ["Date", "Open", "High", "Low", "Close", "Volume", "Dividends"]
+        ]
+        normalized = normalized.sort_values("Date").drop_duplicates(
+            subset=["Date"], keep="last"
+        )
+        normalized["Volume"] = pd.to_numeric(
+            normalized["Volume"], errors="coerce"
+        ).fillna(0)
+        normalized["Dividends"] = pd.to_numeric(
+            normalized["Dividends"], errors="coerce"
+        ).fillna(0)
         return normalized.reset_index(drop=True)
 
     def _load_existing_price_frame(self, ticker: str) -> pd.DataFrame:
@@ -207,7 +239,9 @@ class MarketDataRefresher:
                 end_date=datetime.now(),
             )
             fresh_slice = self._normalize_price_frame(fetched)
-            merged = self._normalize_price_frame(pd.concat([existing, fresh_slice], ignore_index=True))
+            merged = self._normalize_price_frame(
+                pd.concat([existing, fresh_slice], ignore_index=True)
+            )
 
         if merged.empty:
             raise ValueError(f"No rows returned for {ticker}")
@@ -269,7 +303,9 @@ class MarketDataRefresher:
         return {
             "today": today.isoformat(),
             "latest_market_date": market_day.isoformat() if market_day else None,
-            "latest_shortlist_date": shortlist_day.isoformat() if shortlist_day else None,
+            "latest_shortlist_date": (
+                shortlist_day.isoformat() if shortlist_day else None
+            ),
             "latest_shortlist_updated_at": shortlist_updated_at,
             "days_stale": days_stale,
             "is_stale": (
@@ -315,6 +351,9 @@ class MarketDataRefresher:
         progress_callback=None,
     ) -> dict[str, Any]:
         job = "market-refresh"
+        promoted = self.delisting_tracker.promote_aged_missing(threshold_days=14)
+        if promoted:
+            logger.info("Promoted %d missing tickers to blacklist", len(promoted))
         self._emit_progress(
             progress_callback,
             job=job,
@@ -394,9 +433,14 @@ class MarketDataRefresher:
                         raise ValueError("No rows returned")
                     self.db.insert_dataframe(df, symbol)
                     self.storage.save_etf_data(df, symbol)
+                    self.delisting_tracker.clear_missing(ticker)
                     refreshed += 1
                 except Exception as exc:
                     failed += 1
+                    message = str(exc)
+                    if "No data found" in message or "No rows returned" in message:
+                        self.delisting_tracker.mark_missing(ticker, reason=message)
+                        self.delisting_tracker.promote_aged_missing(threshold_days=14)
                     errors.append({"ticker": ticker, "error": str(exc)})
                 finally:
                     completed += 1
@@ -431,9 +475,16 @@ class MarketDataRefresher:
                             raise ValueError("No rows returned")
                         self.db.insert_dataframe(df, symbol)
                         self.storage.save_etf_data(df, symbol)
+                        self.delisting_tracker.clear_missing(ticker)
                         refreshed += 1
                     except Exception as exc:
                         failed += 1
+                        message = str(exc)
+                        if "No data found" in message or "No rows returned" in message:
+                            self.delisting_tracker.mark_missing(ticker, reason=message)
+                            self.delisting_tracker.promote_aged_missing(
+                                threshold_days=14
+                            )
                         errors.append({"ticker": ticker, "error": str(exc)})
                     finally:
                         completed += 1

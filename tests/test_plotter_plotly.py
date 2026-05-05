@@ -93,9 +93,7 @@ END
 
     # Block "CONTEXT_REGIME" → readable left gutter label with condition summary
     labels = [
-        a
-        for a in fig.layout.annotations
-        if "Context Regime" in getattr(a, "text", "")
+        a for a in fig.layout.annotations if "Context Regime" in getattr(a, "text", "")
     ]
     assert labels, "Expected left-side annotation for Context_Regime"
 
@@ -674,7 +672,9 @@ EXIT: risk_ok > 0.5
 END
 """
 
-    fig = InteractivePlotter().create_plot(df, "TEST", strategy_content=strategy_content)
+    fig = InteractivePlotter().create_plot(
+        df, "TEST", strategy_content=strategy_content
+    )
     fig_json = json.loads(fig.to_json())
     trace_names = [t.get("name", "") for t in fig_json["data"]]
     label_texts = {a.get("text", "") for a in fig_json["layout"].get("annotations", [])}
@@ -742,11 +742,15 @@ EXIT: risk_ok > 0.5
 END
 """
 
-    fig = InteractivePlotter().create_plot(df, "TEST", strategy_content=strategy_content)
+    fig = InteractivePlotter().create_plot(
+        df, "TEST", strategy_content=strategy_content
+    )
     fig_json = json.loads(fig.to_json())
 
     invalidate_y = _trace_y(
-        next(t for t in fig_json["data"] if t.get("name", "").startswith("Invalidate - "))
+        next(
+            t for t in fig_json["data"] if t.get("name", "").startswith("Invalidate - ")
+        )
     )
     aggregated_y = _trace_y(
         next(t for t in fig_json["data"] if t.get("name") == "Aggregated")
@@ -879,7 +883,9 @@ END
     )
     trace_names = [getattr(t, "name", "") for t in fig.data]
 
-    context_traces = [name for name in trace_names if str(name).startswith("Context - ")]
+    context_traces = [
+        name for name in trace_names if str(name).startswith("Context - ")
+    ]
     invalidate_traces = [
         name for name in trace_names if str(name).startswith("Invalidate - ")
     ]
@@ -1080,15 +1086,11 @@ END
     fig = InteractivePlotter().create_plot(
         df, "TEST", strategy_content=strategy_content
     )
-    st_traces = [
-        t
-        for t in fig.data
-        if getattr(t, "name", "") == "Supertrend"
-    ]
+    st_traces = [t for t in fig.data if getattr(t, "name", "") == "Supertrend"]
 
-    assert not st_traces, (
-        "Supertrend overlay should NOT be drawn when the strategy does not reference supertrend"
-    )
+    assert (
+        not st_traces
+    ), "Supertrend overlay should NOT be drawn when the strategy does not reference supertrend"
 
 
 def test_strategy_curves_include_referenced_ta_panels():

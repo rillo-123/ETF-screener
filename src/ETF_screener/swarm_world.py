@@ -82,7 +82,9 @@ class SwarmWorldEngine:
         base += 8.0 * self._safe_float(components.get("macd_above_signal"))
         return self._clamp(base, 0.0, 100.0)
 
-    def _energy_score(self, row: pd.Series, components: dict[str, Any]) -> tuple[float, float, float]:
+    def _energy_score(
+        self, row: pd.Series, components: dict[str, Any]
+    ) -> tuple[float, float, float]:
         final_score = self._safe_float(row.get("final_score"))
         technical_score = self._safe_float(row.get("technical_score"))
         product_score = self._safe_float(row.get("product_score"))
@@ -123,7 +125,9 @@ class SwarmWorldEngine:
         volume = max(1.0, self._safe_float(row.get("volume"), 1.0))
         log_volume = math.log10(volume)
         if max_log_volume > min_log_volume:
-            volume_norm = (log_volume - min_log_volume) / (max_log_volume - min_log_volume)
+            volume_norm = (log_volume - min_log_volume) / (
+                max_log_volume - min_log_volume
+            )
         else:
             volume_norm = 0.5
 
@@ -145,7 +149,9 @@ class SwarmWorldEngine:
         nodes: list[dict[str, Any]] = []
         for _, row in shortlist_df.iterrows():
             components = self._parse_components(row.get("components_json"))
-            energy, momentum_score, freshness_score = self._energy_score(row, components)
+            energy, momentum_score, freshness_score = self._energy_score(
+                row, components
+            )
             final_score = self._safe_float(row.get("final_score"))
             technical_score = self._safe_float(row.get("technical_score"))
             row_payload = {
@@ -159,7 +165,8 @@ class SwarmWorldEngine:
                 "volume": self._safe_int(row.get("volume"), 0),
                 "recent_entry_days": (
                     self._safe_int(row.get("recent_entry_days"))
-                    if row.get("recent_entry_days") is not None and not pd.isna(row.get("recent_entry_days"))
+                    if row.get("recent_entry_days") is not None
+                    and not pd.isna(row.get("recent_entry_days"))
                     else None
                 ),
                 "product_score": round(self._safe_float(row.get("product_score")), 2),
@@ -182,7 +189,9 @@ class SwarmWorldEngine:
     def grid_dimensions(cls, node_count: int) -> tuple[int, int]:
         """Return square-ish grid columns and rows for the ticker count."""
         clean_count = max(1, int(node_count or 1))
-        columns = max(1, math.ceil(math.sqrt(clean_count * (cls.WORLD_WIDTH / cls.WORLD_HEIGHT))))
+        columns = max(
+            1, math.ceil(math.sqrt(clean_count * (cls.WORLD_WIDTH / cls.WORLD_HEIGHT)))
+        )
         rows = max(1, math.ceil(clean_count / columns))
         return columns, rows
 
@@ -211,7 +220,9 @@ class SwarmWorldEngine:
                 % len(available_cells)
             ]
             if (row, col) in used_cells:
-                row, col = next(cell for cell in available_cells if cell not in used_cells)
+                row, col = next(
+                    cell for cell in available_cells if cell not in used_cells
+                )
             used_cells.add((row, col))
             node["row"] = row
             node["col"] = col
@@ -219,13 +230,17 @@ class SwarmWorldEngine:
             node["y"] = round((row + 0.5) * cell_height, 2)
             node["vx"] = 0.0
             node["vy"] = 0.0
-            node["charge"] = round(0.8 + (self._safe_float(node.get("energy")) / 100.0) * 2.2, 4)
+            node["charge"] = round(
+                0.8 + (self._safe_float(node.get("energy")) / 100.0) * 2.2, 4
+            )
             node["is_dummy"] = False
 
         return nodes
 
     def build_world(self, refresh_shortlist: bool = False) -> pd.DataFrame:
-        shortlist_df = self.shortlist_engine.get_shortlist(limit=None, refresh=refresh_shortlist)
+        shortlist_df = self.shortlist_engine.get_shortlist(
+            limit=None, refresh=refresh_shortlist
+        )
         if shortlist_df.empty:
             return pd.DataFrame()
 
@@ -256,7 +271,12 @@ class SwarmWorldEngine:
             else None
         )
 
-        if refresh or not world_date or world_date != shortlist_date or cached_version != self.ARTIFACT_VERSION:
+        if (
+            refresh
+            or not world_date
+            or world_date != shortlist_date
+            or cached_version != self.ARTIFACT_VERSION
+        ):
             self.build_world(refresh_shortlist=refresh)
 
         return self.db.get_swarm_world(limit=limit, label=label)

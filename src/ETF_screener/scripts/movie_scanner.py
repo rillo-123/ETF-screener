@@ -241,7 +241,9 @@ def movie_scanner(
                     continue
 
                 date_str = df.iloc[idx]["Date"].strftime("%Y-%m-%d")
-                days_str = "TODAY" if int(recent_days) == 0 else f"{int(recent_days)} days ago"
+                days_str = (
+                    "TODAY" if int(recent_days) == 0 else f"{int(recent_days)} days ago"
+                )
 
                 # Store as tuple (days_ago, ticker, line_text, df) for easy sorting and plotting
                 results.append(
@@ -331,7 +333,9 @@ def movie_scanner(
 
     if csv_rows:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = Path(f"{get_paths()['data']['movie_scans']}/movie_scan_{timestamp}.csv")
+        output_file = Path(
+            f"{get_paths()['data']['movie_scans']}/movie_scan_{timestamp}.csv"
+        )
         output_file.parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(csv_rows).to_csv(output_file, index=False)
         print(f"\nFull results saved to {output_file}")
@@ -339,7 +343,7 @@ def movie_scanner(
         # Keep only the 3 most recent movie scan files
         try:
             history_files = sorted(
-                Path(get_paths()['data']['movie_scans']).glob("movie_scan_*.csv"),
+                Path(get_paths()["data"]["movie_scans"]).glob("movie_scan_*.csv"),
                 key=os.path.getmtime,
                 reverse=True,
             )

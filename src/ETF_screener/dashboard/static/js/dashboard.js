@@ -3785,6 +3785,14 @@ let backtestSourceMode = "saved";
     let scanAbortController = null;
     let navScanProgressPoller = null;
     let navScanProgressJob = null;
+    let lastScreenMatches = [];
+    let lastScreenMeta = {
+      strategy_name: "",
+      scan_scope: "",
+      exchange: "",
+      ticker_list: "",
+    };
+    let exportTopMatchesInFlight = false;
     const LAST_COMPLETED_STRATEGY_KEY = "etf-discovery:last-completed-strategy";
 
     // --- Console Log Capture System ---
@@ -3966,6 +3974,22 @@ let backtestSourceMode = "saved";
       }
     }
 
+    function bumpStrategyVersion(name) {
+      const base = String(name || "").trim();
+      if (!base) {
+        return "custom_strategy_v2";
+      }
+      const match = base.match(/^(.*?)([_-])?v(\d+)$/i);
+      if (!match) {
+        return `${base}_v2`;
+      }
+      const prefix = match[1];
+      const separator = match[2] || "_";
+      const currentVersion = Number.parseInt(match[3], 10);
+      const nextVersion = Number.isFinite(currentVersion) ? currentVersion + 1 : 2;
+      return `${prefix}${separator}v${nextVersion}`;
+    }
+
     // Opens the modify modal for the current strategy or visible draft.
     async function modifyStrategy() {
       const strategySelect = document.getElementById("strategy-select");
@@ -3984,7 +4008,7 @@ let backtestSourceMode = "saved";
         const baseName = (filename && filename.value ? filename.value : "custom_strategy").trim() || "custom_strategy";
 
         document.getElementById("modify-modal-editor").value = existingDsl;
-        document.getElementById("modify-modal-name").value = `${baseName}_v2`;
+        document.getElementById("modify-modal-name").value = bumpStrategyVersion(baseName);
         document.getElementById("modify-modal-source").textContent = "Based on: unsaved editor content";
         sourceStrategyName = baseName;
 
@@ -3995,7 +4019,7 @@ let backtestSourceMode = "saved";
 
       // Open immediately, then load the exact file content for the selected strategy.
       document.getElementById("modify-modal-editor").value = "Loading strategy file...";
-      document.getElementById("modify-modal-name").value = strategyName + "_v2";
+      document.getElementById("modify-modal-name").value = bumpStrategyVersion(strategyName);
       document.getElementById("modify-modal-source").textContent = "Based on: " + strategyName;
       sourceStrategyName = strategyName;
       modal.style.display = "flex";
@@ -4071,6 +4095,84 @@ let backtestSourceMode = "saved";
         }
       } catch (err) {
         showToast("Save failed: " + err, true);
+      }
+    }
+
+    function syncExportMatchesButtonState() {
+      const button = document.getElementById("export-matches-btn");
+      if (!button) {
+        return;
+      }
+      const busy = exportTopMatchesInFlight;
+      button.dataset.busy = busy ? "1" : "0";
+      button.classList.toggle("opacity-80", busy);
+      button.classList.toggle("cursor-wait", busy);
+    }
+
+    function setLastScreenMatches(matches, meta = {}) {
+      lastScreenMatches = Array.isArray(matches) ? matches.slice() : [];
+      lastScreenMeta = {
+        strategy_name: String(meta.strategy_name || meta.strategy || currentStrategy || "").trim(),
+        scan_scope: String(meta.scan_scope || "").trim(),
+        exchange: String(meta.exchange || "").trim(),
+        ticker_list: String(meta.ticker_list || "").trim(),
+      };
+      syncExportMatchesButtonState();
+    }
+
+    async function exportTopMatches() {
+      if (exportTopMatchesInFlight) {
+        return;
+      }
+      if (!Array.isArray(lastScreenMatches) || lastScreenMatches.length === 0) {
+        showToast("Run the screener first so there are matches to export.", true);
+        return;
+      }
+
+      const button = document.getElementById("export-matches-btn");
+      exportTopMatchesInFlight = true;
+      syncExportMatchesButtonState();
+      if (button) {
+        button.textContent = "Exporting...";
+      }
+
+      try {
+        const resp = await fetch("/api/screen/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            matches: lastScreenMatches,
+            strategy_name: lastScreenMeta.strategy_name || currentStrategy || "Top Matches",
+            scan_scope: lastScreenMeta.scan_scope || "",
+            exchange: lastScreenMeta.exchange || "",
+            ticker_list: lastScreenMeta.ticker_list || "",
+          }),
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          throw new Error(data.detail || "Failed to export top matches");
+        }
+        const blob = await resp.blob();
+        const header = resp.headers.get("content-disposition") || "";
+        const fileMatch = header.match(/filename="?([^";]+)"?/i);
+        const filename = fileMatch ? fileMatch[1] : "top_matches.csv";
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+        showToast(`CSV exported as ${filename}`);
+      } catch (err) {
+        showToast(`Export failed: ${err}`, true);
+      } finally {
+        exportTopMatchesInFlight = false;
+        if (button) {
+          button.textContent = "Export CSV";
+        }
+        syncExportMatchesButtonState();
       }
     }
 
@@ -4350,6 +4452,11 @@ let backtestSourceMode = "saved";
         } else {
           currentStrategy = "";
         }
+        setLastScreenMatches([], {
+          strategy_name: currentStrategy || (customDsl ? "Editor Draft" : ""),
+          scan_scope: normalizeScanScope(tickerScanScope),
+          ticker_list: universeParams.get("ticker_list") || "",
+        });
         console.log("Screen scan starting with URL:", url);
         console.log("Current strategy:", currentStrategy);
 
@@ -4441,6 +4548,11 @@ let backtestSourceMode = "saved";
           list.innerHTML = "";
           document.getElementById("match-count").textContent = matches.length;
           console.log("List cleared, match count updated to:", matches.length);
+          setLastScreenMatches(matches, {
+            strategy_name: currentStrategy || (customDsl ? "Editor Draft" : ""),
+            scan_scope: normalizeScanScope(tickerScanScope),
+            ticker_list: universeParams.get("ticker_list") || "",
+          });
 
           // Update ticker dropdown options based on screen results.
           if (matches.length > 0 && (strategySelect.value || customDsl)) {
@@ -4551,6 +4663,11 @@ let backtestSourceMode = "saved";
           globalText: "FAILED",
           globalPct: 100,
           globalWorking: false,
+        });
+        setLastScreenMatches([], {
+          strategy_name: currentStrategy || (customDsl ? "Editor Draft" : ""),
+          scan_scope: normalizeScanScope(tickerScanScope),
+          ticker_list: getUniverseFilterParams().get("ticker_list") || "",
         });
         resetScanUI();
       }
@@ -4751,6 +4868,7 @@ let backtestSourceMode = "saved";
       }
       updateRangeChrome();
       await loadMarketStatus();
+      syncExportMatchesButtonState();
     })();
 
     function testMe() {
@@ -4771,6 +4889,7 @@ let backtestSourceMode = "saved";
       openSelectedSwarmTicker,
       refreshMarketData,
       ensureFreshMarketData,
+      exportTopMatches,
       resetSwarmSimulation,
       runScreen,
       saveAsStrategy,

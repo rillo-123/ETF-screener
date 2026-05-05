@@ -20,8 +20,7 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -115,6 +114,9 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
         if (typeof window.showTab !== "function") {{
           throw new Error("showTab is not exposed on window");
         }}
+        if (typeof window.exportTopMatches !== "function") {{
+          throw new Error("exportTopMatches is not exposed on window");
+        }}
         window.showTab("swarm");
         if (document.getElementById("tab-swarm").classList.contains("hidden")) {{
           throw new Error("Swarm tab stayed hidden after showTab('swarm')");
@@ -122,8 +124,179 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
         if (!document.getElementById("tab-btn-swarm").classList.contains("active")) {{
           throw new Error("Swarm tab button did not become active");
         }}
-        """
+        """)
+
+    result = subprocess.run(
+        [node, "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
     )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_dashboard_js_modify_strategy_bumps_existing_version():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for dashboard JavaScript smoke tests")
+
+    dashboard_js = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "ETF_screener"
+        / "dashboard"
+        / "static"
+        / "js"
+        / "dashboard.js"
+    )
+    script = textwrap.dedent(f"""
+        const fs = require("fs");
+
+        class ClassList {{
+          constructor() {{ this.values = new Set(); }}
+          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
+          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
+          contains(name) {{ return this.values.has(name); }}
+          toggle(name, force) {{
+            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
+            if (shouldAdd) this.values.add(name);
+            else this.values.delete(name);
+            return shouldAdd;
+          }}
+        }}
+
+        class Element {{
+          constructor(id = "") {{
+            this.id = id;
+            this.classList = new ClassList();
+            this.children = [];
+            this.dataset = {{}};
+            this.style = {{}};
+            this.options = [];
+            this.value = "";
+            this.textContent = "";
+            this.innerHTML = "";
+            this.disabled = false;
+            this.clientWidth = 900;
+            this.clientHeight = 520;
+          }}
+          addEventListener() {{}}
+          setAttribute(name, value) {{ this[name] = value; }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          remove() {{}}
+          focus() {{}}
+          getContext() {{
+            const noop = () => {{}};
+            return new Proxy({{}}, {{ get: () => noop, set: () => true }});
+          }}
+        }}
+
+        const elements = new Map();
+        const getElement = (id) => {{
+          if (!elements.has(id)) elements.set(id, new Element(id));
+          return elements.get(id);
+        }};
+
+        [
+          "strategy-select",
+          "strategy-editor",
+          "strategy-filename",
+          "modify-modal",
+          "modify-modal-editor",
+          "modify-modal-name",
+          "modify-modal-source",
+          "shortlist-market-status",
+          "tab-screener",
+          "tab-shortlist",
+          "tab-swarm",
+          "tab-backtest",
+          "tab-btn-screener",
+          "tab-btn-shortlist",
+          "tab-btn-swarm",
+          "tab-btn-backtest",
+        ].forEach(getElement);
+
+        getElement("strategy-select").value = "my_strategy_v2";
+        getElement("strategy-editor").value = "FILTER: close > ema_20";
+        getElement("strategy-filename").value = "my_strategy_v2";
+        getElement("modify-modal").style.display = "none";
+
+        global.window = global;
+        global.window.addEventListener = () => {{}};
+        global.document = {{
+          body: new Element("body"),
+          createElement: (tag) => new Element(tag),
+          getElementById: getElement,
+          querySelectorAll: (selector) => selector === ".tab-btn"
+            ? ["screener", "shortlist", "swarm", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            : [],
+          addEventListener: () => {{}},
+        }};
+        global.localStorage = {{
+          getItem: () => "",
+          setItem: () => {{}},
+          removeItem: () => {{}},
+        }};
+        global.fetch = async (url) => {{
+          if (String(url).includes("/api/strategy/")) {{
+            return {{
+              ok: true,
+              json: async () => ({{ name: "my_strategy_v2", content: "TRIGGER: close > ema_20" }}),
+            }};
+          }}
+          if (String(url).includes("/api/market-status")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                today: "2026-04-29",
+                latest_market_date: "2026-04-29",
+                days_stale: 0,
+                is_stale: false,
+                tracked_tickers: 1,
+                fresh_tickers: 1,
+                missing_tickers: 0,
+                stale_tickers: 0,
+              }}),
+            }};
+          }}
+          if (String(url).includes("/api/custom-ticker-list")) {{
+            return {{
+              ok: true,
+              json: async () => ({{ count: 0, tickers: [] }}),
+            }};
+          }}
+          return {{
+            ok: true,
+            json: async () => ({{}}),
+          }};
+        }};
+        global.requestAnimationFrame = () => 1;
+        global.cancelAnimationFrame = () => {{}};
+        global.setTimeout = () => 1;
+        global.setInterval = () => 1;
+        global.clearInterval = () => {{}};
+        global.alert = () => {{}};
+        global.showToast = () => {{}};
+        global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
+
+        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
+        Function(source)();
+
+        (async () => {{
+          if (window.dashboardReadyPromise) {{
+            await window.dashboardReadyPromise;
+          }}
+          await Promise.resolve();
+          await window.modifyStrategy();
+          const name = document.getElementById("modify-modal-name").value;
+          if (name !== "my_strategy_v3") {{
+            throw new Error(`Expected version bump to my_strategy_v3, got ${{name}}`);
+          }}
+        }})().catch((err) => {{
+          console.error(err);
+          process.exit(1);
+        }});
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -148,8 +321,7 @@ def test_dashboard_js_persists_chart_range():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -259,8 +431,7 @@ def test_dashboard_js_persists_chart_range():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -285,8 +456,7 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -500,8 +670,7 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],

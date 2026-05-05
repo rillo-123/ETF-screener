@@ -2,7 +2,6 @@ import pytest
 import pandas as pd
 import numpy as np
 from ETF_screener.backtester import Backtester, rsi_strategy, ema_cross_strategy
-from ETF_screener.indicators import calculate_ema, calculate_rsi
 
 
 @pytest.fixture

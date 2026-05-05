@@ -562,12 +562,12 @@ def add_indicators(
     trend_dir = pd.Series(index=df_copy.index, dtype=float)
     if ub is not None and lb is not None and st is not None:
         # Trend is up if supertrend equals lower band, down if equals upper band
-        trend_dir[:] = float('nan')
+        trend_dir[:] = float("nan")
         trend_dir[st == lb] = 1
         trend_dir[st == ub] = -1
         # Only one of ST_Lower or ST_Upper should be set per row
-        st_lower = lb.where(trend_dir == 1, float('nan'))
-        st_upper = ub.where(trend_dir == -1, float('nan'))
+        st_lower = lb.where(trend_dir == 1, float("nan"))
+        st_upper = ub.where(trend_dir == -1, float("nan"))
         df_copy["Supertrend"] = st
         df_copy["ST_Lower"] = st_lower
         df_copy["ST_Upper"] = st_upper

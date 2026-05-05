@@ -1,9 +1,9 @@
-
 import json
 from pathlib import Path
 from typing import Any, Dict
 
 _paths_cache = None
+
 
 def get_paths() -> Dict[str, Any]:
     """

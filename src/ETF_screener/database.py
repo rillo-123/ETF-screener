@@ -1,4 +1,5 @@
 from ETF_screener.config_loader import get_paths
+
 """SQLite database interface for ETF data persistence."""
 
 import sqlite3
@@ -61,8 +62,7 @@ class ETFDatabase:
         cursor = conn.cursor()
 
         # Create ETF data table with proper indexing
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS etf_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ticker TEXT NOT NULL,
@@ -81,8 +81,7 @@ class ETFDatabase:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(ticker, date)
             )
-            """
-        )
+            """)
         self._ensure_columns(
             cursor,
             "etf_data",
@@ -91,8 +90,7 @@ class ETFDatabase:
             },
         )
 
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS etf_metadata (
                 ticker TEXT PRIMARY KEY,
                 name TEXT,
@@ -106,11 +104,9 @@ class ETFDatabase:
                 source TEXT,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-            """
-        )
+            """)
 
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS etf_shortlist_artifacts (
                 ticker TEXT PRIMARY KEY,
                 as_of_date TEXT NOT NULL,
@@ -131,11 +127,9 @@ class ETFDatabase:
                 artifact_version TEXT,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-            """
-        )
+            """)
 
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS swarm_world_artifacts (
                 ticker TEXT PRIMARY KEY,
                 as_of_date TEXT NOT NULL,
@@ -163,8 +157,7 @@ class ETFDatabase:
                 world_version TEXT,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
-            """
-        )
+            """)
         self._ensure_columns(
             cursor,
             "swarm_world_artifacts",
@@ -486,13 +479,11 @@ class ETFDatabase:
     def get_ticker_latest_dates(self) -> dict[str, str]:
         """Return the most recent stored market date for each ticker."""
         conn = self._get_connection()
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT ticker, MAX(date) AS latest_date
             FROM etf_data
             GROUP BY ticker
-            """
-        ).fetchall()
+            """).fetchall()
         return {
             str(row["ticker"] if isinstance(row, sqlite3.Row) else row[0]).upper(): str(
                 row["latest_date"] if isinstance(row, sqlite3.Row) else row[1]

@@ -40,10 +40,13 @@ The main PowerShell entry surface lives at the repo root so you can launch commo
 .\run_filtered_plots.ps1
 .\run_vulture.ps1
 .\update-devtools.ps1
+.\workflow_end_of_day.ps1
+.\workflow_update_plan_progress.ps1
 ```
 
 These root scripts forward into the underlying `scripts/` implementations where applicable.
-Use `.\update-devtools.ps1` to install or upgrade stable VS Code or VS Code Insiders and refresh the matching CLI extensions.
+Use `.\update-devtools.ps1` to install or upgrade stable VS Code or VS Code Insiders, refresh the matching CLI extensions, and update `pwsh` when winget can manage it.
+Use `.\workflow_end_of_day.ps1` for the full test/fix/commit flow, and `.\workflow_update_plan_progress.ps1` when you want to stamp `plan.md` and prepend a fresh progress entry together.
 
 ### Get Finnhub API Key
 
