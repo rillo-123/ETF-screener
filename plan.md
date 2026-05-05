@@ -1,6 +1,6 @@
 # Plan
 
-Last updated: 2026-05-05 20:37:56 +02:00
+Last updated: 2026-05-05 22:47:42 +02:00
 
 ## Current objective
 
@@ -8,6 +8,8 @@ End-of-day workflow completed successfully with no auto-fixes required.
 
 ## Current state
 
+- -Summary
+- -Summary
 - -Summary
 - -Summary
 - The end-of-day workflow now updates `plan.md` and `progress.md` before staging, committing, and pushing so the resume docs stay in lockstep with the final branch state.
@@ -91,6 +93,8 @@ End-of-day workflow completed successfully with no auto-fixes required.
 
 ## Locked decisions
 
+- -NextResumePoint
+- -Summary
 - -NextResumePoint
 - -Summary
 - Prefer cached artifacts over request-time recomputation whenever the snapshot is fresh.

@@ -1,4 +1,4 @@
-"""Build and cache a rectangular ticker world for the Swarm dashboard tab."""
+"""Build and cache a spherical asset world for the Swarm dashboard tab."""
 
 from __future__ import annotations
 
@@ -14,11 +14,11 @@ from ETF_screener.shortlist_engine import ETFShortlistEngine
 
 
 class SwarmWorldEngine:
-    """Project shortlist artifacts into a stable rectangular swarm world."""
+    """Project shortlist artifacts into a stable spherical asset world."""
 
-    ARTIFACT_VERSION = "swarm_v3_grid"
-    WORLD_WIDTH = 1600.0
-    WORLD_HEIGHT = 920.0
+    ARTIFACT_VERSION = "swarm_v6_sphere_tetra"
+    MIN_WORLD_RADIUS = 20.0
+    PACKING_DENSITY = 0.42
 
     def __init__(
         self,
@@ -65,177 +65,276 @@ class SwarmWorldEngine:
         return int(digest[:12], 16) / float((16**12) - 1)
 
     @classmethod
-    def _clamp(cls, value: float, low: float, high: float) -> float:
+    def _clamp(_cls, value: float, low: float, high: float) -> float:
         return max(low, min(high, value))
 
-    def _freshness_score(self, recent_entry_days: Any) -> float:
-        if recent_entry_days is None or pd.isna(recent_entry_days):
-            return 22.0
-        age = max(0.0, float(recent_entry_days))
-        return self._clamp(100.0 - (age * 7.5), 0.0, 100.0)
-
-    def _momentum_score(self, components: dict[str, Any]) -> float:
-        slope_pct = self._safe_float(components.get("ema_50_slope_pct"))
-        base = 50.0 + (slope_pct * 16.0)
-        base += 12.0 * self._safe_float(components.get("close_above_ema_50"))
-        base += 12.0 * self._safe_float(components.get("close_above_supertrend"))
-        base += 8.0 * self._safe_float(components.get("macd_above_signal"))
-        return self._clamp(base, 0.0, 100.0)
-
-    def _energy_score(
-        self, row: pd.Series, components: dict[str, Any]
+    @staticmethod
+    def _normalize_vector(
+        vector: tuple[float, float, float],
     ) -> tuple[float, float, float]:
+        x, y, z = vector
+        length = math.sqrt((x * x) + (y * y) + (z * z))
+        if length <= 1e-12:
+            return (0.0, 1.0, 0.0)
+        return (x / length, y / length, z / length)
+
+    @staticmethod
+    def _dot(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
+        return (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2])
+
+    @staticmethod
+    def _scale(
+        vector: tuple[float, float, float], factor: float
+    ) -> tuple[float, float, float]:
+        return (vector[0] * factor, vector[1] * factor, vector[2] * factor)
+
+    @staticmethod
+    def _subtract(
+        a: tuple[float, float, float], b: tuple[float, float, float]
+    ) -> tuple[float, float, float]:
+        return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+    @staticmethod
+    def _add(
+        a: tuple[float, float, float], b: tuple[float, float, float]
+    ) -> tuple[float, float, float]:
+        return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+    @staticmethod
+    def _fibonacci_vector(
+        index: int, total: int, seed: str = ""
+    ) -> tuple[float, float, float]:
+        count = max(1, int(total or 1))
+        idx = max(0, min(count - 1, int(index or 0)))
+        phase = SwarmWorldEngine._stable_fraction(seed, "sphere-index") if seed else 0.0
+        golden_angle = math.pi * (3 - math.sqrt(5))
+        y = 1 - ((idx + 0.5) / count) * 2
+        radius = math.sqrt(max(0.0, 1 - (y * y)))
+        theta = (idx + phase) * golden_angle
+        return SwarmWorldEngine._normalize_vector(
+            (
+                math.cos(theta) * radius,
+                y,
+                math.sin(theta) * radius,
+            )
+        )
+
+    def _asset_value(self, row: pd.Series) -> float:
+        close = self._safe_float(row.get("close"))
+        if close > 0:
+            return close
+        final_score = self._safe_float(row.get("final_score"))
+        return max(0.01, final_score if final_score > 0 else 1.0)
+
+    def _asset_radius(self, value: float) -> float:
+        log_value = math.log10(max(1.0, value))
+        return round(self._clamp(1.35 + (log_value * 0.95), 1.35, 8.5), 3)
+
+    def _asset_mass(self, value: float) -> float:
+        log_value = math.log10(max(1.0, value))
+        return round(self._clamp(0.9 + (log_value * 0.85), 0.9, 10.0), 3)
+
+    def _asset_energy(self, row: pd.Series, components: dict[str, Any]) -> float:
         final_score = self._safe_float(row.get("final_score"))
         technical_score = self._safe_float(row.get("technical_score"))
         product_score = self._safe_float(row.get("product_score"))
-        freshness_score = self._freshness_score(row.get("recent_entry_days"))
-        momentum_score = self._momentum_score(components)
-
-        label = str(row.get("label") or "Watch")
-        label_bonus = {"Buy": 8.0, "Watch": 2.0, "Skip": -6.0}.get(label, 0.0)
-
-        energy = (
-            (0.42 * final_score)
+        momentum_score = self._safe_float(components.get("ema_50_slope_pct")) * 14.0
+        value_bonus = math.log10(max(1.0, self._asset_value(row))) * 6.0
+        return self._clamp(
+            (0.44 * final_score)
             + (0.24 * technical_score)
-            + (0.12 * product_score)
-            + (0.12 * freshness_score)
-            + (0.10 * momentum_score)
-            + label_bonus
+            + (0.14 * product_score)
+            + momentum_score
+            + value_bonus,
+            5.0,
+            100.0,
         )
-        return (
-            self._clamp(energy, 5.0, 100.0),
-            momentum_score,
-            freshness_score,
-        )
+
+    def _sphere_radius(self, nodes: list[dict[str, Any]]) -> float:
+        if not nodes:
+            return self.MIN_WORLD_RADIUS
+        if len(nodes) == 4:
+            max_radius = max(float(node["radius"]) for node in nodes)
+            return round(max_radius * (math.sqrt(6.0) / 2.0), 3)
+        area_sum = sum(math.pi * (float(node["radius"]) ** 2) for node in nodes)
+        estimated = math.sqrt(area_sum / (4 * math.pi * self.PACKING_DENSITY))
+        scaled = max(self.MIN_WORLD_RADIUS, estimated)
+        scaled = max(scaled, math.sqrt(len(nodes)) * 3.0)
+        return round(scaled, 3)
 
     @staticmethod
-    def _color_for_label(label: str) -> str:
-        if label == "Buy":
-            return "#10b981"
-        if label == "Watch":
-            return "#f59e0b"
-        return "#f43f5e"
+    def _tetrahedron_vectors() -> list[tuple[float, float, float]]:
+        return [
+            SwarmWorldEngine._normalize_vector((1.0, 1.0, 1.0)),
+            SwarmWorldEngine._normalize_vector((-1.0, -1.0, 1.0)),
+            SwarmWorldEngine._normalize_vector((-1.0, 1.0, -1.0)),
+            SwarmWorldEngine._normalize_vector((1.0, -1.0, -1.0)),
+        ]
 
-    def _radius_for_row(
+    def _relax_positions(
         self,
-        row: pd.Series,
-        min_log_volume: float,
-        max_log_volume: float,
-    ) -> float:
-        volume = max(1.0, self._safe_float(row.get("volume"), 1.0))
-        log_volume = math.log10(volume)
-        if max_log_volume > min_log_volume:
-            volume_norm = (log_volume - min_log_volume) / (
-                max_log_volume - min_log_volume
-            )
-        else:
-            volume_norm = 0.5
+        nodes: list[dict[str, Any]],
+        sphere_radius: float,
+        passes: int = 5,
+    ) -> None:
+        if len(nodes) < 2:
+            return
 
-        label = str(row.get("label") or "Watch")
-        label_bonus = {"Buy": 2.0, "Watch": 1.0, "Skip": 0.2}.get(label, 0.5)
-        return round(4.0 + (volume_norm * 5.0) + label_bonus, 2)
+        for _ in range(max(0, int(passes))):
+            for idx, node in enumerate(nodes):
+                current = (
+                    float(node["sphere_x"]) / sphere_radius,
+                    float(node["sphere_y"]) / sphere_radius,
+                    float(node["sphere_z"]) / sphere_radius,
+                )
+                for offset in range(1, min(10, len(nodes))):
+                    other = nodes[(idx + offset) % len(nodes)]
+                    other_vec = (
+                        float(other["sphere_x"]) / sphere_radius,
+                        float(other["sphere_y"]) / sphere_radius,
+                        float(other["sphere_z"]) / sphere_radius,
+                    )
+                    dot = self._clamp(self._dot(current, other_vec), -1.0, 1.0)
+                    angle = math.acos(dot)
+                    min_angle = (
+                        (float(node["radius"]) + float(other["radius"]))
+                        / max(1.0, sphere_radius)
+                    ) * 1.04
+                    if angle >= min_angle:
+                        continue
+                    tangent = self._subtract(other_vec, self._scale(current, dot))
+                    tangent = self._normalize_vector(tangent)
+                    push = ((min_angle - angle) / max(min_angle, 1e-6)) * 0.22
+                    current = self._normalize_vector(
+                        self._subtract(current, self._scale(tangent, push))
+                    )
+                    other_vec = self._normalize_vector(
+                        self._add(other_vec, self._scale(tangent, push))
+                    )
+                    other["sphere_x"] = round(other_vec[0] * sphere_radius, 6)
+                    other["sphere_y"] = round(other_vec[1] * sphere_radius, 6)
+                    other["sphere_z"] = round(other_vec[2] * sphere_radius, 6)
+                    other["latitude"] = round(
+                        math.asin(self._clamp(other_vec[1], -1.0, 1.0)), 6
+                    )
+                    other["longitude"] = round(
+                        math.atan2(other_vec[2], other_vec[0]), 6
+                    )
+                node["sphere_x"] = round(current[0] * sphere_radius, 6)
+                node["sphere_y"] = round(current[1] * sphere_radius, 6)
+                node["sphere_z"] = round(current[2] * sphere_radius, 6)
+                node["latitude"] = round(
+                    math.asin(self._clamp(current[1], -1.0, 1.0)), 6
+                )
+                node["longitude"] = round(math.atan2(current[2], current[0]), 6)
 
-    def _prepare_nodes(self, shortlist_df: pd.DataFrame) -> list[dict[str, Any]]:
+    def _prepare_rows(self, shortlist_df: pd.DataFrame) -> list[dict[str, Any]]:
         if shortlist_df.empty:
             return []
 
-        volume_logs = [
-            math.log10(max(1.0, self._safe_float(row.get("volume"), 1.0)))
-            for _, row in shortlist_df.iterrows()
-        ]
-        min_log_volume = min(volume_logs) if volume_logs else 0.0
-        max_log_volume = max(volume_logs) if volume_logs else 1.0
+        rows = shortlist_df.copy()
+        rows["__order"] = (
+            rows["ticker"]
+            .astype(str)
+            .map(lambda ticker: self._stable_fraction(ticker.upper(), "sphere-order"))
+        )
+        rows = rows.sort_values(
+            by=["__order", "final_score", "ticker"],
+            ascending=[True, False, True],
+        ).reset_index(drop=True)
 
-        nodes: list[dict[str, Any]] = []
-        for _, row in shortlist_df.iterrows():
+        prepared: list[dict[str, Any]] = []
+        for _, row in rows.iterrows():
             components = self._parse_components(row.get("components_json"))
-            energy, momentum_score, freshness_score = self._energy_score(
-                row, components
+            value = self._asset_value(row)
+            radius = self._asset_radius(value)
+            mass = self._asset_mass(value)
+            energy = self._asset_energy(row, components)
+            prepared.append(
+                {
+                    "ticker": str(row.get("ticker") or "").upper(),
+                    "as_of_date": str(row.get("as_of_date") or ""),
+                    "name": str(row.get("name") or row.get("ticker") or ""),
+                    "issuer": str(row.get("issuer") or ""),
+                    "asset_class": str(row.get("asset_class") or ""),
+                    "region": str(row.get("region") or ""),
+                    "label": str(row.get("label") or "Watch"),
+                    "close": round(self._safe_float(row.get("close"), value), 4),
+                    "value": round(value, 4),
+                    "mass": mass,
+                    "volume": self._safe_int(row.get("volume"), 0),
+                    "recent_entry_days": (
+                        self._safe_int(row.get("recent_entry_days"))
+                        if row.get("recent_entry_days") is not None
+                        and not pd.isna(row.get("recent_entry_days"))
+                        else None
+                    ),
+                    "product_score": round(
+                        self._safe_float(row.get("product_score")), 2
+                    ),
+                    "exposure_score": round(
+                        self._safe_float(row.get("exposure_score")), 2
+                    ),
+                    "technical_score": round(
+                        self._safe_float(row.get("technical_score")), 2
+                    ),
+                    "final_score": round(self._safe_float(row.get("final_score")), 2),
+                    "energy": round(energy, 2),
+                    "momentum_score": round(
+                        self._safe_float(components.get("ema_50_slope_pct")) * 14.0, 2
+                    ),
+                    "freshness_score": round(
+                        100.0
+                        - (
+                            max(
+                                0.0, self._safe_float(row.get("recent_entry_days"), 0.0)
+                            )
+                            * 7.0
+                        ),
+                        2,
+                    ),
+                    "radius": radius,
+                    "components": components,
+                }
             )
-            final_score = self._safe_float(row.get("final_score"))
-            technical_score = self._safe_float(row.get("technical_score"))
-            row_payload = {
-                "ticker": str(row.get("ticker") or "").upper(),
-                "as_of_date": str(row.get("as_of_date") or ""),
-                "name": str(row.get("name") or row.get("ticker") or ""),
-                "issuer": str(row.get("issuer") or ""),
-                "asset_class": str(row.get("asset_class") or ""),
-                "region": str(row.get("region") or ""),
-                "label": str(row.get("label") or "Watch"),
-                "volume": self._safe_int(row.get("volume"), 0),
-                "recent_entry_days": (
-                    self._safe_int(row.get("recent_entry_days"))
-                    if row.get("recent_entry_days") is not None
-                    and not pd.isna(row.get("recent_entry_days"))
-                    else None
-                ),
-                "product_score": round(self._safe_float(row.get("product_score")), 2),
-                "exposure_score": round(self._safe_float(row.get("exposure_score")), 2),
-                "technical_score": round(technical_score, 2),
-                "final_score": round(final_score, 2),
-                "energy": round(energy, 2),
-                "momentum_score": round(momentum_score, 2),
-                "freshness_score": round(freshness_score, 2),
-                "radius": self._radius_for_row(row, min_log_volume, max_log_volume),
-                "color": self._color_for_label(str(row.get("label") or "Watch")),
-                "components": components,
-                "world_version": self.ARTIFACT_VERSION,
-            }
-            nodes.append(row_payload)
 
-        return nodes
-
-    @classmethod
-    def grid_dimensions(cls, node_count: int) -> tuple[int, int]:
-        """Return square-ish grid columns and rows for the ticker count."""
-        clean_count = max(1, int(node_count or 1))
-        columns = max(
-            1, math.ceil(math.sqrt(clean_count * (cls.WORLD_WIDTH / cls.WORLD_HEIGHT)))
-        )
-        rows = max(1, math.ceil(clean_count / columns))
-        return columns, rows
-
-    @classmethod
-    def grid_cell_size(cls, columns: int, rows: int) -> tuple[float, float]:
-        clean_columns = max(1, int(columns or 1))
-        clean_rows = max(1, int(rows or 1))
-        return cls.WORLD_WIDTH / clean_columns, cls.WORLD_HEIGHT / clean_rows
-
-    def _position_nodes(self, nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        if not nodes:
-            return nodes
-
-        columns, rows = self.grid_dimensions(len(nodes))
-        cell_width, cell_height = self.grid_cell_size(columns, rows)
-        available_cells = [(row, col) for row in range(rows) for col in range(columns)]
-        available_cells.sort(
-            key=lambda cell: self._stable_fraction(f"{cell[0]}:{cell[1]}", "grid-cell")
-        )
-
-        used_cells: set[tuple[int, int]] = set()
-        for idx, node in enumerate(nodes):
-            ticker = node["ticker"]
-            row, col = available_cells[
-                int(self._stable_fraction(ticker, "ticker-grid") * len(available_cells))
-                % len(available_cells)
-            ]
-            if (row, col) in used_cells:
-                row, col = next(
-                    cell for cell in available_cells if cell not in used_cells
-                )
-            used_cells.add((row, col))
-            node["row"] = row
-            node["col"] = col
-            node["x"] = round((col + 0.5) * cell_width, 2)
-            node["y"] = round((row + 0.5) * cell_height, 2)
-            node["vx"] = 0.0
-            node["vy"] = 0.0
-            node["charge"] = round(
-                0.8 + (self._safe_float(node.get("energy")) / 100.0) * 2.2, 4
+        sphere_radius = self._sphere_radius(prepared)
+        tetrahedron_mode = len(prepared) == 4
+        tetra_vectors = self._tetrahedron_vectors() if tetrahedron_mode else []
+        for idx, node in enumerate(prepared):
+            direction = (
+                tetra_vectors[idx]
+                if tetrahedron_mode
+                else self._fibonacci_vector(idx, len(prepared), node["ticker"])
             )
-            node["is_dummy"] = False
+            node["sphere_radius"] = sphere_radius
+            node["sphere_x"] = round(direction[0] * sphere_radius, 6)
+            node["sphere_y"] = round(direction[1] * sphere_radius, 6)
+            node["sphere_z"] = round(direction[2] * sphere_radius, 6)
+            node["latitude"] = round(math.asin(self._clamp(direction[1], -1.0, 1.0)), 6)
+            node["longitude"] = round(math.atan2(direction[2], direction[0]), 6)
+            node["x"] = node["sphere_x"]
+            node["y"] = node["sphere_y"]
+            node["z"] = node["sphere_z"]
+            node["grid_row"] = idx
+            node["grid_col"] = 0
+            node["color"] = "#f8fafc" if node["label"] == "Buy" else "#cbd5e1"
+            node["world_version"] = self.ARTIFACT_VERSION
 
-        return nodes
+        if not tetrahedron_mode:
+            self._relax_positions(prepared, sphere_radius)
+
+        for idx, node in enumerate(prepared):
+            node["sphere_radius"] = sphere_radius
+            node["x"] = round(node["sphere_x"], 6)
+            node["y"] = round(node["sphere_y"], 6)
+            node["z"] = round(node["sphere_z"], 6)
+            node["grid_row"] = idx
+            node["grid_col"] = 0
+            node["radius"] = round(node["radius"], 3)
+            node["mass"] = round(node["mass"], 3)
+
+        return prepared
 
     def build_world(self, refresh_shortlist: bool = False) -> pd.DataFrame:
         shortlist_df = self.shortlist_engine.get_shortlist(
@@ -244,14 +343,14 @@ class SwarmWorldEngine:
         if shortlist_df.empty:
             return pd.DataFrame()
 
-        nodes = self._position_nodes(self._prepare_nodes(shortlist_df))
+        rows = self._prepare_rows(shortlist_df)
         self.db.upsert_swarm_world_artifacts(
             [
                 {
-                    **node,
-                    "components_json": json.dumps(node.get("components", {})),
+                    **row,
+                    "components_json": json.dumps(row.get("components", {})),
                 }
-                for node in nodes
+                for row in rows
             ]
         )
         return self.db.get_swarm_world(limit=None)
@@ -270,12 +369,18 @@ class SwarmWorldEngine:
             if not cached_world.empty and "world_version" in cached_world.columns
             else None
         )
+        cached_layout = (
+            str(cached_world.iloc[0].get("layout"))
+            if not cached_world.empty and "layout" in cached_world.columns
+            else None
+        )
 
         if (
             refresh
             or not world_date
             or world_date != shortlist_date
             or cached_version != self.ARTIFACT_VERSION
+            or cached_layout == "grid"
         ):
             self.build_world(refresh_shortlist=refresh)
 

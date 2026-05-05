@@ -1,6 +1,7 @@
 import inspect
 import asyncio
 import hashlib
+import random
 import re
 import json
 import logging as _logging_mod
@@ -375,6 +376,8 @@ def _normalize_market_source(value: object | None) -> str:
         return "list"
     if cleaned in {"all_lists", "alllists", "all list", "all lists"}:
         return "all_lists"
+    if cleaned in {"debug", "demo", "dummy", "synthetic"}:
+        return "debug"
     if cleaned in {"xetra", "germany", "de", "exchange", "all"}:
         return "xetra"
     return "xetra"
@@ -389,6 +392,204 @@ def _market_source_config(source: object | None) -> tuple[Path, str]:
     if normalized == "all_lists":
         return CUSTOM_TICKER_LIST_CONFIG_PATH, "all"
     return XETRA_METADATA_PATH, "active"
+
+
+def _swarm_scope_tickers(
+    db,
+    *,
+    scan_scope: Optional[str] = None,
+    exchange: Optional[str] = None,
+    ticker_list: Optional[str] = None,
+) -> list[str]:
+    """Resolve the current Swarm selector into a concrete ticker list."""
+    try:
+        normalized_scope = _normalize_market_source(scan_scope or exchange or "xetra")
+        latest_market_date = _latest_market_date_for(db)
+        universe = list(_cached_screen_universe(_db_path_for(db), latest_market_date))
+        return filter_tickers_by_exchange_and_list(
+            universe,
+            exchange=exchange,
+            ticker_list=ticker_list,
+            scan_scope=normalized_scope,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Swarm scope resolution fell back to scope-only filtering: %s", exc
+        )
+        return []
+
+
+def _ticker_matches_swarm_scope(ticker: object, scope: str) -> bool:
+    upper = str(ticker or "").upper()
+    if not upper:
+        return False
+    normalized = _normalize_market_source(scope)
+    if normalized == "sweden":
+        return upper.endswith(".ST") or upper.endswith(".SE") or upper.endswith(".SS")
+    if normalized == "xetra":
+        return upper.endswith(".DE") or upper.endswith(".F") or "." not in upper
+    return True
+
+
+def _swarm_is_debug_scope(
+    scan_scope: object | None = None, exchange: object | None = None
+) -> bool:
+    return _normalize_market_source(scan_scope or exchange or "xetra") == "debug"
+
+
+def _swarm_debug_asset_count(value: object | None, default: int = 24) -> int:
+    try:
+        cleaned = int(str(value).strip())
+    except (TypeError, ValueError, AttributeError):
+        cleaned = default
+    return max(1, min(cleaned, 400))
+
+
+def _swarm_debug_seed(*parts: object) -> int:
+    payload = "|".join(str(part or "") for part in parts)
+    return int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16], 16)
+
+
+def _swarm_debug_close_for_radius(target_radius: float) -> float:
+    safe_radius = max(1.35, min(float(target_radius), 8.5))
+    return 10 ** ((safe_radius - 1.35) / 0.95)
+
+
+def _swarm_debug_shortlist_frame(
+    asset_count: int,
+    *,
+    scan_scope: object | None = None,
+    exchange: object | None = None,
+    ticker_list: object | None = None,
+) -> pd.DataFrame:
+    rng = random.Random(
+        _swarm_debug_seed(asset_count, scan_scope, exchange, ticker_list, "world")
+    )
+    as_of_date = pd.Timestamp.utcnow().normalize().strftime("%Y-%m-%d")
+    labels = ["Buy", "Watch", "Skip"]
+    rows: list[dict[str, object]] = []
+
+    for index in range(asset_count):
+        ticker = f"DUMMY-{index + 1:03d}"
+        target_radius = 1.9 + (rng.random() * 1.45) + ((index % 5) * 0.04)
+        close = round(_swarm_debug_close_for_radius(target_radius), 4)
+        volume = int(rng.uniform(50_000, 8_500_000))
+        recent_entry_days = rng.choice([None, 1, 2, 4, 7, 12, 18])
+        label = rng.choices(labels, weights=[0.36, 0.44, 0.20], k=1)[0]
+        technical_score = round(rng.uniform(14.0, 96.0), 2)
+        product_score = round(rng.uniform(12.0, 95.0), 2)
+        exposure_score = round(rng.uniform(10.0, 92.0), 2)
+        final_score = round(
+            min(
+                99.0,
+                max(
+                    1.0,
+                    (technical_score * 0.42)
+                    + (product_score * 0.31)
+                    + (exposure_score * 0.27),
+                ),
+            ),
+            2,
+        )
+        slope = round(rng.uniform(-5.5, 5.5), 3)
+        components = {
+            "ema_50_slope_pct": slope,
+            "close_above_ema_50": int(rng.random() > 0.42),
+            "close_above_supertrend": int(rng.random() > 0.48),
+            "macd_above_signal": int(rng.random() > 0.5),
+        }
+        rows.append(
+            {
+                "ticker": ticker,
+                "as_of_date": as_of_date,
+                "name": f"Synthetic Asset {index + 1:03d}",
+                "issuer": "Debug Lab",
+                "asset_class": "Synthetic",
+                "region": "Debug",
+                "label": label,
+                "close": close,
+                "volume": volume,
+                "recent_entry_days": recent_entry_days,
+                "product_score": product_score,
+                "exposure_score": exposure_score,
+                "technical_score": technical_score,
+                "final_score": final_score,
+                "components_json": json.dumps(components),
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def _swarm_debug_nodes(
+    engine: SwarmWorldEngine,
+    asset_count: int,
+    *,
+    scan_scope: object | None = None,
+    exchange: object | None = None,
+    ticker_list: object | None = None,
+) -> list[dict[str, object]]:
+    shortlist_df = _swarm_debug_shortlist_frame(
+        asset_count,
+        scan_scope=scan_scope,
+        exchange=exchange,
+        ticker_list=ticker_list,
+    )
+    prepared = engine._prepare_rows(shortlist_df)
+    for row in prepared:
+        row["components_json"] = json.dumps(row.get("components", {}))
+    return prepared
+
+
+def _swarm_debug_history_payload(
+    nodes: list[dict[str, object]],
+    safe_days: int,
+    *,
+    scan_scope: object | None = None,
+    exchange: object | None = None,
+    ticker_list: object | None = None,
+) -> dict[str, object]:
+    date_index = pd.bdate_range(
+        end=pd.Timestamp.utcnow().normalize(),
+        periods=max(1, int(safe_days or 1)),
+    )
+    latest_date = str(date_index[-1].date())
+    dates = [str(ts.date()) for ts in date_index]
+    history: dict[str, dict[str, list]] = {}
+
+    for row in nodes:
+        ticker = str(row.get("ticker") or "").upper()
+        if not ticker:
+            continue
+        rng = random.Random(
+            _swarm_debug_seed(
+                ticker,
+                safe_days,
+                scan_scope,
+                exchange,
+                ticker_list,
+                "history",
+            )
+        )
+        base_value = max(
+            0.5,
+            float(row.get("value") or row.get("close") or rng.uniform(5.0, 140.0)),
+        )
+        closes = [round(base_value, 6) for _ in dates]
+        dividends = [0.0 for _ in dates]
+        history[ticker] = {
+            "dates": dates,
+            "closes": closes,
+            "dividends": dividends,
+        }
+
+    return {
+        "days": safe_days,
+        "requested_tickers": len(nodes),
+        "count": len(history),
+        "as_of_date": latest_date,
+        "history": history,
+    }
 
 
 def _ticker_exchange_bucket(
@@ -1184,6 +1385,10 @@ async def swarm_world(
     limit: Optional[int] = None,
     label: Optional[str] = None,
     refresh: bool = False,
+    scan_scope: Optional[str] = None,
+    exchange: Optional[str] = None,
+    ticker_list: Optional[str] = None,
+    debug_assets: Optional[int] = None,
 ):
     """Return the cached swarm world artifact for the exploratory tab."""
     safe_limit = None if limit is None else max(1, min(int(limit), 5000))
@@ -1192,11 +1397,46 @@ async def swarm_world(
         raise HTTPException(status_code=400, detail="label must be Buy, Watch, or Skip")
 
     engine = SwarmWorldEngine(db_path=str(get_db().db_path))
-    try:
-        df = engine.get_world(limit=safe_limit, label=safe_label, refresh=refresh)
-    except Exception as e:
-        logger.error("Swarm world endpoint failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    debug_scope = _swarm_is_debug_scope(scan_scope, exchange)
+
+    if debug_scope:
+        debug_count = _swarm_debug_asset_count(debug_assets)
+        debug_nodes = _swarm_debug_nodes(
+            engine,
+            debug_count,
+            scan_scope=scan_scope,
+            exchange=exchange,
+            ticker_list=ticker_list,
+        )
+        df = pd.DataFrame(debug_nodes)
+    else:
+        try:
+            df = engine.get_world(limit=safe_limit, label=safe_label, refresh=refresh)
+        except Exception as e:
+            logger.error("Swarm world endpoint failed: %s", e, exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e))
+
+        db = get_db()
+        selected_tickers = _swarm_scope_tickers(
+            db,
+            scan_scope=scan_scope,
+            exchange=exchange,
+            ticker_list=ticker_list,
+        )
+        normalized_scope = _normalize_market_source(scan_scope or exchange or "xetra")
+        if selected_tickers:
+            selected = {str(ticker).upper() for ticker in selected_tickers}
+            df = df[df["ticker"].astype(str).str.upper().isin(selected)].reset_index(
+                drop=True
+            )
+        elif normalized_scope in {"list", "all_lists"}:
+            df = df.iloc[0:0]
+        elif normalized_scope in {"xetra", "sweden"}:
+            df = df[
+                df["ticker"].map(
+                    lambda ticker: _ticker_matches_swarm_scope(ticker, normalized_scope)
+                )
+            ].reset_index(drop=True)
 
     nodes = []
     for _, row in df.iterrows():
@@ -1214,6 +1454,7 @@ async def swarm_world(
                 "asset_class": row.get("asset_class", ""),
                 "region": row.get("region", ""),
                 "label": row.get("label", "Watch"),
+                "close": round(float(row.get("close", 0.0) or 0.0), 4),
                 "volume": int(row.get("volume", 0) or 0),
                 "recent_entry_days": (
                     int(row["recent_entry_days"])
@@ -1229,6 +1470,10 @@ async def swarm_world(
                 ),
                 "final_score": round(float(row.get("final_score", 0.0) or 0.0), 2),
                 "energy": round(float(row.get("energy", 0.0) or 0.0), 2),
+                "value": round(
+                    float(row.get("value", row.get("close", 0.0)) or 0.0), 4
+                ),
+                "mass": round(float(row.get("mass", 0.0) or 0.0), 3),
                 "momentum_score": round(
                     float(row.get("momentum_score", 0.0) or 0.0), 2
                 ),
@@ -1239,14 +1484,27 @@ async def swarm_world(
                 "col": int(row.get("grid_col", row.get("col", 0)) or 0),
                 "x": round(float(row.get("x", 0.0) or 0.0), 2),
                 "y": round(float(row.get("y", 0.0) or 0.0), 2),
+                "z": round(float(row.get("z", 0.0) or 0.0), 2),
                 "vx": round(float(row.get("vx", 0.0) or 0.0), 4),
                 "vy": round(float(row.get("vy", 0.0) or 0.0), 4),
                 "charge": round(float(row.get("charge", 1.0) or 1.0), 4),
                 "radius": round(float(row.get("radius", 0.0) or 0.0), 2),
+                "sphere_radius": round(float(row.get("sphere_radius", 0.0) or 0.0), 3),
+                "sphere_x": round(
+                    float(row.get("sphere_x", row.get("x", 0.0)) or 0.0), 4
+                ),
+                "sphere_y": round(
+                    float(row.get("sphere_y", row.get("y", 0.0)) or 0.0), 4
+                ),
+                "sphere_z": round(
+                    float(row.get("sphere_z", row.get("z", 0.0)) or 0.0), 4
+                ),
+                "latitude": round(float(row.get("latitude", 0.0) or 0.0), 6),
+                "longitude": round(float(row.get("longitude", 0.0) or 0.0), 6),
                 "color": row.get("color", "#64748b"),
                 "components": components,
                 "world_version": row.get("world_version"),
-                "is_dummy": False,
+                "is_dummy": bool(row.get("is_dummy", debug_scope)),
                 "as_of_date": row.get("as_of_date"),
                 "updated_at": row.get("updated_at"),
             }
@@ -1257,28 +1515,20 @@ async def swarm_world(
         for grade in ["Buy", "Watch", "Skip"]
     }
 
-    world_width = float(getattr(engine, "WORLD_WIDTH", 1600.0))
-    world_height = float(getattr(engine, "WORLD_HEIGHT", 920.0))
-    if nodes:
-        columns = max(int(node.get("col", 0)) for node in nodes) + 1
-        rows = max(int(node.get("row", 0)) for node in nodes) + 1
-    else:
-        columns = 1
-        rows = 1
-    if hasattr(engine, "grid_dimensions") and nodes:
-        columns, rows = engine.grid_dimensions(len(nodes))
-    cell_width = world_width / max(1, columns)
-    cell_height = world_height / max(1, rows)
+    sphere_radius = (
+        float(nodes[0].get("sphere_radius", getattr(engine, "MIN_WORLD_RADIUS", 120.0)))
+        if nodes
+        else float(getattr(engine, "MIN_WORLD_RADIUS", 120.0))
+    )
+    surface_area = 4.0 * math.pi * (sphere_radius**2)
 
     return {
         "world": {
-            "width": world_width,
-            "height": world_height,
-            "layout": "grid",
-            "columns": columns,
-            "rows": rows,
-            "cell_width": round(cell_width, 4),
-            "cell_height": round(cell_height, 4),
+            "layout": "sphere",
+            "radius": round(sphere_radius, 4),
+            "diameter": round(sphere_radius * 2.0, 4),
+            "surface_area": round(surface_area, 4),
+            "asset_count": len(nodes),
             "version": getattr(engine, "ARTIFACT_VERSION", "swarm_v1"),
         },
         "as_of_date": nodes[0]["as_of_date"] if nodes else None,
@@ -1290,12 +1540,37 @@ async def swarm_world(
 
 
 @app.get("/api/swarm-history")
-async def swarm_history(days: int = 420, limit: Optional[int] = 5000):
+async def swarm_history(
+    days: int = 420,
+    limit: Optional[int] = 5000,
+    scan_scope: Optional[str] = None,
+    exchange: Optional[str] = None,
+    ticker_list: Optional[str] = None,
+    debug_assets: Optional[int] = None,
+):
     """Return compact cached close-price history for current swarm tickers."""
     safe_days = max(2, min(int(days), 1500))
     safe_limit = max(1, min(int(limit or 5000), 5000))
     db = get_db()
     engine = SwarmWorldEngine(db_path=str(db.db_path))
+    debug_scope = _swarm_is_debug_scope(scan_scope, exchange)
+
+    if debug_scope:
+        debug_count = _swarm_debug_asset_count(debug_assets)
+        debug_nodes = _swarm_debug_nodes(
+            engine,
+            debug_count,
+            scan_scope=scan_scope,
+            exchange=exchange,
+            ticker_list=ticker_list,
+        )
+        return _swarm_debug_history_payload(
+            debug_nodes,
+            safe_days,
+            scan_scope=scan_scope,
+            exchange=exchange,
+            ticker_list=ticker_list,
+        )
 
     try:
         world_df = engine.get_world(limit=safe_limit, refresh=False)
@@ -1303,10 +1578,28 @@ async def swarm_history(days: int = 420, limit: Optional[int] = 5000):
         logger.error("Swarm history world lookup failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+    selected_tickers = _swarm_scope_tickers(
+        db,
+        scan_scope=scan_scope,
+        exchange=exchange,
+        ticker_list=ticker_list,
+    )
+    normalized_scope = _normalize_market_source(scan_scope or exchange or "xetra")
     tickers = [
         str(ticker).upper()
         for ticker in world_df.get("ticker", pd.Series(dtype=str)).dropna().tolist()
     ]
+    if selected_tickers:
+        selected = {str(ticker).upper() for ticker in selected_tickers}
+        tickers = [ticker for ticker in tickers if ticker in selected]
+    elif normalized_scope in {"list", "all_lists"}:
+        tickers = []
+    elif normalized_scope in {"xetra", "sweden"}:
+        tickers = [
+            ticker
+            for ticker in tickers
+            if _ticker_matches_swarm_scope(ticker, normalized_scope)
+        ]
     if not tickers:
         return {
             "days": safe_days,

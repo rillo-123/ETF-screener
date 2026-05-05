@@ -91,7 +91,7 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
         global.fetch = async (url) => ({{
           ok: true,
           json: async () => String(url).includes("swarm-world")
-            ? {{ world: {{ layout: "grid", rows: 1, columns: 1, cell_width: 1, cell_height: 1 }}, nodes: [], count: 0 }}
+            ? {{ world: {{ layout: "sphere", radius: 1, diameter: 2, surface_area: 12.566, asset_count: 0 }}, nodes: [], count: 0 }}
             : String(url).includes("ticker-universe")
               ? {{ count: 0, items: [] }}
               : String(url).includes("custom-ticker-list")
@@ -117,6 +117,12 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
         if (typeof window.exportTopMatches !== "function") {{
           throw new Error("exportTopMatches is not exposed on window");
         }}
+        if (typeof window.stepSwarmDays !== "function") {{
+          throw new Error("stepSwarmDays is not exposed on window");
+        }}
+        if (typeof window.setSwarmDebugAssetCount !== "function") {{
+          throw new Error("setSwarmDebugAssetCount is not exposed on window");
+        }}
         window.showTab("swarm");
         if (document.getElementById("tab-swarm").classList.contains("hidden")) {{
           throw new Error("Swarm tab stayed hidden after showTab('swarm')");
@@ -124,6 +130,277 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
         if (!document.getElementById("tab-btn-swarm").classList.contains("active")) {{
           throw new Error("Swarm tab button did not become active");
         }}
+        """)
+
+    result = subprocess.run(
+        [node, "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_dashboard_js_scan_source_buttons_toggle_debug_controls():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for dashboard JavaScript smoke tests")
+
+    dashboard_js = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "ETF_screener"
+        / "dashboard"
+        / "static"
+        / "js"
+        / "dashboard.js"
+    )
+    script = textwrap.dedent(f"""
+        const fs = require("fs");
+
+        class ClassList {{
+          constructor() {{ this.values = new Set(); }}
+          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
+          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
+          contains(name) {{ return this.values.has(name); }}
+          toggle(name, force) {{
+            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
+            if (shouldAdd) this.values.add(name);
+            else this.values.delete(name);
+            return shouldAdd;
+          }}
+        }}
+
+        class Element {{
+          constructor(id = "") {{
+            this.id = id;
+            this.classList = new ClassList();
+            this.children = [];
+            this.dataset = {{}};
+            this.style = {{}};
+            this.options = [];
+            this.value = "";
+            this.textContent = "";
+            this.innerHTML = "";
+            this.disabled = false;
+            this.hidden = false;
+            this.clientWidth = 900;
+            this.clientHeight = 520;
+          }}
+          addEventListener() {{}}
+          setAttribute(name, value) {{ this[name] = value; }}
+          appendChild(child) {{
+            this.children.push(child);
+            if (Array.isArray(this.options)) {{
+              this.options.push(child);
+            }}
+            return child;
+          }}
+          remove() {{}}
+          focus() {{}}
+          getBoundingClientRect() {{
+            return {{ width: this.clientWidth, height: this.clientHeight, left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight }};
+          }}
+          getContext() {{
+            const noop = () => {{}};
+            return new Proxy({{}}, {{ get: () => noop, set: () => true }});
+          }}
+        }}
+
+        const elements = new Map();
+        const getElement = (id) => {{
+          if (!elements.has(id)) elements.set(id, new Element(id));
+          return elements.get(id);
+        }};
+
+        ["screener", "shortlist", "swarm", "backtest"].forEach((tab) => {{
+          getElement(`tab-${{tab}}`).classList.add("hidden");
+          getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
+        }});
+
+        ["xetra", "sweden", "list", "all_lists", "debug"].forEach((scope) => {{
+          const screenerBtn = getElement(`scan-source-${{scope}}`);
+          screenerBtn.dataset.scope = scope;
+          screenerBtn.classList.add("scan-source-btn");
+          const swarmBtn = getElement(`swarm-scan-source-${{scope}}`);
+          swarmBtn.dataset.scope = scope;
+          swarmBtn.classList.add("scan-source-btn");
+        }});
+
+        ["list-modal-xetra", "list-modal-sweden", "list-modal-all"].forEach((id, index) => {{
+          const btn = getElement(id);
+          btn.dataset.listExchange = index === 0 ? "xetra" : index === 1 ? "sweden" : "all";
+        }});
+
+        [
+          "swarm-debug-controls",
+          "swarm-debug-count",
+          "swarm-debug-count-label",
+          "swarm-world-visibility",
+          "ticker-select",
+          "shortlist-market-status",
+          "list-modal",
+          "list-modal-grid",
+          "list-modal-visible-count",
+          "list-modal-search",
+          "list-modal-name",
+          "list-modal-preview",
+          "list-modal-list-select",
+          "list-modal-count",
+          "strategy-select",
+          "strategy-editor",
+          "strategy-filename",
+        ].forEach(getElement);
+
+        getElement("strategy-select").options = [new Element("strategy-option")];
+
+        global.window = global;
+        global.window.addEventListener = () => {{}};
+        global.document = {{
+          body: new Element("body"),
+          createElement: (tag) => new Element(tag),
+          getElementById: getElement,
+          querySelectorAll: (selector) => {{
+            if (selector === ".tab-btn") {{
+              return ["screener", "shortlist", "swarm", "backtest"]
+                .map((tab) => getElement(`tab-btn-${{tab}}`));
+            }}
+            if (selector.includes(".scan-source-btn")) {{
+              return ["xetra", "sweden", "list", "all_lists", "debug"].flatMap((scope) => [
+                getElement(`scan-source-${{scope}}`),
+                getElement(`swarm-scan-source-${{scope}}`),
+              ]);
+            }}
+            if (selector === "[data-list-exchange]") {{
+              return ["list-modal-xetra", "list-modal-sweden", "list-modal-all"]
+                .map((id) => getElement(id));
+            }}
+            return [];
+          }},
+          addEventListener: () => {{}},
+        }};
+        global.localStorage = {{
+          getItem: (key) => {{
+            if (key === "etf-discovery:last-custom-list") return "AAA,BBB";
+            if (key === "etf-discovery:last-custom-list-name") return "My List";
+            if (key === "etf-discovery:last-swarm-debug-asset-count") return "24";
+            return "";
+          }},
+          setItem: () => {{}},
+          removeItem: () => {{}},
+        }};
+        global.fetch = async (url) => {{
+          const target = String(url);
+          if (target.includes("/api/ticker-universe")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                count: 3,
+                items: [
+                  {{ ticker: "AAA", exchange: "xetra", label: "AAA" }},
+                  {{ ticker: "BBB", exchange: "sweden", label: "BBB" }},
+                  {{ ticker: "CCC", exchange: "xetra", label: "CCC" }},
+                ],
+              }}),
+            }};
+          }}
+          if (target.includes("/api/custom-ticker-list")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                active_name: "My List",
+                lists: [{{ name: "My List", tickers: ["AAA", "BBB"] }}],
+                tickers: ["AAA", "BBB"],
+              }}),
+            }};
+          }}
+          if (target.includes("/api/market-status")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                today: "2026-05-05",
+                latest_market_date: "2026-05-05",
+                days_stale: 0,
+                is_stale: false,
+                fresh_tickers: 3,
+                tracked_tickers: 3,
+              }}),
+            }};
+          }}
+          if (target.includes("/api/log")) {{
+            return {{ ok: true, json: async () => ({{ ok: true }}) }};
+          }}
+          return {{ ok: true, json: async () => ({{}}) }};
+        }};
+        global.requestAnimationFrame = () => 1;
+        global.cancelAnimationFrame = () => {{}};
+        global.setTimeout = () => 1;
+        global.setInterval = () => 1;
+        global.clearInterval = () => {{}};
+        global.alert = () => {{}};
+        global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
+
+        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
+        Function(source)();
+
+        const waitForReady = window.dashboardReadyPromise || Promise.resolve();
+
+        (async () => {{
+          await waitForReady;
+
+          const debugPanel = getElement("swarm-debug-controls");
+          const sourceScopes = ["xetra", "sweden", "list", "all_lists", "debug"];
+
+          const assertScope = (expectedScope, expectDebugVisible) => {{
+            sourceScopes.forEach((scope) => {{
+              const screenerActive = getElement(`scan-source-${{scope}}`).classList.contains("is-active");
+              const swarmActive = getElement(`swarm-scan-source-${{scope}}`).classList.contains("is-active");
+              const shouldBeActive = scope === expectedScope;
+              if (screenerActive !== shouldBeActive) {{
+                throw new Error(`Screener scope ${{scope}} active state mismatch for ${{expectedScope}}`);
+              }}
+              if (swarmActive !== shouldBeActive) {{
+                throw new Error(`Swarm scope ${{scope}} active state mismatch for ${{expectedScope}}`);
+              }}
+            }});
+            if (debugPanel.hidden !== !expectDebugVisible) {{
+              throw new Error(`Debug panel visibility mismatch for ${{expectedScope}}`);
+            }}
+            if (getElement("swarm-debug-count").disabled !== !expectDebugVisible) {{
+              throw new Error(`Debug input disabled state mismatch for ${{expectedScope}}`);
+            }}
+          }};
+
+          for (const scope of sourceScopes) {{
+            await window.setScanSource(scope);
+            assertScope(scope, scope === "debug");
+          }}
+
+          const worldCaption = getElement("swarm-world-caption");
+          await window.setScanSource("debug");
+          if (typeof window.loadSwarmWorld === "function") {{
+            await window.loadSwarmWorld(true);
+          }}
+          if (!String(worldCaption.textContent || "").toLowerCase().includes("debug plane")) {{
+            throw new Error("Debug plane caption did not appear");
+          }}
+
+          const worldBadge = getElement("swarm-world-visibility");
+          await window.setSwarmZoom(2.2);
+          if (worldBadge.textContent !== "Zoomed in") {{
+            throw new Error("World visibility badge did not show zoomed-in state");
+          }}
+          await window.setSwarmZoom(0.35);
+          if (worldBadge.textContent !== "Whole world visible") {{
+            throw new Error("World visibility badge did not show whole-world state");
+          }}
+
+          await window.setScanSource("xetra");
+          assertScope("xetra", false);
+        }})().catch((err) => {{
+          console.error(err);
+          process.exit(1);
+        }});
         """)
 
     result = subprocess.run(
@@ -626,7 +903,7 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
           if (String(url).includes("swarm-world")) {{
             return {{
               ok: true,
-              json: async () => ({{ world: {{ layout: "grid", rows: 1, columns: 1, cell_width: 1, cell_height: 1 }}, nodes: [], count: 0 }}),
+              json: async () => ({{ world: {{ layout: "sphere", radius: 1, diameter: 2, surface_area: 12.566, asset_count: 0 }}, nodes: [], count: 0 }}),
             }};
           }}
           if (String(url).includes("swarm-history")) {{

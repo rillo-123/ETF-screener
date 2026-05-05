@@ -52,6 +52,11 @@ def test_tab_bar_visible():
     assert 'id="scan-source-sweden"' in html
     assert 'id="scan-source-list"' in html
     assert 'id="scan-source-all-lists"' in html
+    assert 'id="swarm-scan-source-toggle"' in html
+    assert 'id="swarm-scan-source-xetra"' in html
+    assert 'id="swarm-scan-source-sweden"' in html
+    assert 'id="swarm-scan-source-list"' in html
+    assert 'id="swarm-scan-source-all-lists"' in html
     assert 'id="list-edit-btn"' in html
     assert ">Screener<" in html
     assert ">Shortlist<" in html
@@ -64,11 +69,14 @@ def test_tab_bar_visible():
     assert "Signal Window" in html
     assert 'id="shortlist-grid"' in html
     assert 'id="swarm-canvas"' in html
+    assert 'id="swarm-step-1-btn"' in html
+    assert 'id="swarm-step-10-btn"' in html
     assert 'id="swarm-timeline-slider"' in html
     assert 'id="swarm-jump-cost-slider"' in html
-    assert "Global ticker scan" in html
+    assert "Global asset scan" in html
     assert 'id="swarm-agents-per-node-slider"' in html
     assert 'id="swarm-zoom-slider"' in html
+    assert 'id="swarm-world-visibility"' in html
     assert 'id="swarm-stop-btn"' in html
     assert 'id="swarm-agent-selected"' in html
     assert 'id="swarm-top-agents"' in html
@@ -108,7 +116,7 @@ def test_tab_bar_visible():
     assert "SWARM_SPHERE_REPULSION_SAMPLE" in dashboard_source
     assert "setSwarmZoom" in dashboard_source
     assert "DUMMY-R" not in dashboard_source
-    assert "wealth-scaled positive charges" in dashboard_source
+    assert "asset sphere" in dashboard_source
     assert "updateFixedSwarmNodeWorth" in dashboard_source
     assert "fixed ticker map" not in dashboard_source
     assert "childHeadStart" in dashboard_source
@@ -116,7 +124,12 @@ def test_tab_bar_visible():
     assert "getSwarmTickerDrawRadius" in dashboard_source
     assert "SWARM_MAX_AGENTS = 5000" in dashboard_source
     assert "swarmCompletedAgents" in dashboard_source
-    assert "virus-like agents" in dashboard_source
+    assert "stepSwarmDays" in dashboard_source
+    assert "three.min.js" in dashboard_source
+    assert "asset sphere" in dashboard_source
+    assert "getSwarmScopeQueryParams" in dashboard_source
+    assert "setSwarmDebugAssetCount" in dashboard_source
+    assert "debug_assets" in dashboard_source
     assert "exportTopMatches" in dashboard_source
     assert "getSwarmAgentHeading" in dashboard_source
     assert "startSwarmPlayback" in dashboard_source
@@ -607,13 +620,58 @@ def test_swarm_world_endpoint(monkeypatch):
                 "grid_col": 4,
                 "x": 1220.4,
                 "y": 210.0,
+                "z": 88.0,
                 "radius": 9.5,
+                "value": 239.84,
+                "mass": 5.61,
+                "sphere_radius": 244.0,
+                "sphere_x": 88.0,
+                "sphere_y": 130.0,
+                "sphere_z": 194.0,
+                "latitude": 0.42,
+                "longitude": 1.12,
                 "color": "#10b981",
-                "world_version": "swarm_v3_grid",
+                "world_version": "swarm_v6_sphere_tetra",
                 "components_json": '{"style": "Core Broad Market"}',
                 "as_of_date": "2026-04-23",
                 "updated_at": "2026-04-23 22:10:00",
-            }
+            },
+            {
+                "ticker": "XACT.ST",
+                "name": "Swedish World ETF",
+                "issuer": "Xact",
+                "asset_class": "Equity",
+                "region": "Sweden",
+                "label": "Watch",
+                "volume": 510000,
+                "recent_entry_days": 4,
+                "product_score": 71.0,
+                "exposure_score": 69.0,
+                "technical_score": 64.0,
+                "final_score": 67.4,
+                "energy": 77.1,
+                "momentum_score": 68.2,
+                "freshness_score": 82.0,
+                "grid_row": 3,
+                "grid_col": 1,
+                "x": 980.0,
+                "y": 360.0,
+                "z": -14.0,
+                "radius": 8.4,
+                "value": 175.22,
+                "mass": 5.02,
+                "sphere_radius": 244.0,
+                "sphere_x": -72.0,
+                "sphere_y": 186.0,
+                "sphere_z": -140.0,
+                "latitude": 0.84,
+                "longitude": -0.64,
+                "color": "#38bdf8",
+                "world_version": "swarm_v6_sphere_tetra",
+                "components_json": '{"style": "Nordic Equity"}',
+                "as_of_date": "2026-04-23",
+                "updated_at": "2026-04-23 22:10:00",
+            },
         ]
     )
 
@@ -622,10 +680,7 @@ def test_swarm_world_endpoint(monkeypatch):
             self.db_path = db_path
             self.WORLD_WIDTH = 1600.0
             self.WORLD_HEIGHT = 920.0
-            self.ARTIFACT_VERSION = "swarm_v3_grid"
-
-        def grid_dimensions(self, node_count):
-            return 6, 3
+            self.ARTIFACT_VERSION = "swarm_v6_sphere_tetra"
 
         def get_world(self, limit=None, label=None, refresh=False):
             return fake_df
@@ -634,22 +689,38 @@ def test_swarm_world_endpoint(monkeypatch):
         "ETF_screener.dashboard.app_fast.SwarmWorldEngine",
         FakeSwarmEngine,
     )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._swarm_scope_tickers",
+        lambda db, scan_scope=None, exchange=None, ticker_list=None: (
+            ["EUNL.DE"]
+            if (scan_scope or exchange or "xetra") in {"xetra", None, "exchange"}
+            else ["XACT.ST"]
+        ),
+    )
 
     response = client.get("/api/swarm-world")
     assert response.status_code == 200
     data = response.json()
     assert data["count"] == 1
-    assert data["world"]["width"] > 0
-    assert data["world"]["layout"] == "grid"
-    assert data["world"]["columns"] == 6
-    assert data["world"]["rows"] == 3
-    assert data["world"]["cell_width"] > 0
+    assert data["world"]["layout"] == "sphere"
+    assert data["world"]["radius"] > 0
+    assert data["world"]["asset_count"] == 1
     assert data["nodes"][0]["ticker"] == "EUNL.DE"
     assert data["nodes"][0]["energy"] == 82.5
-    assert data["nodes"][0]["row"] == 2
-    assert data["nodes"][0]["col"] == 4
+    assert data["nodes"][0]["value"] == 239.84
+    assert data["nodes"][0]["mass"] == 5.61
+    assert data["nodes"][0]["sphere_radius"] == 244.0
+    assert data["nodes"][0]["sphere_x"] == 88.0
+    assert data["nodes"][0]["sphere_y"] == 130.0
+    assert data["nodes"][0]["sphere_z"] == 194.0
     assert data["nodes"][0]["is_dummy"] is False
-    assert data["nodes"][0]["world_version"] == "swarm_v3_grid"
+    assert data["nodes"][0]["world_version"] == "swarm_v6_sphere_tetra"
+
+    sweden_response = client.get("/api/swarm-world?scan_scope=sweden")
+    assert sweden_response.status_code == 200
+    sweden_data = sweden_response.json()
+    assert sweden_data["count"] == 1
+    assert sweden_data["nodes"][0]["ticker"] == "XACT.ST"
 
 
 def test_swarm_history_endpoint_returns_cached_close_history(monkeypatch):
@@ -698,6 +769,13 @@ def test_swarm_history_endpoint_returns_cached_close_history(monkeypatch):
         "ETF_screener.dashboard.app_fast.SwarmWorldEngine",
         FakeSwarmEngine,
     )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._swarm_scope_tickers",
+        lambda db, scan_scope=None, exchange=None, ticker_list=None: [
+            "AAA.DE",
+            "BBB.DE",
+        ],
+    )
 
     response = client.get("/api/swarm-history?days=2&limit=2")
     assert response.status_code == 200
@@ -713,6 +791,45 @@ def test_swarm_history_endpoint_returns_cached_close_history(monkeypatch):
     assert data["history"]["BBB.DE"]["dividends"] == [0.0, 0.0]
 
 
+def test_swarm_debug_scope_generates_dummy_assets(monkeypatch, tmp_path):
+    class FakeDB:
+        db_path = str(tmp_path / "debug.db")
+
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", lambda: FakeDB())
+
+    world_response = client.get("/api/swarm-world?scan_scope=debug&debug_assets=5")
+    assert world_response.status_code == 200
+    world = world_response.json()
+    assert world["world"]["layout"] == "sphere"
+    assert world["world"]["asset_count"] == 5
+    assert world["count"] == 5
+    assert len(world["nodes"]) == 5
+    assert all(str(node["ticker"]).startswith("DUMMY-") for node in world["nodes"])
+    assert all(node["is_dummy"] is True for node in world["nodes"])
+    radii = [float(node["radius"]) for node in world["nodes"]]
+    assert min(radii) >= 1.7
+    assert max(radii) <= 3.7
+    assert max(radii) - min(radii) >= 0.25
+
+    history_response = client.get(
+        "/api/swarm-history?scan_scope=debug&debug_assets=5&days=4"
+    )
+    assert history_response.status_code == 200
+    history = history_response.json()
+    assert history["requested_tickers"] == 5
+    assert history["count"] == 5
+    assert history["days"] == 4
+    assert len(history["history"]) == 5
+    assert all(str(ticker).startswith("DUMMY-") for ticker in history["history"])
+    for payload in history["history"].values():
+        closes = payload["closes"]
+        dividends = payload["dividends"]
+        assert len(closes) == 4
+        assert len(dividends) == 4
+        assert len(set(round(close, 6) for close in closes)) == 1
+        assert all(dividend == 0.0 for dividend in dividends)
+
+
 def test_swarm_dna_save_endpoint_writes_config(monkeypatch, tmp_path):
     target_path = tmp_path / "config" / "swarm_agent_dna.json"
     monkeypatch.setattr(
@@ -723,7 +840,7 @@ def test_swarm_dna_save_endpoint_writes_config(monkeypatch, tmp_path):
     payload = {
         "schema_version": "swarm_agent_dna_v2",
         "created_at": "2026-04-26T12:00:00.000Z",
-        "world_version": "swarm_v3_grid",
+        "world_version": "swarm_v6_sphere_tetra",
         "as_of_date": "2026-04-24",
         "simulation": {
             "steps": 250,
