@@ -90,7 +90,7 @@ def test_tab_bar_visible():
     assert "force=true&stale_after_days=0" in dashboard_source
     assert "/api/swarm-history" in dashboard_source
     assert 'id="swarm-dna-save-status"' in html
-    assert "/static/js/dashboard.js" in html
+    assert "/static/js/dashboard-loader.js" in html
     assert "/static/js/browser-log-relay.js" in html
     assert "supertrend_continuation" in html
     assert "SWARM_DNA_SCHEMA_VERSION" in dashboard_source
@@ -113,6 +113,8 @@ def test_tab_bar_visible():
     assert "swarmJumpCostMultiplier" in dashboard_source
     assert "getSwarmGlobalCandidateNodes" in dashboard_source
     assert "stableSwarmSphereVector" in dashboard_source
+    assert "normalizeSwarmDebugSphereNodes" in dashboard_source
+    assert "getSwarmDebugCapRadius" in dashboard_source
     assert "SWARM_SPHERE_REPULSION_SAMPLE" in dashboard_source
     assert "setSwarmZoom" in dashboard_source
     assert "DUMMY-R" not in dashboard_source
@@ -125,8 +127,9 @@ def test_tab_bar_visible():
     assert "SWARM_MAX_AGENTS = 5000" in dashboard_source
     assert "swarmCompletedAgents" in dashboard_source
     assert "stepSwarmDays" in dashboard_source
-    assert "three.min.js" in dashboard_source
+    assert "dashboard-loader.js" in dashboard_source
     assert "asset sphere" in dashboard_source
+    assert "debug sphere" in dashboard_source
     assert "getSwarmScopeQueryParams" in dashboard_source
     assert "setSwarmDebugAssetCount" in dashboard_source
     assert "debug_assets" in dashboard_source

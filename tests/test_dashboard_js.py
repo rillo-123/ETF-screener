@@ -381,8 +381,8 @@ def test_dashboard_js_scan_source_buttons_toggle_debug_controls():
           if (typeof window.loadSwarmWorld === "function") {{
             await window.loadSwarmWorld(true);
           }}
-          if (!String(worldCaption.textContent || "").toLowerCase().includes("debug plane")) {{
-            throw new Error("Debug plane caption did not appear");
+          if (!String(worldCaption.textContent || "").toLowerCase().includes("debug sphere")) {{
+            throw new Error("Debug sphere caption did not appear");
           }}
 
           const worldBadge = getElement("swarm-world-visibility");

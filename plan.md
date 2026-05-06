@@ -1,6 +1,6 @@
 # Plan
 
-Last updated: 2026-05-05 22:47:42 +02:00
+Last updated: 2026-05-06 22:09:43 +02:00
 
 ## Current objective
 
@@ -8,6 +8,10 @@ End-of-day workflow completed successfully with no auto-fixes required.
 
 ## Current state
 
+- -Summary
+- Switched the dashboard to a local Three.js loader so the Swarm globe no longer depends on the CDN.
+- Added swarm renderer diagnostics to the browser console and confirmed the earlier missing graticule was caused by Three.js not loading.
+- The debug Swarm globe now renders visible sphere-hugging cap geometry instead of floating sprite markers, and the globe/graticule are visible in live testing.
 - -Summary
 - -Summary
 - -Summary
@@ -93,6 +97,7 @@ End-of-day workflow completed successfully with no auto-fixes required.
 
 ## Locked decisions
 
+- -NextResumePoint
 - -NextResumePoint
 - -Summary
 - -NextResumePoint

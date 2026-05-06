@@ -1,5 +1,17 @@
 # Progress
 
+## 2026-05-06 22:09:43 +02:00
+
+- -Summary
+- Next resume point: Review the latest commit and pick up the next implementation task.
+
+## 2026-05-06 22:08:43 +02:00
+
+- Switched the dashboard to a local Three.js loader so the Swarm globe no longer depends on the CDN.
+- Added swarm renderer diagnostics to the browser console and confirmed the earlier missing graticule was caused by Three.js not loading.
+- The debug Swarm globe now renders visible sphere-hugging cap geometry instead of floating sprite markers, and the globe/graticule are visible in live testing.
+- Next resume point: Reload the debug Swarm globe, live-tune cap depth and contact behavior, and decide whether the next pass should emphasize exact tangency or richer cap shading.
+
 ## 2026-05-05 22:47:42 +02:00
 
 - -Summary
