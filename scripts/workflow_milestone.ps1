@@ -1,28 +1,38 @@
 <#
-workflow_end_of_day.ps1
+workflow_milestone.ps1
 
-End-of-day maintenance workflow for the ETF Screener repo.
+Milestone maintenance workflow for the ETF Screener repo.
 
 What it does:
   1. Updates plan.md and progress.md.
   2. Runs the test suite.
   3. Optionally applies light auto-fixes when tests fail.
-  4. Reruns the tests once after fixes.
-  5. Commits and pushes the current branch if the tree is in a good state.
+  4. Reruns the tests after those fixes.
+  5. Stops if tests are still failing; otherwise commits and pushes the current branch.
+
+Conversation convention:
+  "Set the milestone" means the work should be carried to a clean checkpoint:
+    - update plan.md and progress.md
+    - run the full test suite
+    - fix remaining bugs until everything passes
+    - commit and push the finished checkpoint
+
+This script handles the reproducible gate/publish portion of that workflow.
+If substantive bugs remain after the automatic fix pass, repair them and rerun
+the milestone workflow.
 
 Usage:
-  .\workflow_end_of_day.ps1
-  .\workflow_end_of_day.ps1 -QualityGate
-  .\workflow_end_of_day.ps1 -NoAutoFix
-  .\workflow_end_of_day.ps1 -CommitMessage "chore: end-of-day sync"
-  .\workflow_end_of_day.ps1 -Parallel -TimeoutSec 120
+  .\workflow_milestone.ps1
+  .\workflow_milestone.ps1 -NoAutoFix
+  .\workflow_milestone.ps1 -CommitMessage "chore: milestone sync"
+  .\workflow_milestone.ps1 -- -Parallel -TimeoutSec 120
 
 Any extra arguments are forwarded to `run_all_tests.ps1`.
 #>
 
 param(
     [switch]$NoAutoFix,
-    [string]$CommitMessage = "chore: end-of-day sync",
+    [string]$CommitMessage = "chore: milestone sync",
     [switch]$Help,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$TestRunnerArgs
@@ -32,22 +42,27 @@ $ErrorActionPreference = 'Stop'
 
 if ($Help) {
     Write-Host @"
-workflow_end_of_day.ps1
+workflow_milestone.ps1
 
-End-of-day maintenance workflow for the ETF Screener repo.
+Milestone maintenance workflow for the ETF Screener repo.
 
 Usage:
-  .\workflow_end_of_day.ps1
-  .\workflow_end_of_day.ps1 -NoAutoFix
-  .\workflow_end_of_day.ps1 -CommitMessage "chore: end-of-day sync"
-  .\workflow_end_of_day.ps1 -Parallel -TimeoutSec 120
+  .\workflow_milestone.ps1
+  .\workflow_milestone.ps1 -NoAutoFix
+  .\workflow_milestone.ps1 -CommitMessage "chore: milestone sync"
+  .\workflow_milestone.ps1 -- -Parallel -TimeoutSec 120
 
 Behavior:
-  1. Updates plan.md and progress.md with the end-of-day outcome.
+  1. Updates plan.md and progress.md with the current milestone outcome.
   2. Runs run_all_tests.ps1.
   3. Applies light auto-fixes with ruff and black if the tests fail.
-  4. Reruns the tests once after fixes.
-  5. Commits and pushes the current branch if everything passes.
+  4. Reruns the tests after those fixes.
+  5. Stops if tests are still failing; otherwise commits and pushes the current branch.
+
+Conversation convention:
+  "Set the milestone" means: update plan/progress, run all tests, fix bugs
+  until everything passes, and then commit/push the checkpoint. This script
+  performs the repeatable gate/publish step after the code is ready.
 
 Any extra arguments are forwarded to run_all_tests.ps1.
 "@
@@ -74,7 +89,7 @@ if (-not (Test-Path $logDir)) {
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 }
 
-$logFile = Join-Path $logDir "workflow_end_of_day_$timestamp.log"
+$logFile = Join-Path $logDir "workflow_milestone_$timestamp.log"
 Start-Transcript -Path $logFile -Append | Out-Null
 
 function Write-Info {
@@ -185,7 +200,7 @@ function Get-CurrentBranch {
 
 try {
     Write-Host "`n" + ("=" * 60) -ForegroundColor Cyan
-    Write-Host "ETF SCREENER - END OF DAY WORKFLOW" -ForegroundColor Cyan
+    Write-Host "ETF SCREENER - MILESTONE WORKFLOW" -ForegroundColor Cyan
     Write-Host ("=" * 60) -ForegroundColor Cyan
 
     $testExitCode = Invoke-TestSuite -RunnerArgs $TestRunnerArgs
@@ -211,12 +226,12 @@ try {
     $summaryLines = @()
     if ($testExitCode -eq 0) {
         if ($appliedFixes.Count -gt 0) {
-            $summaryLines += "End-of-day workflow completed successfully after applying fixes: $($appliedFixes -join ', ')."
+            $summaryLines += "Milestone workflow completed successfully after applying fixes: $($appliedFixes -join ', ')."
         } else {
-            $summaryLines += "End-of-day workflow completed successfully with no auto-fixes required."
+            $summaryLines += "Milestone workflow completed successfully with no auto-fixes required."
         }
     } else {
-        $summaryLines += "End-of-day workflow stopped because the test suite still fails."
+        $summaryLines += "Milestone workflow stopped because the test suite still fails."
         if ($appliedFixes.Count -gt 0) {
             $summaryLines += "Applied fixes before stopping: $($appliedFixes -join ', ')."
         }
@@ -225,7 +240,7 @@ try {
     $nextResumePoint = if ($testExitCode -eq 0) {
         "Review the latest commit and pick up the next implementation task."
     } else {
-        "Inspect the failing test output and fix the remaining bug before rerunning end-of-day."
+        "Inspect the failing test output and fix the remaining bug before rerunning the milestone workflow."
     }
 
     Write-Info "Updating plan.md and progress.md..."
@@ -244,7 +259,7 @@ try {
         throw "git add failed with exit code $addExit"
     }
 
-    # Keep obviously local runtime artifacts out of the end-of-day commit.
+    # Keep obviously local runtime artifacts out of the milestone commit.
     $excludePaths = @(
         'etf.db',
         'config/delisting_state.json'
@@ -267,7 +282,7 @@ try {
     }
 
     if ([string]::IsNullOrWhiteSpace($CommitMessage)) {
-        $CommitMessage = "chore: end-of-day sync"
+        $CommitMessage = "chore: milestone sync"
     }
 
     Write-Info "Creating commit on branch '$branch'..."

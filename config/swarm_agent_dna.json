@@ -1,630 +1,630 @@
 {
   "schema_version": "swarm_agent_dna_v2",
-  "created_at": "2026-05-06T19:40:48.361Z",
+  "created_at": "2026-05-06T21:13:01.065Z",
   "world_version": "swarm_v6_sphere_tetra",
   "as_of_date": "2026-05-06",
   "simulation": {
     "steps": 419,
     "max_steps": 419,
     "filter": "All",
-    "visible_node_count": 6,
+    "visible_node_count": 24,
     "starting_energy": 10000,
     "jump_cost_multiplier": 2,
     "history_days": 420,
-    "history_ticker_count": 6
+    "history_ticker_count": 24
   },
   "top_agents": [
     {
       "rank": 1,
-      "id": "DUMMY-002-1-jsy3sm",
+      "id": "DUMMY-008-1-0bojbw",
       "generation": 1,
-      "energy": 4767.651258252642,
-      "profit": -5232.348741747358,
-      "age": 6034.015360614753,
-      "target_ticker": "DUMMY-005",
-      "learned_ticker_count": 6,
+      "energy": 5112.452418097897,
+      "profit": -4887.547581902103,
+      "age": 6034.009360374748,
+      "target_ticker": "DUMMY-008",
+      "learned_ticker_count": 1,
       "dna": {
         "schema_version": "swarm_agent_dna_v2",
-        "ema_fast_period": 44,
-        "ema_slow_period": 75,
-        "rsi_period": 16,
-        "rsi_low": 26,
-        "rsi_high": 83,
+        "ema_fast_period": 98,
+        "ema_slow_period": 182,
+        "rsi_period": 24,
+        "rsi_low": 33,
+        "rsi_high": 84,
         "behavior_modules": [
           {
             "type": "ema_cross_up",
-            "stay_weight": -0.11347274726907737,
-            "jump_weight": 0.8775311034110126,
-            "fast_period": 44,
-            "slow_period": 75
+            "stay_weight": -0.16177412142736108,
+            "jump_weight": 0.6769590870916437,
+            "fast_period": 98,
+            "slow_period": 182
           },
           {
             "type": "ema_cross_down",
-            "stay_weight": -0.7575716423819531,
-            "jump_weight": 0.48364305838960225,
-            "fast_period": 44,
-            "slow_period": 75
+            "stay_weight": -0.8011021869760588,
+            "jump_weight": 0.6012742348585475,
+            "fast_period": 98,
+            "slow_period": 182
           },
           {
             "type": "rsi_low",
-            "stay_weight": 0.365805150035834,
-            "jump_weight": 0.2796305765007364,
-            "period": 16,
-            "threshold": 26
+            "stay_weight": 0.34262568170834984,
+            "jump_weight": 0.1621274131933033,
+            "period": 24,
+            "threshold": 33
           },
           {
             "type": "rsi_high",
-            "stay_weight": -0.2886632244174106,
-            "jump_weight": 0.44462593102634973,
-            "period": 16,
-            "threshold": 83
+            "stay_weight": -0.5059115149945597,
+            "jump_weight": 0.2775686420160787,
+            "period": 24,
+            "threshold": 84
           }
         ],
-        "mutation_rate": 0.04357896894111678,
-        "spawn_limit": 15080.63217918823,
-        "jump_cost_sensitivity": 0.49003927113086887,
-        "exploration_bias": 0.8709640220672784,
+        "mutation_rate": 0.08016439071435076,
+        "spawn_limit": 20309.875920846247,
+        "jump_cost_sensitivity": 2.2,
+        "exploration_bias": 0.2979596464040681,
         "metabolism": 0.45,
-        "speed": 1.240175571253552
+        "speed": 1.5385046578596013
       },
       "rules": [
-        "Hold winners while EMA 44 stays constructive against EMA 75; jump only when a global ticker setup clears friction.",
+        "Hold winners while EMA 98 stays constructive against EMA 182; jump only when a global ticker setup clears friction.",
         "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
-        "Use RSI 26-83 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
-        "Move readily when a global alternative looks better after transaction and jump friction.",
-        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
+        "Use RSI 33-84 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
+        "Prefer known assets with positive memory over novelty."
       ]
     },
     {
       "rank": 2,
-      "id": "DUMMY-004-1-9b2i9j",
+      "id": "DUMMY-014-1-lsvbs5",
       "generation": 1,
-      "energy": 4555.520753141383,
-      "profit": -5444.479246858617,
-      "age": 6034.015360614753,
-      "target_ticker": "DUMMY-004",
+      "energy": 5112.452418097897,
+      "profit": -4887.547581902103,
+      "age": 6034.009360374748,
+      "target_ticker": "DUMMY-014",
       "learned_ticker_count": 1,
       "dna": {
         "schema_version": "swarm_agent_dna_v2",
-        "ema_fast_period": 111,
-        "ema_slow_period": 166,
-        "rsi_period": 14,
-        "rsi_low": 39,
-        "rsi_high": 81,
+        "ema_fast_period": 84,
+        "ema_slow_period": 237,
+        "rsi_period": 7,
+        "rsi_low": 44,
+        "rsi_high": 59,
         "behavior_modules": [
           {
             "type": "ema_cross_up",
-            "stay_weight": -0.059644472112782676,
-            "jump_weight": 0.8036282423962133,
-            "fast_period": 111,
-            "slow_period": 166
+            "stay_weight": -0.23669848112403546,
+            "jump_weight": 0.7233582662825261,
+            "fast_period": 84,
+            "slow_period": 237
           },
           {
             "type": "ema_cross_down",
-            "stay_weight": -0.8100438286034918,
-            "jump_weight": 0.3324361694921931,
-            "fast_period": 111,
-            "slow_period": 166
+            "stay_weight": -0.8376356824906378,
+            "jump_weight": 0.4389898713486279,
+            "fast_period": 84,
+            "slow_period": 237
           },
           {
             "type": "rsi_low",
-            "stay_weight": 0.45792269454609247,
-            "jump_weight": 0.2862685071746923,
-            "period": 14,
-            "threshold": 39
+            "stay_weight": 0.32951144360001167,
+            "jump_weight": 0.25090204768623975,
+            "period": 7,
+            "threshold": 44
           },
           {
             "type": "rsi_high",
-            "stay_weight": -0.2339994704530718,
-            "jump_weight": 0.4264180755866417,
-            "period": 14,
-            "threshold": 81
+            "stay_weight": -0.34533438575623576,
+            "jump_weight": 0.41823390605644084,
+            "period": 7,
+            "threshold": 59
           }
         ],
-        "mutation_rate": 0.06387065666298704,
-        "spawn_limit": 22000,
-        "jump_cost_sensitivity": 1.6935061918642207,
-        "exploration_bias": 0.20067228956748862,
-        "metabolism": 0.5012765980746468,
-        "speed": 1.135397659387556
+        "mutation_rate": 0.07904721743335742,
+        "spawn_limit": 21717.994456032247,
+        "jump_cost_sensitivity": 1.5662771549671426,
+        "exploration_bias": 0.5240394785194168,
+        "metabolism": 0.45,
+        "speed": 1.379720184590264
       },
       "rules": [
-        "Hold winners while EMA 111 stays constructive against EMA 166; jump only when a global ticker setup clears friction.",
+        "Hold winners while EMA 84 stays constructive against EMA 237; jump only when a global ticker setup clears friction.",
         "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
-        "Use RSI 39-81 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Use RSI 44-59 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
         "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
         "Prefer known assets with positive memory over novelty."
       ]
     },
     {
       "rank": 3,
-      "id": "DUMMY-003-1-bam3il",
+      "id": "DUMMY-002-1-hz8uxf",
       "generation": 1,
-      "energy": 4426.375060762252,
-      "profit": -5573.624939237748,
-      "age": 6034.015360614753,
-      "target_ticker": "DUMMY-005",
-      "learned_ticker_count": 6,
-      "dna": {
-        "schema_version": "swarm_agent_dna_v2",
-        "ema_fast_period": 33,
-        "ema_slow_period": 184,
-        "rsi_period": 7,
-        "rsi_low": 20,
-        "rsi_high": 81,
-        "behavior_modules": [
-          {
-            "type": "ema_cross_up",
-            "stay_weight": -0.13818461453702527,
-            "jump_weight": 0.8747933085306855,
-            "fast_period": 33,
-            "slow_period": 184
-          },
-          {
-            "type": "ema_cross_down",
-            "stay_weight": -0.9040306832755435,
-            "jump_weight": 0.36844315968716723,
-            "fast_period": 33,
-            "slow_period": 184
-          },
-          {
-            "type": "rsi_low",
-            "stay_weight": 0.28210956709894397,
-            "jump_weight": 0.2792610534552763,
-            "period": 7,
-            "threshold": 20
-          },
-          {
-            "type": "rsi_high",
-            "stay_weight": -0.3227046244493076,
-            "jump_weight": 0.4667152865710521,
-            "period": 7,
-            "threshold": 81
-          }
-        ],
-        "mutation_rate": 0.061313408242752075,
-        "spawn_limit": 14926.157967598872,
-        "jump_cost_sensitivity": 1.4215145383014018,
-        "exploration_bias": 1.3076072022761764,
-        "metabolism": 0.47274324376736127,
-        "speed": 1.1901097667824005
-      },
-      "rules": [
-        "Hold winners while EMA 33 stays constructive against EMA 184; jump only when a global ticker setup clears friction.",
-        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
-        "Use RSI 20-81 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
-        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
-        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
-      ]
-    },
-    {
-      "rank": 4,
-      "id": "DUMMY-003-1-7goipg",
-      "generation": 1,
-      "energy": 4060.1404640469123,
-      "profit": -5939.859535953088,
-      "age": 6034.015360614753,
-      "target_ticker": "DUMMY-003",
+      "energy": 5001.948817992185,
+      "profit": -4998.051182007815,
+      "age": 6034.009360374748,
+      "target_ticker": "DUMMY-002",
       "learned_ticker_count": 1,
       "dna": {
         "schema_version": "swarm_agent_dna_v2",
-        "ema_fast_period": 91,
-        "ema_slow_period": 95,
-        "rsi_period": 31,
-        "rsi_low": 39,
-        "rsi_high": 61,
+        "ema_fast_period": 41,
+        "ema_slow_period": 240,
+        "rsi_period": 28,
+        "rsi_low": 25,
+        "rsi_high": 60,
         "behavior_modules": [
           {
             "type": "ema_cross_up",
-            "stay_weight": -0.10319461159808811,
-            "jump_weight": 0.8423370490843788,
-            "fast_period": 91,
-            "slow_period": 95
+            "stay_weight": -0.12985554764534143,
+            "jump_weight": 0.8650803508534552,
+            "fast_period": 41,
+            "slow_period": 240
           },
           {
             "type": "ema_cross_down",
-            "stay_weight": -0.7851267512143355,
-            "jump_weight": 0.5672874139919273,
-            "fast_period": 91,
-            "slow_period": 95
+            "stay_weight": -0.7114215080528455,
+            "jump_weight": 0.46389818901647195,
+            "fast_period": 41,
+            "slow_period": 240
           },
           {
             "type": "rsi_low",
-            "stay_weight": 0.2937419120542722,
-            "jump_weight": 0.2624514551384717,
-            "period": 31,
-            "threshold": 39
+            "stay_weight": 0.3422735116591894,
+            "jump_weight": 0.32138282535714136,
+            "period": 28,
+            "threshold": 25
           },
           {
             "type": "rsi_high",
-            "stay_weight": -0.3907031609878596,
-            "jump_weight": 0.38371347320815535,
-            "period": 31,
-            "threshold": 61
+            "stay_weight": -0.3272482772216054,
+            "jump_weight": 0.36543954989070426,
+            "period": 28,
+            "threshold": 60
           }
         ],
-        "mutation_rate": 0.08830996717429004,
-        "spawn_limit": 17784.413874737744,
-        "jump_cost_sensitivity": 1.1072453330401864,
-        "exploration_bias": 0.49920691167479697,
-        "metabolism": 0.5468865700870237,
-        "speed": 1.1081433648805978
+        "mutation_rate": 0.07918907437931148,
+        "spawn_limit": 18066.193792400412,
+        "jump_cost_sensitivity": 0.8227612311089155,
+        "exploration_bias": 0.46798953813086824,
+        "metabolism": 0.4601741454613383,
+        "speed": 1.6338719026700688
       },
       "rules": [
-        "Hold winners while EMA 91 stays constructive against EMA 95; jump only when a global ticker setup clears friction.",
+        "Hold winners while EMA 41 stays constructive against EMA 240; jump only when a global ticker setup clears friction.",
         "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
-        "Use RSI 39-61 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Use RSI 25-60 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
         "Move readily when a global alternative looks better after transaction and jump friction.",
         "Prefer known assets with positive memory over novelty."
       ]
     },
     {
-      "rank": 5,
-      "id": "DUMMY-004-1-nu035h",
+      "rank": 4,
+      "id": "DUMMY-001-1-bgqynv",
       "generation": 1,
-      "energy": 3855.5814879738728,
-      "profit": -6144.418512026127,
-      "age": 6034.015360614753,
-      "target_ticker": "DUMMY-004",
-      "learned_ticker_count": 4,
+      "energy": 4702.260997768612,
+      "profit": -5297.739002231388,
+      "age": 6034.009360374748,
+      "target_ticker": "DUMMY-022",
+      "learned_ticker_count": 9,
       "dna": {
         "schema_version": "swarm_agent_dna_v2",
-        "ema_fast_period": 65,
-        "ema_slow_period": 69,
+        "ema_fast_period": 33,
+        "ema_slow_period": 193,
         "rsi_period": 17,
-        "rsi_low": 25,
-        "rsi_high": 58,
+        "rsi_low": 46,
+        "rsi_high": 86,
         "behavior_modules": [
           {
             "type": "ema_cross_up",
-            "stay_weight": -0.10019083716889213,
-            "jump_weight": 0.8314083263295723,
-            "fast_period": 65,
-            "slow_period": 69
+            "stay_weight": -0.25044523252489426,
+            "jump_weight": 0.729994612347777,
+            "fast_period": 33,
+            "slow_period": 193
           },
           {
             "type": "ema_cross_down",
-            "stay_weight": -0.8973879683550954,
-            "jump_weight": 0.3400315391475706,
-            "fast_period": 65,
-            "slow_period": 69
+            "stay_weight": -0.8035550129853318,
+            "jump_weight": 0.41448994174562803,
+            "fast_period": 33,
+            "slow_period": 193
           },
           {
             "type": "rsi_low",
-            "stay_weight": 0.47961905944340333,
-            "jump_weight": 0.34001245565833316,
+            "stay_weight": 0.322021722910875,
+            "jump_weight": 0.35332462642468676,
             "period": 17,
-            "threshold": 25
+            "threshold": 46
           },
           {
             "type": "rsi_high",
-            "stay_weight": -0.4634189390266003,
-            "jump_weight": 0.32852451532763516,
+            "stay_weight": -0.3050525549695227,
+            "jump_weight": 0.48794953062470675,
             "period": 17,
-            "threshold": 58
+            "threshold": 86
           }
         ],
-        "mutation_rate": 0.06643689539070094,
+        "mutation_rate": 0.06768742604765812,
         "spawn_limit": 22000,
-        "jump_cost_sensitivity": 1.6353102131698296,
-        "exploration_bias": 0.8041192110253926,
-        "metabolism": 0.5362303341641768,
-        "speed": 1.736375237317967
+        "jump_cost_sensitivity": 0.8094062992760054,
+        "exploration_bias": 0.5865980753290944,
+        "metabolism": 0.45,
+        "speed": 0.7
       },
       "rules": [
-        "Hold winners while EMA 65 stays constructive against EMA 69; jump only when a global ticker setup clears friction.",
+        "Hold winners while EMA 33 stays constructive against EMA 193; jump only when a global ticker setup clears friction.",
         "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
-        "Use RSI 25-58 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
-        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
+        "Use RSI 46-86 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move readily when a global alternative looks better after transaction and jump friction.",
         "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
       ]
     },
     {
-      "rank": 6,
-      "id": "DUMMY-002-1-o0h4au",
+      "rank": 5,
+      "id": "DUMMY-006-1-914g7n",
       "generation": 1,
-      "energy": 3736.523329412993,
-      "profit": -6263.476670587007,
-      "age": 6034.015360614753,
-      "target_ticker": "DUMMY-001",
-      "learned_ticker_count": 2,
+      "energy": 4663.059454257466,
+      "profit": -5336.940545742534,
+      "age": 6034.009360374748,
+      "target_ticker": "DUMMY-021",
+      "learned_ticker_count": 1,
       "dna": {
         "schema_version": "swarm_agent_dna_v2",
-        "ema_fast_period": 21,
-        "ema_slow_period": 214,
-        "rsi_period": 9,
-        "rsi_low": 37,
-        "rsi_high": 82,
+        "ema_fast_period": 54,
+        "ema_slow_period": 166,
+        "rsi_period": 17,
+        "rsi_low": 34,
+        "rsi_high": 86,
         "behavior_modules": [
           {
             "type": "ema_cross_up",
-            "stay_weight": -0.07455937269625107,
-            "jump_weight": 0.9371359403630564,
-            "fast_period": 21,
-            "slow_period": 214
+            "stay_weight": -0.188359909799459,
+            "jump_weight": 0.8592289248369441,
+            "fast_period": 54,
+            "slow_period": 166
           },
           {
             "type": "ema_cross_down",
-            "stay_weight": -0.8318406922413502,
-            "jump_weight": 0.368121151496397,
-            "fast_period": 21,
-            "slow_period": 214
+            "stay_weight": -0.6637440863542232,
+            "jump_weight": 0.34974841240868926,
+            "fast_period": 54,
+            "slow_period": 166
           },
           {
             "type": "rsi_low",
-            "stay_weight": 0.4176617332880489,
-            "jump_weight": 0.17763052251905845,
-            "period": 9,
-            "threshold": 37
+            "stay_weight": 0.2649189594937582,
+            "jump_weight": 0.25745138360459796,
+            "period": 17,
+            "threshold": 34
           },
           {
             "type": "rsi_high",
-            "stay_weight": -0.3282769489726508,
-            "jump_weight": 0.45619186421324165,
-            "period": 9,
-            "threshold": 82
+            "stay_weight": -0.47382105224769466,
+            "jump_weight": 0.34166026369861446,
+            "period": 17,
+            "threshold": 86
           }
         ],
-        "mutation_rate": 0.04485165206682575,
-        "spawn_limit": 17461.613237617803,
-        "jump_cost_sensitivity": 1.127440239275666,
-        "exploration_bias": 0.11106717927021861,
-        "metabolism": 0.5648476221631009,
-        "speed": 0.8782842648042926
+        "mutation_rate": 0.08066347243253882,
+        "spawn_limit": 13394.551399832664,
+        "jump_cost_sensitivity": 0.47662534528562034,
+        "exploration_bias": 0.09816734326219925,
+        "metabolism": 0.4882610996107895,
+        "speed": 1.496760211577408
       },
       "rules": [
-        "Hold winners while EMA 21 stays constructive against EMA 214; jump only when a global ticker setup clears friction.",
+        "Hold winners while EMA 54 stays constructive against EMA 166; jump only when a global ticker setup clears friction.",
         "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
-        "Use RSI 37-82 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Use RSI 34-86 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move readily when a global alternative looks better after transaction and jump friction.",
+        "Prefer known assets with positive memory over novelty."
+      ]
+    },
+    {
+      "rank": 6,
+      "id": "DUMMY-018-1-6suszl",
+      "generation": 1,
+      "energy": 4537.816524560213,
+      "profit": -5462.183475439787,
+      "age": 6034.009360374748,
+      "target_ticker": "DUMMY-023",
+      "learned_ticker_count": 2,
+      "dna": {
+        "schema_version": "swarm_agent_dna_v2",
+        "ema_fast_period": 120,
+        "ema_slow_period": 124,
+        "rsi_period": 12,
+        "rsi_low": 38,
+        "rsi_high": 86,
+        "behavior_modules": [
+          {
+            "type": "ema_cross_up",
+            "stay_weight": -0.19063423927349096,
+            "jump_weight": 0.9630158381102798,
+            "fast_period": 120,
+            "slow_period": 124
+          },
+          {
+            "type": "ema_cross_down",
+            "stay_weight": -0.9057380941215237,
+            "jump_weight": 0.47774753402792813,
+            "fast_period": 120,
+            "slow_period": 124
+          },
+          {
+            "type": "rsi_low",
+            "stay_weight": 0.24228322324648016,
+            "jump_weight": 0.24031984560055375,
+            "period": 12,
+            "threshold": 38
+          },
+          {
+            "type": "rsi_high",
+            "stay_weight": -0.39005287055311927,
+            "jump_weight": 0.4812993644039882,
+            "period": 12,
+            "threshold": 86
+          }
+        ],
+        "mutation_rate": 0.08940722956930745,
+        "spawn_limit": 15033.887467683044,
+        "jump_cost_sensitivity": 0.7924081892810494,
+        "exploration_bias": 0.20818327006123202,
+        "metabolism": 0.4891992917770102,
+        "speed": 0.7
+      },
+      "rules": [
+        "Hold winners while EMA 120 stays constructive against EMA 124; jump only when a global ticker setup clears friction.",
+        "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
+        "Use RSI 38-86 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
         "Move readily when a global alternative looks better after transaction and jump friction.",
         "Prefer known assets with positive memory over novelty."
       ]
     },
     {
       "rank": 7,
-      "id": "DUMMY-002-1-7k07pv",
+      "id": "DUMMY-017-1-xyqojd",
       "generation": 1,
-      "energy": 3497.821926587153,
-      "profit": -6502.178073412847,
-      "age": 6034.015360614753,
-      "target_ticker": "DUMMY-002",
+      "energy": 4359.097113368056,
+      "profit": -5640.902886631944,
+      "age": 6034.009360374748,
+      "target_ticker": "DUMMY-017",
       "learned_ticker_count": 1,
       "dna": {
         "schema_version": "swarm_agent_dna_v2",
-        "ema_fast_period": 35,
-        "ema_slow_period": 71,
-        "rsi_period": 17,
-        "rsi_low": 36,
-        "rsi_high": 75,
+        "ema_fast_period": 59,
+        "ema_slow_period": 63,
+        "rsi_period": 34,
+        "rsi_low": 32,
+        "rsi_high": 64,
         "behavior_modules": [
           {
             "type": "ema_cross_up",
-            "stay_weight": -0.2932794932489926,
-            "jump_weight": 0.9590573103820709,
-            "fast_period": 35,
-            "slow_period": 71
+            "stay_weight": -0.21829993827651958,
+            "jump_weight": 0.8560820119804257,
+            "fast_period": 59,
+            "slow_period": 63
           },
           {
             "type": "ema_cross_down",
-            "stay_weight": -0.9473928255518368,
-            "jump_weight": 0.4921945032345422,
-            "fast_period": 35,
-            "slow_period": 71
+            "stay_weight": -0.7917265009167647,
+            "jump_weight": 0.39383735405924514,
+            "fast_period": 59,
+            "slow_period": 63
           },
           {
             "type": "rsi_low",
-            "stay_weight": 0.3983352003881681,
-            "jump_weight": 0.10617881770753344,
-            "period": 17,
-            "threshold": 36
+            "stay_weight": 0.3754173798052144,
+            "jump_weight": 0.18000739039709476,
+            "period": 34,
+            "threshold": 32
           },
           {
             "type": "rsi_high",
-            "stay_weight": -0.3057452984003237,
-            "jump_weight": 0.2621686626953146,
-            "period": 17,
-            "threshold": 75
+            "stay_weight": -0.2670692246873489,
+            "jump_weight": 0.4173097922777774,
+            "period": 34,
+            "threshold": 64
           }
         ],
-        "mutation_rate": 0.10250687974968595,
-        "spawn_limit": 16683.64478028375,
-        "jump_cost_sensitivity": 0.816692962530525,
-        "exploration_bias": 0.18411775995697952,
-        "metabolism": 0.5986595883522197,
-        "speed": 1.6122016367659988
+        "mutation_rate": 0.059550401334711796,
+        "spawn_limit": 20086.735635359575,
+        "jump_cost_sensitivity": 0.6053975020015443,
+        "exploration_bias": 0.26034489554999385,
+        "metabolism": 0.5193619614840537,
+        "speed": 0.7187068301605336
       },
       "rules": [
-        "Hold winners while EMA 35 stays constructive against EMA 71; jump only when a global ticker setup clears friction.",
+        "Hold winners while EMA 59 stays constructive against EMA 63; jump only when a global ticker setup clears friction.",
         "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
-        "Use RSI 36-75 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Use RSI 32-64 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
         "Move readily when a global alternative looks better after transaction and jump friction.",
         "Prefer known assets with positive memory over novelty."
       ]
     },
     {
       "rank": 8,
-      "id": "DUMMY-003-1-wchenj",
+      "id": "DUMMY-021-1-7qwo20",
       "generation": 1,
-      "energy": 3159.5315890288352,
-      "profit": -6840.468410971165,
-      "age": 6034.015360614753,
-      "target_ticker": "DUMMY-006",
-      "learned_ticker_count": 6,
+      "energy": 4311.966077588064,
+      "profit": -5688.033922411936,
+      "age": 6034.009360374748,
+      "target_ticker": "DUMMY-011",
+      "learned_ticker_count": 7,
       "dna": {
         "schema_version": "swarm_agent_dna_v2",
-        "ema_fast_period": 70,
-        "ema_slow_period": 163,
-        "rsi_period": 28,
-        "rsi_low": 21,
-        "rsi_high": 64,
+        "ema_fast_period": 74,
+        "ema_slow_period": 88,
+        "rsi_period": 8,
+        "rsi_low": 34,
+        "rsi_high": 73,
         "behavior_modules": [
           {
             "type": "ema_cross_up",
-            "stay_weight": -0.05853313138341859,
-            "jump_weight": 0.7674849702419541,
-            "fast_period": 70,
-            "slow_period": 163
+            "stay_weight": -0.1320656453548876,
+            "jump_weight": 0.790809260562979,
+            "fast_period": 74,
+            "slow_period": 88
           },
           {
             "type": "ema_cross_down",
-            "stay_weight": -0.7595299490906054,
-            "jump_weight": 0.3529723318060916,
-            "fast_period": 70,
-            "slow_period": 163
+            "stay_weight": -0.8949545158700221,
+            "jump_weight": 0.5280205207858166,
+            "fast_period": 74,
+            "slow_period": 88
           },
           {
             "type": "rsi_low",
-            "stay_weight": 0.36022909087129606,
-            "jump_weight": 0.18793630623822388,
-            "period": 28,
-            "threshold": 21
+            "stay_weight": 0.3509687170365385,
+            "jump_weight": 0.24070616261962588,
+            "period": 8,
+            "threshold": 34
           },
           {
             "type": "rsi_high",
-            "stay_weight": -0.3848468041458451,
-            "jump_weight": 0.49953589646470953,
-            "period": 28,
-            "threshold": 64
+            "stay_weight": -0.35066928991610674,
+            "jump_weight": 0.3193860966896136,
+            "period": 8,
+            "threshold": 73
           }
         ],
-        "mutation_rate": 0.07091394839362677,
-        "spawn_limit": 21759.702670630144,
-        "jump_cost_sensitivity": 0.6571634990298,
-        "exploration_bias": 1.0381362575818271,
-        "metabolism": 0.5976514010600126,
-        "speed": 0.8487943327332347
+        "mutation_rate": 0.056855581708314,
+        "spawn_limit": 20499.707787955605,
+        "jump_cost_sensitivity": 1.5904700605394722,
+        "exploration_bias": 0.7281797093722642,
+        "metabolism": 0.4665030735497128,
+        "speed": 1.728429475521384
       },
       "rules": [
-        "Hold winners while EMA 70 stays constructive against EMA 163; jump only when a global ticker setup clears friction.",
+        "Hold winners while EMA 74 stays constructive against EMA 88; jump only when a global ticker setup clears friction.",
         "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
-        "Use RSI 21-64 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
-        "Move readily when a global alternative looks better after transaction and jump friction.",
+        "Use RSI 34-73 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
         "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
       ]
     },
     {
       "rank": 9,
-      "id": "DUMMY-002-1-zgufx4",
+      "id": "DUMMY-006-1-niw8au",
       "generation": 1,
-      "energy": 2920.859039918149,
-      "profit": -7079.1409600818515,
-      "age": 6034.015360614753,
-      "target_ticker": "DUMMY-002",
-      "learned_ticker_count": 1,
+      "energy": 4201.677111526097,
+      "profit": -5798.322888473903,
+      "age": 6034.009360374748,
+      "target_ticker": "DUMMY-012",
+      "learned_ticker_count": 17,
       "dna": {
         "schema_version": "swarm_agent_dna_v2",
-        "ema_fast_period": 120,
-        "ema_slow_period": 170,
+        "ema_fast_period": 72,
+        "ema_slow_period": 191,
         "rsi_period": 7,
-        "rsi_low": 26,
-        "rsi_high": 78,
+        "rsi_low": 23,
+        "rsi_high": 73,
         "behavior_modules": [
           {
             "type": "ema_cross_up",
-            "stay_weight": -0.12186040090894074,
-            "jump_weight": 0.772997650634357,
-            "fast_period": 120,
-            "slow_period": 170
+            "stay_weight": -0.022971766823326606,
+            "jump_weight": 0.7572198917817845,
+            "fast_period": 72,
+            "slow_period": 191
           },
           {
             "type": "ema_cross_down",
-            "stay_weight": -0.8522634436690346,
-            "jump_weight": 0.3695159815675007,
-            "fast_period": 120,
-            "slow_period": 170
+            "stay_weight": -0.9226528895986644,
+            "jump_weight": 0.37029626830758555,
+            "fast_period": 72,
+            "slow_period": 191
           },
           {
             "type": "rsi_low",
-            "stay_weight": 0.3061702873429397,
-            "jump_weight": 0.2646322395086534,
+            "stay_weight": 0.4820258383459587,
+            "jump_weight": 0.24078934748066744,
             "period": 7,
-            "threshold": 26
+            "threshold": 23
           },
           {
             "type": "rsi_high",
-            "stay_weight": -0.4018905742892479,
-            "jump_weight": 0.4832454451281526,
+            "stay_weight": -0.3185667041707303,
+            "jump_weight": 0.34415422648820304,
             "period": 7,
-            "threshold": 78
+            "threshold": 73
           }
         ],
-        "mutation_rate": 0.06415290016779039,
-        "spawn_limit": 13986.528310283646,
-        "jump_cost_sensitivity": 1.6559149465322687,
-        "exploration_bias": 0.1783080683225964,
-        "metabolism": 0.6517809209775921,
-        "speed": 1.7919246196085954
+        "mutation_rate": 0.09217873463619079,
+        "spawn_limit": 17156.78856217387,
+        "jump_cost_sensitivity": 0.9745645236954413,
+        "exploration_bias": 0.7039147386931461,
+        "metabolism": 0.45,
+        "speed": 1.2157529245682273
       },
       "rules": [
-        "Hold winners while EMA 120 stays constructive against EMA 170; jump only when a global ticker setup clears friction.",
+        "Hold winners while EMA 72 stays constructive against EMA 191; jump only when a global ticker setup clears friction.",
         "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
-        "Use RSI 26-78 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
-        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
-        "Prefer known assets with positive memory over novelty."
+        "Use RSI 23-73 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move readily when a global alternative looks better after transaction and jump friction.",
+        "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
       ]
     },
     {
       "rank": 10,
-      "id": "DUMMY-002-1-l6wbhc",
+      "id": "DUMMY-008-1-b2796z",
       "generation": 1,
-      "energy": 2549.8983039236678,
-      "profit": -7450.101696076332,
-      "age": 6034.015360614753,
-      "target_ticker": "DUMMY-003",
-      "learned_ticker_count": 6,
+      "energy": 4127.003681895781,
+      "profit": -5872.996318104219,
+      "age": 6034.009360374748,
+      "target_ticker": "DUMMY-010",
+      "learned_ticker_count": 14,
       "dna": {
         "schema_version": "swarm_agent_dna_v2",
-        "ema_fast_period": 25,
-        "ema_slow_period": 96,
-        "rsi_period": 25,
-        "rsi_low": 42,
-        "rsi_high": 68,
+        "ema_fast_period": 90,
+        "ema_slow_period": 137,
+        "rsi_period": 13,
+        "rsi_low": 28,
+        "rsi_high": 63,
         "behavior_modules": [
           {
             "type": "ema_cross_up",
-            "stay_weight": -0.1239955835629444,
-            "jump_weight": 0.9500890882158144,
-            "fast_period": 25,
-            "slow_period": 96
+            "stay_weight": -0.08882000468197265,
+            "jump_weight": 0.7996919079786647,
+            "fast_period": 90,
+            "slow_period": 137
           },
           {
             "type": "ema_cross_down",
-            "stay_weight": -0.6717323391145158,
-            "jump_weight": 0.5033892003908437,
-            "fast_period": 25,
-            "slow_period": 96
+            "stay_weight": -0.6680317383667566,
+            "jump_weight": 0.48120376291351574,
+            "fast_period": 90,
+            "slow_period": 137
           },
           {
             "type": "rsi_low",
-            "stay_weight": 0.2453833292808132,
-            "jump_weight": 0.153280447702404,
-            "period": 25,
-            "threshold": 42
+            "stay_weight": 0.28301868166180566,
+            "jump_weight": 0.1718972742879526,
+            "period": 13,
+            "threshold": 28
           },
           {
             "type": "rsi_high",
-            "stay_weight": -0.3901299576038958,
-            "jump_weight": 0.49291499286511065,
-            "period": 25,
-            "threshold": 68
+            "stay_weight": -0.2718038144530406,
+            "jump_weight": 0.4892843639528469,
+            "period": 13,
+            "threshold": 63
           }
         ],
-        "mutation_rate": 0.06663858618544267,
-        "spawn_limit": 12329.067594803162,
-        "jump_cost_sensitivity": 1.5604861025983519,
-        "exploration_bias": 1.4,
-        "metabolism": 0.6159325035170226,
-        "speed": 1.1273703408667182
+        "mutation_rate": 0.06969149778392193,
+        "spawn_limit": 11800,
+        "jump_cost_sensitivity": 0.6699365891145181,
+        "exploration_bias": 0.6919659426481454,
+        "metabolism": 0.4776939332009818,
+        "speed": 1.3685149996022994
       },
       "rules": [
-        "Hold winners while EMA 25 stays constructive against EMA 96; jump only when a global ticker setup clears friction.",
+        "Hold winners while EMA 90 stays constructive against EMA 137; jump only when a global ticker setup clears friction.",
         "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
-        "Use RSI 42-68 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
-        "Move reluctantly: require a larger global edge before paying transaction and jump friction.",
+        "Use RSI 28-63 as comfort bounds: oversold cells can be recovery candidates, overheated cells need stronger trend evidence.",
+        "Move readily when a global alternative looks better after transaction and jump friction.",
         "Keep a deliberate curiosity bias toward unvisited assets anywhere in the world."
       ]
     }
   ],
-  "saved_at": "2026-05-06T19:40:48.366302+00:00",
+  "saved_at": "2026-05-06T21:13:01.213286+00:00",
   "saved_by": "dashboard_swarm_auto_save"
 }

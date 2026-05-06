@@ -39,6 +39,9 @@ let backtestSourceMode = "saved";
     let swarmAgentsPerNode = 20;
     let swarmZoomLevel = 0.75;
     let swarmCameraVector = { x: 0, y: 0, z: 1 };
+    let swarmCameraManual = false;
+    let swarmCameraDrag = { active: false, moved: false, lastX: 0, lastY: 0 };
+    let swarmSuppressNextClick = false;
     let swarmThreeReady = false;
     let swarmThreeScene = null;
     let swarmThreeCamera = null;
@@ -52,6 +55,7 @@ let backtestSourceMode = "saved";
     let swarmThreeAssetMeshes = new Map();
     let swarmThreeAssetTextures = new Map();
     let swarmThreeAgentMeshes = new Map();
+    let swarmThreeDebugCapGeometryCache = new Map();
     let swarmRenderDiagnostics = {
       threeSupport: null,
       renderPath: "",
@@ -98,11 +102,17 @@ let backtestSourceMode = "saved";
     const LAST_LIST_MODE_KEY = "etf-discovery:last-list-mode";
     const LAST_CUSTOM_LIST_KEY = "etf-discovery:last-custom-list";
     const LAST_CUSTOM_LIST_NAME_KEY = "etf-discovery:last-custom-list-name";
+    const LAST_DASHBOARD_TAB_KEY = "etf-discovery:last-dashboard-tab";
 
     function getDashboardTabs() {
       return ["screener", "shortlist", "swarm", "backtest"]
         .map((name) => document.getElementById(`tab-${name}`))
         .filter(Boolean);
+    }
+
+    function normalizeDashboardTab(value) {
+      const cleaned = String(value || "screener").trim().toLowerCase();
+      return ["screener", "shortlist", "swarm", "backtest"].includes(cleaned) ? cleaned : "screener";
     }
 
     function readStickyValue(key, fallback = "") {
@@ -1445,6 +1455,63 @@ let backtestSourceMode = "saved";
       });
     }
 
+    function resolveSwarmDebugCapCollisions(nodes, sphereRadius, iterations = 3) {
+      const realNodes = Array.isArray(nodes) ? nodes : [];
+      if (realNodes.length < 2) {
+        return;
+      }
+      const safeSphereRadius = Math.max(1, Number(sphereRadius || 1));
+      for (let pass = 0; pass < iterations; pass += 1) {
+        let hadOverlap = false;
+        for (let idx = 0; idx < realNodes.length; idx += 1) {
+          const node = realNodes[idx];
+          node.sphereVector = normalizeSwarmVector(node.sphereVector || worldToSphereVector(node.x, node.y));
+          const nodeRadius = Math.max(0.9, Number(node.capRadius || node.radius || node.baseRadius || 1));
+          for (let otherIdx = idx + 1; otherIdx < realNodes.length; otherIdx += 1) {
+            const other = realNodes[otherIdx];
+            other.sphereVector = normalizeSwarmVector(other.sphereVector || worldToSphereVector(other.x, other.y));
+            const otherRadius = Math.max(0.9, Number(other.capRadius || other.radius || other.baseRadius || 1));
+            const dot = clampSwarm(
+              (node.sphereVector.x * other.sphereVector.x) + (node.sphereVector.y * other.sphereVector.y) + (node.sphereVector.z * other.sphereVector.z),
+              -0.999999,
+              0.999999,
+            );
+            const angle = Math.acos(dot);
+            const targetAngle = Math.max(0.02, (nodeRadius + otherRadius) / safeSphereRadius);
+            const overlap = targetAngle - angle;
+            if (overlap <= 0.0001) {
+              continue;
+            }
+            hadOverlap = true;
+            const nodeToOther = projectSwarmVectorToTangentPlane({
+              x: other.sphereVector.x - (node.sphereVector.x * dot),
+              y: other.sphereVector.y - (node.sphereVector.y * dot),
+              z: other.sphereVector.z - (node.sphereVector.z * dot),
+            }, node.sphereVector);
+            const otherToNode = projectSwarmVectorToTangentPlane({
+              x: node.sphereVector.x - (other.sphereVector.x * dot),
+              y: node.sphereVector.y - (other.sphereVector.y * dot),
+              z: node.sphereVector.z - (other.sphereVector.z * dot),
+            }, other.sphereVector);
+            const separation = overlap * 0.52;
+            node.sphereVector = normalizeSwarmVector({
+              x: node.sphereVector.x - (nodeToOther.x * separation),
+              y: node.sphereVector.y - (nodeToOther.y * separation),
+              z: node.sphereVector.z - (nodeToOther.z * separation),
+            });
+            other.sphereVector = normalizeSwarmVector({
+              x: other.sphereVector.x - (otherToNode.x * separation),
+              y: other.sphereVector.y - (otherToNode.y * separation),
+              z: other.sphereVector.z - (otherToNode.z * separation),
+            });
+          }
+        }
+        if (!hadOverlap) {
+          break;
+        }
+      }
+    }
+
     function getSwarmDebugCapRadius(node) {
       const baseRadius = Math.max(0.9, Number(node?.baseRadius ?? node?.radius ?? 1));
       return clampSwarm(8.0 + (baseRadius * 6.0), 8.0, 34.0);
@@ -1458,9 +1525,48 @@ let backtestSourceMode = "saved";
       const capRadii = safeNodes.map((node) => getSwarmDebugCapRadius(node));
       const totalCapArea = capRadii.reduce((sum, radius) => sum + (Math.PI * (radius ** 2)), 0);
       const averageCapRadius = capRadii.reduce((sum, radius) => sum + radius, 0) / Math.max(1, capRadii.length);
-      const packingFraction = 0.22;
+      const packingFraction = 0.34;
       const fittedRadius = Math.sqrt(totalCapArea / (4 * Math.PI * Math.max(0.05, packingFraction)));
       return Math.max(averageCapRadius * 2.9, fittedRadius, 12);
+    }
+
+    function getSwarmDebugAdaptiveSphereRadius(nodes, fallbackRadius = swarmDebugSphereRadius) {
+      const safeNodes = Array.isArray(nodes) ? nodes : [];
+      if (!safeNodes.length) {
+        return Math.max(1, Number(fallbackRadius || getSwarmDebugSphereRadius()));
+      }
+      const baselineRadius = Math.max(1, getSwarmDebugSphereRadius(safeNodes));
+      const currentRadius = Math.max(1, Number(fallbackRadius || baselineRadius));
+      let requiredRadius = Math.max(currentRadius, baselineRadius);
+      let overlapPressure = 0;
+      for (let idx = 0; idx < safeNodes.length; idx += 1) {
+        const node = safeNodes[idx];
+        const nodeVector = normalizeSwarmVector(node.sphereVector || worldToSphereVector(node.x, node.y));
+        const nodeRadius = Math.max(0.9, Number(node.capRadius || getSwarmDebugCapRadius(node)));
+        for (let otherIdx = idx + 1; otherIdx < safeNodes.length; otherIdx += 1) {
+          const other = safeNodes[otherIdx];
+          const otherVector = normalizeSwarmVector(other.sphereVector || worldToSphereVector(other.x, other.y));
+          const otherRadius = Math.max(0.9, Number(other.capRadius || getSwarmDebugCapRadius(other)));
+          const dot = clampSwarm(
+            (nodeVector.x * otherVector.x) + (nodeVector.y * otherVector.y) + (nodeVector.z * otherVector.z),
+            -0.999999,
+            0.999999,
+          );
+          const angle = Math.max(0.01, Math.acos(dot));
+          const targetAngle = Math.max(0.02, (nodeRadius + otherRadius) / currentRadius);
+          const overlap = targetAngle - angle;
+          if (overlap <= 0.0001) {
+            continue;
+          }
+          overlapPressure = Math.max(overlapPressure, overlap / Math.max(0.02, targetAngle));
+          const localRadius = (nodeRadius + otherRadius) / Math.max(angle, targetAngle * 0.72);
+          requiredRadius = Math.max(requiredRadius, localRadius);
+        }
+      }
+      const maxGrowthStep = currentRadius * 1.08;
+      const pressureRadius = currentRadius * (1 + clampSwarm(overlapPressure * 0.22, 0, 0.08));
+      const crowdingCap = baselineRadius * clampSwarm(1.35 + (safeNodes.length / 60), 1.45, 2.4);
+      return clampSwarm(Math.max(baselineRadius, pressureRadius, requiredRadius), baselineRadius, Math.max(maxGrowthStep, crowdingCap));
     }
 
     function getSwarmDebugTouchRadius(node, nearestAngle, sphereRadius) {
@@ -1485,6 +1591,46 @@ let backtestSourceMode = "saved";
         z: forward.x * right.y - forward.y * right.x,
       });
       return { forward, right, up };
+    }
+
+    function rotateSwarmVectorAroundAxis(vector, axis, angle) {
+      const normalizedVector = normalizeSwarmVector(vector);
+      const normalizedAxis = normalizeSwarmVector(axis);
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const dot = (normalizedVector.x * normalizedAxis.x)
+        + (normalizedVector.y * normalizedAxis.y)
+        + (normalizedVector.z * normalizedAxis.z);
+      return normalizeSwarmVector({
+        x: (normalizedVector.x * cos)
+          + ((normalizedAxis.y * normalizedVector.z) - (normalizedAxis.z * normalizedVector.y)) * sin
+          + (normalizedAxis.x * dot * (1 - cos)),
+        y: (normalizedVector.y * cos)
+          + ((normalizedAxis.z * normalizedVector.x) - (normalizedAxis.x * normalizedVector.z)) * sin
+          + (normalizedAxis.y * dot * (1 - cos)),
+        z: (normalizedVector.z * cos)
+          + ((normalizedAxis.x * normalizedVector.y) - (normalizedAxis.y * normalizedVector.x)) * sin
+          + (normalizedAxis.z * dot * (1 - cos)),
+      });
+    }
+
+    function orbitSwarmCamera(deltaX, deltaY) {
+      const safeDx = Number(deltaX || 0);
+      const safeDy = Number(deltaY || 0);
+      if (Math.abs(safeDx) < 0.001 && Math.abs(safeDy) < 0.001) {
+        return;
+      }
+      const basis = getSphereBasis(swarmCameraVector);
+      const yaw = -safeDx * 0.0055;
+      const pitch = -safeDy * 0.0055;
+      let nextVector = rotateSwarmVectorAroundAxis(swarmCameraVector, { x: 0, y: 1, z: 0 }, yaw);
+      nextVector = rotateSwarmVectorAroundAxis(nextVector, basis.right, pitch);
+      swarmCameraVector = normalizeSwarmVector({
+        x: nextVector.x,
+        y: clampSwarm(nextVector.y, -0.82, 0.82),
+        z: nextVector.z,
+      });
+      swarmCameraManual = true;
     }
 
     function drawSwarmDebugSphereGraticule(ctx, layout) {
@@ -1604,8 +1750,8 @@ let backtestSourceMode = "saved";
       const gridRadius = sphereRadius * 1.0045;
       const latitudeValues = [-75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75];
       const longitudeValues = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150];
-      const latSegments = 96;
-      const lonSegments = 96;
+      const latSegments = 48;
+      const lonSegments = 48;
       const gridSignature = `${sphereRadius}:${latitudeValues.length}:${longitudeValues.length}:${isSwarmDebugMode() ? "debug" : "standard"}`;
       if (swarmRenderDiagnostics.lastGridSignature !== gridSignature) {
         swarmRenderDiagnostics.lastGridSignature = gridSignature;
@@ -1686,6 +1832,9 @@ let backtestSourceMode = "saved";
     }
 
     function updateSwarmCameraVector() {
+      if (swarmCameraManual || swarmCameraDrag.active) {
+        return;
+      }
       let weighted = { x: 0, y: 0, z: 120 };
       swarmAgents.forEach((agent) => {
         const vector = agent.sphereVector || worldToSphereVector(agent.x, agent.y);
@@ -1811,27 +1960,16 @@ let backtestSourceMode = "saved";
 
       return baseVectors.map((node, idx) => {
         const capRadius = getSwarmDebugCapRadius(node);
-        const { tangentX, tangentY } = getSwarmSphereTangentBasis(node.sphereVector);
-        const velocityPhase = stableSwarmFraction(String(node.ticker || idx), "debug-sphere-velocity") * Math.PI * 2;
-        const velocityScale = (stableSwarmFraction(String(node.ticker || idx), "debug-sphere-speed") - 0.5) * 0.0028;
-        const sphereVelocity = projectSwarmVectorToTangentPlane({
-          x: (tangentX.x * Math.cos(velocityPhase)) + (tangentY.x * Math.sin(velocityPhase)),
-          y: (tangentX.y * Math.cos(velocityPhase)) + (tangentY.y * Math.sin(velocityPhase)),
-          z: (tangentX.z * Math.cos(velocityPhase)) + (tangentY.z * Math.sin(velocityPhase)),
-        }, node.sphereVector);
         const worldPoint = sphereVectorToWorld(node.sphereVector);
         return {
           ...node,
           capRadius,
+          mass: Math.max(0.75, Math.pow(capRadius / 8, 1.35)),
           sphereRadius: swarmDebugSphereRadius,
           capAngularRadius: capRadius / Math.max(1, swarmDebugSphereRadius),
           sphereVector: node.sphereVector,
           seedSphereVector: { ...node.sphereVector },
-          sphereVelocity: {
-            x: sphereVelocity.x * velocityScale,
-            y: sphereVelocity.y * velocityScale,
-            z: sphereVelocity.z * velocityScale,
-          },
+          sphereVelocity: { x: 0, y: 0, z: 0 },
           x: worldPoint.x,
           y: worldPoint.y,
           z: node.sphereVector.z * swarmDebugSphereRadius,
@@ -2185,7 +2323,7 @@ let backtestSourceMode = "saved";
       if (isSwarmDebugMode()) {
         material.color?.setHex?.(0xe5e7eb);
         material.opacity = 0.42;
-        material.wireframe = true;
+        material.wireframe = false;
         material.shininess = 4;
         material.emissive?.setHex?.(0x9ca3af);
       } else {
@@ -2262,6 +2400,38 @@ let backtestSourceMode = "saved";
       return texture;
     }
 
+    function getSwarmThreeDebugCapGeometry(sphereRadius, angularRadius) {
+      const THREE = window.THREE;
+      const radiusKey = Math.round(Number(sphereRadius || 0) * 10) / 10;
+      const angularKey = Math.round(Number(angularRadius || 0) * 1000) / 1000;
+      const key = `${radiusKey}:${angularKey}`;
+      if (!swarmThreeDebugCapGeometryCache.has(key)) {
+        const capGeometry = new THREE.SphereGeometry(
+          radiusKey * 1.0015,
+          18,
+          12,
+          0,
+          Math.PI * 2,
+          0,
+          angularKey,
+        );
+        const rimPoints = [];
+        const rimRadius = radiusKey * 1.0035;
+        const rimSegments = 32;
+        for (let step = 0; step < rimSegments; step += 1) {
+          const phi = (step / rimSegments) * Math.PI * 2;
+          rimPoints.push(new THREE.Vector3(
+            Math.sin(angularKey) * Math.cos(phi) * rimRadius,
+            Math.cos(angularKey) * rimRadius,
+            Math.sin(angularKey) * Math.sin(phi) * rimRadius,
+          ));
+        }
+        const rimGeometry = new THREE.BufferGeometry().setFromPoints(rimPoints);
+        swarmThreeDebugCapGeometryCache.set(key, { capGeometry, rimGeometry });
+      }
+      return swarmThreeDebugCapGeometryCache.get(key);
+    }
+
     function createSwarmThreeDebugCapMesh(node, sphereRadius) {
       const THREE = window.THREE;
       const angularRadius = clampSwarm(
@@ -2270,15 +2440,7 @@ let backtestSourceMode = "saved";
         Math.PI * 0.42,
       );
       const ringColor = getSwarmAssetBorderColor(node);
-      const capGeometry = new THREE.SphereGeometry(
-        sphereRadius * 1.0015,
-        36,
-        24,
-        0,
-        Math.PI * 2,
-        0,
-        angularRadius,
-      );
+      const cachedGeometry = getSwarmThreeDebugCapGeometry(sphereRadius, angularRadius);
       const capMaterial = new THREE.MeshPhongMaterial({
         color: 0xf8fafc,
         transparent: true,
@@ -2291,22 +2453,10 @@ let backtestSourceMode = "saved";
         polygonOffsetUnits: -2,
       });
       const group = new THREE.Group();
-      const capMesh = new THREE.Mesh(capGeometry, capMaterial);
+      const capMesh = new THREE.Mesh(cachedGeometry.capGeometry, capMaterial);
       capMesh.renderOrder = 10;
       group.add(capMesh);
 
-      const rimPoints = [];
-      const rimRadius = sphereRadius * 1.0035;
-      const rimSegments = 80;
-      for (let step = 0; step <= rimSegments; step += 1) {
-        const phi = (step / rimSegments) * Math.PI * 2;
-        rimPoints.push(new THREE.Vector3(
-          Math.sin(angularRadius) * Math.cos(phi) * rimRadius,
-          Math.cos(angularRadius) * rimRadius,
-          Math.sin(angularRadius) * Math.sin(phi) * rimRadius,
-        ));
-      }
-      const rimGeometry = new THREE.BufferGeometry().setFromPoints(rimPoints);
       const rimMaterial = new THREE.LineBasicMaterial({
         color: ringColor,
         transparent: true,
@@ -2314,7 +2464,7 @@ let backtestSourceMode = "saved";
         depthTest: true,
         depthWrite: false,
       });
-      const rim = new THREE.LineLoop(rimGeometry, rimMaterial);
+      const rim = new THREE.LineLoop(cachedGeometry.rimGeometry, rimMaterial);
       rim.renderOrder = 11;
       group.add(rim);
       group.userData.renderKind = "debug-cap";
@@ -2327,7 +2477,6 @@ let backtestSourceMode = "saved";
         return;
       }
       mesh.traverse?.((child) => {
-        child.geometry?.dispose?.();
         child.material?.dispose?.();
       });
       if (mesh.material?.dispose) {
@@ -2342,8 +2491,16 @@ let backtestSourceMode = "saved";
       const THREE = window.THREE;
       const sphereRadius = getSwarmSphereRadius();
       if (swarmThreeSphere) {
-        swarmThreeSphere.geometry.dispose?.();
-        swarmThreeSphere.geometry = new THREE.SphereGeometry(sphereRadius, 64, 64);
+        const sphereSignature = `${Math.round(sphereRadius)}:${isSwarmDebugMode() ? "debug" : "normal"}`;
+        if (swarmThreeSphere.userData.sphereSignature !== sphereSignature) {
+          swarmThreeSphere.geometry.dispose?.();
+          swarmThreeSphere.geometry = new THREE.SphereGeometry(
+            sphereRadius,
+            isSwarmDebugMode() ? 32 : 48,
+            isSwarmDebugMode() ? 24 : 32,
+          );
+          swarmThreeSphere.userData.sphereSignature = sphereSignature;
+        }
       }
       updateSwarmThreeSphereAppearance();
       syncSwarmThreeGrid();
@@ -2401,26 +2558,28 @@ let backtestSourceMode = "saved";
       });
 
       const agentIds = new Set();
-      swarmAgents.slice(0, SWARM_MAX_DRAWN_AGENTS).forEach((agent) => {
-        const id = String(agent.id || "");
-        agentIds.add(id);
-        let mesh = swarmThreeAgentMeshes.get(id);
-        if (!mesh) {
-          const geometry = new THREE.SphereGeometry(1, 12, 12);
-          const material = new THREE.MeshStandardMaterial({
-            color: agent.energy >= SWARM_STARTING_ENERGY ? 0xa5b4fc : 0xf9a8d4,
-            transparent: true,
-            opacity: 0.8,
-            roughness: 0.7,
-            metalness: 0.02,
-          });
-          mesh = new THREE.Mesh(geometry, material);
-          mesh.userData.agent = agent;
-          swarmThreeAgentGroup.add(mesh);
-          swarmThreeAgentMeshes.set(id, mesh);
-        }
-        updateSwarmThreeAgentTransform(agent, mesh);
-      });
+      if (!isSwarmDebugMode()) {
+        swarmAgents.slice(0, SWARM_MAX_DRAWN_AGENTS).forEach((agent) => {
+          const id = String(agent.id || "");
+          agentIds.add(id);
+          let mesh = swarmThreeAgentMeshes.get(id);
+          if (!mesh) {
+            const geometry = new THREE.SphereGeometry(1, 12, 12);
+            const material = new THREE.MeshStandardMaterial({
+              color: agent.energy >= SWARM_STARTING_ENERGY ? 0xa5b4fc : 0xf9a8d4,
+              transparent: true,
+              opacity: 0.8,
+              roughness: 0.7,
+              metalness: 0.02,
+            });
+            mesh = new THREE.Mesh(geometry, material);
+            mesh.userData.agent = agent;
+            swarmThreeAgentGroup.add(mesh);
+            swarmThreeAgentMeshes.set(id, mesh);
+          }
+          updateSwarmThreeAgentTransform(agent, mesh);
+        });
+      }
       Array.from(swarmThreeAgentMeshes.entries()).forEach(([id, mesh]) => {
         if (!agentIds.has(id)) {
           swarmThreeAgentGroup.remove(mesh);
@@ -2700,33 +2859,28 @@ let backtestSourceMode = "saved";
       }
       if (isSwarmDebugMode()) {
         const realNodes = swarmVisibleNodes;
-        const sphereRadius = Math.max(1, getSwarmSphereRadius());
+        const currentDebugRadius = Math.max(1, Number(swarmDebugSphereRadius || getSwarmSphereRadius()));
+        const targetDebugRadius = getSwarmDebugAdaptiveSphereRadius(realNodes, currentDebugRadius);
+        const sphereRadius = targetDebugRadius > currentDebugRadius
+          ? targetDebugRadius
+          : (currentDebugRadius + ((targetDebugRadius - currentDebugRadius) * 0.08));
+        swarmDebugSphereRadius = Math.max(1, sphereRadius);
         const forces = realNodes.map(() => ({ x: 0, y: 0, z: 0 }));
-        const nearestAngles = realNodes.map(() => Math.PI);
         realNodes.forEach((node, idx) => {
           const seedVector = normalizeSwarmVector(node.sphereVector || worldToSphereVector(node.x, node.y));
           node.sphereVector = seedVector;
           const capRadius = getSwarmDebugCapRadius(node);
           node.capRadius = capRadius;
-          node.sphereRadius = sphereRadius;
+          node.mass = Math.max(0.75, Math.pow(capRadius / 8, 1.35));
+          node.sphereRadius = swarmDebugSphereRadius;
           node.capAngularRadius = capRadius / Math.max(1, sphereRadius);
-          const tangentBasis = getSwarmSphereTangentBasis(seedVector);
           const velocity = node.sphereVelocity || { x: 0, y: 0, z: 0 };
           node.sphereVelocity = projectSwarmVectorToTangentPlane(velocity, seedVector);
-          if (Math.hypot(node.sphereVelocity.x, node.sphereVelocity.y, node.sphereVelocity.z) < 0.00001) {
-            const wobblePhase = stableSwarmFraction(String(node.ticker || idx), "debug-sphere-twist") * Math.PI * 2;
-            const wobble = 0.00045 + (stableSwarmFraction(String(node.ticker || idx), "debug-sphere-twist-scale") * 0.0003);
-            node.sphereVelocity = {
-              x: (tangentBasis.tangentX.x * Math.cos(wobblePhase) + tangentBasis.tangentY.x * Math.sin(wobblePhase)) * wobble,
-              y: (tangentBasis.tangentX.y * Math.cos(wobblePhase) + tangentBasis.tangentY.y * Math.sin(wobblePhase)) * wobble,
-              z: (tangentBasis.tangentX.z * Math.cos(wobblePhase) + tangentBasis.tangentY.z * Math.sin(wobblePhase)) * wobble,
-            };
-          }
         });
         for (let idx = 0; idx < realNodes.length; idx += 1) {
           const node = realNodes[idx];
           const nodeVector = normalizeSwarmVector(node.sphereVector || worldToSphereVector(node.x, node.y));
-          const nodeRadius = getSwarmDebugCapRadius(node);
+          const nodeRadius = Math.max(0.9, Number(node.capRadius || getSwarmDebugCapRadius(node)));
           for (let otherIdx = idx + 1; otherIdx < realNodes.length; otherIdx += 1) {
             const other = realNodes[otherIdx];
             const otherVector = normalizeSwarmVector(other.sphereVector || worldToSphereVector(other.x, other.y));
@@ -2736,10 +2890,8 @@ let backtestSourceMode = "saved";
               0.999999,
             );
             const angle = Math.acos(dot);
-            const otherRadius = getSwarmDebugCapRadius(other);
-            const targetAngle = Math.max(0.02, ((nodeRadius + otherRadius) / sphereRadius) * 1.025);
-            nearestAngles[idx] = Math.min(nearestAngles[idx], angle);
-            nearestAngles[otherIdx] = Math.min(nearestAngles[otherIdx], angle);
+            const otherRadius = Math.max(0.9, Number(other.capRadius || getSwarmDebugCapRadius(other)));
+            const targetAngle = Math.max(0.02, (nodeRadius + otherRadius) / sphereRadius);
             const nodeToOther = projectSwarmVectorToTangentPlane({
               x: otherVector.x - (nodeVector.x * dot),
               y: otherVector.y - (nodeVector.y * dot),
@@ -2751,9 +2903,12 @@ let backtestSourceMode = "saved";
               z: nodeVector.z - (otherVector.z * dot),
             }, otherVector);
             const gap = angle - targetAngle;
-            const spring = clampSwarm(gap * 0.085, -0.045, 0.045);
+            const nodeMass = Math.max(0.75, Number(node.mass || 1));
+            const otherMass = Math.max(0.75, Number(other.mass || 1));
+            const attractionBias = Math.sqrt(nodeMass * otherMass);
+            const spring = clampSwarm(gap * 0.052 * attractionBias, -0.08, 0.08);
             const overlap = Math.max(0, targetAngle - angle);
-            const correction = clampSwarm(overlap * 0.12, 0, 0.06);
+            const correction = clampSwarm(overlap * 0.2, 0, 0.11);
             const coupling = spring + correction;
             forces[idx].x += nodeToOther.x * coupling;
             forces[idx].y += nodeToOther.y * coupling;
@@ -2765,17 +2920,17 @@ let backtestSourceMode = "saved";
         }
         realNodes.forEach((node, idx) => {
           const currentMass = Math.max(0.45, Number(node.mass || 1));
-          const currentRadius = clampSwarm(Number(node.capRadius || node.baseRadius || node.radius || 1), 1.35, 9.5);
+          const fixedRadius = clampSwarm(getSwarmDebugCapRadius(node), 1.35, 34);
           const force = forces[idx];
           const velocity = node.sphereVelocity || { x: 0, y: 0, z: 0 };
-          const damping = 0.92;
+          const damping = 0.93;
           const nextVelocity = projectSwarmVectorToTangentPlane({
             x: (velocity.x * damping) + (force.x / currentMass),
             y: (velocity.y * damping) + (force.y / currentMass),
             z: (velocity.z * damping) + (force.z / currentMass),
           }, node.sphereVector);
           const speed = Math.hypot(nextVelocity.x, nextVelocity.y, nextVelocity.z);
-          const velocityLimit = 0.022;
+          const velocityLimit = 0.03;
           const cappedVelocity = speed > velocityLimit
             ? {
               x: nextVelocity.x * (velocityLimit / speed),
@@ -2795,23 +2950,25 @@ let backtestSourceMode = "saved";
           node.z = node.sphereVector.z * node.sphereRadius;
           node.seedX = worldPoint.x;
           node.seedY = worldPoint.y;
-          const targetRadius = getSwarmDebugTouchRadius(node, nearestAngles[idx], node.sphereRadius);
-          const growthRate = 0.16;
-          const nextRadius = clampSwarm(
-            currentRadius + ((targetRadius - currentRadius) * growthRate),
-            currentRadius,
-            targetRadius,
-          );
-          node.radius = nextRadius;
-          node.capRadius = nextRadius;
-          node.capAngularRadius = nextRadius / Math.max(1, node.sphereRadius);
+          node.radius = fixedRadius;
+          node.capRadius = fixedRadius;
+          node.capAngularRadius = fixedRadius / Math.max(1, node.sphereRadius);
           node.vx = 0;
           node.vy = 0;
         });
+        resolveSwarmDebugCapCollisions(realNodes, sphereRadius, 5);
         swarmVisibleNodes.forEach((node) => {
+          const worldPoint = sphereVectorToWorld(node.sphereVector);
+          node.x = worldPoint.x;
+          node.y = worldPoint.y;
+          node.z = node.sphereVector.z * node.sphereRadius;
+          node.seedX = worldPoint.x;
+          node.seedY = worldPoint.y;
           const worth = Math.max(SWARM_TICKER_WEALTH_FLOOR, Number(node.simEnergy || node.baseValue || SWARM_STARTING_ENERGY));
           node.charge = 1 + (Math.sqrt(worth / SWARM_STARTING_ENERGY) * 0.2);
-          node.radius = clampSwarm(Number(node.capRadius || node.baseRadius || node.radius || 1), 1.35, 9.5);
+          node.radius = clampSwarm(Number(node.capRadius || node.baseRadius || node.radius || 1), 1.35, 34);
+          node.capRadius = node.radius;
+          node.capAngularRadius = node.radius / Math.max(1, node.sphereRadius);
         });
         return;
       }
@@ -4000,6 +4157,9 @@ let backtestSourceMode = "saved";
     }
 
     function drawSwarmScene() {
+      if (isSwarmDebugMode() && swarmTrails.length) {
+        swarmTrails = [];
+      }
       if (renderSwarmThreeScene()) {
         return;
       }
@@ -4021,19 +4181,21 @@ let backtestSourceMode = "saved";
         ctx.drawImage(swarmStaticLayer, 0, 0, layout.width, layout.height);
       }
 
-      swarmTrails.forEach((trail) => {
-        const a = worldToCanvas(layout, trail.x1, trail.y1);
-        const b = worldToCanvas(layout, trail.x2, trail.y2);
-        if (!a.visible || !b.visible) {
-          return;
-        }
-        ctx.strokeStyle = `rgba(129, 140, 248, ${Math.max(0.05, trail.life / 40)})`;
-        ctx.lineWidth = Math.max(0.7, trail.width * layout.scale);
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
-      });
+      if (!isSwarmDebugMode()) {
+        swarmTrails.forEach((trail) => {
+          const a = worldToCanvas(layout, trail.x1, trail.y1);
+          const b = worldToCanvas(layout, trail.x2, trail.y2);
+          if (!a.visible || !b.visible) {
+            return;
+          }
+          ctx.strokeStyle = `rgba(129, 140, 248, ${Math.max(0.05, trail.life / 40)})`;
+          ctx.lineWidth = Math.max(0.7, trail.width * layout.scale);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        });
+      }
 
       const drawHighlight = (node, stroke, fill, fillAlpha = 0.14) => {
         if (!node) {
@@ -4090,11 +4252,12 @@ let backtestSourceMode = "saved";
       drawHighlight(hoverNode, "rgba(191, 219, 254, 1)", "#bfdbfe");
       drawHighlight(selectedNode, "rgba(250, 204, 21, 1)", "#fde68a", 0.18);
 
-      swarmAgents.forEach((agent) => {
-        const point = worldToCanvas(layout, agent.x, agent.y);
-        if (!point.visible) {
-          return;
-        }
+      if (!isSwarmDebugMode()) {
+        swarmAgents.forEach((agent) => {
+          const point = worldToCanvas(layout, agent.x, agent.y);
+          if (!point.visible) {
+            return;
+          }
         const radius = getSwarmAgentRadius(agent, layout);
         const heading = getSwarmAgentHeading(agent);
         const selected = selectedAgent && selectedAgent.id === agent.id;
@@ -4155,8 +4318,9 @@ let backtestSourceMode = "saved";
         ctx.fillStyle = "rgba(15, 23, 42, 0.78)";
         ctx.fillRect(barX, barY, barWidth, 2.6);
         ctx.fillStyle = wealthRatio >= 1 ? "rgba(34, 197, 94, 0.95)" : "rgba(251, 113, 133, 0.95)";
-        ctx.fillRect(barX, barY, barWidth * clampSwarm(wealthRatio / 2, 0.08, 1), 2.6);
-      });
+          ctx.fillRect(barX, barY, barWidth * clampSwarm(wealthRatio / 2, 0.08, 1), 2.6);
+        });
+      }
     }
 
     function resetSwarmSimulation() {
@@ -4274,6 +4438,9 @@ let backtestSourceMode = "saved";
     }
 
     function stepSwarmSimulation(dt) {
+      if (isSwarmDebugMode() && swarmTrails.length) {
+        swarmTrails = [];
+      }
       if (!swarmVisibleNodes.length || !swarmAgents.length) {
         if (swarmCompletedAgents.length) {
           swarmPlaying = false;
@@ -4329,7 +4496,7 @@ let backtestSourceMode = "saved";
             agent.sphereVector = nextTarget.sphereVector ? { ...nextTarget.sphereVector } : worldToSphereVector(agent.x, agent.y);
             agent.vx = agent.x - prevX;
             agent.vy = agent.y - prevY;
-            if (swarmTrails.length < SWARM_MAX_TRAILS && previousTarget && previousTarget.ticker !== nextTarget.ticker) {
+            if (!isSwarmDebugMode() && swarmTrails.length < SWARM_MAX_TRAILS && previousTarget && previousTarget.ticker !== nextTarget.ticker) {
               swarmTrails.push({
                 x1: prevX,
                 y1: prevY,
@@ -4686,12 +4853,14 @@ let backtestSourceMode = "saved";
     }
 
     function showTab(tab) {
+      tab = normalizeDashboardTab(tab);
       console.log('[TABBAR] Switching to tab:', tab);
       fetch('/api/log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ level: 'info', message: `[TABBAR] Switching to tab: ${tab}` })
       });
+      writeStickyValue(LAST_DASHBOARD_TAB_KEY, tab);
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.remove('active');
       });
@@ -5199,7 +5368,42 @@ let backtestSourceMode = "saved";
       }
       const swarmCanvas = document.getElementById("swarm-canvas");
       if (swarmCanvas) {
-        swarmCanvas.addEventListener("mousemove", (event) => {
+        const stopSwarmCameraDrag = () => {
+          if (!swarmCameraDrag.active) {
+            return;
+          }
+          swarmCameraDrag.active = false;
+          swarmCanvas.style.cursor = "grab";
+          if (swarmCameraDrag.moved) {
+            swarmSuppressNextClick = true;
+          }
+        };
+        swarmCanvas.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0 && event.pointerType !== "touch") {
+            return;
+          }
+          swarmCanvas.setPointerCapture?.(event.pointerId);
+          swarmCameraDrag.active = true;
+          swarmCameraDrag.moved = false;
+          swarmCameraDrag.lastX = event.clientX;
+          swarmCameraDrag.lastY = event.clientY;
+          swarmCanvas.style.cursor = "grabbing";
+          event.preventDefault();
+        });
+        swarmCanvas.addEventListener("pointermove", (event) => {
+          if (swarmCameraDrag.active) {
+            const deltaX = event.clientX - swarmCameraDrag.lastX;
+            const deltaY = event.clientY - swarmCameraDrag.lastY;
+            if (Math.abs(deltaX) > 0 || Math.abs(deltaY) > 0) {
+              swarmCameraDrag.moved = true;
+              orbitSwarmCamera(deltaX, deltaY);
+              swarmCameraDrag.lastX = event.clientX;
+              swarmCameraDrag.lastY = event.clientY;
+              drawSwarmScene();
+            }
+            event.preventDefault();
+            return;
+          }
           const node = getSwarmNodeAtPoint(event.clientX, event.clientY);
           const nextTicker = node ? node.ticker : null;
           if (nextTicker !== swarmHoveredTicker) {
@@ -5208,14 +5412,24 @@ let backtestSourceMode = "saved";
             drawSwarmScene();
           }
         });
-        swarmCanvas.addEventListener("mouseleave", () => {
+        swarmCanvas.addEventListener("pointerleave", () => {
+          stopSwarmCameraDrag();
           if (swarmHoveredTicker !== null) {
             swarmHoveredTicker = null;
             updateSwarmPanels();
             drawSwarmScene();
           }
         });
+        swarmCanvas.addEventListener("pointerup", (event) => {
+          swarmCanvas.releasePointerCapture?.(event.pointerId);
+          stopSwarmCameraDrag();
+        });
+        swarmCanvas.addEventListener("pointercancel", stopSwarmCameraDrag);
         swarmCanvas.addEventListener("click", (event) => {
+          if (swarmSuppressNextClick) {
+            swarmSuppressNextClick = false;
+            return;
+          }
           const agent = getSwarmAgentAtPoint(event.clientX, event.clientY);
           if (agent) {
             swarmSelectedAgentId = agent.id;
@@ -5227,13 +5441,14 @@ let backtestSourceMode = "saved";
           updateSwarmPanels();
           drawSwarmScene();
         });
+        window.addEventListener("pointerup", stopSwarmCameraDrag);
       }
       window.addEventListener("resize", () => {
         if (swarmLoaded) {
           drawSwarmScene();
         }
       });
-      showTab('screener');
+      showTab(normalizeDashboardTab(readStickyValue(LAST_DASHBOARD_TAB_KEY, "screener")));
     });
     let currentDays = 365 * 2;
     let currentTicker = "";

@@ -588,102 +588,114 @@
         Open the Swarm tab to load the cached asset sphere.
       </div>
 
-      <div id="swarm-content" class="hidden grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-6">
-        <div class="space-y-4">
-          <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-900">
-            <span class="font-bold">Read the world:</span> every asset is a circular disc anchored to the sphere surface. Larger assets have more mass, move less easily, and the scene evolves by return-driven forces.
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Show</span>
-            <button id="swarm-filter-all" type="button" onclick="setSwarmFilter('All')"
-              class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-              All
-            </button>
-            <button id="swarm-filter-buy" type="button" onclick="setSwarmFilter('Buy')"
-              class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-              Buy
-            </button>
-            <button id="swarm-filter-watch" type="button" onclick="setSwarmFilter('Watch')"
-              class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-              Watch
-            </button>
-            <button id="swarm-filter-skip" type="button" onclick="setSwarmFilter('Skip')"
-              class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-              Skip
-            </button>
-          </div>
-          <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
-            <div class="flex items-center justify-between gap-3">
+      <div id="swarm-content" class="hidden grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_320px] gap-6">
+        <aside class="space-y-4">
+          <details open class="group overflow-hidden rounded-xl border border-violet-200 bg-white shadow">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 bg-gradient-to-r from-violet-50 via-white to-sky-50 px-4 py-3">
               <div>
-                <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Timeline</div>
-                <div id="swarm-timeline-label" class="mt-1 text-sm font-semibold text-slate-700">Step 0 / 1000</div>
+                <div class="text-xs font-bold uppercase tracking-wide text-violet-500">Controls</div>
+                <div class="mt-1 text-sm font-semibold text-slate-800">Simulation Panel</div>
               </div>
-              <div id="swarm-timeline-mode" class="text-xs font-bold uppercase tracking-wide text-violet-600">Stopped</div>
-            </div>
-            <input id="swarm-timeline-slider" type="range" min="0" max="1000" value="0" step="1"
-              oninput="setSwarmTimeline(Number(this.value), true)"
-              class="mt-3 w-full accent-violet-600">
-          </div>
-          <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Jump Cost</div>
-                <div id="swarm-jump-cost-label" class="mt-1 text-sm font-semibold text-slate-700">2.0x market friction</div>
+              <span class="text-xs font-bold uppercase tracking-wide text-slate-400 transition-transform group-open:rotate-180">Hide</span>
+            </summary>
+            <div class="space-y-4 px-4 py-4">
+              <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+                <span class="font-bold">Read the world:</span> every asset is a circular disc anchored to the sphere surface. Larger assets have more mass, move less easily, and the scene evolves by return-driven forces.
               </div>
-              <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Global</div>
-            </div>
-            <input id="swarm-jump-cost-slider" type="range" min="0.5" max="8" value="2" step="0.25"
-              oninput="setSwarmJumpCost(Number(this.value))"
-              class="mt-3 w-full accent-violet-600">
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
-              <div class="flex items-center justify-between gap-3">
-              <div>
-                <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Knowledge</div>
-                <div id="swarm-sense-label" class="mt-1 text-sm font-semibold text-slate-700">Global asset scan</div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Show</span>
+                <button id="swarm-filter-all" type="button" onclick="setSwarmFilter('All')"
+                  class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+                  All
+                </button>
+                <button id="swarm-filter-buy" type="button" onclick="setSwarmFilter('Buy')"
+                  class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+                  Buy
+                </button>
+                <button id="swarm-filter-watch" type="button" onclick="setSwarmFilter('Watch')"
+                  class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+                  Watch
+                </button>
+                <button id="swarm-filter-skip" type="button" onclick="setSwarmFilter('Skip')"
+                  class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
+                  Skip
+                </button>
               </div>
-                <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Global</div>
-              </div>
-              <div class="mt-3 text-xs leading-relaxed text-slate-500">
-                Agents evaluate all real tickers using current timeline indicators, without seeing future returns.
-              </div>
-            </div>
-            <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
-              <div class="flex items-center justify-between gap-3">
-              <div>
-                  <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Assets / Node</div>
-                  <div id="swarm-agents-per-node-label" class="mt-1 text-sm font-semibold text-slate-700">20 per alternating asset</div>
+              <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Timeline</div>
+                    <div id="swarm-timeline-label" class="mt-1 text-sm font-semibold text-slate-700">Step 0 / 1000</div>
+                  </div>
+                  <div id="swarm-timeline-mode" class="text-xs font-bold uppercase tracking-wide text-violet-600">Stopped</div>
                 </div>
-                <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Capped</div>
+                <input id="swarm-timeline-slider" type="range" min="0" max="1000" value="0" step="1"
+                  oninput="setSwarmTimeline(Number(this.value), true)"
+                  class="mt-3 w-full accent-violet-600">
               </div>
-              <input id="swarm-agents-per-node-slider" type="range" min="1" max="100" value="20" step="1"
-                oninput="setSwarmAgentsPerNode(Number(this.value))"
-                class="mt-3 w-full accent-violet-600">
+              <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Jump Cost</div>
+                    <div id="swarm-jump-cost-label" class="mt-1 text-sm font-semibold text-slate-700">2.0x market friction</div>
+                  </div>
+                  <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Global</div>
+                </div>
+                <input id="swarm-jump-cost-slider" type="range" min="0.5" max="8" value="2" step="0.25"
+                  oninput="setSwarmJumpCost(Number(this.value))"
+                  class="mt-3 w-full accent-violet-600">
+              </div>
+              <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Knowledge</div>
+                    <div id="swarm-sense-label" class="mt-1 text-sm font-semibold text-slate-700">Global asset scan</div>
+                  </div>
+                  <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Global</div>
+                </div>
+                <div class="mt-3 text-xs leading-relaxed text-slate-500">
+                  Agents evaluate all real tickers using current timeline indicators, without seeing future returns.
+                </div>
+              </div>
+              <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Assets / Node</div>
+                    <div id="swarm-agents-per-node-label" class="mt-1 text-sm font-semibold text-slate-700">20 per alternating asset</div>
+                  </div>
+                  <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Capped</div>
+                </div>
+                <input id="swarm-agents-per-node-slider" type="range" min="1" max="100" value="20" step="1"
+                  oninput="setSwarmAgentsPerNode(Number(this.value))"
+                  class="mt-3 w-full accent-violet-600">
+              </div>
+              <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Zoom</div>
+                    <div id="swarm-zoom-label" class="mt-1 text-sm font-semibold text-slate-700">0.75x sphere view</div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span id="swarm-world-visibility" class="rounded-full border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">Zoomed in</span>
+                    <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Camera</div>
+                  </div>
+                </div>
+                <input id="swarm-zoom-slider" type="range" min="0.35" max="2.2" value="0.75" step="0.05"
+                  oninput="setSwarmZoom(Number(this.value))"
+                  class="mt-3 w-full accent-violet-600">
+              </div>
             </div>
-          </div>
-          <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Zoom</div>
-                <div id="swarm-zoom-label" class="mt-1 text-sm font-semibold text-slate-700">0.75x sphere view</div>
-              </div>
-              <div class="flex items-center gap-2">
-                <span id="swarm-world-visibility" class="rounded-full border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">Zoomed in</span>
-                <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Camera</div>
-              </div>
-            </div>
-            <input id="swarm-zoom-slider" type="range" min="0.35" max="2.2" value="0.75" step="0.05"
-              oninput="setSwarmZoom(Number(this.value))"
-              class="mt-3 w-full accent-violet-600">
-          </div>
+          </details>
+        </aside>
+
+        <div class="space-y-4">
           <div class="overflow-hidden rounded-xl bg-white shadow border border-violet-100">
             <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 flex items-center justify-between">
               <span>Charged Asset Sphere</span>
               <span id="swarm-world-caption" class="text-[11px] uppercase tracking-wide text-slate-400">Hover an asset to inspect it</span>
             </div>
             <div id="swarm-canvas-wrap" class="relative w-full h-[640px] bg-slate-950">
-              <canvas id="swarm-canvas" class="absolute inset-0 h-full w-full"></canvas>
+              <canvas id="swarm-canvas" class="absolute inset-0 h-full w-full cursor-grab touch-none"></canvas>
             </div>
           </div>
         </div>

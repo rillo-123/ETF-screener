@@ -1,13 +1,14 @@
 # Plan
 
-Last updated: 2026-05-06 22:09:43 +02:00
+Last updated: 2026-05-06 23:26:06 +02:00
 
 ## Current objective
 
-End-of-day workflow completed successfully with no auto-fixes required.
+Milestone workflow completed successfully after applying fixes: E402 Module level import not at top of file,  --> src\ETF_screener\backtester.py:5:1,   |, 3 | """Backtesting engine for ETF trading strategies.""", 4 |, 5 | import hashlib,   | ^^^^^^^^^^^^^^, 6 | import logging, 7 | import re,   |, , E402 Module level import not at top of file,  --> src\ETF_screener\backtester.py:6:1,   |, 5 | import hashlib, 6 | import logging,   | ^^^^^^^^^^^^^^, 7 | import re, 8 | import sys,   |, , E402 Module level import not at top of file,  --> src\ETF_screener\backtester.py:7:1,   |, 5 | import hashlib, 6 | import logging, 7 | import re,   | ^^^^^^^^^, 8 | import sys, 9 | from pathlib import Path,   |, , E402 Module level import not at top of file,  --> src\ETF_screener\backtester.py:8:1,   |, 6 | import logging, 7 | import re, 8 | import sys,   | ^^^^^^^^^^, 9 | from pathlib import Path,   |, , E402 Module level import not at top of file,   --> src\ETF_screener\backtester.py:9:1,    |,  7 | import re,  8 | import sys,  9 | from pathlib import Path,    | ^^^^^^^^^^^^^^^^^^^^^^^^, 10 |, 11 | import numpy as np,    |, , E402 Module level import not at top of file,   --> src\ETF_screener\backtester.py:11:1,    |,  9 | from pathlib import Path, 10 |, 11 | import numpy as np,    | ^^^^^^^^^^^^^^^^^^, 12 | import pandas as pd,    |, , E402 Module level import not at top of file,   --> src\ETF_screener\backtester.py:12:1,    |, 11 | import numpy as np, 12 | import pandas as pd,    | ^^^^^^^^^^^^^^^^^^^, 13 |, 14 | from ETF_screener.database import ETFDatabase,    |, , E402 Module level import not at top of file,   --> src\ETF_screener\backtester.py:14:1,    |, 12 | import pandas as pd, 13 |, 14 | from ETF_screener.database import ETFDatabase,    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^, 15 | from ETF_screener.indicators import (, 16 |     calculate_adx,,    |, , E402 Module level import not at top of file,   --> src\ETF_screener\backtester.py:15:1,    |, 14 |   from ETF_screener.database import ETFDatabase, 15 | / from ETF_screener.indicators import (, 16 | |     calculate_adx,, 17 | |     calculate_ema,, 18 | |     calculate_macd,, 19 | |     calculate_rsi,, 20 | |     calculate_rsi_ema,, 21 | |     calculate_stochastic,, 22 | |     calculate_stoch_rsi,, 23 | |     calculate_supertrend,, 24 | |     calculate_linreg_slope,, 25 | |     calculate_tsi,, 26 | | ),    | |_^, 27 |   from ETF_screener.strategy_manager import CachedStrategyManager,    |, , E402 Module level import not at top of file,   --> src\ETF_screener\backtester.py:27:1,    |, 25 |     calculate_tsi,, 26 | ), 27 | from ETF_screener.strategy_manager import CachedStrategyManager,    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^, 28 |, 29 | logger = logging.getLogger(__name__),    |, , F841 Local variable `price_col` is assigned to but never used,    --> src\ETF_screener\backtester.py:184:13,     |, 182 |             df["Date"] = pd.to_datetime(df.get("Date", df.get("date"))), 183 |             df = df.sort_values("Date").reset_index(drop=True), 184 |             price_col = "Close" if "Close" in df else "close",     |             ^^^^^^^^^, 185 |             kwargs = strategy_kwargs or {},     |, help: Remove assignment to unused variable `price_col`, , E402 Module level import not at top of file,  --> src\ETF_screener\database.py:5:1,   |, 3 | """SQLite database interface for ETF data persistence.""", 4 |, 5 | import sqlite3,   | ^^^^^^^^^^^^^^, 6 | from pathlib import Path, 7 | from typing import Optional,   |, , E402 Module level import not at top of file,  --> src\ETF_screener\database.py:6:1,   |, 5 | import sqlite3, 6 | from pathlib import Path,   | ^^^^^^^^^^^^^^^^^^^^^^^^, 7 | from typing import Optional,   |, , E402 Module level import not at top of file,  --> src\ETF_screener\database.py:7:1,   |, 5 | import sqlite3, 6 | from pathlib import Path, 7 | from typing import Optional,   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^, 8 |, 9 | import pandas as pd,   |, , E402 Module level import not at top of file,  --> src\ETF_screener\database.py:9:1,   |, 7 | from typing import Optional, 8 |, 9 | import pandas as pd,   | ^^^^^^^^^^^^^^^^^^^,   |, , F821 Undefined name `logger`,    --> src\ETF_screener\market_data_service.py:356:13,     |, 354 |         promoted = self.delisting_tracker.promote_aged_missing(threshold_days=14), 355 |         if promoted:, 356 |             logger.info("Promoted %d missing tickers to blacklist", len(promoted)),     |             ^^^^^^, 357 |         self._emit_progress(, 358 |             progress_callback,,     |, , E402 Module level import not at top of file,  --> src\ETF_screener\storage.py:5:1,   |, 3 | """Data storage utilities for parquet files.""", 4 |, 5 | from pathlib import Path,   | ^^^^^^^^^^^^^^^^^^^^^^^^, 6 |, 7 | import pandas as pd,   |, , E402 Module level import not at top of file,  --> src\ETF_screener\storage.py:7:1,   |, 5 | from pathlib import Path, 6 |, 7 | import pandas as pd,   | ^^^^^^^^^^^^^^^^^^^,   |, , F841 Local variable `trigger_trace` is assigned to but never used,    --> tests\test_plotter_plotly.py:542:5,     |, 540 |         df, "TEST", strategy_content=strategy_content, 541 |     ), 542 |     trigger_trace = next(,     |     ^^^^^^^^^^^^^, 543 |         t, 544 |         for t in fig.data,     |, help: Remove assignment to unused variable `trigger_trace`, , Found 19 errors., No fixes available (2 hidden fixes can be enabled with the `--unsafe-fixes` option)., black.
 
 ## Current state
 
+- -Summary
 - -Summary
 - Switched the dashboard to a local Three.js loader so the Swarm globe no longer depends on the CDN.
 - Added swarm renderer diagnostics to the browser console and confirmed the earlier missing graticule was caused by Three.js not loading.
@@ -16,7 +17,7 @@ End-of-day workflow completed successfully with no auto-fixes required.
 - -Summary
 - -Summary
 - -Summary
-- The end-of-day workflow now updates `plan.md` and `progress.md` before staging, committing, and pushing so the resume docs stay in lockstep with the final branch state.
+- The milestone workflow now updates `plan.md` and `progress.md` before staging, committing, and pushing so the resume docs stay in lockstep with the final branch state.
 - The database now has dedicated `etf_metadata` and `etf_shortlist_artifacts` tables for persisted shortlist state.
 - `src/ETF_screener/shortlist_engine.py` now builds a reusable shortlist snapshot from cached parquet first, DB fallback second, and analyzes the universe in parallel threads.
 - The shortlist engine scores each ticker across product, exposure, and technical state, then persists `Buy` / `Watch` / `Skip` artifacts with reason strings and score components.
@@ -40,7 +41,7 @@ End-of-day workflow completed successfully with no auto-fixes required.
 - The repo-local vulture quality gate now has a whitelist file for deliberate FastAPI and helper entrypoints, and the nested Windows PowerShell test runner was adjusted to avoid Unicode parsing issues.
 - The default `run_all_tests.ps1` invocation now includes `vulture` so dead-code scanning is part of the main quality pass.
 - The Plotly ribbon chart now uses a slimmer shared left margin so the main graph sits farther left with less dead space.
-- The repo now has an end-of-day workflow wrapper, `workflow_end_of_day.ps1`, that runs the test suite, applies light auto-fixes when needed, and handles commit/push for the current branch.
+- The repo now has a milestone workflow wrapper, `workflow_milestone.ps1`, that runs the test suite, applies light auto-fixes when needed, and handles commit/push for the current branch.
 - Agent motion now uses direct global jumps between real tickers based on each agent's DNA criteria.
 - Swarm ticker balls are white/neutral, with radius proportional to `log10(simulated wealth)`; color no longer encodes simulated gain/loss or shortlist label.
 - Globe zoom now uses a smaller ticker draw radius than projected map zoom so thousands of white ticker balls remain distinct instead of merging into a few blobs.
@@ -99,6 +100,7 @@ End-of-day workflow completed successfully with no auto-fixes required.
 
 - -NextResumePoint
 - -NextResumePoint
+- -NextResumePoint
 - -Summary
 - -NextResumePoint
 - -Summary
@@ -140,6 +142,7 @@ End-of-day workflow completed successfully with no auto-fixes required.
 - Treat the Swarm timeline as a replayable simulation over historical market dates, with explicit play, stop, and restart controls instead of a purely ambient animation.
 - Keep `plan.md` and `progress.md` tracked at the repo root.
 - Refresh both docs on every future implementation turn when plan or progress changes meaningfully.
+- Treat "set the milestone" as shorthand for: update `plan.md` and `progress.md`, run the full quality gate, fix remaining failures until the repo is green, then commit and push the checkpoint.
 
 ## Next steps
 
@@ -173,7 +176,7 @@ End-of-day workflow completed successfully with no auto-fixes required.
 - Evaluate GPU acceleration only where it naturally fits: browser rendering, WebGL/WebGPU visualization, or very data-parallel simulation steps.
 - Benchmark whether the process-worker backtest path is fast enough; if not, the next step is a more aggressive indicator/trade-state vectorization pass.
 - Benchmark whether the scripted result cache removes enough repeat latency on the dashboard path, and only then consider deeper vectorization.
-- Exercise `workflow_end_of_day.ps1` against a real branch state, then decide whether it should grow a dry-run mode or extra commit filters for generated artifacts.
+- Exercise `workflow_milestone.ps1` against a real branch state, then decide whether it should grow a dry-run mode or extra commit filters for generated artifacts.
 - Keep the progress UI lightweight and expressive rather than introducing a heavier notification system.
 - Let the global progress bar represent any long-running dashboard operation, not just screener/backtester work.
 - Keep updating `plan.md` and `progress.md` on every future implementation turn when state changes meaningfully.
