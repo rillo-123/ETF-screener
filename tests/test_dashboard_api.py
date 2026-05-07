@@ -61,6 +61,7 @@ def test_tab_bar_visible():
     assert ">Screener<" in html
     assert ">Shortlist<" in html
     assert ">Swarm<" in html
+    assert ">Swarm Lab<" in html
     assert ">Backtester<" in html
     assert ">Churner<" not in html
     assert ">Discovery<" not in html
@@ -69,27 +70,36 @@ def test_tab_bar_visible():
     assert "Signal Window" in html
     assert 'id="shortlist-grid"' in html
     assert 'id="swarm-canvas"' in html
-    assert 'id="swarm-step-1-btn"' in html
-    assert 'id="swarm-step-10-btn"' in html
-    assert 'id="swarm-timeline-slider"' in html
-    assert 'id="swarm-jump-cost-slider"' in html
-    assert "Global asset scan" in html
-    assert 'id="swarm-agents-per-node-slider"' in html
-    assert 'id="swarm-zoom-slider"' in html
-    assert 'id="swarm-world-visibility"' in html
-    assert 'id="swarm-stop-btn"' in html
-    assert 'id="swarm-agent-selected"' in html
-    assert 'id="swarm-top-agents"' in html
+    assert 'id="tab-btn-swarm-lab"' in html
+    assert 'id="tab-swarm-lab"' in html
+    assert 'id="swarm-lab-canvas"' in html
+    assert 'id="swarm-lab-population-slider"' in html
+    assert 'id="swarm-lab-node-count-slider"' in html
+    assert 'id="swarm-lab-mutation-slider"' in html
+    assert 'id="swarm-lab-repulsion-slider"' in html
+    assert 'id="swarm-lab-speed-slider"' in html
+    assert 'id="swarm-lab-zoom-slider"' in html
+    assert 'id="swarm-step-1-btn"' not in html
+    assert 'id="swarm-step-10-btn"' not in html
+    assert 'id="swarm-timeline-slider"' not in html
+    assert 'id="swarm-jump-cost-slider"' not in html
+    assert "Global asset scan" not in html
+    assert 'id="swarm-agents-per-node-slider"' not in html
+    assert 'id="swarm-zoom-slider"' not in html
+    assert 'id="swarm-world-visibility"' not in html
+    assert 'id="swarm-stop-btn"' not in html
+    assert 'id="swarm-agent-selected"' not in html
+    assert 'id="swarm-top-agents"' not in html
     assert 'id="shortlist-filter-buy"' in html
     assert 'id="swarm-filter-buy"' in html
     assert 'id="shortlist-filter-watch"' in html
     assert 'id="shortlist-filter-skip"' in html
     assert 'id="market-refresh-btn"' in html
     assert 'id="export-matches-btn"' in html
+    assert 'id="swarm-debug-controls"' not in html
+    assert "/api/swarm-history" in dashboard_source
     assert "/api/market-status?stale_after_days=0" in dashboard_source
     assert "force=true&stale_after_days=0" in dashboard_source
-    assert "/api/swarm-history" in dashboard_source
-    assert 'id="swarm-dna-save-status"' in html
     assert "/static/js/dashboard-loader.js" in html
     assert "/static/js/browser-log-relay.js" in html
     assert "supertrend_continuation" in html
@@ -107,6 +117,11 @@ def test_tab_bar_visible():
     assert "interpretSwarmDnaRules" in dashboard_source
     assert "Investment rule interpretation" in dashboard_source
     assert "SWARM_ANNUAL_INFLATION_RATE" in dashboard_source
+    assert "Swarm Lab: tune the abstract model" in dashboard_source
+    assert "loadSwarmLab" in dashboard_source
+    assert "toggleSwarmLabPlayback" in dashboard_source
+    assert "tab-btn-swarm-lab" in dashboard_source
+    assert "tab-swarm-lab" in dashboard_source
     assert "Export DNA" not in dashboard_source
     assert "spawnLimit" in dashboard_source
     assert "jumpCostSensitivity" in dashboard_source
@@ -787,7 +802,7 @@ def test_swarm_history_endpoint_returns_cached_close_history(monkeypatch):
     assert data["requested_tickers"] == 2
     assert data["count"] == 2
     assert data["as_of_date"] == "2026-04-22"
-    assert data["history"]["AAA.DE"]["dates"] == ["2026-04-21", "2026-04-22"]
+    assert "dates" not in data["history"]["AAA.DE"]
     assert data["history"]["AAA.DE"]["closes"] == [10.5, 11.0]
     assert data["history"]["AAA.DE"]["dividends"] == [0.0, 0.25]
     assert data["history"]["BBB.DE"]["closes"] == [20.0, 19.5]
@@ -827,6 +842,7 @@ def test_swarm_debug_scope_generates_dummy_assets(monkeypatch, tmp_path):
     for payload in history["history"].values():
         closes = payload["closes"]
         dividends = payload["dividends"]
+        assert "dates" not in payload
         assert len(closes) == 4
         assert len(dividends) == 4
         assert len(set(round(close, 6) for close in closes)) == 1

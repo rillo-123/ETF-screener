@@ -554,7 +554,6 @@ def _swarm_debug_history_payload(
         periods=max(1, int(safe_days or 1)),
     )
     latest_date = str(date_index[-1].date())
-    dates = [str(ts.date()) for ts in date_index]
     history: dict[str, dict[str, list]] = {}
 
     for row in nodes:
@@ -575,10 +574,9 @@ def _swarm_debug_history_payload(
             0.5,
             float(row.get("value") or row.get("close") or rng.uniform(5.0, 140.0)),
         )
-        closes = [round(base_value, 6) for _ in dates]
-        dividends = [0.0 for _ in dates]
+        closes = [round(base_value, 6) for _ in range(len(date_index))]
+        dividends = [0.0 for _ in range(len(date_index))]
         history[ticker] = {
-            "dates": dates,
             "closes": closes,
             "dividends": dividends,
         }
@@ -1609,7 +1607,6 @@ async def swarm_history(
             "history": {},
         }
 
-    frames = []
     conn = db._get_connection()
     etf_data_columns = {
         str(row[1]) for row in conn.execute("PRAGMA table_info(etf_data)").fetchall()
@@ -1620,6 +1617,8 @@ async def swarm_history(
         else "0.0 AS dividends"
     )
     chunk_size = 750
+    history: dict[str, dict[str, list]] = {}
+    latest_date: str | None = None
     for start in range(0, len(tickers), chunk_size):
         chunk = tickers[start : start + chunk_size]
         placeholders = ",".join("?" for _ in chunk)
@@ -1639,16 +1638,14 @@ async def swarm_history(
             WHERE rn <= ?
             ORDER BY ticker, date
         """  # nosec B608 - placeholders are generated, values are parameterized
-        frames.append(pd.read_sql_query(query, conn, params=[*chunk, safe_days]))
-
-    history_df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    history: dict[str, dict[str, list]] = {}
-    latest_date = None
-    if not history_df.empty:
-        history_df["ticker"] = history_df["ticker"].astype(str).str.upper()
-        history_df["date"] = history_df["date"].astype(str)
-        latest_date = str(history_df["date"].max())
-        for ticker, group in history_df.groupby("ticker", sort=False):
+        frame = pd.read_sql_query(query, conn, params=[*chunk, safe_days])
+        if frame.empty:
+            continue
+        frame["ticker"] = frame["ticker"].astype(str).str.upper()
+        frame["date"] = frame["date"].astype(str)
+        chunk_latest = str(frame["date"].max())
+        latest_date = chunk_latest if latest_date is None else max(latest_date, chunk_latest)
+        for ticker, group in frame.groupby("ticker", sort=False):
             clean_group = group.dropna(subset=["close"]).sort_values("date")
             closes = [
                 round(float(value), 6)
@@ -1663,7 +1660,6 @@ async def swarm_history(
             ]
             if closes:
                 history[str(ticker)] = {
-                    "dates": clean_group["date"].tolist()[-len(closes) :],
                     "closes": closes,
                     "dividends": dividends[-len(closes) :],
                 }

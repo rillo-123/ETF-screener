@@ -66,6 +66,26 @@ let backtestSourceMode = "saved";
     let swarmLoadProgressValue = 0;
     let swarmLoadProgressLabel = "Swarm";
     let swarmDebugAssetCount = 24;
+    let swarmLabLoaded = false;
+    let swarmLabPlaying = false;
+    let swarmLabAnimationHandle = null;
+    let swarmLabLastFrameTime = null;
+    let swarmLabFrameCounter = 0;
+    let swarmLabWorld = null;
+    let swarmLabNodes = [];
+    let swarmLabAgents = [];
+    let swarmLabTrails = [];
+    let swarmLabHoveredNodeId = null;
+    let swarmLabSelectedNodeId = null;
+    let swarmLabPopulation = 72;
+    let swarmLabNodeCount = 24;
+    let swarmLabMutation = 0.08;
+    let swarmLabRepulsion = 0.55;
+    let swarmLabSpeed = 1.0;
+    let swarmLabZoom = 1.0;
+    let swarmLabGenerationMax = 1;
+    let swarmLabBirthCount = 0;
+    let swarmLabDeathCount = 0;
     let marketDataAutoRefreshAttempted = false;
     let tickerSelectUniverse = [];
     let tickerUniverseLoadPromise = null;
@@ -105,14 +125,14 @@ let backtestSourceMode = "saved";
     const LAST_DASHBOARD_TAB_KEY = "etf-discovery:last-dashboard-tab";
 
     function getDashboardTabs() {
-      return ["screener", "shortlist", "swarm", "backtest"]
+      return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"]
         .map((name) => document.getElementById(`tab-${name}`))
         .filter(Boolean);
     }
 
     function normalizeDashboardTab(value) {
       const cleaned = String(value || "screener").trim().toLowerCase();
-      return ["screener", "shortlist", "swarm", "backtest"].includes(cleaned) ? cleaned : "screener";
+      return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].includes(cleaned) ? cleaned : "screener";
     }
 
     function readStickyValue(key, fallback = "") {
@@ -4630,7 +4650,6 @@ let backtestSourceMode = "saved";
       const content = document.getElementById("swarm-content");
       const empty = document.getElementById("swarm-empty");
       const scope = normalizeScanScope(tickerScanScope);
-      const debugActive = scope === "debug";
       swarmDebugSphereRadius = null;
 
       const backbone = await ensureGuiMarketBackbone();
@@ -4640,36 +4659,26 @@ let backtestSourceMode = "saved";
         stopSwarmLoadProgress();
         ensureSwarmThreeScene();
         drawSwarmScene();
-        if (!swarmAnimationHandle && !document.getElementById("tab-swarm").classList.contains("hidden")) {
-          swarmLastFrameTime = null;
-          swarmAnimationHandle = requestAnimationFrame(runSwarmFrame);
-        }
         return;
       }
 
       const loadTask = (async () => {
-      if (debugActive) {
-        startSwarmLoadProgress("Swarm Debug", shouldRefreshWorld ? "Generating synthetic assets..." : "Loading synthetic sphere...");
-      } else {
       startSwarmLoadProgress(
         "Swarm",
-        shouldRefreshWorld ? "Refreshing world..." : "Loading cached world...",
+        shouldRefreshWorld ? "Refreshing production world..." : "Loading cached production world...",
       );
-      }
-      setSwarmEmptyState(debugActive
-        ? (shouldRefreshWorld ? "Generating synthetic debug sphere..." : "Loading synthetic debug sphere...")
-        : (shouldRefreshWorld ? "Refreshing swarm world..." : "Loading cached swarm world..."));
+      setSwarmEmptyState(
+        shouldRefreshWorld ? "Refreshing production swarm..." : "Loading cached production swarm...",
+      );
       if (refreshBtn) {
         refreshBtn.disabled = true;
         refreshBtn.textContent = shouldRefreshWorld ? "Refreshing..." : "Loading...";
       }
       if (status) {
         status.className = "text-xs font-bold uppercase tracking-wide text-violet-600";
-        status.textContent = debugActive
-          ? "Generating synthetic debug sphere..."
-          : shouldRefreshWorld
-            ? "Rebuilding swarm world from shortlist artifacts..."
-            : "Loading cached swarm world...";
+        status.textContent = shouldRefreshWorld
+          ? "Rebuilding production swarm world..."
+          : "Loading cached production swarm world...";
       }
 
       try {
@@ -4680,58 +4689,51 @@ let backtestSourceMode = "saved";
           throw new Error(data.detail || "Swarm world request failed");
         }
 
-        if (debugActive) {
-          setSwarmLoadProgress({
-            show: true,
-            label: "Swarm Debug",
-            text: "Loading synthetic history...",
-            pct: 96,
-            working: true,
-          });
-        } else {
         setSwarmLoadProgress({
           show: true,
           label: "Swarm",
-          text: "Loading history...",
+          text: "Loading world...",
           pct: 96,
           working: true,
         });
-        }
         swarmWorld = data;
-        swarmRealNodes = debugActive
-          ? normalizeSwarmDebugSphereNodes(Array.isArray(data.nodes) ? data.nodes : [])
-          : normalizeSwarmSphereNodes(Array.isArray(data.nodes) ? data.nodes : []);
+        swarmRealNodes = normalizeSwarmSphereNodes(Array.isArray(data.nodes) ? data.nodes : []);
         swarmNodes = swarmRealNodes;
         swarmLoaded = true;
         swarmHoveredTicker = null;
         if (swarmSelectedTicker && !swarmNodes.some((node) => node.ticker === swarmSelectedTicker)) {
           swarmSelectedTicker = null;
         }
+        swarmSelectedAgentId = null;
+        swarmAgents = [];
+        swarmCompletedAgents = [];
+        swarmTopAgentSnapshots = [];
+        swarmHistoryByTicker = new Map();
+        swarmHistoryMeta = null;
+        swarmTimelineIndex = 0;
+        swarmTimelineMax = 0;
+        swarmPlaying = false;
+        swarmPlaybackAccumulator = 0;
+        swarmBirthCount = 0;
+        swarmDeathCount = 0;
+        swarmGenerationMax = 1;
 
-        if (countEl) countEl.textContent = debugActive
-          ? `${Number(data.count || 0)} dummy assets`
-          : `${Number(data.count || 0)} assets`;
+        if (countEl) countEl.textContent = `${Number(data.count || 0)} assets`;
         if (asOfEl) asOfEl.textContent = data.as_of_date || "-";
         if (status) {
           status.className = "text-xs font-bold uppercase tracking-wide text-emerald-600";
-          status.textContent = debugActive
-            ? `Swarm debug sphere ready · ${Number(data.count || 0)} dummy assets · ${normalizeScanScope(tickerScanScope)} scope · data as of ${data.as_of_date || "unknown"}`
-            : `Swarm sphere ready · ${Number(data.count || 0)} assets · ${normalizeScanScope(tickerScanScope)} scope · data as of ${data.as_of_date || "unknown"}`;
+          status.textContent = `Swarm sphere ready · ${Number(data.count || 0)} assets · ${normalizeScanScope(tickerScanScope)} scope · data as of ${data.as_of_date || "unknown"}`;
         }
         if (empty) empty.classList.add("hidden");
         if (content) content.classList.remove("hidden");
 
         refreshSwarmDerivedState();
-        if (status) {
-          status.className = "text-xs font-bold uppercase tracking-wide text-violet-600";
-          status.textContent = debugActive
-            ? "Loading synthetic close history for sphere motion..."
-            : "Loading cached close history for asset motion...";
-        }
-        await loadSwarmHistory();
+        ensureSwarmThreeScene();
+        drawSwarmScene();
+        updateSwarmPanels();
         setSwarmLoadProgress({
           show: true,
-          label: debugActive ? "Swarm Debug" : "Swarm",
+          label: "Swarm",
           text: "100%",
           pct: 100,
           working: false,
@@ -4739,27 +4741,16 @@ let backtestSourceMode = "saved";
         setTimeout(() => stopSwarmLoadProgress(), 180);
         if (status) {
           status.className = "text-xs font-bold uppercase tracking-wide text-emerald-600";
-          status.textContent = debugActive
-            ? `Swarm debug sphere ready · ${Number(data.count || 0)} dummy assets · ${Number((swarmHistoryMeta && swarmHistoryMeta.count) || 0)} histories · debug scope · data as of ${data.as_of_date || "unknown"}`
-            : `Swarm sphere ready · ${Number(data.count || 0)} assets · ${Number((swarmHistoryMeta && swarmHistoryMeta.count) || 0)} histories · ${normalizeScanScope(tickerScanScope)} scope · data as of ${data.as_of_date || "unknown"}`;
+          status.textContent = `Swarm sphere ready · ${Number(data.count || 0)} assets · ${normalizeScanScope(tickerScanScope)} scope · data as of ${data.as_of_date || "unknown"}`;
         }
         updateSwarmFilterButtons();
-        updateSwarmPanels();
-        relaxInitialSwarmSphere();
-        ensureSwarmThreeScene();
-        resetSwarmSimulation();
-
-        if (!document.getElementById("tab-swarm").classList.contains("hidden")) {
-          ensureSwarmAnimationLoop();
-        }
+        updateSwarmSummary();
       } catch (err) {
         stopSwarmLoadProgress();
-        setSwarmEmptyState(debugActive
-          ? `Swarm debug error: ${err.message || err}`
-          : `Swarm world error: ${err.message || err}`);
+        setSwarmEmptyState(`Swarm world error: ${err.message || err}`);
         if (status) {
           status.className = "text-xs font-bold uppercase tracking-wide text-rose-600";
-          status.textContent = debugActive ? "Swarm debug load failed" : "Swarm world load failed";
+          status.textContent = "Swarm world load failed";
         }
       } finally {
         clearSwarmLoadProgressTimer();
@@ -4792,12 +4783,687 @@ let backtestSourceMode = "saved";
       if (tab === "shortlist") {
         context.textContent = "Shortlist: browse ideas, then open the chart";
       } else if (tab === "swarm") {
-        context.textContent = "Swarm: explore the asset sphere and pin assets";
+        context.textContent = "Swarm: production asset explorer";
+      } else if (tab === "swarm-lab") {
+        context.textContent = "Swarm Lab: tune the abstract model";
       } else if (tab === "backtest") {
         context.textContent = "Backtester: choose what to evaluate below";
       } else {
         context.textContent = "Screener controls: pick a strategy, then click Run Screener";
       }
+    }
+
+    function getSwarmLabCanvas() {
+      return document.getElementById("swarm-lab-canvas");
+    }
+
+    function getSwarmLabCanvasLayout(canvas = getSwarmLabCanvas()) {
+      if (!canvas) {
+        return null;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const width = Math.max(1, rect.width);
+      const height = Math.max(1, rect.height);
+      if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+      }
+      return {
+        canvas,
+        rect,
+        dpr,
+        width,
+        height,
+        scale: Math.min(width / 1600, height / 900) * swarmLabZoom,
+        worldWidth: 1600,
+        worldHeight: 900,
+      };
+    }
+
+    function getSwarmLabWorldCenter(layout) {
+      return {
+        x: layout.width / 2,
+        y: layout.height / 2,
+      };
+    }
+
+    function getSwarmLabGlobeRadius(layout) {
+      return Math.min(layout.width, layout.height) * 0.46 * swarmLabZoom;
+    }
+
+    const swarmLabSurfaceYaw = -0.95;
+    const swarmLabSurfacePitch = 0.52;
+
+    function projectSwarmLabSurfacePoint(layout, x, y) {
+      const center = getSwarmLabWorldCenter(layout);
+      const radius = getSwarmLabGlobeRadius(layout);
+      const lon = ((Number(x || 0) / 1600) - 0.5) * Math.PI * 2;
+      const lat = (0.5 - (Number(y || 0) / 900)) * Math.PI * 0.88;
+      const cosLat = Math.cos(lat);
+      const sinLat = Math.sin(lat);
+      const cosLon = Math.cos(lon);
+      const sinLon = Math.sin(lon);
+      const vx = cosLat * sinLon;
+      const vy = sinLat;
+      const vz = cosLat * cosLon;
+
+      const cosYaw = Math.cos(swarmLabSurfaceYaw);
+      const sinYaw = Math.sin(swarmLabSurfaceYaw);
+      const xYaw = (vx * cosYaw) + (vz * sinYaw);
+      const zYaw = (-vx * sinYaw) + (vz * cosYaw);
+
+      const cosPitch = Math.cos(swarmLabSurfacePitch);
+      const sinPitch = Math.sin(swarmLabSurfacePitch);
+      const yPitch = (vy * cosPitch) - (zYaw * sinPitch);
+      const zPitch = (vy * sinPitch) + (zYaw * cosPitch);
+
+      return {
+        x: center.x + (xYaw * radius * 0.94),
+        y: center.y - (yPitch * radius * 0.76),
+        z: zPitch,
+      };
+    }
+
+    function drawSwarmLabGlobeBackdrop(ctx, layout) {
+      const center = getSwarmLabWorldCenter(layout);
+      const radius = getSwarmLabGlobeRadius(layout);
+      const horizonY = center.y - (radius * 0.10);
+      const glow = ctx.createRadialGradient(
+        center.x - radius * 0.14,
+        center.y - radius * 0.18,
+        radius * 0.04,
+        center.x,
+        center.y,
+        radius * 1.15,
+      );
+      glow.addColorStop(0, "rgba(125, 211, 252, 0.34)");
+      glow.addColorStop(0.34, "rgba(129, 140, 248, 0.18)");
+      glow.addColorStop(1, "rgba(15, 23, 42, 0)");
+      const rim = ctx.createLinearGradient(center.x - radius, center.y - radius, center.x + radius, center.y + radius);
+      rim.addColorStop(0, "rgba(191, 219, 254, 0.98)");
+      rim.addColorStop(0.35, "rgba(125, 211, 252, 0.92)");
+      rim.addColorStop(0.62, "rgba(129, 140, 248, 0.88)");
+      rim.addColorStop(1, "rgba(34, 211, 238, 0.94)");
+      const sphereFill = ctx.createRadialGradient(
+        center.x - radius * 0.25,
+        center.y - radius * 0.28,
+        radius * 0.08,
+        center.x,
+        center.y,
+        radius * 1.02,
+      );
+      sphereFill.addColorStop(0, "rgba(15, 23, 42, 0.96)");
+      sphereFill.addColorStop(0.45, "rgba(15, 23, 42, 0.72)");
+      sphereFill.addColorStop(1, "rgba(8, 15, 32, 0.98)");
+
+      ctx.save();
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "screen";
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius * 1.08, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius * 0.995, 0, Math.PI * 2);
+      ctx.fillStyle = sphereFill;
+      ctx.fill();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius * 0.988, 0, Math.PI * 2);
+      if (typeof ctx.clip === "function") {
+        ctx.clip();
+        const horizonShade = ctx.createRadialGradient(
+          center.x - radius * 0.10,
+          center.y - radius * 0.08,
+          radius * 0.24,
+          center.x,
+          center.y,
+          radius,
+        );
+        horizonShade.addColorStop(0, "rgba(56, 189, 248, 0.08)");
+        horizonShade.addColorStop(0.6, "rgba(15, 23, 42, 0.05)");
+        horizonShade.addColorStop(1, "rgba(15, 23, 42, 0.30)");
+        ctx.fillStyle = horizonShade;
+        ctx.fillRect(center.x - radius, center.y - radius, radius * 2, radius * 2);
+      }
+      ctx.restore();
+
+      ctx.shadowColor = "rgba(56, 189, 248, 0.28)";
+      ctx.shadowBlur = 22;
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = rim;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      const latitudeValues = [-75, -45, -15, 0, 15, 45, 75];
+      latitudeValues.forEach((latDeg) => {
+        const lat = (latDeg * Math.PI) / 180;
+        const ringRadius = Math.max(0, radius * Math.cos(lat) * 0.985);
+        const ringY = center.y + (Math.sin(lat) * radius * 0.56);
+        ctx.strokeStyle = latDeg === 0
+          ? "rgba(248, 250, 252, 0.72)"
+          : "rgba(186, 230, 253, 0.28)";
+        ctx.lineWidth = latDeg === 0 ? 2.4 : 1.5;
+        ctx.beginPath();
+        if (typeof ctx.ellipse === "function") {
+          ctx.ellipse(center.x, ringY, ringRadius, Math.max(2, ringRadius * 0.30), -0.12, 0, Math.PI * 2);
+        } else {
+          ctx.arc(center.x, ringY, ringRadius, 0, Math.PI * 2);
+        }
+        ctx.stroke();
+      });
+
+      const longitudeValues = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150];
+      longitudeValues.forEach((lonDeg) => {
+        const tilt = (lonDeg * Math.PI) / 180;
+        ctx.strokeStyle = lonDeg === 0
+          ? "rgba(248, 250, 252, 0.68)"
+          : "rgba(186, 230, 253, 0.18)";
+        ctx.lineWidth = lonDeg === 0 ? 2.0 : 1.2;
+        ctx.beginPath();
+        for (let step = 0; step <= 48; step += 1) {
+          const t = (step / 48) * Math.PI * 2;
+          const x = center.x + Math.sin(t) * radius * Math.cos(tilt) * 0.94;
+          const y = center.y + Math.cos(t) * radius * 0.58;
+          if (step === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        ctx.stroke();
+      });
+
+      ctx.shadowColor = "rgba(14, 165, 233, 0.24)";
+      ctx.shadowBlur = 18;
+      ctx.strokeStyle = "rgba(191, 219, 254, 0.5)";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(center.x, horizonY, radius * 0.98, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius * 0.64, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function swarmLabWorldToCanvas(layout, x, y) {
+      return projectSwarmLabSurfacePoint(layout, x, y);
+    }
+
+    function swarmLabCanvasToWorld(layout, x, y) {
+      const center = getSwarmLabWorldCenter(layout);
+      return {
+        x: 800 + ((x - center.x) / Math.max(0.0001, layout.scale)),
+        y: 450 + ((y - center.y) / Math.max(0.0001, layout.scale)),
+      };
+    }
+
+    function buildSwarmLabNodes(count) {
+      const safeCount = Math.max(6, Math.min(64, Math.round(Number(count || 24))));
+      const nodes = [];
+      const palette = ["#60a5fa", "#34d399", "#f59e0b", "#f472b6", "#a78bfa", "#22d3ee"];
+      for (let idx = 0; idx < safeCount; idx += 1) {
+        const angle = (Math.PI * 2 * idx) / safeCount;
+        const radius = 210 + ((idx % 5) * 22) + ((Math.random() - 0.5) * 18);
+        const x = 800 + (Math.cos(angle) * radius) + ((Math.random() - 0.5) * 70);
+        const y = 450 + (Math.sin(angle * 1.4) * (radius * 0.62)) + ((Math.random() - 0.5) * 70);
+        nodes.push({
+          id: `node-${idx + 1}`,
+          label: `Node ${String(idx + 1).padStart(2, "0")}`,
+          x,
+          y,
+          vx: 0,
+          vy: 0,
+          radius: 14 + ((idx % 4) * 2),
+          energy: 70 + ((idx % 7) * 7),
+          color: palette[idx % palette.length],
+        });
+      }
+      return nodes;
+    }
+
+    function spawnSwarmLabAgent(index, node = null) {
+      const home = node || swarmLabNodes[index % Math.max(1, swarmLabNodes.length)] || {
+        x: 800,
+        y: 450,
+      };
+      const offset = (Math.random() - 0.5) * 38;
+      const angle = Math.random() * Math.PI * 2;
+      return {
+        id: `agent-${index + 1}`,
+        x: home.x + (Math.cos(angle) * offset),
+        y: home.y + (Math.sin(angle) * offset),
+        vx: (Math.random() - 0.5) * 1.6,
+        vy: (Math.random() - 0.5) * 1.6,
+        energy: 100 + (Math.random() * 20),
+        age: 0,
+        generation: 1,
+        targetId: home.id,
+        memory: {},
+      };
+    }
+
+    function updateSwarmLabControls() {
+      const populationSlider = document.getElementById("swarm-lab-population-slider");
+      const populationLabel = document.getElementById("swarm-lab-population-label");
+      const nodeCountSlider = document.getElementById("swarm-lab-node-count-slider");
+      const nodeCountLabel = document.getElementById("swarm-lab-node-count-label");
+      const mutationSlider = document.getElementById("swarm-lab-mutation-slider");
+      const mutationLabel = document.getElementById("swarm-lab-mutation-label");
+      const repulsionSlider = document.getElementById("swarm-lab-repulsion-slider");
+      const repulsionLabel = document.getElementById("swarm-lab-repulsion-label");
+      const speedSlider = document.getElementById("swarm-lab-speed-slider");
+      const speedLabel = document.getElementById("swarm-lab-speed-label");
+      const zoomSlider = document.getElementById("swarm-lab-zoom-slider");
+      const zoomLabel = document.getElementById("swarm-lab-zoom-label");
+
+      if (populationSlider) populationSlider.value = String(swarmLabPopulation);
+      if (populationLabel) populationLabel.textContent = `${swarmLabPopulation} agents`;
+      if (nodeCountSlider) nodeCountSlider.value = String(swarmLabNodeCount);
+      if (nodeCountLabel) nodeCountLabel.textContent = `${swarmLabNodeCount} nodes`;
+      if (mutationSlider) mutationSlider.value = String(swarmLabMutation);
+      if (mutationLabel) mutationLabel.textContent = `${(swarmLabMutation * 100).toFixed(1)}% mutation`;
+      if (repulsionSlider) repulsionSlider.value = String(swarmLabRepulsion);
+      if (repulsionLabel) repulsionLabel.textContent = `${Number(swarmLabRepulsion).toFixed(2)} repulsion`;
+      if (speedSlider) speedSlider.value = String(swarmLabSpeed);
+      if (speedLabel) speedLabel.textContent = `${Number(swarmLabSpeed).toFixed(2)}x speed`;
+      if (zoomSlider) zoomSlider.value = String(swarmLabZoom);
+      if (zoomLabel) zoomLabel.textContent = `${Number(swarmLabZoom).toFixed(2)}x world`;
+    }
+
+    function renderSwarmLabPanels() {
+      const hoverEl = document.getElementById("swarm-lab-hover");
+      const selectedEl = document.getElementById("swarm-lab-selected");
+      const worldLabel = document.getElementById("swarm-lab-world-caption");
+      const stats = document.getElementById("swarm-lab-stats");
+      const selected = swarmLabSelectedNodeId ? swarmLabNodes.find((node) => node.id === swarmLabSelectedNodeId) : null;
+      const hovered = swarmLabHoveredNodeId ? swarmLabNodes.find((node) => node.id === swarmLabHoveredNodeId) : null;
+      if (hoverEl) {
+        hoverEl.innerHTML = hovered
+          ? `<div class="font-bold text-slate-800">${hovered.label}</div><div class="text-slate-500">Energy ${Number(hovered.energy || 0).toFixed(0)} · radius ${Number(hovered.radius || 0).toFixed(0)}</div>`
+          : "Move across the lab to inspect nodes.";
+      }
+      if (selectedEl) {
+        selectedEl.innerHTML = selected
+          ? `<div class="font-bold text-slate-800">${selected.label}</div><div class="text-slate-500">Pinned node in the abstract world.</div>`
+          : "Click a node to pin it here.";
+      }
+      if (worldLabel) {
+        worldLabel.textContent = swarmLabPlaying ? "Playing" : "Paused";
+      }
+      if (stats) {
+        const avgEnergy = swarmLabAgents.length
+          ? swarmLabAgents.reduce((sum, agent) => sum + Number(agent.energy || 0), 0) / swarmLabAgents.length
+          : 0;
+        stats.textContent = `${swarmLabNodes.length} nodes · ${swarmLabAgents.length} agents · avg energy ${avgEnergy.toFixed(1)} · gen ${swarmLabGenerationMax}`;
+      }
+      updateSwarmLabControls();
+    }
+
+    function resetSwarmLabSimulation() {
+      swarmLabWorld = {
+        width: 1600,
+        height: 900,
+      };
+      swarmLabNodes = buildSwarmLabNodes(swarmLabNodeCount);
+      swarmLabAgents = [];
+      swarmLabTrails = [];
+      swarmLabFrameCounter = 0;
+      swarmLabBirthCount = 0;
+      swarmLabDeathCount = 0;
+      swarmLabGenerationMax = 1;
+      swarmLabSelectedNodeId = null;
+      swarmLabHoveredNodeId = null;
+      const cap = Math.max(12, Math.round(Number(swarmLabPopulation || 72)));
+      for (let idx = 0; idx < cap; idx += 1) {
+        swarmLabAgents.push(spawnSwarmLabAgent(idx, swarmLabNodes[idx % swarmLabNodes.length]));
+      }
+      renderSwarmLabPanels();
+      drawSwarmLabScene();
+    }
+
+    function setSwarmLabPopulation(nextValue) {
+      swarmLabPopulation = Math.round(clampSwarm(Number(nextValue || 72), 12, 240));
+      resetSwarmLabSimulation();
+    }
+
+    function setSwarmLabNodeCount(nextValue) {
+      swarmLabNodeCount = Math.round(clampSwarm(Number(nextValue || 24), 6, 64));
+      resetSwarmLabSimulation();
+    }
+
+    function setSwarmLabMutation(nextValue) {
+      swarmLabMutation = clampSwarm(Number(nextValue || 0.08), 0.01, 0.35);
+      updateSwarmLabControls();
+    }
+
+    function setSwarmLabRepulsion(nextValue) {
+      swarmLabRepulsion = clampSwarm(Number(nextValue || 0.55), 0.0, 1.5);
+      updateSwarmLabControls();
+    }
+
+    function setSwarmLabSpeed(nextValue) {
+      swarmLabSpeed = clampSwarm(Number(nextValue || 1.0), 0.35, 3.0);
+      updateSwarmLabControls();
+    }
+
+    function setSwarmLabZoom(nextValue) {
+      swarmLabZoom = clampSwarm(Number(nextValue || 1.0), 0.6, 1.8);
+      updateSwarmLabControls();
+      drawSwarmLabScene();
+    }
+
+    function drawSwarmLabScene() {
+      const canvas = getSwarmLabCanvas();
+      const layout = getSwarmLabCanvasLayout(canvas);
+      if (!layout) {
+        return;
+      }
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        return;
+      }
+      ctx.save();
+      ctx.scale(layout.dpr, layout.dpr);
+      ctx.clearRect(0, 0, layout.width, layout.height);
+      const bg = ctx.createLinearGradient(0, 0, 0, layout.height);
+      bg.addColorStop(0, "#0f172a");
+      bg.addColorStop(1, "#111827");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, layout.width, layout.height);
+      drawSwarmLabGlobeBackdrop(ctx, layout);
+
+      const globeRadius = getSwarmLabGlobeRadius(layout) * 0.985;
+      const globeCenter = getSwarmLabWorldCenter(layout);
+
+      const projectedTrails = swarmLabTrails.map((trail) => ({
+        trail,
+        x1: projectSwarmLabSurfacePoint(layout, trail.x1, trail.y1),
+        x2: projectSwarmLabSurfacePoint(layout, trail.x2, trail.y2),
+      }));
+      projectedTrails.forEach(({ trail, x1, x2 }) => {
+        const alpha = Math.max(0, Math.min(0.34, trail.life / 92));
+        ctx.strokeStyle = `rgba(96, 165, 250, ${alpha})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(x1.x, x1.y);
+        ctx.lineTo(x2.x, x2.y);
+        ctx.stroke();
+      });
+
+      const projectedNodes = swarmLabNodes
+        .map((node) => ({ node, point: swarmLabWorldToCanvas(layout, node.x, node.y) }))
+        .sort((a, b) => a.point.z - b.point.z);
+      projectedNodes.forEach(({ node, point }) => {
+        const selected = node.id === swarmLabSelectedNodeId;
+        const hovered = node.id === swarmLabHoveredNodeId;
+        const depthAlpha = 0.44 + (Math.max(-1, Math.min(1, point.z)) + 1) * 0.24;
+        ctx.beginPath();
+        ctx.fillStyle = node.color;
+        ctx.globalAlpha = hovered ? 1 : depthAlpha;
+        ctx.arc(point.x, point.y, node.radius * (hovered ? 1.35 : 1) * (0.92 + (point.z * 0.06)), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = selected ? "#facc15" : "rgba(15, 23, 42, 0.72)";
+        ctx.lineWidth = selected ? 2.4 : 1.2;
+        ctx.stroke();
+      });
+
+      const projectedAgents = swarmLabAgents
+        .map((agent) => ({ agent, point: swarmLabWorldToCanvas(layout, agent.x, agent.y) }))
+        .sort((a, b) => a.point.z - b.point.z);
+      projectedAgents.forEach(({ agent, point }) => {
+        ctx.fillStyle = agent.energy >= 90 ? "#ddd6fe" : "#67e8f9";
+        ctx.globalAlpha = 0.74 + (Math.max(-1, Math.min(1, point.z)) + 1) * 0.12;
+        const canTransform = typeof ctx.translate === "function" && typeof ctx.rotate === "function";
+        if (canTransform) {
+          ctx.save();
+          ctx.translate(point.x, point.y);
+          ctx.rotate(Math.atan2(agent.vy || 0, agent.vx || 0) + Math.PI / 2);
+          ctx.beginPath();
+          if (typeof ctx.roundRect === "function") {
+            ctx.roundRect(-1.2, -4.2, 2.4, 8.4, 1.2);
+          } else {
+            ctx.ellipse(0, 0, 1.6, 4.0, 0, 0, Math.PI * 2);
+          }
+          ctx.fill();
+          ctx.restore();
+        } else {
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      ctx.restore();
+    }
+
+    function getSwarmLabNodeAtPoint(clientX, clientY) {
+      const layout = getSwarmLabCanvasLayout();
+      if (!layout || !swarmLabNodes.length) {
+        return null;
+      }
+      const x = clientX - layout.rect.left;
+      const y = clientY - layout.rect.top;
+      let winner = null;
+      let winnerDistance = Number.POSITIVE_INFINITY;
+      swarmLabNodes.forEach((node) => {
+        const point = swarmLabWorldToCanvas(layout, node.x, node.y);
+        const dist = Math.hypot(x - point.x, y - point.y);
+        if (dist <= node.radius + 8 && dist < winnerDistance) {
+          winner = node;
+          winnerDistance = dist;
+        }
+      });
+      return winner;
+    }
+
+    function stepSwarmLabSimulation(dt) {
+      if (!swarmLabAgents.length || !swarmLabNodes.length) {
+        return;
+      }
+      swarmLabFrameCounter += 1;
+      const timeScale = Math.max(0.35, Math.min(2.4, dt / 16.666)) * swarmLabSpeed;
+      swarmLabTrails = swarmLabTrails
+        .map((trail) => ({ ...trail, life: trail.life - (1.3 * timeScale) }))
+        .filter((trail) => trail.life > 0);
+
+      swarmLabAgents.forEach((agent) => {
+        agent.age += timeScale;
+        let chosenNode = null;
+        let chosenScore = Number.POSITIVE_INFINITY;
+        swarmLabNodes.forEach((node) => {
+          const dx = node.x - agent.x;
+          const dy = node.y - agent.y;
+          const distance = Math.max(0.001, Math.hypot(dx, dy));
+          const mutationBias = 1 + (swarmLabMutation * ((Math.sin(agent.age / 7) + 1) * 0.25));
+          const score = distance / Math.max(0.2, node.energy / 70) * mutationBias;
+          if (score < chosenScore) {
+            chosenScore = score;
+            chosenNode = node;
+          }
+        });
+
+        if (chosenNode) {
+          agent.targetId = chosenNode.id;
+          const dx = chosenNode.x - agent.x;
+          const dy = chosenNode.y - agent.y;
+          const distance = Math.max(0.001, Math.hypot(dx, dy));
+          const pull = (chosenNode.energy / 160) * swarmLabSpeed;
+          const nx = dx / distance;
+          const ny = dy / distance;
+          agent.vx += nx * pull * 0.08;
+          agent.vy += ny * pull * 0.08;
+        }
+
+        swarmLabAgents.forEach((other) => {
+          if (other === agent) {
+            return;
+          }
+          const dx = agent.x - other.x;
+          const dy = agent.y - other.y;
+          const distance = Math.max(0.001, Math.hypot(dx, dy));
+          if (distance < 28) {
+            const repulse = (28 - distance) / 28 * swarmLabRepulsion * 0.025;
+            agent.vx += (dx / distance) * repulse;
+            agent.vy += (dy / distance) * repulse;
+          }
+        });
+
+        agent.vx = clampSwarm(agent.vx * 0.965, -4.5, 4.5);
+        agent.vy = clampSwarm(agent.vy * 0.965, -4.5, 4.5);
+        const prevX = agent.x;
+        const prevY = agent.y;
+        agent.x = clampSwarm(agent.x + (agent.vx * timeScale), 0, 1600);
+        agent.y = clampSwarm(agent.y + (agent.vy * timeScale), 0, 900);
+        agent.energy -= (0.18 + (swarmLabMutation * 0.4)) * timeScale;
+
+        if (chosenNode) {
+          const proximity = Math.max(0, 1 - (Math.hypot(chosenNode.x - agent.x, chosenNode.y - agent.y) / 240));
+          agent.energy += proximity * 0.65 * timeScale;
+        }
+
+        if (Math.hypot(agent.vx, agent.vy) > 0.25) {
+          swarmLabTrails.push({ x1: prevX, y1: prevY, x2: agent.x, y2: agent.y, life: 38 });
+        }
+
+        if (agent.energy > 132 && swarmLabAgents.length < swarmLabPopulation + 48) {
+          swarmLabBirthCount += 1;
+          swarmLabGenerationMax = Math.max(swarmLabGenerationMax, agent.generation + 1);
+          swarmLabAgents.push({
+            id: `agent-${swarmLabFrameCounter}-${swarmLabBirthCount}`,
+            x: agent.x + ((Math.random() - 0.5) * 18),
+            y: agent.y + ((Math.random() - 0.5) * 18),
+            vx: -agent.vx + ((Math.random() - 0.5) * 0.5),
+            vy: -agent.vy + ((Math.random() - 0.5) * 0.5),
+            energy: 96,
+            age: 0,
+            generation: agent.generation + 1,
+            targetId: chosenNode ? chosenNode.id : null,
+            memory: {},
+          });
+          agent.energy *= 0.68;
+        }
+
+        if (agent.energy <= 0) {
+          swarmLabDeathCount += 1;
+          const seed = swarmLabNodes[swarmLabDeathCount % swarmLabNodes.length];
+          agent.x = seed.x;
+          agent.y = seed.y;
+          agent.vx = (Math.random() - 0.5) * 1.4;
+          agent.vy = (Math.random() - 0.5) * 1.4;
+          agent.energy = 92;
+          agent.age = 0;
+          agent.generation = 1;
+        }
+      });
+
+      swarmLabNodes.forEach((node, idx) => {
+        const pulse = Math.sin((swarmLabFrameCounter / 22) + idx) * 6;
+        node.energy = clampSwarm(node.energy + pulse * 0.1, 24, 160);
+        node.radius = clampSwarm(12 + (node.energy / 22), 12, 22);
+      });
+
+      if (swarmLabAgents.length > Math.max(swarmLabPopulation, 1)) {
+        swarmLabAgents = swarmLabAgents.slice(0, Math.max(swarmLabPopulation, 1));
+      }
+    }
+
+    function runSwarmLabFrame(timestamp) {
+      swarmLabAnimationHandle = null;
+      if (swarmLabLastFrameTime === null) {
+        swarmLabLastFrameTime = timestamp;
+      }
+      const dt = timestamp - swarmLabLastFrameTime;
+      swarmLabLastFrameTime = timestamp;
+      if (swarmLabPlaying) {
+        stepSwarmLabSimulation(dt);
+      }
+      drawSwarmLabScene();
+      if (!document.getElementById("tab-swarm-lab").classList.contains("hidden")) {
+        swarmLabAnimationHandle = requestAnimationFrame(runSwarmLabFrame);
+      }
+    }
+
+    function ensureSwarmLabAnimationLoop() {
+      if (!swarmLabAnimationHandle && !document.getElementById("tab-swarm-lab").classList.contains("hidden")) {
+        swarmLabLastFrameTime = null;
+        swarmLabAnimationHandle = requestAnimationFrame(runSwarmLabFrame);
+      }
+    }
+
+    async function loadSwarmLab(forceRefresh = false) {
+      const status = document.getElementById("swarm-lab-status");
+      const empty = document.getElementById("swarm-lab-empty");
+      const content = document.getElementById("swarm-lab-content");
+      const refreshBtn = document.getElementById("swarm-lab-refresh-btn");
+      if (swarmLabLoaded && !forceRefresh) {
+        if (content) {
+          content.classList.remove("hidden");
+        }
+        renderSwarmLabPanels();
+        drawSwarmLabScene();
+        ensureSwarmLabAnimationLoop();
+        return;
+      }
+      if (status) {
+        status.textContent = forceRefresh ? "Reinitialising abstract lab..." : "Loading abstract lab...";
+      }
+      if (empty) {
+        empty.classList.add("hidden");
+      }
+      if (content) {
+        content.classList.remove("hidden");
+      }
+      if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = forceRefresh ? "Resetting..." : "Loading...";
+      }
+      swarmLabLoaded = true;
+      swarmLabPlaying = false;
+      swarmLabLastFrameTime = null;
+      resetSwarmLabSimulation();
+      updateSwarmLabControls();
+      renderSwarmLabPanels();
+      if (status) {
+        status.textContent = "Abstract lab ready";
+      }
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = "Reset Lab";
+      }
+      ensureSwarmLabAnimationLoop();
+    }
+
+    function toggleSwarmLabPlayback() {
+      if (swarmLabPlaying) {
+        swarmLabPlaying = false;
+        swarmLabLastFrameTime = null;
+        drawSwarmLabScene();
+        renderSwarmLabPanels();
+        return;
+      }
+      swarmLabPlaying = true;
+      ensureSwarmLabAnimationLoop();
+      renderSwarmLabPanels();
+    }
+
+    function stopSwarmLabPlayback() {
+      swarmLabPlaying = false;
+      swarmLabLastFrameTime = null;
+      drawSwarmLabScene();
+      renderSwarmLabPanels();
     }
 
     async function loadMarketStatus(source = tickerScanScope) {
@@ -4878,6 +5544,10 @@ let backtestSourceMode = "saved";
         cancelAnimationFrame(swarmAnimationHandle);
         swarmAnimationHandle = null;
       }
+      if (tab !== 'swarm-lab' && swarmLabAnimationHandle) {
+        cancelAnimationFrame(swarmLabAnimationHandle);
+        swarmLabAnimationHandle = null;
+      }
       if (tab === 'backtest') {
         loadBacktestMetrics();
       } else if (tab === 'shortlist') {
@@ -4886,8 +5556,38 @@ let backtestSourceMode = "saved";
         });
         loadShortlist();
       } else if (tab === 'swarm') {
-        loadSwarmWorld(true);
+        loadSwarmWorld(false);
+      } else if (tab === 'swarm-lab') {
+        loadSwarmLab(false);
       }
+    }
+
+    window.showTab = showTab;
+
+    const DEFAULT_DASHBOARD_TAB = "swarm-lab";
+    let dashboardDefaultTabApplied = false;
+
+    function applyDefaultDashboardTab() {
+      if (dashboardDefaultTabApplied) {
+        return;
+      }
+      const labCanvas = document.getElementById("swarm-lab-canvas");
+      if (!labCanvas || typeof labCanvas.getBoundingClientRect !== "function") {
+        return;
+      }
+      dashboardDefaultTabApplied = true;
+      const pendingTab = normalizeDashboardTab(window.__dashboardPendingTab || "");
+      if (window.__dashboardPendingTab) {
+        window.__dashboardPendingTab = null;
+        showTab(pendingTab);
+        return;
+      }
+      showTab(DEFAULT_DASHBOARD_TAB);
+    }
+
+    function resetDashboardTabPreference() {
+      dashboardDefaultTabApplied = false;
+      showTab(DEFAULT_DASHBOARD_TAB);
     }
 
     async function refreshMarketData() {
@@ -5346,6 +6046,10 @@ let backtestSourceMode = "saved";
         body: JSON.stringify({ level: 'info', message: '[TABBAR] Tab bar rendered' })
       });
       tickerScanScope = normalizeScanScope(readStickyValue(LAST_SCAN_SCOPE_KEY, "xetra"));
+      if (tickerScanScope === "debug") {
+        tickerScanScope = "xetra";
+        writeStickyValue(LAST_SCAN_SCOPE_KEY, tickerScanScope);
+      }
       swarmDebugAssetCount = normalizeSwarmDebugAssetCount(
         readStickyValue(LAST_SWARM_DEBUG_ASSET_COUNT_KEY, "24")
       );
@@ -5443,13 +6147,42 @@ let backtestSourceMode = "saved";
         });
         window.addEventListener("pointerup", stopSwarmCameraDrag);
       }
+      const swarmLabCanvas = document.getElementById("swarm-lab-canvas");
+      if (swarmLabCanvas) {
+        swarmLabCanvas.addEventListener("pointermove", (event) => {
+          const node = getSwarmLabNodeAtPoint?.(event.clientX, event.clientY);
+          const nextId = node ? node.id : null;
+          if (nextId !== swarmLabHoveredNodeId) {
+            swarmLabHoveredNodeId = nextId;
+            renderSwarmLabPanels();
+            drawSwarmLabScene();
+          }
+        });
+        swarmLabCanvas.addEventListener("pointerleave", () => {
+          if (swarmLabHoveredNodeId !== null) {
+            swarmLabHoveredNodeId = null;
+            renderSwarmLabPanels();
+            drawSwarmLabScene();
+          }
+        });
+        swarmLabCanvas.addEventListener("click", (event) => {
+          const node = getSwarmLabNodeAtPoint?.(event.clientX, event.clientY);
+          swarmLabSelectedNodeId = node ? node.id : null;
+          renderSwarmLabPanels();
+          drawSwarmLabScene();
+        });
+      }
       window.addEventListener("resize", () => {
         if (swarmLoaded) {
           drawSwarmScene();
         }
+        if (swarmLabLoaded) {
+          drawSwarmLabScene();
+        }
       });
-      showTab(normalizeDashboardTab(readStickyValue(LAST_DASHBOARD_TAB_KEY, "screener")));
+      applyDefaultDashboardTab();
     });
+    applyDefaultDashboardTab();
     let currentDays = 365 * 2;
     let currentTicker = "";
     let currentStrategy = "";
@@ -6556,12 +7289,14 @@ let backtestSourceMode = "saved";
       loadBacktestMetrics,
       loadShortlist,
       loadSwarmWorld,
+      loadSwarmLab,
       saveListEditor,
       modifyStrategy,
       openSelectedSwarmTicker,
       refreshMarketData,
       ensureFreshMarketData,
       exportTopMatches,
+      resetDashboardTabPreference,
       resetSwarmSimulation,
       runScreen,
       saveAsStrategy,
@@ -6573,6 +7308,12 @@ let backtestSourceMode = "saved";
       setListBuilderList,
       setScanSource,
       setSwarmDebugAssetCount,
+      setSwarmLabMutation,
+      setSwarmLabNodeCount,
+      setSwarmLabPopulation,
+      setSwarmLabRepulsion,
+      setSwarmLabSpeed,
+      setSwarmLabZoom,
       setRange,
       dashboardReadyPromise,
       setShortlistFilter,
@@ -6585,8 +7326,10 @@ let backtestSourceMode = "saved";
       stepSwarmDays,
       showTab,
       stopSwarmPlayback,
+      stopSwarmLabPlayback,
       testMe,
       toggleStrategyPanel,
       toggleVisibleListBuilderTickers,
       toggleSwarmPlayback,
+      toggleSwarmLabPlayback,
     });

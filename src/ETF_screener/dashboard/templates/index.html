@@ -323,20 +323,31 @@
   </div>
 
 
+  <script>
+    window.__dashboardPendingTab = window.__dashboardPendingTab || null;
+    if (typeof window.showTab !== "function") {
+      window.showTab = function (tab) {
+        window.__dashboardPendingTab = String(tab || "").trim().toLowerCase();
+      };
+    }
+  </script>
+
   <!-- Tab Bar -->
   <div id="dashboard-tabs" class="flex space-x-3 bg-slate-800 px-6 pt-3 pb-2 border-b border-slate-700">
-    <button id="tab-btn-screener" class="tab-btn active bg-rose-600 text-white font-bold py-2.5 px-5 rounded-lg border border-rose-400/50 shadow-sm"
+    <button id="tab-btn-screener" class="tab-btn bg-rose-600 text-white font-bold py-2.5 px-5 rounded-lg border border-rose-400/50 shadow-sm"
       onclick="showTab('screener')">Screener</button>
     <button id="tab-btn-shortlist" class="tab-btn bg-sky-700 text-white font-bold py-2.5 px-5 rounded-lg border border-sky-400/40 shadow-sm"
       onclick="showTab('shortlist')">Shortlist</button>
     <button id="tab-btn-swarm" class="tab-btn bg-violet-700 text-white font-bold py-2.5 px-5 rounded-lg border border-violet-400/40 shadow-sm"
       onclick="showTab('swarm')">Swarm</button>
+    <button id="tab-btn-swarm-lab" class="tab-btn active bg-cyan-700 text-white font-bold py-2.5 px-5 rounded-lg border border-cyan-400/40 shadow-sm"
+      onclick="showTab('swarm-lab')">Swarm Lab</button>
     <button id="tab-btn-backtest" class="tab-btn bg-emerald-700 text-white font-bold py-2.5 px-5 rounded-lg border border-emerald-400/40 shadow-sm"
       onclick="showTab('backtest')">Backtester</button>
   </div>
 
   <!-- Tab Content Sections -->
-  <div id="tab-screener">
+  <div id="tab-screener" class="hidden">
     <div class="w-full flex gap-6 px-6 mt-6 pb-12">
       <!-- Sidebar for matching tickers -->
       <aside class="w-80 flex flex-col gap-4 overflow-hidden shrink-0">
@@ -524,11 +535,11 @@
     <div class="p-6 space-y-6">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h2 class="text-xl font-bold text-slate-800">Swarm Lab</h2>
-          <p class="text-sm text-slate-500">Explore the ETF universe as a charged sphere where assets glide frictionlessly on the surface and attract or repel by return similarity.</p>
+          <h2 class="text-xl font-bold text-slate-800">Swarm</h2>
+          <p class="text-sm text-slate-500">Production asset explorer for hovering, pinning, and opening chart drill-downs.</p>
         </div>
         <div class="flex flex-col items-end gap-3">
-          <div id="swarm-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Waiting for cached swarm world...</div>
+          <div id="swarm-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Waiting for cached production swarm world...</div>
           <div id="swarm-load-progress" class="hidden w-full max-w-[280px] rounded-lg border border-violet-500/25 bg-slate-950/85 px-3 py-2 shadow-sm">
             <div class="flex items-center justify-between gap-3 text-[10px] uppercase tracking-wide text-slate-400">
               <span id="swarm-load-progress-label" class="font-bold text-violet-200">Swarm</span>
@@ -539,43 +550,13 @@
                 style="width: 0%"></div>
             </div>
           </div>
-          <div id="swarm-debug-controls" hidden class="hidden w-full max-w-[280px] rounded-lg border border-amber-500/25 bg-slate-950/85 px-3 py-2 shadow-sm">
-            <div class="flex items-center justify-between gap-3 text-[10px] uppercase tracking-wide text-slate-400">
-              <span class="font-bold text-amber-200">Dummy assets</span>
-              <span id="swarm-debug-count-label" class="font-bold text-amber-100">24</span>
-            </div>
-            <input id="swarm-debug-count" type="text" inputmode="numeric" autocomplete="off" value="24"
-              class="mt-1.5 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs font-semibold text-slate-100 outline-none transition focus:border-amber-400"
-              onchange="setSwarmDebugAssetCount(this.value)">
-          </div>
           <div class="scan-source-toggle" id="swarm-scan-source-toggle" role="group" aria-label="Swarm scan source">
             <button type="button" id="swarm-scan-source-xetra" class="scan-source-btn" data-scope="xetra" onclick="setScanSource('xetra')">Xetra</button>
             <button type="button" id="swarm-scan-source-sweden" class="scan-source-btn" data-scope="sweden" onclick="setScanSource('sweden')">Sweden</button>
             <button type="button" id="swarm-scan-source-list" class="scan-source-btn" data-scope="list" onclick="setScanSource('list')">My List</button>
             <button type="button" id="swarm-scan-source-all-lists" class="scan-source-btn" data-scope="all_lists" onclick="setScanSource('all_lists')">All Lists</button>
-            <button type="button" id="swarm-scan-source-debug" class="scan-source-btn" data-scope="debug" onclick="setScanSource('debug')">Debug</button>
           </div>
           <div class="flex flex-wrap justify-end gap-2">
-            <button id="swarm-play-btn" onclick="toggleSwarmPlayback()"
-              class="bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-violet-500/60 transition-all">
-              Play
-            </button>
-            <button id="swarm-stop-btn" onclick="stopSwarmPlayback()"
-              class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold py-2 px-4 rounded-lg border border-slate-500/60 transition-all">
-              Stop
-            </button>
-            <button id="swarm-reset-btn" onclick="resetSwarmSimulation()"
-              class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold py-2 px-4 rounded-lg border border-slate-500/60 transition-all">
-              Restart
-            </button>
-            <button id="swarm-step-1-btn" onclick="stepSwarmDays(1)"
-              class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold py-2 px-4 rounded-lg border border-slate-500/60 transition-all">
-              +1 Day
-            </button>
-            <button id="swarm-step-10-btn" onclick="stepSwarmDays(10)"
-              class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold py-2 px-4 rounded-lg border border-slate-500/60 transition-all">
-              +10 Days
-            </button>
             <button id="swarm-refresh-btn" onclick="loadSwarmWorld(true)"
               class="bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-sky-500/60 transition-all">
               Refresh World
@@ -585,114 +566,44 @@
       </div>
 
       <div id="swarm-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-        Open the Swarm tab to load the cached asset sphere.
+        Open Swarm to load the production asset sphere.
       </div>
 
       <div id="swarm-content" class="hidden grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_320px] gap-6">
         <aside class="space-y-4">
-          <details open class="group overflow-hidden rounded-xl border border-violet-200 bg-white shadow">
-            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 bg-gradient-to-r from-violet-50 via-white to-sky-50 px-4 py-3">
-              <div>
-                <div class="text-xs font-bold uppercase tracking-wide text-violet-500">Controls</div>
-                <div class="mt-1 text-sm font-semibold text-slate-800">Simulation Panel</div>
-              </div>
-              <span class="text-xs font-bold uppercase tracking-wide text-slate-400 transition-transform group-open:rotate-180">Hide</span>
-            </summary>
+          <div class="rounded-xl border border-violet-200 bg-white shadow overflow-hidden">
+            <div class="bg-gradient-to-r from-violet-50 via-white to-sky-50 px-4 py-3">
+              <div class="text-xs font-bold uppercase tracking-wide text-violet-500">Filters</div>
+              <div class="mt-1 text-sm font-semibold text-slate-800">Production view</div>
+            </div>
             <div class="space-y-4 px-4 py-4">
-              <div class="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-900">
-                <span class="font-bold">Read the world:</span> every asset is a circular disc anchored to the sphere surface. Larger assets have more mass, move less easily, and the scene evolves by return-driven forces.
-              </div>
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Show</span>
-                <button id="swarm-filter-all" type="button" onclick="setSwarmFilter('All')"
-                  class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-                  All
-                </button>
-                <button id="swarm-filter-buy" type="button" onclick="setSwarmFilter('Buy')"
-                  class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-                  Buy
-                </button>
-                <button id="swarm-filter-watch" type="button" onclick="setSwarmFilter('Watch')"
-                  class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-                  Watch
-                </button>
-                <button id="swarm-filter-skip" type="button" onclick="setSwarmFilter('Skip')"
-                  class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-                  Skip
-                </button>
+                <button id="swarm-filter-all" type="button" onclick="setSwarmFilter('All')" class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">All</button>
+                <button id="swarm-filter-buy" type="button" onclick="setSwarmFilter('Buy')" class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">Buy</button>
+                <button id="swarm-filter-watch" type="button" onclick="setSwarmFilter('Watch')" class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">Watch</button>
+                <button id="swarm-filter-skip" type="button" onclick="setSwarmFilter('Skip')" class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">Skip</button>
               </div>
-              <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Timeline</div>
-                    <div id="swarm-timeline-label" class="mt-1 text-sm font-semibold text-slate-700">Step 0 / 1000</div>
-                  </div>
-                  <div id="swarm-timeline-mode" class="text-xs font-bold uppercase tracking-wide text-violet-600">Stopped</div>
-                </div>
-                <input id="swarm-timeline-slider" type="range" min="0" max="1000" value="0" step="1"
-                  oninput="setSwarmTimeline(Number(this.value), true)"
-                  class="mt-3 w-full accent-violet-600">
-              </div>
-              <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Jump Cost</div>
-                    <div id="swarm-jump-cost-label" class="mt-1 text-sm font-semibold text-slate-700">2.0x market friction</div>
-                  </div>
-                  <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Global</div>
-                </div>
-                <input id="swarm-jump-cost-slider" type="range" min="0.5" max="8" value="2" step="0.25"
-                  oninput="setSwarmJumpCost(Number(this.value))"
-                  class="mt-3 w-full accent-violet-600">
-              </div>
-              <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Knowledge</div>
-                    <div id="swarm-sense-label" class="mt-1 text-sm font-semibold text-slate-700">Global asset scan</div>
-                  </div>
-                  <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Global</div>
-                </div>
-                <div class="mt-3 text-xs leading-relaxed text-slate-500">
-                  Agents evaluate all real tickers using current timeline indicators, without seeing future returns.
-                </div>
-              </div>
-              <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Assets / Node</div>
-                    <div id="swarm-agents-per-node-label" class="mt-1 text-sm font-semibold text-slate-700">20 per alternating asset</div>
-                  </div>
-                  <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Capped</div>
-                </div>
-                <input id="swarm-agents-per-node-slider" type="range" min="1" max="100" value="20" step="1"
-                  oninput="setSwarmAgentsPerNode(Number(this.value))"
-                  class="mt-3 w-full accent-violet-600">
-              </div>
-              <div class="rounded-xl bg-white shadow border border-violet-100 px-4 py-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Zoom</div>
-                    <div id="swarm-zoom-label" class="mt-1 text-sm font-semibold text-slate-700">0.75x sphere view</div>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span id="swarm-world-visibility" class="rounded-full border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">Zoomed in</span>
-                    <div class="text-xs font-bold uppercase tracking-wide text-violet-600">Camera</div>
-                  </div>
-                </div>
-                <input id="swarm-zoom-slider" type="range" min="0.35" max="2.2" value="0.75" step="0.05"
-                  oninput="setSwarmZoom(Number(this.value))"
-                  class="mt-3 w-full accent-violet-600">
+              <div class="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Hover an asset, pin it, and jump into the chart. Keep the view clean and production-focused.
               </div>
             </div>
-          </details>
+          </div>
+          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">World</div>
+            <div class="mt-3 space-y-2 text-sm text-slate-600">
+              <div><span class="font-semibold text-slate-700">Data As Of:</span> <span id="swarm-as-of">-</span></div>
+              <div><span class="font-semibold text-slate-700">Assets:</span> <span id="swarm-count">0</span></div>
+              <div id="swarm-world-caption" class="pt-2 text-[11px] uppercase tracking-wide text-slate-400">Hover an asset to inspect it</div>
+            </div>
+          </div>
         </aside>
 
         <div class="space-y-4">
           <div class="overflow-hidden rounded-xl bg-white shadow border border-violet-100">
             <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 flex items-center justify-between">
-              <span>Charged Asset Sphere</span>
-              <span id="swarm-world-caption" class="text-[11px] uppercase tracking-wide text-slate-400">Hover an asset to inspect it</span>
+              <span>Production Asset Sphere</span>
+              <span class="text-[11px] uppercase tracking-wide text-slate-400">Hover an asset to inspect it</span>
             </div>
             <div id="swarm-canvas-wrap" class="relative w-full h-[640px] bg-slate-950">
               <canvas id="swarm-canvas" class="absolute inset-0 h-full w-full cursor-grab touch-none"></canvas>
@@ -702,70 +613,161 @@
 
         <aside class="space-y-4">
           <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
-            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Ecosystem Stats</div>
-            <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
-              <div class="rounded-lg bg-violet-50 px-3 py-2">
-                <div class="text-[11px] uppercase tracking-wide text-violet-500 font-bold">Data As Of</div>
-                <div id="swarm-as-of" class="mt-1 text-lg font-bold text-slate-800">-</div>
-              </div>
-              <div class="rounded-lg bg-indigo-50 px-3 py-2">
-                <div class="text-[11px] uppercase tracking-wide text-indigo-500 font-bold">Assets</div>
-                <div id="swarm-count" class="mt-1 text-lg font-bold text-slate-800">0</div>
-              </div>
-              <div class="rounded-lg bg-emerald-50 px-3 py-2">
-                <div class="text-[11px] uppercase tracking-wide text-emerald-500 font-bold">Agents</div>
-                <div id="swarm-bug-count" class="mt-1 text-lg font-bold text-slate-800">0</div>
-              </div>
-              <div class="rounded-lg bg-amber-50 px-3 py-2">
-                <div class="text-[11px] uppercase tracking-wide text-amber-500 font-bold">Avg Energy</div>
-                <div id="swarm-energy-avg" class="mt-1 text-lg font-bold text-slate-800">0.0</div>
-              </div>
-              <div class="rounded-lg bg-slate-50 px-3 py-2">
-                <div class="text-[11px] uppercase tracking-wide text-slate-400 font-bold">Visible Nodes</div>
-                <div id="swarm-visible-count" class="mt-1 text-xl font-bold text-slate-800">0</div>
-              </div>
-              <div class="rounded-lg bg-slate-50 px-3 py-2">
-                <div class="text-[11px] uppercase tracking-wide text-slate-400 font-bold">Generations</div>
-                <div id="swarm-generation-count" class="mt-1 text-xl font-bold text-slate-800">1</div>
-              </div>
-              <div class="rounded-lg bg-slate-50 px-3 py-2">
-                <div class="text-[11px] uppercase tracking-wide text-slate-400 font-bold">Births</div>
-                <div id="swarm-birth-count" class="mt-1 text-xl font-bold text-slate-800">0</div>
-              </div>
-              <div class="rounded-lg bg-slate-50 px-3 py-2">
-                <div class="text-[11px] uppercase tracking-wide text-slate-400 font-bold">Respawns</div>
-                <div id="swarm-death-count" class="mt-1 text-xl font-bold text-slate-800">0</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
             <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Hovered Asset</div>
             <div id="swarm-hover" class="mt-3 text-sm text-slate-500">Move across the sphere to inspect asset clusters.</div>
           </div>
 
           <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
-            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Selected Agent</div>
-            <div id="swarm-agent-selected" class="mt-3 text-sm text-slate-500">Click an agent to inspect its mutable traits.</div>
-          </div>
-
-          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
             <div class="flex items-center justify-between gap-2">
-              <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Top Agents</div>
-              <div id="swarm-dna-save-status" class="text-[11px] font-bold text-slate-400">Autosaves to config</div>
-            </div>
-            <div id="swarm-top-agents" class="mt-3 text-sm text-slate-500">The ten most profitable agents appear when the timeline finishes.</div>
-          </div>
-
-          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
-            <div class="flex items-center justify-between gap-2">
-              <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Selected Node</div>
+              <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Selected Asset</div>
               <button id="swarm-selected-open" type="button" onclick="openSelectedSwarmTicker()" disabled
                 class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">
                 Open Chart
               </button>
             </div>
-            <div id="swarm-selected" class="mt-3 text-sm text-slate-500">Click a ticker node to pin it here and jump into the Screener chart.</div>
+            <div id="swarm-selected" class="mt-3 text-sm text-slate-500">Click an asset to pin it here and jump into the Screener chart.</div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-swarm-lab">
+    <div class="p-6 space-y-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">Swarm Lab</h2>
+          <p class="text-sm text-slate-500">Abstract sandbox for tuning node and agent behavior without market data, tickers, or assets.</p>
+        </div>
+        <div class="flex flex-col items-end gap-3">
+          <div id="swarm-lab-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Waiting for abstract lab...</div>
+          <div class="flex flex-wrap justify-end gap-2">
+            <button id="swarm-lab-play-btn" onclick="toggleSwarmLabPlayback()"
+              class="bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-cyan-500/60 transition-all">
+              Play
+            </button>
+            <button id="swarm-lab-stop-btn" onclick="stopSwarmLabPlayback()"
+              class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold py-2 px-4 rounded-lg border border-slate-500/60 transition-all">
+              Stop
+            </button>
+            <button id="swarm-lab-refresh-btn" onclick="loadSwarmLab(true)"
+              class="bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-violet-500/60 transition-all">
+              Reset Lab
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="swarm-lab-empty" class="hidden rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+        Open Swarm Lab to load the abstract sandbox.
+      </div>
+
+      <div id="swarm-lab-content" class="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_320px] gap-6">
+        <aside class="space-y-4">
+          <div class="rounded-xl border border-cyan-200 bg-white shadow overflow-hidden">
+            <div class="bg-gradient-to-r from-cyan-50 via-white to-sky-50 px-4 py-3">
+              <div class="text-xs font-bold uppercase tracking-wide text-cyan-600">Model</div>
+              <div class="mt-1 text-sm font-semibold text-slate-800">Abstract controls</div>
+            </div>
+            <div class="space-y-4 px-4 py-4">
+              <div class="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Tune the population, mutation, and repulsion to watch the swarm reorganize.
+              </div>
+              <div class="rounded-xl bg-white shadow border border-cyan-100 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Population</div>
+                    <div id="swarm-lab-population-label" class="mt-1 text-sm font-semibold text-slate-700">72 agents</div>
+                  </div>
+                </div>
+                <input id="swarm-lab-population-slider" type="range" min="12" max="240" value="72" step="1"
+                  oninput="setSwarmLabPopulation(Number(this.value))"
+                  class="mt-3 w-full accent-cyan-600">
+              </div>
+              <div class="rounded-xl bg-white shadow border border-cyan-100 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Nodes</div>
+                    <div id="swarm-lab-node-count-label" class="mt-1 text-sm font-semibold text-slate-700">24 nodes</div>
+                  </div>
+                </div>
+                <input id="swarm-lab-node-count-slider" type="range" min="6" max="64" value="24" step="1"
+                  oninput="setSwarmLabNodeCount(Number(this.value))"
+                  class="mt-3 w-full accent-cyan-600">
+              </div>
+              <div class="rounded-xl bg-white shadow border border-cyan-100 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Mutation</div>
+                    <div id="swarm-lab-mutation-label" class="mt-1 text-sm font-semibold text-slate-700">8.0% mutation</div>
+                  </div>
+                </div>
+                <input id="swarm-lab-mutation-slider" type="range" min="0.01" max="0.35" value="0.08" step="0.01"
+                  oninput="setSwarmLabMutation(Number(this.value))"
+                  class="mt-3 w-full accent-cyan-600">
+              </div>
+              <div class="rounded-xl bg-white shadow border border-cyan-100 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Repulsion</div>
+                    <div id="swarm-lab-repulsion-label" class="mt-1 text-sm font-semibold text-slate-700">0.55 repulsion</div>
+                  </div>
+                </div>
+                <input id="swarm-lab-repulsion-slider" type="range" min="0" max="1.5" value="0.55" step="0.05"
+                  oninput="setSwarmLabRepulsion(Number(this.value))"
+                  class="mt-3 w-full accent-cyan-600">
+              </div>
+              <div class="rounded-xl bg-white shadow border border-cyan-100 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Speed</div>
+                    <div id="swarm-lab-speed-label" class="mt-1 text-sm font-semibold text-slate-700">1.00x speed</div>
+                  </div>
+                </div>
+                <input id="swarm-lab-speed-slider" type="range" min="0.35" max="3" value="1" step="0.05"
+                  oninput="setSwarmLabSpeed(Number(this.value))"
+                  class="mt-3 w-full accent-cyan-600">
+              </div>
+              <div class="rounded-xl bg-white shadow border border-cyan-100 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Zoom</div>
+                    <div id="swarm-lab-zoom-label" class="mt-1 text-sm font-semibold text-slate-700">1.00x world</div>
+                  </div>
+                </div>
+                <input id="swarm-lab-zoom-slider" type="range" min="0.6" max="1.8" value="1" step="0.05"
+                  oninput="setSwarmLabZoom(Number(this.value))"
+                  class="mt-3 w-full accent-cyan-600">
+              </div>
+            </div>
+          </div>
+          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Population</div>
+            <div id="swarm-lab-stats" class="mt-3 text-sm text-slate-600">0 nodes · 0 agents · avg energy 0.0 · gen 1</div>
+          </div>
+        </aside>
+
+        <div class="space-y-4">
+          <div class="overflow-hidden rounded-xl bg-white shadow border border-cyan-100">
+            <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 flex items-center justify-between">
+              <span>Abstract Swarm</span>
+              <span id="swarm-lab-world-caption" class="text-[11px] uppercase tracking-wide text-slate-400">Paused</span>
+            </div>
+            <div id="swarm-lab-canvas-wrap" class="relative w-full h-[640px] bg-slate-950">
+              <canvas id="swarm-lab-canvas" class="absolute inset-0 h-full w-full cursor-crosshair touch-none"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <aside class="space-y-4">
+          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Hovered Node</div>
+            <div id="swarm-lab-hover" class="mt-3 text-sm text-slate-500">Move across the lab to inspect nodes.</div>
+          </div>
+
+          <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Pinned Node</div>
+            <div id="swarm-lab-selected" class="mt-3 text-sm text-slate-500">Click a node to pin it here.</div>
           </div>
         </aside>
       </div>
@@ -861,7 +863,7 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/dashboard-loader.js?v=20260506e"></script>
+  <script type="module" src="/static/js/dashboard-loader.js?v=20260507e"></script>
 
   <!-- ===============================================================
          Browser → Server log relay

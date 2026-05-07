@@ -1,4 +1,4 @@
-const DASHBOARD_SCRIPT_SRC = "/static/js/dashboard.js?v=20260506e";
+const DASHBOARD_SCRIPT_SRC = "/static/js/dashboard.js?v=20260507e";
 const THREE_MODULE_SRC = "/static/vendor/three/three.module.js";
 
 function injectDashboardScript() {

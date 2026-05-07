@@ -1,4 +1,5 @@
 import json
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Dict, List
 
@@ -9,9 +10,8 @@ from ETF_screener.database import ETFDatabase
 class CachedStrategyManager:
     """Manages strategy execution with memory caching for indicator calculations."""
 
-    _memory_cache: ClassVar[dict[str, Any]] = (
-        {}
-    )  # Class-level cache shared across instances but local to process
+    _memory_cache: ClassVar[OrderedDict[str, Any]] = OrderedDict()
+    _memory_cache_limit: ClassVar[int] = 256
 
     def __init__(self, db: ETFDatabase, cache_dir: str = "data/cache"):
         self.db = db
@@ -31,6 +31,22 @@ class CachedStrategyManager:
         param_str = json.dumps(serializable_params, sort_keys=True)
         return f"{ticker}_{indicator_name}_{param_str}_{df_len}"
 
+    @classmethod
+    def _get_cached_value(cls, cache_key: str) -> Any | None:
+        """Return a cached indicator result and mark it as recently used."""
+        if cache_key not in cls._memory_cache:
+            return None
+        cls._memory_cache.move_to_end(cache_key)
+        return cls._memory_cache[cache_key]
+
+    @classmethod
+    def _store_cached_value(cls, cache_key: str, value: Any) -> None:
+        """Store a cached indicator result and evict the oldest entry if needed."""
+        cls._memory_cache[cache_key] = value
+        cls._memory_cache.move_to_end(cache_key)
+        while len(cls._memory_cache) > cls._memory_cache_limit:
+            cls._memory_cache.popitem(last=False)
+
     def get_indicator(
         self, df: pd.DataFrame, ticker: str, func: Callable, name: str, **kwargs
     ) -> pd.Series:
@@ -38,17 +54,19 @@ class CachedStrategyManager:
         Get indicator values, using disk and then memory cache if available.
         """
         cache_key = self._get_cache_key(ticker, name, kwargs, len(df))
+        call_kwargs = dict(kwargs)
 
         # 1. Check Memory Cache
-        if cache_key in self._memory_cache:
-            return self._memory_cache[cache_key]
+        cached_value = self._get_cached_value(cache_key)
+        if cached_value is not None:
+            return cached_value
 
         # 2. Check Disk Cache
         disk_cache_file = Path("data/parquet") / f"{cache_key}.parquet"
         if disk_cache_file.exists():
             try:
                 result = pd.read_parquet(disk_cache_file).iloc[:, 0]
-                self._memory_cache[cache_key] = result
+                self._store_cached_value(cache_key, result)
                 return result
             except Exception:
                 pass  # Fallback to calculation if disk read fails
@@ -64,20 +82,20 @@ class CachedStrategyManager:
             "calculate_stochastic",
         ]:
             # Some indicators return multiple values and require OHLC
-            res = func(df[high_col], df[low_col], df[price_col], **kwargs)
+            res = func(df[high_col], df[low_col], df[price_col], **call_kwargs)
             result = res[0] if isinstance(res, tuple) else res
-        elif "series" in kwargs:
+        elif "series" in call_kwargs:
             # For functions like calculate_linreg_slope that take a pre-calculated series
-            series = kwargs.pop("series")
-            result = func(series, **kwargs)
+            series = call_kwargs.pop("series")
+            result = func(series, **call_kwargs)
         else:
             # Standard single-column indicators (EMA, RSI, MACD)
-            res = func(df[price_col], **kwargs)
+            res = func(df[price_col], **call_kwargs)
             # If the result is a tuple (like MACD), we cache the whole thing
             result = res
 
         # 3. Save to memory and disk cache
-        self._memory_cache[cache_key] = result
+        self._store_cached_value(cache_key, result)
 
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)

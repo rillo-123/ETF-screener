@@ -55,9 +55,33 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
           setAttribute(name, value) {{ this[name] = value; }}
           appendChild(child) {{ this.children.push(child); return child; }}
           remove() {{}}
+          getBoundingClientRect() {{
+            return {{ width: this.clientWidth, height: this.clientHeight, left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight }};
+          }}
           getContext() {{
+            const gradient = {{ addColorStop() {{}} }};
             const noop = () => {{}};
-            return new Proxy({{}}, {{ get: () => noop, set: () => true }});
+            return {{
+              save: noop,
+              restore: noop,
+              scale: noop,
+              clearRect: noop,
+              fillRect: noop,
+              beginPath: noop,
+              arc: noop,
+              fill: noop,
+              stroke: noop,
+              moveTo: noop,
+              lineTo: noop,
+              createLinearGradient: () => gradient,
+              createRadialGradient: () => gradient,
+              lineCap: "",
+              lineJoin: "",
+              globalAlpha: 1,
+              fillStyle: "",
+              strokeStyle: "",
+              lineWidth: 1,
+            }};
           }}
         }}
 
@@ -67,7 +91,7 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -79,14 +103,19 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
-          addEventListener: () => {{}},
+          addEventListener: (event, handler) => {{
+            if (event === "DOMContentLoaded" && typeof handler === "function") {{
+              handler();
+            }}
+          }},
         }};
+        const storage = new Map();
         global.localStorage = {{
-          getItem: () => "",
-          setItem: () => {{}},
-          removeItem: () => {{}},
+          getItem: (key) => storage.has(key) ? storage.get(key) : "",
+          setItem: (key, value) => {{ storage.set(key, String(value)); }},
+          removeItem: (key) => {{ storage.delete(key); }},
         }};
         global.fetch = async (url) => ({{
           ok: true,
@@ -111,25 +140,61 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
         const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
         Function(source)();
 
-        if (typeof window.showTab !== "function") {{
-          throw new Error("showTab is not exposed on window");
-        }}
-        if (typeof window.exportTopMatches !== "function") {{
-          throw new Error("exportTopMatches is not exposed on window");
-        }}
-        if (typeof window.stepSwarmDays !== "function") {{
-          throw new Error("stepSwarmDays is not exposed on window");
-        }}
-        if (typeof window.setSwarmDebugAssetCount !== "function") {{
-          throw new Error("setSwarmDebugAssetCount is not exposed on window");
-        }}
-        window.showTab("swarm");
-        if (document.getElementById("tab-swarm").classList.contains("hidden")) {{
-          throw new Error("Swarm tab stayed hidden after showTab('swarm')");
-        }}
-        if (!document.getElementById("tab-btn-swarm").classList.contains("active")) {{
-          throw new Error("Swarm tab button did not become active");
-        }}
+        (async () => {{
+          if (window.dashboardReadyPromise) {{
+            await window.dashboardReadyPromise;
+          }}
+          if (document.getElementById("tab-swarm-lab").classList.contains("hidden")) {{
+            throw new Error("Dashboard did not start on Swarm Lab");
+          }}
+          if (!document.getElementById("tab-btn-swarm-lab").classList.contains("active")) {{
+            throw new Error("Swarm Lab tab button was not active on startup");
+          }}
+
+          if (typeof window.showTab !== "function") {{
+            throw new Error("showTab is not exposed on window");
+          }}
+          if (typeof window.exportTopMatches !== "function") {{
+            throw new Error("exportTopMatches is not exposed on window");
+          }}
+          if (typeof window.stepSwarmDays !== "function") {{
+            throw new Error("stepSwarmDays is not exposed on window");
+          }}
+          if (typeof window.loadSwarmLab !== "function") {{
+            throw new Error("loadSwarmLab is not exposed on window");
+          }}
+          if (typeof window.toggleSwarmLabPlayback !== "function") {{
+            throw new Error("toggleSwarmLabPlayback is not exposed on window");
+          }}
+          localStorage.setItem("etf-discovery:last-dashboard-tab", "screener");
+          if (typeof window.resetDashboardTabPreference !== "function") {{
+            throw new Error("resetDashboardTabPreference is not exposed on window");
+          }}
+          window.resetDashboardTabPreference();
+          if (localStorage.getItem("etf-discovery:last-dashboard-tab") !== "swarm-lab") {{
+            throw new Error("Reset did not restore the dashboard tab to Swarm Lab");
+          }}
+          if (!document.getElementById("tab-btn-swarm-lab").classList.contains("active")) {{
+            throw new Error("Reset did not return to Swarm Lab");
+          }}
+          window.showTab("swarm");
+          if (document.getElementById("tab-swarm").classList.contains("hidden")) {{
+            throw new Error("Swarm tab stayed hidden after showTab('swarm')");
+          }}
+          if (!document.getElementById("tab-btn-swarm").classList.contains("active")) {{
+            throw new Error("Swarm tab button did not become active");
+          }}
+          window.showTab("swarm-lab");
+          if (document.getElementById("tab-swarm-lab").classList.contains("hidden")) {{
+            throw new Error("Swarm Lab tab stayed hidden after showTab('swarm-lab')");
+          }}
+          if (!document.getElementById("tab-btn-swarm-lab").classList.contains("active")) {{
+            throw new Error("Swarm Lab tab button did not become active");
+          }}
+        }})().catch((err) => {{
+          console.error(err);
+          process.exit(1);
+        }});
         """)
 
     result = subprocess.run(
@@ -141,7 +206,7 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
-def test_dashboard_js_scan_source_buttons_toggle_debug_controls():
+def test_dashboard_js_swarm_lab_does_not_call_market_endpoints():
     node = shutil.which("node")
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
@@ -202,57 +267,68 @@ def test_dashboard_js_scan_source_buttons_toggle_debug_controls():
             return {{ width: this.clientWidth, height: this.clientHeight, left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight }};
           }}
           getContext() {{
+            const gradient = {{ addColorStop() {{}} }};
             const noop = () => {{}};
-            return new Proxy({{}}, {{ get: () => noop, set: () => true }});
+            return {{
+              save: noop,
+              restore: noop,
+              scale: noop,
+              clearRect: noop,
+              fillRect: noop,
+              beginPath: noop,
+              arc: noop,
+              fill: noop,
+              stroke: noop,
+              moveTo: noop,
+              lineTo: noop,
+              createLinearGradient: () => gradient,
+              createRadialGradient: () => gradient,
+              lineCap: "",
+              lineJoin: "",
+              globalAlpha: 1,
+              fillStyle: "",
+              strokeStyle: "",
+              lineWidth: 1,
+            }};
           }}
         }}
 
+        const calls = [];
         const elements = new Map();
         const getElement = (id) => {{
           if (!elements.has(id)) elements.set(id, new Element(id));
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
 
-        ["xetra", "sweden", "list", "all_lists", "debug"].forEach((scope) => {{
-          const screenerBtn = getElement(`scan-source-${{scope}}`);
-          screenerBtn.dataset.scope = scope;
-          screenerBtn.classList.add("scan-source-btn");
-          const swarmBtn = getElement(`swarm-scan-source-${{scope}}`);
-          swarmBtn.dataset.scope = scope;
-          swarmBtn.classList.add("scan-source-btn");
-        }});
-
-        ["list-modal-xetra", "list-modal-sweden", "list-modal-all"].forEach((id, index) => {{
-          const btn = getElement(id);
-          btn.dataset.listExchange = index === 0 ? "xetra" : index === 1 ? "sweden" : "all";
-        }});
-
         [
-          "swarm-debug-controls",
-          "swarm-debug-count",
-          "swarm-debug-count-label",
-          "swarm-world-visibility",
-          "ticker-select",
-          "shortlist-market-status",
-          "list-modal",
-          "list-modal-grid",
-          "list-modal-visible-count",
-          "list-modal-search",
-          "list-modal-name",
-          "list-modal-preview",
-          "list-modal-list-select",
-          "list-modal-count",
-          "strategy-select",
-          "strategy-editor",
-          "strategy-filename",
+          "swarm-lab-status",
+          "swarm-lab-empty",
+          "swarm-lab-refresh-btn",
+          "swarm-lab-play-btn",
+          "swarm-lab-stop-btn",
+          "swarm-lab-population-slider",
+          "swarm-lab-population-label",
+          "swarm-lab-node-count-slider",
+          "swarm-lab-node-count-label",
+          "swarm-lab-mutation-slider",
+          "swarm-lab-mutation-label",
+          "swarm-lab-repulsion-slider",
+          "swarm-lab-repulsion-label",
+          "swarm-lab-speed-slider",
+          "swarm-lab-speed-label",
+          "swarm-lab-zoom-slider",
+          "swarm-lab-zoom-label",
+          "swarm-lab-stats",
+          "swarm-lab-world-caption",
+          "swarm-lab-hover",
+          "swarm-lab-selected",
+          "swarm-lab-canvas",
         ].forEach(getElement);
-
-        getElement("strategy-select").options = [new Element("strategy-option")];
 
         global.window = global;
         global.window.addEventListener = () => {{}};
@@ -260,76 +336,23 @@ def test_dashboard_js_scan_source_buttons_toggle_debug_controls():
           body: new Element("body"),
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
-          querySelectorAll: (selector) => {{
-            if (selector === ".tab-btn") {{
-              return ["screener", "shortlist", "swarm", "backtest"]
-                .map((tab) => getElement(`tab-btn-${{tab}}`));
+          querySelectorAll: (selector) => selector === ".tab-btn"
+            ? ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            : [],
+          addEventListener: (event, handler) => {{
+            if (event === "DOMContentLoaded" && typeof handler === "function") {{
+              handler();
             }}
-            if (selector.includes(".scan-source-btn")) {{
-              return ["xetra", "sweden", "list", "all_lists", "debug"].flatMap((scope) => [
-                getElement(`scan-source-${{scope}}`),
-                getElement(`swarm-scan-source-${{scope}}`),
-              ]);
-            }}
-            if (selector === "[data-list-exchange]") {{
-              return ["list-modal-xetra", "list-modal-sweden", "list-modal-all"]
-                .map((id) => getElement(id));
-            }}
-            return [];
           }},
-          addEventListener: () => {{}},
         }};
+        const storage = new Map();
         global.localStorage = {{
-          getItem: (key) => {{
-            if (key === "etf-discovery:last-custom-list") return "AAA,BBB";
-            if (key === "etf-discovery:last-custom-list-name") return "My List";
-            if (key === "etf-discovery:last-swarm-debug-asset-count") return "24";
-            return "";
-          }},
-          setItem: () => {{}},
-          removeItem: () => {{}},
+          getItem: (key) => storage.has(key) ? storage.get(key) : "",
+          setItem: (key, value) => {{ storage.set(key, String(value)); }},
+          removeItem: (key) => {{ storage.delete(key); }},
         }};
         global.fetch = async (url) => {{
-          const target = String(url);
-          if (target.includes("/api/ticker-universe")) {{
-            return {{
-              ok: true,
-              json: async () => ({{
-                count: 3,
-                items: [
-                  {{ ticker: "AAA", exchange: "xetra", label: "AAA" }},
-                  {{ ticker: "BBB", exchange: "sweden", label: "BBB" }},
-                  {{ ticker: "CCC", exchange: "xetra", label: "CCC" }},
-                ],
-              }}),
-            }};
-          }}
-          if (target.includes("/api/custom-ticker-list")) {{
-            return {{
-              ok: true,
-              json: async () => ({{
-                active_name: "My List",
-                lists: [{{ name: "My List", tickers: ["AAA", "BBB"] }}],
-                tickers: ["AAA", "BBB"],
-              }}),
-            }};
-          }}
-          if (target.includes("/api/market-status")) {{
-            return {{
-              ok: true,
-              json: async () => ({{
-                today: "2026-05-05",
-                latest_market_date: "2026-05-05",
-                days_stale: 0,
-                is_stale: false,
-                fresh_tickers: 3,
-                tracked_tickers: 3,
-              }}),
-            }};
-          }}
-          if (target.includes("/api/log")) {{
-            return {{ ok: true, json: async () => ({{ ok: true }}) }};
-          }}
+          calls.push(String(url));
           return {{ ok: true, json: async () => ({{}}) }};
         }};
         global.requestAnimationFrame = () => 1;
@@ -343,60 +366,27 @@ def test_dashboard_js_scan_source_buttons_toggle_debug_controls():
         const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
         Function(source)();
 
-        const waitForReady = window.dashboardReadyPromise || Promise.resolve();
-
         (async () => {{
-          await waitForReady;
+          if (window.dashboardReadyPromise) {{
+            await window.dashboardReadyPromise;
+          }}
+          calls.length = 0;
+          window.showTab("swarm-lab");
+          await window.loadSwarmLab(true);
 
-          const debugPanel = getElement("swarm-debug-controls");
-          const sourceScopes = ["xetra", "sweden", "list", "all_lists", "debug"];
-
-          const assertScope = (expectedScope, expectDebugVisible) => {{
-            sourceScopes.forEach((scope) => {{
-              const screenerActive = getElement(`scan-source-${{scope}}`).classList.contains("is-active");
-              const swarmActive = getElement(`swarm-scan-source-${{scope}}`).classList.contains("is-active");
-              const shouldBeActive = scope === expectedScope;
-              if (screenerActive !== shouldBeActive) {{
-                throw new Error(`Screener scope ${{scope}} active state mismatch for ${{expectedScope}}`);
-              }}
-              if (swarmActive !== shouldBeActive) {{
-                throw new Error(`Swarm scope ${{scope}} active state mismatch for ${{expectedScope}}`);
-              }}
-            }});
-            if (debugPanel.hidden !== !expectDebugVisible) {{
-              throw new Error(`Debug panel visibility mismatch for ${{expectedScope}}`);
+          const forbidden = ["/api/swarm-world", "/api/swarm-history", "/api/market-status", "/api/market-data/refresh"];
+          forbidden.forEach((fragment) => {{
+            if (calls.some((call) => call.includes(fragment))) {{
+              throw new Error(`Swarm Lab should not call market endpoint: ${{fragment}}`);
             }}
-            if (getElement("swarm-debug-count").disabled !== !expectDebugVisible) {{
-              throw new Error(`Debug input disabled state mismatch for ${{expectedScope}}`);
-            }}
-          }};
+          }});
 
-          for (const scope of sourceScopes) {{
-            await window.setScanSource(scope);
-            assertScope(scope, scope === "debug");
+          if (document.getElementById("tab-swarm-lab").classList.contains("hidden")) {{
+            throw new Error("Swarm Lab tab stayed hidden");
           }}
-
-          const worldCaption = getElement("swarm-world-caption");
-          await window.setScanSource("debug");
-          if (typeof window.loadSwarmWorld === "function") {{
-            await window.loadSwarmWorld(true);
+          if (!document.getElementById("tab-btn-swarm-lab").classList.contains("active")) {{
+            throw new Error("Swarm Lab tab button did not become active");
           }}
-          if (!String(worldCaption.textContent || "").toLowerCase().includes("debug sphere")) {{
-            throw new Error("Debug sphere caption did not appear");
-          }}
-
-          const worldBadge = getElement("swarm-world-visibility");
-          await window.setSwarmZoom(2.2);
-          if (worldBadge.textContent !== "Zoomed in") {{
-            throw new Error("World visibility badge did not show zoomed-in state");
-          }}
-          await window.setSwarmZoom(0.35);
-          if (worldBadge.textContent !== "Whole world visible") {{
-            throw new Error("World visibility badge did not show whole-world state");
-          }}
-
-          await window.setScanSource("xetra");
-          assertScope("xetra", false);
         }})().catch((err) => {{
           console.error(err);
           process.exit(1);
@@ -505,7 +495,7 @@ def test_dashboard_js_modify_strategy_bumps_existing_version():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: () => {{}},
         }};
