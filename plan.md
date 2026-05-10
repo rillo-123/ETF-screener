@@ -1,6 +1,6 @@
 # Plan
 
-Last updated: 2026-05-07 19:06:55 +02:00
+Last updated: 2026-05-10 14:36:19 +02:00
 
 ## Current objective
 
@@ -8,6 +8,8 @@ Milestone workflow completed successfully with no auto-fixes required.
 
 ## Current state
 
+- -Summary
+- -Summary
 - -Summary
 - -Summary
 - -Summary
@@ -99,6 +101,8 @@ Milestone workflow completed successfully with no auto-fixes required.
 
 ## Locked decisions
 
+- -NextResumePoint
+- -Summary
 - -NextResumePoint
 - -NextResumePoint
 - -NextResumePoint

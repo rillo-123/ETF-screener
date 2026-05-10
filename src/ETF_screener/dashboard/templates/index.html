@@ -602,11 +602,27 @@
         <div class="space-y-4">
           <div class="overflow-hidden rounded-xl bg-white shadow border border-violet-100">
             <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 flex items-center justify-between">
-              <span>Production Asset Sphere</span>
-              <span class="text-[11px] uppercase tracking-wide text-slate-400">Hover an asset to inspect it</span>
+              <span>ETF World Sphere</span>
+              <span class="text-[11px] uppercase tracking-wide text-slate-400">Caps are assets, lines are the globe grid</span>
             </div>
             <div id="swarm-canvas-wrap" class="relative w-full h-[640px] bg-slate-950">
               <canvas id="swarm-canvas" class="absolute inset-0 h-full w-full cursor-grab touch-none"></canvas>
+            </div>
+            <div class="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div class="flex items-center gap-2">
+                  <span class="inline-block h-3 w-3 rounded-full border border-cyan-400 bg-cyan-300/90"></span>
+                  <span>Curved cap = one ETF asset</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="inline-block h-3 w-3 rounded-full border border-slate-300 bg-slate-100"></span>
+                  <span>Bright center = the cap's highlight</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="inline-block h-3 w-7 rounded-full border border-sky-300 bg-sky-300/70"></span>
+                  <span>Ovals and curves = latitude/longitude on the globe</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -671,50 +687,39 @@
             </div>
             <div class="space-y-4 px-4 py-4">
               <div class="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                Tune the population, mutation, and repulsion to watch the swarm reorganize.
+                Tune the cap radius, node count, and attraction to watch the caps reorganize.
               </div>
               <div class="rounded-xl bg-white shadow border border-cyan-100 px-4 py-3">
                 <div class="flex items-center justify-between gap-3">
                   <div>
-                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Population</div>
-                    <div id="swarm-lab-population-label" class="mt-1 text-sm font-semibold text-slate-700">72 agents</div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Cap Radius</div>
+                    <div id="swarm-lab-population-label" class="mt-1 text-sm font-semibold text-slate-700">2.00x radius</div>
                   </div>
                 </div>
-                <input id="swarm-lab-population-slider" type="range" min="12" max="240" value="72" step="1"
-                  oninput="setSwarmLabPopulation(Number(this.value))"
+                <input id="swarm-lab-population-slider" type="range" min="0.5" max="3.5" value="2" step="0.05"
+                  oninput="setSwarmLabCapRadius(Number(this.value))"
                   class="mt-3 w-full accent-cyan-600">
               </div>
               <div class="rounded-xl bg-white shadow border border-cyan-100 px-4 py-3">
                 <div class="flex items-center justify-between gap-3">
                   <div>
                     <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Nodes</div>
-                    <div id="swarm-lab-node-count-label" class="mt-1 text-sm font-semibold text-slate-700">24 nodes</div>
+                    <div id="swarm-lab-node-count-label" class="mt-1 text-sm font-semibold text-slate-700">6 caps</div>
                   </div>
                 </div>
-                <input id="swarm-lab-node-count-slider" type="range" min="6" max="64" value="24" step="1"
+                <input id="swarm-lab-node-count-slider" type="range" min="1" max="64" value="6" step="1"
                   oninput="setSwarmLabNodeCount(Number(this.value))"
                   class="mt-3 w-full accent-cyan-600">
               </div>
               <div class="rounded-xl bg-white shadow border border-cyan-100 px-4 py-3">
                 <div class="flex items-center justify-between gap-3">
                   <div>
-                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Mutation</div>
-                    <div id="swarm-lab-mutation-label" class="mt-1 text-sm font-semibold text-slate-700">8.0% mutation</div>
+                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Attraction</div>
+                    <div id="swarm-lab-attraction-label" class="mt-1 text-sm font-semibold text-slate-700">0.0 attraction</div>
                   </div>
                 </div>
-                <input id="swarm-lab-mutation-slider" type="range" min="0.01" max="0.35" value="0.08" step="0.01"
-                  oninput="setSwarmLabMutation(Number(this.value))"
-                  class="mt-3 w-full accent-cyan-600">
-              </div>
-              <div class="rounded-xl bg-white shadow border border-cyan-100 px-4 py-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Repulsion</div>
-                    <div id="swarm-lab-repulsion-label" class="mt-1 text-sm font-semibold text-slate-700">0.55 repulsion</div>
-                  </div>
-                </div>
-                <input id="swarm-lab-repulsion-slider" type="range" min="0" max="1.5" value="0.55" step="0.05"
-                  oninput="setSwarmLabRepulsion(Number(this.value))"
+                <input id="swarm-lab-attraction-slider" type="range" min="-10" max="10" value="0" step="0.1"
+                  oninput="setSwarmLabAttraction(Number(this.value))"
                   class="mt-3 w-full accent-cyan-600">
               </div>
               <div class="rounded-xl bg-white shadow border border-cyan-100 px-4 py-3">
@@ -742,8 +747,8 @@
             </div>
           </div>
           <div class="rounded-xl bg-white shadow border border-slate-200 p-4">
-            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Population</div>
-            <div id="swarm-lab-stats" class="mt-3 text-sm text-slate-600">0 nodes · 0 agents · avg energy 0.0 · gen 1</div>
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Caps</div>
+            <div id="swarm-lab-stats" class="mt-3 text-sm text-slate-600">6 caps · 2.00x radius · gen 1</div>
           </div>
         </aside>
 
@@ -863,7 +868,7 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/dashboard-loader.js?v=20260507e"></script>
+  <script type="module" src="/static/js/dashboard-loader.js?v=20260507ax"></script>
 
   <!-- ===============================================================
          Browser → Server log relay
@@ -871,7 +876,7 @@
          each entry to /api/log so it appears in the server-side debug
          log file alongside all Python / uvicorn log records.
     ================================================================ -->
-  <script src="/static/js/browser-log-relay.js?v=20260502d"></script>
+  <script src="/static/js/browser-log-relay.js?v=20260507r"></script>
 
   <!-- List Editor Modal -->
   <div id="list-modal"

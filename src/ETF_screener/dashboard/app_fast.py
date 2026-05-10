@@ -1644,7 +1644,9 @@ async def swarm_history(
         frame["ticker"] = frame["ticker"].astype(str).str.upper()
         frame["date"] = frame["date"].astype(str)
         chunk_latest = str(frame["date"].max())
-        latest_date = chunk_latest if latest_date is None else max(latest_date, chunk_latest)
+        latest_date = (
+            chunk_latest if latest_date is None else max(latest_date, chunk_latest)
+        )
         for ticker, group in frame.groupby("ticker", sort=False):
             clean_group = group.dropna(subset=["close"]).sort_values("date")
             closes = [

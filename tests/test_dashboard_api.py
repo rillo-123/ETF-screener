@@ -75,8 +75,7 @@ def test_tab_bar_visible():
     assert 'id="swarm-lab-canvas"' in html
     assert 'id="swarm-lab-population-slider"' in html
     assert 'id="swarm-lab-node-count-slider"' in html
-    assert 'id="swarm-lab-mutation-slider"' in html
-    assert 'id="swarm-lab-repulsion-slider"' in html
+    assert 'id="swarm-lab-attraction-slider"' in html
     assert 'id="swarm-lab-speed-slider"' in html
     assert 'id="swarm-lab-zoom-slider"' in html
     assert 'id="swarm-step-1-btn"' not in html
