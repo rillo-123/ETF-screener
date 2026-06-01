@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
-_paths_cache = None
+_paths_cache: Dict[str, Any] | None = None
 
 
 def get_paths() -> Dict[str, Any]:
@@ -15,7 +15,7 @@ def get_paths() -> Dict[str, Any]:
     config_dir = Path(__file__).parent.parent.parent / "config"
     path_file = config_dir / "paths.json"
     with open(path_file, "r", encoding="utf-8") as f:
-        _paths_cache = json.load(f)
+        _paths_cache = cast(Dict[str, Any], json.load(f))
     return _paths_cache
 
 
@@ -33,7 +33,7 @@ def load_command_config(config_file: str = "config/commands.json") -> Dict[str, 
 
     if config_path.exists():
         with open(config_path) as f:
-            return json.load(f)  # type: ignore[no-any-return]
+            return cast(Dict[str, Any], json.load(f))
     return {}
 
 

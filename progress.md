@@ -1,5 +1,21 @@
 # Progress
 
+## 2026-05-22 00:00:03 +02:00
+
+- Added a new early-entry strategy, `supertrend_st_crossdown_ema50_slope_turnup.dsl`, that keeps `ema_200_slope > 0`, requires a recent Supertrend crossdown below `ema_50`, and triggers when `ema_50_slope` turns positive.
+- Updated the DSL parser coverage and added a churn/backtest smoke test so the new trigger and setup window are both verified.
+- Verified with `python -m pytest -q tests/test_dsl_parser.py tests/test_churn_strategies.py`; all 13 tests passed.
+- Current status: the early-entry milestone is set and the repo notes now reflect the new strategy checkpoint.
+- Next resume point: if you want to tune it further, decide whether to shorten the Supertrend lookback window or widen it by a few bars.
+
+## 2026-05-15 16:03:13 +02:00
+
+- Collapsed the user-facing launcher surface into a single root `run.ps1` frontend and moved the dashboard implementation into `scripts/run_dashboard.ps1`.
+- Redirected the old root `run_*.ps1` entrypoints into the scripts folder, updated the dashboard bootstrap flow, and pointed the workflow/test callers at `scripts/run_all_tests.ps1`.
+- Updated the README so the launch examples now center on `run.ps1` instead of the individual root wrappers.
+- Verified the dashboard API/JS tests still pass after the launcher refactor.
+- Next resume point: run the new `run.ps1` frontend end to end and confirm the dashboard launcher behaves as expected.
+
 ## 2026-05-10 14:36:19 +02:00
 
 - -Summary

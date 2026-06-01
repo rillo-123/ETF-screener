@@ -337,9 +337,7 @@ class SwarmWorldEngine:
         return prepared
 
     def build_world(self, refresh_shortlist: bool = False) -> pd.DataFrame:
-        shortlist_df = self.shortlist_engine.get_shortlist(
-            limit=None, refresh=refresh_shortlist
-        )
+        shortlist_df = self.shortlist_engine.get_shortlist(refresh=refresh_shortlist)
         if shortlist_df.empty:
             return pd.DataFrame()
 

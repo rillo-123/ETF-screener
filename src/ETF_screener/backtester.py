@@ -1,5 +1,3 @@
-from ETF_screener.config_loader import get_paths
-
 """Backtesting engine for ETF trading strategies."""
 
 import hashlib
@@ -11,17 +9,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from ETF_screener.config_loader import get_paths
 from ETF_screener.database import ETFDatabase
 from ETF_screener.indicators import (
     calculate_adx,
     calculate_ema,
+    calculate_linreg_slope,
     calculate_macd,
     calculate_rsi,
     calculate_rsi_ema,
     calculate_stochastic,
     calculate_stoch_rsi,
     calculate_supertrend,
-    calculate_linreg_slope,
     calculate_tsi,
 )
 from ETF_screener.strategy_manager import CachedStrategyManager
@@ -82,7 +81,7 @@ def _worker_run_remote_scripted(
 
 
 class Backtester:
-    RESULT_CACHE_VERSION = "backtest_result_v1"
+    RESULT_CACHE_VERSION = "backtest_result_v2"
 
     def __init__(
         self,
@@ -181,7 +180,6 @@ class Backtester:
                 return {"ticker": ticker, "error": f"No data for {ticker}"}
             df["Date"] = pd.to_datetime(df.get("Date", df.get("date")))
             df = df.sort_values("Date").reset_index(drop=True)
-            price_col = "Close" if "Close" in df else "close"
             kwargs = strategy_kwargs or {}
 
             is_scripted = False
@@ -254,6 +252,7 @@ class Backtester:
         capital = self.initial_capital
         position = 0
         trades = []
+        trade_points = []
         equity = [capital]
         max_equity = self.initial_capital
         mdd = 0
@@ -277,16 +276,31 @@ class Backtester:
                 trades.append({"type": "BUY", "date": dates[i], "price": buy_price})
                 executed_signals[i] = 1
             elif signal == -1 and position > 0:
+                buy_trade = trades[-1]
                 sell_price = price * (1 - self.slippage_pct / 100)
                 capital = (position * sell_price) - self.commission
                 position = 0
+                profit = (sell_price - buy_trade["price"]) / buy_trade["price"]
                 trades.append(
                     {
                         "type": "SELL",
                         "date": dates[i],
                         "price": sell_price,
-                        "profit": (sell_price - trades[-1]["price"])
-                        / trades[-1]["price"],
+                        "profit": profit,
+                    }
+                )
+                trade_points.append(
+                    {
+                        "trade_index": len(trade_points) + 1,
+                        "buy_date": pd.Timestamp(buy_trade["date"]).isoformat()
+                        if not pd.isna(buy_trade["date"])
+                        else "",
+                        "sell_date": pd.Timestamp(dates[i]).isoformat()
+                        if not pd.isna(dates[i])
+                        else "",
+                        "buy_price": round(float(buy_trade["price"]), 6),
+                        "sell_price": round(float(sell_price), 6),
+                        "gain_pct": round(float(profit * 100.0), 4),
                     }
                 )
                 executed_signals[i] = -1
@@ -337,6 +351,7 @@ class Backtester:
             "profit_factor": profit_factor,
             "sharpe_ratio": sharpe,
             "max_drawdown_pct": round(mdd * 100, 2),
+            "trade_points": trade_points,
             "df": df,
         }
 
@@ -1030,15 +1045,35 @@ class Backtester:
                     running_times.pop(future, None)
                     ticker = future_to_ticker[future]
                     try:
-                        results.append(future.result())
+                        result = future.result()
                     except Exception as exc:
-                        results.append({"ticker": ticker, "error": str(exc)})
+                        result = {"ticker": ticker, "error": str(exc)}
+                    results.append(result)
                     completed += 1
 
                     if pbar is not None:
                         pbar.update(1)
                     if progress_callback is not None:
                         pct = 5.0 + ((completed / max(1, total)) * 88.0)
+                        ticker_payload = {
+                            "ticker": ticker,
+                            "completed": completed,
+                            "total": total,
+                        }
+                        if isinstance(result, dict):
+                            ticker_payload.update(
+                                {
+                                    "ticker": result.get("ticker", ticker),
+                                    "error": result.get("error"),
+                                    "return_pct": result.get("total_return_pct"),
+                                    "win_rate_pct": result.get("win_rate_pct"),
+                                    "profit_factor": result.get("profit_factor"),
+                                    "sharpe": result.get("sharpe_ratio"),
+                                    "max_dd_pct": result.get("max_drawdown_pct"),
+                                    "trades": result.get("num_trades"),
+                                    "trade_points": result.get("trade_points") or [],
+                                }
+                            )
                         try:
                             progress_callback(
                                 {
@@ -1048,6 +1083,11 @@ class Backtester:
                                     "detail": f"{completed}/{total} tickers complete",
                                     "label": progress_label or "Backtest",
                                     "active": True,
+                                    "payload": {
+                                        "completed": completed,
+                                        "total": total,
+                                        "ticker_result": ticker_payload,
+                                    },
                                 }
                             )
                         except Exception:
@@ -1089,6 +1129,16 @@ class Backtester:
                                         "detail": f"{completed}/{total} tickers complete",
                                         "label": progress_label or "Backtest",
                                         "active": True,
+                                        "payload": {
+                                            "completed": completed,
+                                            "total": total,
+                                            "ticker_result": {
+                                                "ticker": ticker,
+                                                "completed": completed,
+                                                "total": total,
+                                                "error": f"Timed out after {task_timeout_seconds} seconds",
+                                            },
+                                        },
                                     }
                                 )
                             except Exception:

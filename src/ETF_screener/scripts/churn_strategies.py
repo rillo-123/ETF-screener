@@ -18,6 +18,11 @@ BLACKLIST_PATH = Path("config") / "blacklist.json"
 STRATEGY_EVAL_CACHE_VERSION = "strategy_eval_v2"
 
 
+def _strip_dsl_comment(text: str) -> str:
+    """Remove inline DSL comments while preserving the expression before them."""
+    return str(text or "").split("#", 1)[0].strip()
+
+
 @lru_cache(maxsize=1)
 def _cached_blacklist_tickers() -> set[str]:
     if not BLACKLIST_PATH.exists():
@@ -132,7 +137,7 @@ def parse_dsl_content(content: str | None) -> dict:
     """Parse DSL content into runnable scripts plus strategy metadata.
 
     Entry is composed from positive conditions in CONTEXT/SETUP/QUALIFY/TRIGGER.
-    Exit is composed from EXIT lines plus INVALIDATE/RISK conditions.
+    Exit is composed from EXIT lines plus RISK conditions.
     """
     content = content or ""
 
@@ -143,7 +148,6 @@ def parse_dsl_content(content: str | None) -> dict:
         "trigger": "trigger",
         "entry": "trigger",
         "risk": "risk",
-        "invalidate": "risk",
         "exit": "risk",
     }
     canonical_prefixes: List[str] = [
@@ -152,7 +156,6 @@ def parse_dsl_content(content: str | None) -> dict:
         "qualify",
         "trigger",
         "risk",
-        "invalidate",
         "entry",
         "exit",
     ]
@@ -168,7 +171,7 @@ def parse_dsl_content(content: str | None) -> dict:
                 return canonical_alias[prefix]
         return "setup"
 
-    scoped_terms = {
+    scoped_terms: dict[str, list[str]] = {
         "context": [],
         "setup": [],
         "trigger": [],
@@ -180,7 +183,7 @@ def parse_dsl_content(content: str | None) -> dict:
     current_block_raw: str | None = None
     max_days: int | None = None
     for raw in content.splitlines():
-        line = raw.strip()
+        line = _strip_dsl_comment(raw)
         if not line:
             continue
 
@@ -227,7 +230,7 @@ def parse_dsl_content(content: str | None) -> dict:
             continue
 
         if canonical_block == "risk":
-            # INVALIDATE/RISK positive conditions should disqualify, so treat as exits.
+            # RISK positive conditions should disqualify, so treat as exits.
             explicit_exits.append(wrapped)
             continue
 
@@ -271,24 +274,13 @@ def load_dsl_file(file_path):
 
 def _prepare_scan_expression(expr: str) -> str:
     """Convert DSL-style expressions into a pandas.eval-friendly form."""
-    s = str(expr or "").strip()
+    s = " ".join(
+        part for part in (_strip_dsl_comment(line) for line in str(expr or "").splitlines()) if part
+    ).strip()
     if not s:
         return "False"
     if s.lower() in {"true", "false"}:
         return s.title()
-
-    s = re.sub(
-        r"cross_up\(([^,]+),\s*([^)]+)\)",
-        r"(\1 > \2 and \1_d1 <= \2_d1)",
-        s,
-        flags=re.IGNORECASE,
-    )
-    s = re.sub(
-        r"cross_down\(([^,]+),\s*([^)]+)\)",
-        r"(\1 < \2 and \1_d1 >= \2_d1)",
-        s,
-        flags=re.IGNORECASE,
-    )
 
     def split_args(raw: str) -> list[str]:
         parts: list[str] = []
@@ -322,10 +314,55 @@ def _prepare_scan_expression(expr: str) -> str:
 
     s = re.sub(r"([a-z_][a-z0-9_]*)\.d\[(\d+)\]", d_sub, s, flags=re.IGNORECASE)
 
+    def shift_expr(raw: str, delay: int) -> str:
+        def repl(match):
+            word = match.group(1)
+            lowered = word.lower()
+            if lowered in {
+                "and",
+                "or",
+                "not",
+                "true",
+                "false",
+                "cross_up",
+                "cross_down",
+                "was_true",
+                "within",
+                "between",
+                "now",
+            }:
+                return word
+            if re.search(r"_d\d+$", lowered):
+                return word
+            return f"{word}_d{delay}"
+
+        return re.sub(r"\b([a-z_][a-z0-9_]*)\b", repl, raw, flags=re.IGNORECASE)
+
+    def cross_sub(match):
+        content = match.group(0).split("(", 1)[1].rsplit(")", 1)[0]
+        parts = split_args(content)
+        if len(parts) < 2:
+            return "False"
+        left, right = parts[0].strip(), parts[1].strip()
+        left_prev = shift_expr(left, 1)
+        right_prev = shift_expr(right, 1)
+        if match.group(1).lower() == "cross_up":
+            return f"((({left}) > ({right})) and (({left_prev}) <= ({right_prev})))"
+        return f"((({left}) < ({right})) and (({left_prev}) >= ({right_prev})))"
+
+    s = re.sub(
+        r"\b(cross_up|cross_down)\s*\((?:[^()]+|\([^()]*\))+\)",
+        cross_sub,
+        s,
+        flags=re.IGNORECASE,
+    )
+
     def shift_cond(match):
         condition = match.group(1).strip()
         lookback = int(match.group(2))
-        shifted = " or ".join([f"{condition}_d{i}" for i in range(1, lookback + 1)])
+        shifted = " or ".join(
+            [f"({shift_expr(condition, i)})" for i in range(1, lookback + 1)]
+        )
         return f"({shifted})"
 
     s = re.sub(
@@ -348,7 +385,7 @@ def _prepare_scan_expression(expr: str) -> str:
         if end < start:
             return "False"
         terms = [
-            condition if delay == 0 else f"{condition}_d{delay}"
+            f"({condition})" if delay == 0 else f"({shift_expr(condition, delay)})"
             for delay in range(start, end + 1)
         ]
         return f"({' or '.join(terms)})"
@@ -356,6 +393,23 @@ def _prepare_scan_expression(expr: str) -> str:
     s = re.sub(
         r"(?:within|between)\((?:[^()]+|\([^()]*\))+\)",
         within_cond,
+        s,
+        flags=re.IGNORECASE,
+    )
+
+    s = re.sub(
+        r"\b(\d+(?:\.\d+)?)([km])\b",
+        lambda m: str(
+            int(float(m.group(1)) * (1000 if m.group(2).lower() == "k" else 1000000))
+        ),
+        s,
+        flags=re.IGNORECASE,
+    )
+
+    s = s.lower()
+    s = re.sub(
+        r"\b([a-z_][a-z0-9_]*|\d+(?:\.\d+)?)(\s*(?:>=|<=|==|!=|>|<)\s*)([a-z_][a-z0-9_]*|\d+(?:\.\d+)?)\b",
+        r"(\1\2\3)",
         s,
         flags=re.IGNORECASE,
     )
@@ -370,6 +424,69 @@ def _prepare_scan_expression(expr: str) -> str:
         .replace("-ge", ">=")
         .replace("-le", "<=")
     )
+
+
+def _ensure_eval_helper_columns(eval_df: pd.DataFrame, prepared_expr: str) -> pd.DataFrame:
+    """Materialize helper columns referenced by normalized DSL expressions."""
+    identifiers = set(re.findall(r"\b[a-z_][a-z0-9_]*\b", str(prepared_expr or "").lower()))
+    alias_names = set(identifiers)
+    for name in identifiers:
+        if re.search(r"_d\d+$", name):
+            alias_names.add(re.sub(r"_d\d+$", "", name))
+
+    for name in list(alias_names):
+        match = re.fullmatch(
+            r"((?:st|supertrend)_(\d+)_(\d+)_is_(green|red))", name
+        )
+        if match is None:
+            continue
+        if name in eval_df.columns:
+            eval_df[name] = eval_df[name].fillna(False).astype(bool)
+            continue
+        _, period, multiplier, regime = match.groups()
+        st_col = f"st_{period}_{multiplier}"
+        if st_col not in eval_df.columns:
+            st_col = f"supertrend_{period}_{multiplier}"
+        if st_col not in eval_df.columns or "close" not in eval_df.columns:
+            continue
+        if regime == "green":
+            eval_df[name] = eval_df["close"] > eval_df[st_col]
+        else:
+            eval_df[name] = eval_df["close"] < eval_df[st_col]
+
+    shifted = sorted(
+        (
+            (name, re.sub(r"_d\d+$", "", name), int(re.search(r"_d(\d+)$", name).group(1)))
+            for name in identifiers
+            if re.search(r"_d\d+$", name)
+        ),
+        key=lambda item: item[2],
+    )
+    for name, base, delay in shifted:
+        if name in eval_df.columns or base not in eval_df.columns:
+            continue
+        eval_df[name] = eval_df[base].shift(delay)
+
+    return eval_df
+
+
+def _quote_eval_identifiers(expr: str, columns: pd.Index) -> str:
+    """Backtick-quote exact column matches so pandas eval can handle keywords."""
+    if not expr:
+        return expr
+
+    lookup = {
+        str(column).lower(): str(column) for column in columns if str(column).strip()
+    }
+    quoted = expr
+    for name in sorted(lookup, key=len, reverse=True):
+        # Replace exact word matches only so operators like AND/OR remain intact.
+        quoted = re.sub(
+            rf"\b{re.escape(name)}\b",
+            f"`{lookup[name]}`",
+            quoted,
+        )
+    return quoted
 
 
 def _evaluate_strategy_mask(df: pd.DataFrame, expr: str | None) -> pd.Series:
@@ -389,10 +506,12 @@ def _evaluate_strategy_mask(df: pd.DataFrame, expr: str | None) -> pd.Series:
     eval_df.columns = [str(column).lower() for column in eval_df.columns]
     eval_df = eval_df.loc[:, ~eval_df.columns.duplicated()]
     prepared = _prepare_scan_expression(normalized)
+    eval_df = _ensure_eval_helper_columns(eval_df, prepared)
+    prepared = _quote_eval_identifiers(prepared, eval_df.columns)
     result = eval_df.eval(prepared, engine="python")
     if not isinstance(result, pd.Series):
         return pd.Series([bool(result)] * len(eval_df), index=eval_df.index, dtype=bool)
-    return result.fillna(False).astype(bool)
+    return result.astype("boolean").fillna(False).astype(bool)
 
 
 def find_recent_entry_days(
@@ -442,9 +561,11 @@ def _load_strategy_specs(
     exit_script: str | None = None,
     dsl_content: str | None = None,
     strategy_name: str | None = None,
+    require_exit: bool = True,
 ):
     """Build runnable strategy specs from a saved DSL path or direct scripts."""
     strategies = []
+    missing_exit_names: list[str] = []
 
     if strategy_path:
         path = Path(strategy_path)
@@ -465,12 +586,15 @@ def _load_strategy_specs(
                         "max_days": res.get("max_days"),
                     }
                 )
+            else:
+                missing_exit_names.append(path.stem)
         elif path.is_dir():
             for dsl_file in path.glob("*.dsl"):
                 if "strat_cache" in dsl_file.parts:
                     continue
                 res = load_dsl_file(dsl_file)
                 if not res.get("has_valid_exit", False):
+                    missing_exit_names.append(dsl_file.stem)
                     continue
                 strategies.append(
                     {
@@ -489,32 +613,56 @@ def _load_strategy_specs(
     elif dsl_content:
         res = parse_dsl_content(dsl_content)
         if res["entry"] and res["entry"] != "False":
+            if not res.get("has_valid_exit", False):
+                missing_exit_names.append(strategy_name or "Editor Draft")
+            else:
+                strategies.append(
+                    {
+                        "name": strategy_name or "Editor Draft",
+                        "func": backtester.scripted_strategy,
+                        "kwargs": {
+                            "entry_script": res["entry"],
+                            "exit_script": res["exit"],
+                        },
+                        "trigger": res.get("trigger"),
+                        "filter": res.get("filter"),
+                        "exit": res.get("exit"),
+                        "max_days": res.get("max_days"),
+                    }
+                )
+    elif entry_script and exit_script:
+        if not str(exit_script).strip() or str(exit_script).strip() == "False":
+            missing_exit_names.append("CLI_Custom")
+        else:
             strategies.append(
                 {
-                    "name": strategy_name or "Editor Draft",
+                    "name": "CLI_Custom",
                     "func": backtester.scripted_strategy,
                     "kwargs": {
-                        "entry_script": res["entry"],
-                        "exit_script": res["exit"],
+                        "entry_script": entry_script,
+                        "exit_script": exit_script,
                     },
-                    "trigger": res.get("trigger"),
-                    "filter": res.get("filter"),
-                    "exit": res.get("exit"),
-                    "max_days": res.get("max_days"),
+                    "trigger": None,
+                    "filter": None,
+                    "entry": entry_script,
+                    "exit": exit_script,
+                    "max_days": None,
                 }
             )
-    elif entry_script and exit_script:
-        strategies.append(
-            {
-                "name": "CLI_Custom",
-                "func": backtester.scripted_strategy,
-                "kwargs": {"entry_script": entry_script, "exit_script": exit_script},
-                "trigger": None,
-                "filter": None,
-                "entry": entry_script,
-                "exit": exit_script,
-                "max_days": None,
-            }
+
+    if require_exit and missing_exit_names:
+        unique_missing = list(dict.fromkeys(missing_exit_names))
+        raise ValueError(
+            "Selected strategy(ies) require an exit criterion: "
+            + ", ".join(unique_missing[:5])
+        )
+
+    if not require_exit and missing_exit_names:
+        # Keep the caller informed when they are intentionally using a signal-only path.
+        logger.info(
+            "Skipped %d strategy file(s) without an exit criterion: %s",
+            len(set(missing_exit_names)),
+            ", ".join(list(dict.fromkeys(missing_exit_names))[:5]),
         )
 
     return strategies
@@ -618,6 +766,7 @@ def evaluate_strategies(
     exchange: str | None = None,
     ticker_list: str | None = None,
     scan_scope: str | None = None,
+    max_workers: int | None = None,
     progress_callback=None,
 ) -> pd.DataFrame:
     """Run strategy scoring and return a ranked DataFrame without plotting side effects."""
@@ -641,6 +790,7 @@ def evaluate_strategies(
         exit_script=exit_script,
         dsl_content=dsl_content,
         strategy_name=strategy_name,
+        require_exit=True,
     )
 
     if not strategies:
@@ -687,6 +837,7 @@ def evaluate_strategies(
             strat["func"],
             days=500,
             strategy_kwargs=strat.get("kwargs"),
+            max_workers=max_workers,
             show_progress=False,
             progress_label=f"{strat['name']} ({len(tickers)} tickers)",
             progress_callback=progress_callback,
@@ -796,6 +947,7 @@ def churn_db(
         exit_script=exit_script,
         dsl_content=None,
         strategy_name=None,
+        require_exit=True,
     )
 
     if not strategies:

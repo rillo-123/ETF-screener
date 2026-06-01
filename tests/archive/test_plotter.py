@@ -87,3 +87,36 @@ class TestPortfolioPlotter:
         path = plotter.plot_etf_analysis(sample_data_with_indicators, "SIGNALTEST")
 
         assert path.exists()
+
+    def test_plot_ribbon_condition_handles_keyword_named_columns(self, temp_plot_dir):
+        """Ribbon evaluation should survive keyword-shaped column names."""
+        dates = pd.date_range("2024-01-01", periods=5, freq="D")
+        close = np.array([100.0, 101.0, 102.0, 103.0, 104.0])
+        df = pd.DataFrame(
+            {
+                "Date": dates,
+                "Open": close - 0.5,
+                "High": close + 1.0,
+                "Low": close - 1.0,
+                "Close": close,
+                "Volume": np.full(5, 100000.0),
+                "or": np.array([1.0, 2.0, 3.0, 4.0, 5.0]),
+                "Signal": np.zeros(5),
+            }
+        )
+
+        plotter = PortfolioPlotter(output_dir=temp_plot_dir)
+        plotter.ribbon_config = {
+            "ribbons": [
+                {
+                    "label": "Keyword Ribbon",
+                    "layers": [
+                        {"condition": "or > 2", "color": "blue"},
+                    ],
+                }
+            ]
+        }
+
+        path = plotter.plot_etf_analysis(df, "KEYWORD")
+
+        assert path.exists()

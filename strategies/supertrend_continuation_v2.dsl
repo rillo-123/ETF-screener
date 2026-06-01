@@ -1,7 +1,7 @@
 # Supertrend Continuation - Block-Based Version
 # Context: only trade when price is already in a long-term uptrend.
 # Trigger: focus on the Supertrend color flip back to green.
-# Invalidate: exit when the Supertrend flips back to red or broader trend support breaks.
+# Exit: exit when the Supertrend flips back to red or broader trend support breaks.
 
 BEGIN CONTEXT
 
@@ -13,6 +13,7 @@ BEGIN TRIGGER
 TRIGGER: cross_up(close,ema_50)
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT: st_10_4_is_green
 END
+

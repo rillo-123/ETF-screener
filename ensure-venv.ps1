@@ -1,3 +1,8 @@
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [switch]$ForceUpdate
+)
+
 # Idempotent venv activation and requirements check
 # This script safely activates the virtual environment and ensures dependencies match requirements.txt
 # 
@@ -88,11 +93,80 @@ function Get-LatestPwshVersionFromWinget {
     return $null
 }
 
+function Invoke-ExternalTool {
+    param(
+        [Parameter(Mandatory = $true)][string]$CommandPath,
+        [string[]]$Arguments = @()
+    )
+
+    $output = @(& $CommandPath @Arguments 2>&1)
+    $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output = $output
+    }
+}
+
+function Invoke-WingetCli {
+    param(
+        [string[]]$Arguments = @(),
+        [switch]$Elevate
+    )
+
+    $wingetCommand = Get-Command winget -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $wingetCommand) {
+        return [pscustomobject]@{
+            ExitCode = 127
+            Output = @("winget is not available")
+        }
+    }
+
+    if ($Elevate -and -not (Test-IsAdministrator)) {
+        $stdoutFile = [System.IO.Path]::GetTempFileName()
+        $stderrFile = [System.IO.Path]::GetTempFileName()
+        try {
+            $process = Start-Process -FilePath $wingetCommand.Source `
+                -ArgumentList $Arguments `
+                -Verb RunAs `
+                -Wait `
+                -PassThru `
+                -WindowStyle Hidden `
+                -RedirectStandardOutput $stdoutFile `
+                -RedirectStandardError $stderrFile
+
+            $output = @()
+            if (Test-Path $stdoutFile) {
+                $output += @(Get-Content $stdoutFile)
+            }
+            if (Test-Path $stderrFile) {
+                $output += @(Get-Content $stderrFile)
+            }
+
+            return [pscustomobject]@{
+                ExitCode = [int]$process.ExitCode
+                Output = $output
+            }
+        } catch {
+            return [pscustomobject]@{
+                ExitCode = 1
+                Output = @($_.Exception.Message)
+            }
+        } finally {
+            Remove-Item -LiteralPath @($stdoutFile, $stderrFile) -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    return Invoke-ExternalTool -CommandPath $wingetCommand.Source -Arguments $Arguments
+}
+
 function Update-PwshCheckStamp {
     New-Item -Path $pwshCheckFile -ItemType File -Force | Out-Null
 }
 
 function Ensure-PwshVersion {
+    param([switch]$ForceUpdate)
+
     $skipPwshCheck = $false
     if (Test-Path $pwshCheckFile) {
         $lastPwshCheck = Get-Item $pwshCheckFile
@@ -101,26 +175,59 @@ function Ensure-PwshVersion {
         }
     }
 
-    if ($skipPwshCheck) {
-        Write-Host "✓ Skipping PowerShell version check (last check was < 24h ago)" -ForegroundColor Gray
+    if ($skipPwshCheck -and -not $ForceUpdate) {
+        Write-Host "OK: Skipping PowerShell version check (last check was < 24h ago)" -ForegroundColor Gray
         return
     }
 
+    $pwshInfo = Get-PwshInfo
+
     try {
-        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Host "⚠ winget is not available; skipping PowerShell version check" -ForegroundColor Yellow
+        if ($pwshInfo.InstallType -eq "dotnet-tool") {
+            if (-not $ForceUpdate) {
+                Write-Host "WARN: pwsh is installed as a .NET global tool; update it with: dotnet tool update --global PowerShell" -ForegroundColor Yellow
+                return
+            }
+
+            $dotnetCommand = Get-Command dotnet -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $dotnetCommand) {
+                Write-Host "WARN: dotnet is not available; cannot update the pwsh global tool" -ForegroundColor Yellow
+                return
+            }
+
+            Write-Host "Updating pwsh .NET global tool via dotnet..." -ForegroundColor Cyan
+            $dotnetResult = Invoke-ExternalTool -CommandPath $dotnetCommand.Source -Arguments @(
+                "tool",
+                "update",
+                "--global",
+                "PowerShell"
+            )
+            if ($dotnetResult.Output.Count -gt 0) {
+                $dotnetResult.Output | ForEach-Object { if ("$_".Trim()) { Write-Host "  $_" } }
+            }
+
+            if ($dotnetResult.ExitCode -eq 0) {
+                Write-Host "OK: PowerShell update complete via dotnet global tool." -ForegroundColor Green
+            } else {
+                Write-Host "WARN: PowerShell update did not complete (dotnet exit code $($dotnetResult.ExitCode)); continuing with the current shell" -ForegroundColor Yellow
+            }
+
             return
         }
 
-        $pwshInfo = Get-PwshInfo
+        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "WARN: winget is not available; skipping PowerShell version check" -ForegroundColor Yellow
+            return
+        }
+
         $latestVersion = Get-LatestPwshVersionFromWinget
         if ($null -eq $latestVersion) {
-            Write-Host "⚠ Could not determine the latest PowerShell version from winget" -ForegroundColor Yellow
+            Write-Host "WARN: Could not determine the latest PowerShell version from winget" -ForegroundColor Yellow
             return
         }
 
-        if ($pwshInfo.Version -and $pwshInfo.Version -ge $latestVersion) {
-            Write-Host "✓ PowerShell $($pwshInfo.Version) is up to date" -ForegroundColor Green
+        if (-not $ForceUpdate -and $pwshInfo.Version -and $pwshInfo.Version -ge $latestVersion) {
+            Write-Host "OK: PowerShell $($pwshInfo.Version) is up to date" -ForegroundColor Green
             return
         }
 
@@ -132,21 +239,23 @@ function Ensure-PwshVersion {
         }
 
         switch ($pwshInfo.InstallType) {
-            "dotnet-tool" {
-                Write-Host "⚠ pwsh is installed as a .NET global tool; update it with: dotnet tool update --global PowerShell" -ForegroundColor Yellow
-                return
-            }
             "other" {
-                if ($pwshInfo.IsInstalled) {
-                    Write-Host "⚠ pwsh is not in a standard winget-managed location; continuing without auto-update" -ForegroundColor Yellow
+                if ($pwshInfo.IsInstalled -and -not $ForceUpdate) {
+                    Write-Host "WARN: pwsh is not in a standard winget-managed location; continuing without auto-update" -ForegroundColor Yellow
                     return
                 }
             }
         }
 
+        $wingetElevate = $false
         if ($pwshInfo.IsInstalled -and $pwshInfo.InstallType -eq "msi" -and -not (Test-IsAdministrator)) {
-            Write-Host "⚠ This pwsh install uses a machine-wide MSI path. Re-run an elevated shell to update it automatically." -ForegroundColor Yellow
-            return
+            if ($ForceUpdate) {
+                Write-Host "ForceUpdate requested; prompting for elevation to update the machine-wide MSI install." -ForegroundColor Cyan
+                $wingetElevate = $true
+            } else {
+                Write-Host "WARN: This pwsh install uses a machine-wide MSI path. Re-run an elevated shell to update it automatically." -ForegroundColor Yellow
+                return
+            }
         }
 
         $wingetArgs = @(
@@ -156,6 +265,7 @@ function Ensure-PwshVersion {
             "--source", "winget"
             "--accept-source-agreements"
             "--accept-package-agreements"
+            if ($ForceUpdate) { "--force" }
             "--silent"
             "--disable-interactivity"
         )
@@ -165,11 +275,14 @@ function Ensure-PwshVersion {
         }
 
         Write-Host "$(if ($pwshInfo.IsInstalled) { 'Updating' } else { 'Installing' }) PowerShell via winget..." -ForegroundColor Cyan
-        & winget @wingetArgs
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓ PowerShell update complete. Start a new shell to use version $latestVersion." -ForegroundColor Green
+        $wingetResult = Invoke-WingetCli -Arguments $wingetArgs -Elevate:$wingetElevate
+        if ($wingetResult.Output.Count -gt 0) {
+            $wingetResult.Output | ForEach-Object { if ("$_".Trim()) { Write-Host "  $_" } }
+        }
+        if ($wingetResult.ExitCode -eq 0) {
+            Write-Host "OK: PowerShell update complete. Start a new shell to use version $latestVersion." -ForegroundColor Green
         } else {
-            Write-Host "⚠ PowerShell update did not complete (winget exit code $LASTEXITCODE); continuing with the current shell" -ForegroundColor Yellow
+            Write-Host "WARN: PowerShell update did not complete (winget exit code $($wingetResult.ExitCode)); continuing with the current shell" -ForegroundColor Yellow
         }
     } finally {
         Update-PwshCheckStamp
@@ -191,7 +304,7 @@ if (-not (Test-Path $venvDir)) {
         Write-Error "Failed to create virtual environment"
         exit 1
     }
-    Write-Host "✓ Virtual environment created" -ForegroundColor Green
+    Write-Host "OK: Virtual environment created" -ForegroundColor Green
 }
 
 # Check if requirements.txt exists
@@ -200,7 +313,7 @@ if (-not (Test-Path $requirementsFile)) {
     exit 1
 }
 
-Ensure-PwshVersion
+Ensure-PwshVersion -ForceUpdate:$ForceUpdate
 
 # Activate venv if not already activated
 if (-not $env:VIRTUAL_ENV) {
@@ -247,7 +360,7 @@ if (Test-Path $checkFile) {
 }
 
 if ($skipCheck) {
-    Write-Host "✓ Skipping package check (last check was < 60m ago)" -ForegroundColor Gray
+    Write-Host "OK: Skipping package check (last check was < 60m ago)" -ForegroundColor Gray
     # Ensure profile is always re-sourced during activation to keep it idempotent
     if (Test-Path $profileScript) {
         . $profileScript 2>$null | Out-Null
@@ -308,9 +421,9 @@ if ($mismatches.Count -gt 0) {
         Write-Error "Failed to install packages from requirements.txt"
         exit 1
     }
-    Write-Host "✓ Packages updated" -ForegroundColor Green
+    Write-Host "OK: Packages updated" -ForegroundColor Green
 } else {
-    Write-Host "✓ All packages up to date" -ForegroundColor Green
+    Write-Host "OK: All packages up to date" -ForegroundColor Green
 }
 
 # Install the package in editable mode (activates entry points)
@@ -319,10 +432,10 @@ Push-Location $projectRoot
 try {
     $output = pip install -e . 2>&1
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "✓ Package entry points registered" -ForegroundColor Green
+        Write-Host "OK: Package entry points registered" -ForegroundColor Green
     } else {
         # Don't fail - editable install is optional, user can still run commands
-        Write-Host "⚠ Package install had warnings (non-critical)" -ForegroundColor Yellow
+        Write-Host "WARN: Package install had warnings (non-critical)" -ForegroundColor Yellow
     }
 } finally {
     Pop-Location
@@ -330,4 +443,4 @@ try {
 
 # Update the timestamp for the next check
 New-Item -Path $checkFile -ItemType File -Force | Out-Null
-Write-Host "✓ Package check complete (next check in 60m)" -ForegroundColor Green
+Write-Host "OK: Package check complete (next check in 60m)" -ForegroundColor Green

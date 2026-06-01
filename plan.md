@@ -1,13 +1,16 @@
 # Plan
 
-Last updated: 2026-05-10 14:36:19 +02:00
+Last updated: 2026-05-22 00:00:03 +02:00
 
 ## Current objective
 
-Milestone workflow completed successfully with no auto-fixes required.
+Early-entry Supertrend/EMA50 milestone completed successfully with no auto-fixes required.
 
 ## Current state
 
+- Added a new early-entry strategy, `supertrend_st_crossdown_ema50_slope_turnup.dsl`, that keeps `ema_200_slope > 0`, requires a recent Supertrend crossdown under `ema_50`, and triggers on `ema_50_slope_cross_up`.
+- Verified the new strategy with parser and backtest smoke tests so the slope-turnup trigger fires on the intended bar.
+- Collapsed the user-facing launcher scripts into a single root `run.ps1` frontend, moved the dashboard launcher implementation into `scripts/run_dashboard.ps1`, and redirected the other root `run_*.ps1` entrypoints into `scripts/`.
 - -Summary
 - -Summary
 - -Summary
@@ -42,7 +45,7 @@ Milestone workflow completed successfully with no auto-fixes required.
 - The Swarm tab now starts in a lighter browser-safe density mode: agents per alternating node defaults to `20`, with the hard `5000` ceiling still reachable at high slider values.
 - Tickers and agents now use different canvas marks: tickers stay as round nodes, while agents draw as directional wedge markers with small energy bars.
 - The repo-local vulture quality gate now has a whitelist file for deliberate FastAPI and helper entrypoints, and the nested Windows PowerShell test runner was adjusted to avoid Unicode parsing issues.
-- The default `run_all_tests.ps1` invocation now includes `vulture` so dead-code scanning is part of the main quality pass.
+- The test quality gate now lives under `scripts/run_all_tests.ps1` and is launched from the root `run.ps1 -Tests` frontend, with `vulture` still included in the default pass.
 - The Plotly ribbon chart now uses a slimmer shared left margin so the main graph sits farther left with less dead space.
 - The repo now has a milestone workflow wrapper, `workflow_milestone.ps1`, that runs the test suite, applies light auto-fixes when needed, and handles commit/push for the current branch.
 - Agent motion now uses direct global jumps between real tickers based on each agent's DNA criteria.

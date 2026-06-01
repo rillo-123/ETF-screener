@@ -12,7 +12,8 @@ BEGIN TRIGGER
 TRIGGER: cross_down(st_10_4_is_green, 1.0)  # require a bigger move for trigger
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT: close < ema_30
 END
+
 

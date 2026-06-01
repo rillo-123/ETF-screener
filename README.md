@@ -27,25 +27,25 @@ pip install -r requirements.txt
 
 ### Root Entry Scripts
 
-The main PowerShell entry surface lives at the repo root so you can launch common workflows without changing directories:
+The main PowerShell entry surface is the root `run.ps1` frontend. It routes into the implementation scripts under `scripts/` so you only need one top-level launcher:
 
 ```powershell
-.\run_dashboard.ps1
-.\run_all_tests.ps1
-.\run_discovery.ps1
-.\run_movie_scan.ps1
-.\run_custom_backtest.ps1
-.\run_churn.ps1
-.\run_churn_all.ps1
-.\run_filtered_plots.ps1
-.\run_vulture.ps1
+.\run.ps1
+.\run.ps1 -Screener
+.\run.ps1 -Screener -NoBrowser
+.\run.ps1 -Tests -Parallel
+.\run.ps1 -Discovery -StrategyPath strategies/ -Plot 1
+.\run.ps1 -MovieScan -TickerFilter '%ETF%'
+.\run.ps1 -Backtest -Entry "(ema_10 -gt ema_30)" -Exit "(rsi_14 -gt 75)"
+.\run.ps1 -FilteredPlots EXS1.DE EUNG.DE -Lookback 20
 .\update-devtools.ps1
 .\workflow_milestone.ps1
 .\workflow_update_plan_progress.ps1
 ```
 
-These root scripts forward into the underlying `scripts/` implementations where applicable.
-Use `.\update-devtools.ps1` to install or upgrade stable VS Code or VS Code Insiders, refresh the matching CLI extensions, and update `pwsh` when winget can manage it.
+`.\run.ps1` opens the dashboard by default, `.\run.ps1 -Screener` lands directly on the Screener tab, and `.\run.ps1 -Screener -NoBrowser` keeps the dashboard in the terminal without opening a browser.
+The underlying launcher implementations live under `scripts/`.
+Use `.\update-devtools.ps1` to install or upgrade stable VS Code or VS Code Insiders, refresh the matching CLI extensions, and update `pwsh` when winget can manage it. Add `-ForceUpdate` if you want it to push through updatable packages and prompt for elevation when needed.
 Use `.\workflow_milestone.ps1` for the full test/fix/commit flow, and `.\workflow_update_plan_progress.ps1` when you want to stamp `plan.md` and prepend a fresh progress entry together.
 
 ### Milestone Convention
@@ -53,7 +53,7 @@ Use `.\workflow_milestone.ps1` for the full test/fix/commit flow, and `.\workflo
 In this repo, "set the milestone" means:
 
 1. Update `plan.md` and `progress.md`.
-2. Run the full quality gate with `.\run_all_tests.ps1`.
+2. Run the full quality gate with `.\run.ps1 -Tests`.
 3. Fix remaining bugs until all checks pass.
 4. Commit and push the finished checkpoint.
 
@@ -764,7 +764,7 @@ Popular large-cap XETRA ETFs for swing trading:
 ## Testing
 
 ```powershell
-.\run_all_tests.ps1
+.\run.ps1 -Tests
 ```
 
 Or run specific tests:

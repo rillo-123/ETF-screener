@@ -24,9 +24,10 @@ BEGIN TRIGGER
 TRIGGER: cross_up(close, ema_30)
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT: close < ema_50
 EXIT: ema_30 < ema_50
 EXIT: ema_50 < ema_100
 EXIT: ema_100 < ema_200
 END
+

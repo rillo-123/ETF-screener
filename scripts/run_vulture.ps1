@@ -128,7 +128,7 @@ if ($RunTests) {
     if ($rc1 -ne 0) { Write-Info "Initial vulture run completed with code $rc1" }
 
     # Run the test script if available
-    $testScript = Join-Path $projectRoot 'run_all_tests.ps1'
+    $testScript = Join-Path $projectRoot 'scripts\run_all_tests.ps1'
     if (Test-Path $testScript) {
         Write-Info "Running test suite via $testScript"
         try {

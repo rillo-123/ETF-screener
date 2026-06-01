@@ -16,14 +16,13 @@ class StrategyBlock:
 
 
 _DEFAULT_SECTION_LAYER = {"TRIGGER": 3, "ENTRY": 3, "FILTER": 2, "EXIT": 4}
-_FALLBACK_BLOCK_NAMES = {1: "Context", 2: "Setup", 3: "Trigger", 4: "Invalidate"}
+_FALLBACK_BLOCK_NAMES = {1: "Context", 2: "Setup", 3: "Trigger", 4: "Exit"}
 _CANONICAL_ALIAS = {
     "context": (1, "context"),
     "setup": (2, "setup"),
     "qualify": (2, "setup"),
     "trigger": (3, "trigger"),
     "risk": (4, "risk"),
-    "invalidate": (4, "risk"),
     "entry": (3, "trigger"),
     "exit": (4, "risk"),
 }
@@ -33,7 +32,6 @@ _CANONICAL_PREFIX_ORDER = [
     "qualify",
     "trigger",
     "risk",
-    "invalidate",
     "entry",
     "exit",
 ]
@@ -96,12 +94,14 @@ def parse_strategy_blocks(content: str | None) -> list[StrategyBlock]:
         begin_prefix = re.match(r"^begin\s+(.+)$", line, re.IGNORECASE)
         begin_suffix = re.match(r"^(.+?)\s+begin\b", line, re.IGNORECASE)
 
-        if begin_prefix or begin_suffix:
-            raw_name = (
-                begin_prefix.group(1).strip()
-                if begin_prefix
-                else begin_suffix.group(1).strip()
-            )
+        if begin_prefix:
+            raw_name = begin_prefix.group(1).strip()
+        elif begin_suffix:
+            raw_name = begin_suffix.group(1).strip()
+        else:
+            raw_name = ""
+
+        if raw_name:
             current_block = raw_name
             current_layer, _ = resolve_block(raw_name)
             if raw_name not in block_exprs:

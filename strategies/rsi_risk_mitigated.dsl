@@ -3,7 +3,7 @@
 # Setup: mild pullback condition inside that trend.
 # Trigger: RSI momentum reclaim without requiring extreme oversold.
 # Qualify: require liquidity.
-# Invalidate: define fast invalidation.
+# Exit: define fast exits.
 
 BEGIN CONTEXT
 FILTER: close > ema_200
@@ -22,6 +22,7 @@ BEGIN QUALIFY
 FILTER: volume > 75K
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT: rsi_14 > 70 OR close < ema_200 OR cross_down(rsi_14, 45)
 END
+

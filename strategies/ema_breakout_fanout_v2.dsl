@@ -24,6 +24,7 @@ BEGIN TRIGGER
 TRIGGER: cross_down(ema_20, ema_30)
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT:  cross_down(ema_20, ema_100)
 END
+

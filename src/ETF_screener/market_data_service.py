@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -18,6 +19,8 @@ from ETF_screener.indicators import add_indicators
 from ETF_screener.shortlist_engine import ETFShortlistEngine
 from ETF_screener.storage import ParquetStorage
 from ETF_screener.yfinance_fetcher import YFinanceFetcher
+
+logger = logging.getLogger(__name__)
 
 
 class MarketDataRefresher:
@@ -232,6 +235,8 @@ class MarketDataRefresher:
             fetched = self.fetcher.fetch_historical_data(ticker, days=depth)
             merged = self._normalize_price_frame(fetched)
         else:
+            if latest_day is None:
+                raise RuntimeError("Expected a latest market date when refreshing")
             fetch_start = latest_day - timedelta(days=max(5, int(warmup_days)))
             fetched = self.fetcher.fetch_historical_data(
                 ticker,
@@ -351,6 +356,16 @@ class MarketDataRefresher:
         progress_callback=None,
     ) -> dict[str, Any]:
         job = "market-refresh"
+        source_name = self.etfs_file.name.lower()
+        logger.info(
+            "Market refresh started: source=%s force=%s stale_after_days=%s depth=%s max_workers=%s rebuild_shortlist=%s",
+            source_name,
+            force,
+            stale_after_days,
+            depth,
+            max_workers,
+            rebuild_shortlist,
+        )
         promoted = self.delisting_tracker.promote_aged_missing(threshold_days=14)
         if promoted:
             logger.info("Promoted %d missing tickers to blacklist", len(promoted))
@@ -376,6 +391,7 @@ class MarketDataRefresher:
                 to_refresh.append(ticker)
 
         if not to_refresh:
+            logger.info("Market refresh planning complete: nothing to refresh")
             self._emit_progress(
                 progress_callback,
                 job=job,
@@ -397,11 +413,11 @@ class MarketDataRefresher:
             return status
 
         worker_count = min(max(1, int(max_workers)), max(2, os.cpu_count() or 4, 8))
-        source_name = self.etfs_file.name.lower()
         sequential_refresh = False
         if source_name == "sweden.json":
-            worker_count = 1
-            sequential_refresh = True
+            # Sweden tickers are numerous enough that the default worker pool
+            # is a better tradeoff than the old single-worker throttle.
+            worker_count = max(worker_count, min(8, len(to_refresh)))
         elif source_name == "custom_ticker_list.json" and len(to_refresh) <= 100:
             worker_count = min(worker_count, 2)
             sequential_refresh = True
@@ -410,6 +426,13 @@ class MarketDataRefresher:
         errors: list[dict[str, str]] = []
         total = len(to_refresh)
         completed = 0
+        logger.info(
+            "Market refresh planning complete: tracked=%d queued=%d worker_mode=%s worker_count=%d",
+            len(tracked),
+            total,
+            "sequential" if sequential_refresh else "parallel",
+            worker_count,
+        )
 
         self._emit_progress(
             progress_callback,
@@ -420,8 +443,10 @@ class MarketDataRefresher:
             label="Market Refresh",
             active=True,
         )
+        logger.info("Market refresh phase: refreshing %d tickers", total)
 
         if sequential_refresh:
+            logger.info("Market refresh worker mode: sequential")
             for ticker in to_refresh:
                 try:
                     symbol, df = self._build_refresh_frame(
@@ -457,6 +482,7 @@ class MarketDataRefresher:
                     if completed < total:
                         time.sleep(0.1)
         else:
+            logger.info("Market refresh worker mode: parallel (%d workers)", worker_count)
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
                 futures = {
                     executor.submit(
@@ -501,6 +527,7 @@ class MarketDataRefresher:
 
         shortlist_rebuilt = False
         if rebuild_shortlist:
+            logger.info("Market refresh phase: rebuilding shortlist artifacts")
             self._emit_progress(
                 progress_callback,
                 job=job,
@@ -526,6 +553,7 @@ class MarketDataRefresher:
                 label="Market Refresh",
                 active=True,
             )
+            logger.info("Market refresh phase complete: shortlist rebuilt")
 
         status = self.get_status(stale_after_days=stale_after_days)
         status.update(
@@ -536,6 +564,14 @@ class MarketDataRefresher:
                 "shortlist_rebuilt": shortlist_rebuilt,
                 "errors": errors[:25],
             }
+        )
+        logger.info(
+            "Market refresh finished: requested=%d refreshed=%d failed=%d shortlist_rebuilt=%s latest_market_date=%s",
+            status["requested"],
+            refreshed,
+            failed,
+            shortlist_rebuilt,
+            status.get("latest_market_date"),
         )
         self._emit_progress(
             progress_callback,

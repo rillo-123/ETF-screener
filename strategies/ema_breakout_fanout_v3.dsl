@@ -24,6 +24,7 @@ BEGIN TRIGGER
 TRIGGER:  between(ema_20 <= ema_30, 3, now)
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT:  cross_down(ema_20, ema_100)
 END
+
