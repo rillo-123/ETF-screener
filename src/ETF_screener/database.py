@@ -56,7 +56,9 @@ class ETFDatabase:
                     f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
                 )
 
-    def _retry_locked_write(self, write_fn, *, retries: int = 5, delay: float = 0.15) -> None:
+    def _retry_locked_write(
+        self, write_fn, *, retries: int = 5, delay: float = 0.15
+    ) -> None:
         """Retry a short-lived SQLite lock with a fresh connection."""
         last_error: sqlite3.OperationalError | None = None
         for attempt in range(retries):
@@ -282,6 +284,7 @@ class ETFDatabase:
             st_lower: Supertrend lower band
             signal: Trading signal
         """
+
         def _write(conn: sqlite3.Connection) -> None:
             cursor = conn.cursor()
             cursor.execute(

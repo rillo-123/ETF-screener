@@ -5,6 +5,7 @@
 import inspect
 import asyncio
 import hashlib
+import os
 import random
 import re
 import json
@@ -789,6 +790,21 @@ def _parse_strategy_selection(strategies: Optional[str]) -> list[str]:
     ]
 
 
+def _backtest_matrix_worker_plan(total_strategies: int) -> tuple[int, int]:
+    """Bound nested backtest parallelism so "all strategies" stays stable."""
+    safe_total = max(1, int(total_strategies))
+    cpu_budget = max(1, min(os.cpu_count() or 4, 8))
+    strategy_concurrency = min(safe_total, max(1, min(4, cpu_budget)))
+    if safe_total == 1:
+        ticker_workers = min(4, cpu_budget)
+    else:
+        ticker_workers = max(
+            1,
+            min(4, cpu_budget // max(1, strategy_concurrency)),
+        )
+    return strategy_concurrency, ticker_workers
+
+
 @lru_cache(maxsize=4)
 def _cached_dashboard_tickers(
     db_path: str, latest_market_date: str | None
@@ -812,6 +828,74 @@ def _cached_dashboard_tickers(
         return tuple(
             str(ticker) for ticker in tickers if str(ticker).upper() not in blacklist
         )
+
+
+@lru_cache(maxsize=4)
+def _cached_dashboard_universe(
+    db_path: str, latest_market_date: str | None
+) -> tuple[dict[str, object], ...]:
+    """Cache the list-builder ticker universe with metadata until market data advances."""
+    tickers = _cached_dashboard_tickers(db_path, latest_market_date)
+    metadata_map = _cached_etf_metadata_map()
+    db_metadata: dict[str, dict[str, object]] = {}
+
+    if tickers:
+        with ETFDatabase(db_path=db_path) as db:
+            conn = db._get_connection()
+            metadata_df = pd.read_sql_query(
+                "SELECT ticker, name, issuer, asset_class, region, source FROM etf_metadata",
+                conn,
+            )
+        db_metadata = {
+            str(row.get("ticker", "")).upper(): {
+                "name": row.get("name"),
+                "issuer": row.get("issuer"),
+                "asset_class": row.get("asset_class"),
+                "region": row.get("region"),
+                "source": row.get("source"),
+            }
+            for _, row in metadata_df.iterrows()
+            if str(row.get("ticker", "")).strip()
+        }
+
+    items: list[dict[str, object]] = []
+    for ticker in tickers:
+        upper_ticker = str(ticker).upper()
+        db_info = db_metadata.get(upper_ticker, {})
+        fallback_info = metadata_map.get(upper_ticker, {})
+        source_hint = str(
+            db_info.get("source") or fallback_info.get("source") or ""
+        ).lower()
+        exchange = _backtest_ticker_exchange_bucket(upper_ticker)
+        if "sweden" in source_hint:
+            exchange = "sweden"
+        elif "xetra" in source_hint or "etfs.json" in source_hint:
+            exchange = "xetra"
+
+        name = (
+            str(
+                db_info.get("name") or fallback_info.get("name") or upper_ticker
+            ).strip()
+            or upper_ticker
+        )
+        items.append(
+            {
+                "ticker": upper_ticker,
+                "name": name,
+                "label": name,
+                "issuer": str(
+                    db_info.get("issuer") or fallback_info.get("issuer") or ""
+                ).strip(),
+                "asset_class": str(
+                    db_info.get("asset_class") or fallback_info.get("asset_class") or ""
+                ).strip(),
+                "region": str(
+                    db_info.get("region") or fallback_info.get("region") or ""
+                ).strip(),
+                "exchange": exchange,
+            }
+        )
+    return tuple(items)
 
 
 @lru_cache(maxsize=1)
@@ -2955,6 +3039,17 @@ async def backtest_matrix_view(
     )
     estimated_ticker_count = len(ticker_universe)
     total_work_items = total_strategies * estimated_ticker_count
+    strategy_concurrency, ticker_workers = _backtest_matrix_worker_plan(
+        total_strategies
+    )
+    logger.info(
+        "Backtest matrix worker plan: strategies=%d strategy_concurrency=%d ticker_workers=%d estimated_tickers=%d",
+        total_strategies,
+        strategy_concurrency,
+        ticker_workers,
+        estimated_ticker_count,
+    )
+    strategy_worker_semaphore = asyncio.Semaphore(strategy_concurrency)
     run_id = _new_backtest_race_run(strategy_names)
     _append_backtest_race_event(
         run_id,
@@ -3131,243 +3226,113 @@ async def backtest_matrix_view(
         strategy_state_lock = Lock()
 
         async def _run_strategy_worker(index: int, strategy_name: str):
-            current_index = index - 1
-            start_detail = f"{strategy_name} ({index}/{total_strategies})"
-            loaded_from_eval_cache = False
-            _append_backtest_race_event(
-                run_id,
-                "lane_started",
-                lane=strategy_name,
-                payload={
-                    "strategy": strategy_name,
-                    "index": index,
-                    "work_items": "ticker_universe",
-                },
-                active=True,
-            )
-            with strategy_state_lock:
-                strategy_summaries[current_index].update(
-                    {
-                        "status": "running",
-                        "progress_pct": 0.0,
-                        "detail": start_detail,
-                    }
-                )
-            _publish_race_state(
-                active_strategy=strategy_name,
-                current_index=current_index,
-                current_pct=0.0,
-                phase="running",
-                detail=start_detail,
-                active=True,
-            )
-
-            def _strategy_progress_callback(
-                state: dict[str, object],
-                *,
-                _index=current_index,
-                _strategy_name=strategy_name,
-            ) -> None:
-                if not isinstance(state, dict):
-                    return
-                phase = str(state.get("phase") or "running")
-                active = bool(state.get("active", True))
-                detail = (
-                    str(state.get("detail") or "").strip()
-                    or f"{_strategy_name} running"
-                )
-                pct_value = _safe_float(state.get("pct"), 0.0) or 0.0
-                payload = state.get("payload")
-                ticker_result = (
-                    payload.get("ticker_result") if isinstance(payload, dict) else None
-                )
-                nonlocal loaded_from_eval_cache
-                if phase == "done" and not active and not isinstance(
-                    ticker_result, dict
-                ):
-                    loaded_from_eval_cache = True
-                with strategy_state_lock:
-                    if isinstance(payload, dict):
-                        _apply_backtest_live_ticker_result(
-                            strategy_summaries[_index],
-                            live_strategy_stats[_index],
-                            ticker_result,
-                        )
-                    strategy_summaries[_index]["status"] = (
-                        "done" if phase == "done" or not active else "running"
-                    )
-                    strategy_summaries[_index]["progress_pct"] = round(
-                        max(0.0, min(100.0, float(pct_value))), 2
-                    )
-                    completed_tickers = int(
-                        strategy_summaries[_index].get("completed_tickers") or 0
-                    )
-                    total_tickers = int(
-                        strategy_summaries[_index].get("total_tickers") or 0
-                    )
-                    last_ticker = str(
-                        strategy_summaries[_index].get("last_ticker") or ""
-                    )
-                    if last_ticker and total_tickers:
-                        strategy_summaries[_index][
-                            "detail"
-                        ] = f"{completed_tickers}/{total_tickers} tickers, last {last_ticker}"
-                    else:
-                        strategy_summaries[_index]["detail"] = detail
-                    lane_snapshot = dict(strategy_summaries[_index])
-                if isinstance(ticker_result, dict):
-                    ticker = str(ticker_result.get("ticker") or "").strip()
-                    trades = _finite_number(ticker_result.get("trades"), 0.0)
-                    event_payload = {
-                        **ticker_result,
-                        "strategy": _strategy_name,
-                        "progress_pct": round(
-                            max(0.0, min(100.0, float(pct_value))), 2
-                        ),
-                        "scored": not bool(ticker_result.get("error"))
-                        and float(trades) > 0,
-                        "no_trade": not bool(ticker_result.get("error"))
-                        and float(trades) <= 0,
-                        "cache_hit": False,
-                        "work_key": _work_item_key(
-                            run_id=run_id,
-                            strategy_name=_strategy_name,
-                            ticker=ticker,
-                            params={
-                                "signal_days": signal_window_days,
-                                "scan_scope": scan_scope,
-                                "exchange": exchange,
-                            },
-                        ),
-                        "lane": lane_snapshot,
-                    }
-                    _append_backtest_race_event(
-                        run_id,
-                        "ticker_done",
-                        lane=_strategy_name,
-                        payload=event_payload,
-                        active=True,
-                    )
-                elif phase == "done" and not active:
-                    _append_backtest_race_event(
-                        run_id,
-                        "lane_cached",
-                        lane=_strategy_name,
-                        payload={
-                            "strategy": _strategy_name,
-                            "detail": detail,
-                            "progress_pct": round(
-                                max(0.0, min(100.0, float(pct_value))), 2
-                            ),
-                            "cache_hit": True,
-                            "work_key": _work_item_key(
-                                run_id=run_id,
-                                strategy_name=_strategy_name,
-                                params={
-                                    "signal_days": signal_window_days,
-                                    "scan_scope": scan_scope,
-                                    "exchange": exchange,
-                                },
-                            ),
-                        },
-                        active=True,
-                    )
-                _publish_race_state(
-                    active_strategy=_strategy_name,
-                    current_index=_index,
-                    current_pct=float(pct_value),
-                    phase=phase,
-                    detail=str(strategy_summaries[_index].get("detail") or detail),
-                    active=active,
-                )
-
-            strat_path = Path("strategies") / f"{strategy_name}.dsl"
-            evaluate_kwargs = {
-                "strategy_path": strat_path.as_posix(),
-                "strategy_name": strategy_name,
-                "dsl_content": None,
-                "progress_callback": _strategy_progress_callback,
-                "since_days": signal_window_days,
-                "scan_scope": scan_scope,
-                "exchange": exchange,
-                "ticker_list": ticker_list,
-                "max_workers": 4,
-            }
-            try:
-                df = await asyncio.to_thread(
-                    _evaluate_strategy_frame, **evaluate_kwargs
-                )
-            except Exception as exc:
-                logger.error(
-                    "Backtest worker failed for %s: %s",
-                    strategy_name,
-                    exc,
-                    exc_info=True,
+            async with strategy_worker_semaphore:
+                current_index = index - 1
+                start_detail = f"{strategy_name} ({index}/{total_strategies})"
+                loaded_from_eval_cache = False
+                _append_backtest_race_event(
+                    run_id,
+                    "lane_started",
+                    lane=strategy_name,
+                    payload={
+                        "strategy": strategy_name,
+                        "index": index,
+                        "work_items": "ticker_universe",
+                    },
+                    active=True,
                 )
                 with strategy_state_lock:
                     strategy_summaries[current_index].update(
                         {
-                            "status": "failed",
-                            "detail": str(exc),
-                            "progress_pct": 100.0,
+                            "status": "running",
+                            "progress_pct": 0.0,
+                            "detail": start_detail,
                         }
                     )
                 _publish_race_state(
                     active_strategy=strategy_name,
                     current_index=current_index,
-                    current_pct=100.0,
-                    phase="failed",
-                    detail=str(exc),
-                    active=False,
-                    error=str(exc),
+                    current_pct=0.0,
+                    phase="running",
+                    detail=start_detail,
+                    active=True,
                 )
-                return current_index, pd.DataFrame(), exc
 
-            if loaded_from_eval_cache and not df.empty:
-                total_cached_rows = int(len(df))
-                for completed, (_, row) in enumerate(df.iterrows(), start=1):
-                    ticker_result = _backtest_ticker_result_from_series(
-                        row,
-                        completed=completed,
-                        total=total_cached_rows,
+                def _strategy_progress_callback(
+                    state: dict[str, object],
+                    *,
+                    _index=current_index,
+                    _strategy_name=strategy_name,
+                ) -> None:
+                    if not isinstance(state, dict):
+                        return
+                    phase = str(state.get("phase") or "running")
+                    active = bool(state.get("active", True))
+                    detail = (
+                        str(state.get("detail") or "").strip()
+                        or f"{_strategy_name} running"
                     )
-                    pct_value = 5.0 + (
-                        (completed / max(1, total_cached_rows)) * 88.0
+                    pct_value = _safe_float(state.get("pct"), 0.0) or 0.0
+                    payload = state.get("payload")
+                    ticker_result = (
+                        payload.get("ticker_result")
+                        if isinstance(payload, dict)
+                        else None
                     )
+                    nonlocal loaded_from_eval_cache
+                    if (
+                        phase == "done"
+                        and not active
+                        and not isinstance(ticker_result, dict)
+                    ):
+                        loaded_from_eval_cache = True
                     with strategy_state_lock:
-                        _apply_backtest_live_ticker_result(
-                            strategy_summaries[current_index],
-                            live_strategy_stats[current_index],
-                            ticker_result,
+                        if isinstance(payload, dict):
+                            _apply_backtest_live_ticker_result(
+                                strategy_summaries[_index],
+                                live_strategy_stats[_index],
+                                ticker_result,
+                            )
+                        strategy_summaries[_index]["status"] = (
+                            "done" if phase == "done" or not active else "running"
                         )
-                        strategy_summaries[current_index]["status"] = "running"
-                        strategy_summaries[current_index]["progress_pct"] = round(
+                        strategy_summaries[_index]["progress_pct"] = round(
                             max(0.0, min(100.0, float(pct_value))), 2
                         )
-                        strategy_summaries[current_index][
-                            "detail"
-                        ] = f"{completed}/{total_cached_rows} cached rows, last {ticker_result['ticker']}"
-                        lane_snapshot = dict(strategy_summaries[current_index])
-                    _append_backtest_race_event(
-                        run_id,
-                        "ticker_done",
-                        lane=strategy_name,
-                        payload={
+                        completed_tickers = int(
+                            strategy_summaries[_index].get("completed_tickers") or 0
+                        )
+                        total_tickers = int(
+                            strategy_summaries[_index].get("total_tickers") or 0
+                        )
+                        last_ticker = str(
+                            strategy_summaries[_index].get("last_ticker") or ""
+                        )
+                        if last_ticker and total_tickers:
+                            strategy_summaries[_index][
+                                "detail"
+                            ] = f"{completed_tickers}/{total_tickers} tickers, last {last_ticker}"
+                        else:
+                            strategy_summaries[_index]["detail"] = detail
+                        lane_snapshot = dict(strategy_summaries[_index])
+                    if isinstance(ticker_result, dict):
+                        ticker = str(ticker_result.get("ticker") or "").strip()
+                        trades = _finite_number(ticker_result.get("trades"), 0.0)
+                        event_payload = {
                             **ticker_result,
-                            "strategy": strategy_name,
+                            "strategy": _strategy_name,
                             "progress_pct": round(
                                 max(0.0, min(100.0, float(pct_value))), 2
                             ),
                             "scored": not bool(ticker_result.get("error"))
-                            and _finite_number(ticker_result.get("trades"), 0.0) > 0,
+                            and float(trades) > 0,
                             "no_trade": not bool(ticker_result.get("error"))
-                            and _finite_number(ticker_result.get("trades"), 0.0)
-                            <= 0,
-                            "cache_hit": True,
+                            and float(trades) <= 0,
+                            "cache_hit": False,
                             "work_key": _work_item_key(
                                 run_id=run_id,
-                                strategy_name=strategy_name,
-                                ticker=ticker_result.get("ticker"),
+                                strategy_name=_strategy_name,
+                                ticker=ticker,
                                 params={
                                     "signal_days": signal_window_days,
                                     "scan_scope": scan_scope,
@@ -3375,139 +3340,280 @@ async def backtest_matrix_view(
                                 },
                             ),
                             "lane": lane_snapshot,
-                        },
-                        active=True,
+                        }
+                        _append_backtest_race_event(
+                            run_id,
+                            "ticker_done",
+                            lane=_strategy_name,
+                            payload=event_payload,
+                            active=True,
+                        )
+                    elif phase == "done" and not active:
+                        _append_backtest_race_event(
+                            run_id,
+                            "lane_cached",
+                            lane=_strategy_name,
+                            payload={
+                                "strategy": _strategy_name,
+                                "detail": detail,
+                                "progress_pct": round(
+                                    max(0.0, min(100.0, float(pct_value))), 2
+                                ),
+                                "cache_hit": True,
+                                "work_key": _work_item_key(
+                                    run_id=run_id,
+                                    strategy_name=_strategy_name,
+                                    params={
+                                        "signal_days": signal_window_days,
+                                        "scan_scope": scan_scope,
+                                        "exchange": exchange,
+                                    },
+                                ),
+                            },
+                            active=True,
+                        )
+                    _publish_race_state(
+                        active_strategy=_strategy_name,
+                        current_index=_index,
+                        current_pct=float(pct_value),
+                        phase=phase,
+                        detail=str(strategy_summaries[_index].get("detail") or detail),
+                        active=active,
                     )
+
+                strat_path = Path("strategies") / f"{strategy_name}.dsl"
+                evaluate_kwargs = {
+                    "strategy_path": strat_path.as_posix(),
+                    "strategy_name": strategy_name,
+                    "dsl_content": None,
+                    "progress_callback": _strategy_progress_callback,
+                    "since_days": signal_window_days,
+                    "scan_scope": scan_scope,
+                    "exchange": exchange,
+                    "ticker_list": ticker_list,
+                    "max_workers": ticker_workers,
+                }
+                try:
+                    df = await asyncio.to_thread(
+                        _evaluate_strategy_frame, **evaluate_kwargs
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Backtest worker failed for %s: %s",
+                        strategy_name,
+                        exc,
+                        exc_info=True,
+                    )
+                    with strategy_state_lock:
+                        strategy_summaries[current_index].update(
+                            {
+                                "status": "failed",
+                                "detail": str(exc),
+                                "progress_pct": 100.0,
+                            }
+                        )
                     _publish_race_state(
                         active_strategy=strategy_name,
                         current_index=current_index,
-                        current_pct=float(pct_value),
-                        phase="running",
-                        detail=strategy_summaries[current_index]["detail"],
-                        active=True,
+                        current_pct=100.0,
+                        phase="failed",
+                        detail=str(exc),
+                        active=False,
+                        error=str(exc),
                     )
+                    return current_index, pd.DataFrame(), exc
 
-            strategy_summary = _backtest_strategy_summary_from_frame(
-                strategy_name,
-                df,
-                index=index,
-                status="done",
-                progress_pct=100.0,
-                detail=f"{len(df)} rows scored" if not df.empty else "No scored rows",
-            )
-            with strategy_state_lock:
-                completed_tickers = int(
-                    strategy_summaries[current_index].get("completed_tickers") or 0
+                if loaded_from_eval_cache and not df.empty:
+                    total_cached_rows = int(len(df))
+                    for completed, (_, row) in enumerate(df.iterrows(), start=1):
+                        ticker_result = _backtest_ticker_result_from_series(
+                            row,
+                            completed=completed,
+                            total=total_cached_rows,
+                        )
+                        pct_value = 5.0 + (
+                            (completed / max(1, total_cached_rows)) * 88.0
+                        )
+                        with strategy_state_lock:
+                            _apply_backtest_live_ticker_result(
+                                strategy_summaries[current_index],
+                                live_strategy_stats[current_index],
+                                ticker_result,
+                            )
+                            strategy_summaries[current_index]["status"] = "running"
+                            strategy_summaries[current_index]["progress_pct"] = round(
+                                max(0.0, min(100.0, float(pct_value))), 2
+                            )
+                            strategy_summaries[current_index][
+                                "detail"
+                            ] = f"{completed}/{total_cached_rows} cached rows, last {ticker_result['ticker']}"
+                            lane_snapshot = dict(strategy_summaries[current_index])
+                        _append_backtest_race_event(
+                            run_id,
+                            "ticker_done",
+                            lane=strategy_name,
+                            payload={
+                                **ticker_result,
+                                "strategy": strategy_name,
+                                "progress_pct": round(
+                                    max(0.0, min(100.0, float(pct_value))), 2
+                                ),
+                                "scored": not bool(ticker_result.get("error"))
+                                and _finite_number(ticker_result.get("trades"), 0.0)
+                                > 0,
+                                "no_trade": not bool(ticker_result.get("error"))
+                                and _finite_number(ticker_result.get("trades"), 0.0)
+                                <= 0,
+                                "cache_hit": True,
+                                "work_key": _work_item_key(
+                                    run_id=run_id,
+                                    strategy_name=strategy_name,
+                                    ticker=ticker_result.get("ticker"),
+                                    params={
+                                        "signal_days": signal_window_days,
+                                        "scan_scope": scan_scope,
+                                        "exchange": exchange,
+                                    },
+                                ),
+                                "lane": lane_snapshot,
+                            },
+                            active=True,
+                        )
+                        _publish_race_state(
+                            active_strategy=strategy_name,
+                            current_index=current_index,
+                            current_pct=float(pct_value),
+                            phase="running",
+                            detail=strategy_summaries[current_index]["detail"],
+                            active=True,
+                        )
+
+                strategy_summary = _backtest_strategy_summary_from_frame(
+                    strategy_name,
+                    df,
+                    index=index,
+                    status="done",
+                    progress_pct=100.0,
+                    detail=(
+                        f"{len(df)} rows scored" if not df.empty else "No scored rows"
+                    ),
                 )
-                processed_tickers = int(
-                    strategy_summaries[current_index].get("processed_tickers") or 0
-                )
-                scored_tickers = int(
-                    strategy_summaries[current_index].get("scored_tickers") or 0
-                )
-                no_trade_tickers = int(
-                    strategy_summaries[current_index].get("no_trade_tickers") or 0
-                )
-                error_tickers = int(
-                    strategy_summaries[current_index].get("error_tickers") or 0
-                )
-                total_tickers = int(
-                    strategy_summaries[current_index].get("total_tickers") or 0
-                )
-                best_ticker = str(
-                    strategy_summaries[current_index].get("best_ticker") or ""
-                )
-                best_return_pct = _finite_number(
-                    strategy_summaries[current_index].get("best_return_pct"), 0.0
-                )
-                strategy_summaries[current_index].update(strategy_summary)
-                if completed_tickers <= 0:
+                with strategy_state_lock:
                     completed_tickers = int(
-                        strategy_summary.get("completed_tickers") or 0
+                        strategy_summaries[current_index].get("completed_tickers") or 0
                     )
-                if processed_tickers <= 0:
                     processed_tickers = int(
-                        strategy_summary.get("processed_tickers") or completed_tickers
+                        strategy_summaries[current_index].get("processed_tickers") or 0
                     )
-                if scored_tickers <= 0:
-                    scored_tickers = int(strategy_summary.get("scored_tickers") or 0)
-                if no_trade_tickers <= 0:
-                    no_trade_tickers = int(
-                        strategy_summary.get("no_trade_tickers") or 0
-                    )
-                if error_tickers <= 0:
-                    error_tickers = int(strategy_summary.get("error_tickers") or 0)
-                if total_tickers <= 0:
-                    total_tickers = int(strategy_summary.get("total_tickers") or 0)
-                if not best_ticker:
-                    best_ticker = str(strategy_summary.get("best_ticker") or "")
-                if best_return_pct == 0.0:
-                    best_return_pct = _finite_number(
-                        strategy_summary.get("best_return_pct"), 0.0
-                    )
-                strategy_summaries[current_index][
-                    "completed_tickers"
-                ] = completed_tickers
-                strategy_summaries[current_index][
-                    "processed_tickers"
-                ] = processed_tickers
-                strategy_summaries[current_index]["scored_tickers"] = scored_tickers
-                strategy_summaries[current_index][
-                    "no_trade_tickers"
-                ] = no_trade_tickers
-                strategy_summaries[current_index]["error_tickers"] = error_tickers
-                strategy_summaries[current_index]["total_tickers"] = total_tickers
-                strategy_summaries[current_index]["best_ticker"] = best_ticker
-                strategy_summaries[current_index]["best_return_pct"] = round(
-                    best_return_pct, 2
-                )
-                strategy_summaries[current_index]["status"] = "done"
-                strategy_summaries[current_index]["progress_pct"] = 100.0
-                strategy_summaries[current_index]["detail"] = (
-                    f"{len(df)} rows scored" if not df.empty else "No scored rows"
-                )
-            _publish_race_state(
-                active_strategy=strategy_name,
-                current_index=current_index,
-                current_pct=100.0,
-                phase="done",
-                detail=strategy_summaries[current_index]["detail"],
-                active=False,
-            )
-            _append_backtest_race_event(
-                run_id,
-                "lane_done",
-                lane=strategy_name,
-                payload={
-                    "strategy": strategy_name,
-                    "index": index,
-                    "rows_scored": int(len(df)),
-                    "ticker_count": int(
-                        strategy_summaries[current_index].get("total_tickers") or 0
-                    ),
-                    "completed_tickers": int(
-                        strategy_summaries[current_index].get("completed_tickers")
-                        or 0
-                    ),
-                    "processed_tickers": int(
-                        strategy_summaries[current_index].get("processed_tickers")
-                        or 0
-                    ),
-                    "scored_tickers": int(
+                    scored_tickers = int(
                         strategy_summaries[current_index].get("scored_tickers") or 0
-                    ),
-                    "no_trade_tickers": int(
-                        strategy_summaries[current_index].get("no_trade_tickers")
-                        or 0
-                    ),
-                    "error_tickers": int(
+                    )
+                    no_trade_tickers = int(
+                        strategy_summaries[current_index].get("no_trade_tickers") or 0
+                    )
+                    error_tickers = int(
                         strategy_summaries[current_index].get("error_tickers") or 0
-                    ),
-                    "lane": dict(strategy_summaries[current_index]),
-                },
-                active=True,
-            )
-            return current_index, df, None
+                    )
+                    total_tickers = int(
+                        strategy_summaries[current_index].get("total_tickers") or 0
+                    )
+                    best_ticker = str(
+                        strategy_summaries[current_index].get("best_ticker") or ""
+                    )
+                    best_return_pct = _finite_number(
+                        strategy_summaries[current_index].get("best_return_pct"), 0.0
+                    )
+                    strategy_summaries[current_index].update(strategy_summary)
+                    if completed_tickers <= 0:
+                        completed_tickers = int(
+                            strategy_summary.get("completed_tickers") or 0
+                        )
+                    if processed_tickers <= 0:
+                        processed_tickers = int(
+                            strategy_summary.get("processed_tickers")
+                            or completed_tickers
+                        )
+                    if scored_tickers <= 0:
+                        scored_tickers = int(
+                            strategy_summary.get("scored_tickers") or 0
+                        )
+                    if no_trade_tickers <= 0:
+                        no_trade_tickers = int(
+                            strategy_summary.get("no_trade_tickers") or 0
+                        )
+                    if error_tickers <= 0:
+                        error_tickers = int(strategy_summary.get("error_tickers") or 0)
+                    if total_tickers <= 0:
+                        total_tickers = int(strategy_summary.get("total_tickers") or 0)
+                    if not best_ticker:
+                        best_ticker = str(strategy_summary.get("best_ticker") or "")
+                    if best_return_pct == 0.0:
+                        best_return_pct = _finite_number(
+                            strategy_summary.get("best_return_pct"), 0.0
+                        )
+                    strategy_summaries[current_index][
+                        "completed_tickers"
+                    ] = completed_tickers
+                    strategy_summaries[current_index][
+                        "processed_tickers"
+                    ] = processed_tickers
+                    strategy_summaries[current_index]["scored_tickers"] = scored_tickers
+                    strategy_summaries[current_index][
+                        "no_trade_tickers"
+                    ] = no_trade_tickers
+                    strategy_summaries[current_index]["error_tickers"] = error_tickers
+                    strategy_summaries[current_index]["total_tickers"] = total_tickers
+                    strategy_summaries[current_index]["best_ticker"] = best_ticker
+                    strategy_summaries[current_index]["best_return_pct"] = round(
+                        best_return_pct, 2
+                    )
+                    strategy_summaries[current_index]["status"] = "done"
+                    strategy_summaries[current_index]["progress_pct"] = 100.0
+                    strategy_summaries[current_index]["detail"] = (
+                        f"{len(df)} rows scored" if not df.empty else "No scored rows"
+                    )
+                _publish_race_state(
+                    active_strategy=strategy_name,
+                    current_index=current_index,
+                    current_pct=100.0,
+                    phase="done",
+                    detail=strategy_summaries[current_index]["detail"],
+                    active=False,
+                )
+                _append_backtest_race_event(
+                    run_id,
+                    "lane_done",
+                    lane=strategy_name,
+                    payload={
+                        "strategy": strategy_name,
+                        "index": index,
+                        "rows_scored": int(len(df)),
+                        "ticker_count": int(
+                            strategy_summaries[current_index].get("total_tickers") or 0
+                        ),
+                        "completed_tickers": int(
+                            strategy_summaries[current_index].get("completed_tickers")
+                            or 0
+                        ),
+                        "processed_tickers": int(
+                            strategy_summaries[current_index].get("processed_tickers")
+                            or 0
+                        ),
+                        "scored_tickers": int(
+                            strategy_summaries[current_index].get("scored_tickers") or 0
+                        ),
+                        "no_trade_tickers": int(
+                            strategy_summaries[current_index].get("no_trade_tickers")
+                            or 0
+                        ),
+                        "error_tickers": int(
+                            strategy_summaries[current_index].get("error_tickers") or 0
+                        ),
+                        "lane": dict(strategy_summaries[current_index]),
+                    },
+                    active=True,
+                )
+                return current_index, df, None
 
         tasks = [
             asyncio.create_task(_run_strategy_worker(index, strategy_name))

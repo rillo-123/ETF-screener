@@ -82,7 +82,9 @@ def test_supertrend_red_to_green_ema50_crossup_strategy_triggers_on_crossup():
 
     dates = pd.date_range(start="2024-01-01", periods=10)
     close = pd.Series([99.0, 99.5, 99.2, 99.1, 99.0, 101.0, 102.0, 103.0, 104.0, 105.0])
-    st_10_4 = pd.Series([99.0, 99.1, 99.2, 99.3, 99.4, 100.3, 100.6, 100.9, 101.2, 101.5])
+    st_10_4 = pd.Series(
+        [99.0, 99.1, 99.2, 99.3, 99.4, 100.3, 100.6, 100.9, 101.2, 101.5]
+    )
 
     df = pd.DataFrame(
         {
@@ -94,7 +96,18 @@ def test_supertrend_red_to_green_ema50_crossup_strategy_triggers_on_crossup():
             "volume": [100000.0] * 10,
             "st_10_4": st_10_4,
             "ema_50": [100.0] * 10,
-            "ema_200": [190.0, 190.5, 191.0, 191.5, 192.0, 192.5, 193.0, 193.5, 194.0, 194.5],
+            "ema_200": [
+                190.0,
+                190.5,
+                191.0,
+                191.5,
+                192.0,
+                192.5,
+                193.0,
+                193.5,
+                194.0,
+                194.5,
+            ],
         }
     )
 
@@ -259,6 +272,7 @@ def test_evaluate_strategy_mask_materializes_shifted_supertrend_aliases():
 
 def test_evaluate_strategies_reuses_cached_result(monkeypatch, tmp_path):
     calls = {"run_parallel_backtest": 0}
+    captured_executor_modes = []
 
     class FakeDb:
         def get_latest_market_date(self):
@@ -276,6 +290,7 @@ def test_evaluate_strategies_reuses_cached_result(monkeypatch, tmp_path):
 
         def run_parallel_backtest(self, *args, **kwargs):
             calls["run_parallel_backtest"] += 1
+            captured_executor_modes.append(kwargs.get("executor_mode"))
             df = pd.DataFrame(
                 {
                     "close": [9.0, 10.0, 11.0, 12.0, 13.0],
@@ -325,6 +340,7 @@ def test_evaluate_strategies_reuses_cached_result(monkeypatch, tmp_path):
     second = evaluate_strategies(**kwargs)
 
     assert calls["run_parallel_backtest"] == 1
+    assert captured_executor_modes == ["thread"]
     assert not first.empty
     assert not second.empty
     assert first.drop(columns=["df"]).equals(second.drop(columns=["df"]))
@@ -366,4 +382,3 @@ def test_evaluate_strategies_rejects_entry_only_dsl(monkeypatch, tmp_path):
             dsl_content="TRIGGER: close > ema_20",
             strategy_name="NoExit",
         )
-

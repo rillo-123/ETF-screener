@@ -1,4 +1,17 @@
+
 # Progress
+
+## 2026-06-03 00:00:00 +02:00
+
+- Stabilized the dashboard backtester for large saved-strategy runs, especially the `all_strategies=true` edge case.
+- Added a bounded backtest worker plan in `src/ETF_screener/dashboard/app_fast.py` so strategy fan-out and per-strategy ticker workers stay capped instead of multiplying into too many concurrent subprocesses.
+- Changed dashboard strategy evaluation in `src/ETF_screener/scripts/churn_strategies.py` to force thread-mode execution, which avoids the Windows `ProcessPoolExecutor` failure path for GUI-triggered DSL backtests.
+- Added a fallback in `src/ETF_screener/backtester.py` so a broken process pool degrades into inline execution for the remaining tickers instead of aborting the whole run.
+- Tightened regression coverage with new backtester, dashboard API, churn-strategy, and Playwright checks for the process-pool failure path and the all-strategies request shape.
+- Cleared the remaining `mypy` failure from the June 2, 2026 test log by fixing the inline fallback return typing in `src/ETF_screener/backtester.py`.
+- Verified with targeted `pytest`, `mypy`, `black --check`, and `ruff` runs; the live failure we traced in the old log was coming from a stale dashboard process still serving pre-patch code.
+- Current status: the code path on disk is patched and verified; after restarting the dashboard server, the backtester should no longer fail with the broken process-pool popup for the same all-strategies scenario.
+- Next resume point: restart the live dashboard server, rerun the all-strategies backtest once, and if anything still fails inspect the newest `logs/debug_*.log` rather than the stale June 2 process log.
 
 ## 2026-05-22 00:00:03 +02:00
 

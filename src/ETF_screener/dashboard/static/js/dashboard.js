@@ -7489,15 +7489,15 @@ let backtestSourceMode = "saved";
         .filter((point) => Number.isFinite(point.trade_gain_pct));
       const points = realPoints.length > 0
         ? realPoints
-        : Array.from({ length: aggregate.trades }, (_, index) => ({
-          trade_index: index + 1,
-          trade_gain_pct: aggregate.trades > 0 ? Number(aggregate.return_pct || 0) / aggregate.trades : 0,
+        : [{
+          trade_index: 1,
+          trade_gain_pct: Number(aggregate.return_pct || 0),
           buy_date: "",
           sell_date: "",
           buy_price: 0,
           sell_price: 0,
           estimated: true,
-        }));
+        }];
       return points.map((point) => ({
         ...aggregate,
         ...point,
@@ -9409,7 +9409,6 @@ let backtestSourceMode = "saved";
 
     Object.assign(window, {
       applyDsl,
-      applyBacktestRaceEvent,
       applyJobProgressSnapshot,
       closeModifyModal,
       closeListEditorModal,
@@ -9422,17 +9421,9 @@ let backtestSourceMode = "saved";
       mergeBacktestScatterRows,
       prepareBacktestLiveResults,
       renderBacktestScatter,
-      renderBacktestRace,
-      pauseBacktestRacePlayback,
-      pollBacktestRaceEvents,
-      resetBacktestRaceState,
-      startBacktestRacePlayback,
-      restartBacktestRacePlayback,
-      stopBacktestRacePlayback,
       saveListEditor,
       selectBacktestStrategies,
       updateBacktestRunButtonState,
-      updateBacktestRaceFromSnapshot,
       modifyStrategy,
       openSelectedSwarmTicker,
       refreshMarketData,

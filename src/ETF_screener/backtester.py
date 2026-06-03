@@ -292,12 +292,16 @@ class Backtester:
                 trade_points.append(
                     {
                         "trade_index": len(trade_points) + 1,
-                        "buy_date": pd.Timestamp(buy_trade["date"]).isoformat()
-                        if not pd.isna(buy_trade["date"])
-                        else "",
-                        "sell_date": pd.Timestamp(dates[i]).isoformat()
-                        if not pd.isna(dates[i])
-                        else "",
+                        "buy_date": (
+                            pd.Timestamp(buy_trade["date"]).isoformat()
+                            if not pd.isna(buy_trade["date"])
+                            else ""
+                        ),
+                        "sell_date": (
+                            pd.Timestamp(dates[i]).isoformat()
+                            if not pd.isna(dates[i])
+                            else ""
+                        ),
                         "buy_price": round(float(buy_trade["price"]), 6),
                         "sell_price": round(float(sell_price), 6),
                         "gain_pct": round(float(profit * 100.0), 4),
@@ -933,12 +937,15 @@ class Backtester:
         progress_label=None,
         task_timeout_seconds=120,
         progress_callback=None,
+        executor_mode="auto",
     ):
         import concurrent.futures
         import os
         import time
+        from concurrent.futures.process import BrokenProcessPool
 
         results = []
+        tickers = list(tickers)
         total = len(tickers)
         desc = progress_label or getattr(base_strategy, "__name__", "Backtest")
         if max_workers is None:
@@ -985,13 +992,116 @@ class Backtester:
                 )
             except Exception:
                 pass
+        normalized_executor_mode = str(executor_mode or "auto").strip().lower()
+        if normalized_executor_mode not in {"auto", "thread", "process"}:
+            raise ValueError(f"Unsupported executor_mode: {executor_mode}")
+
         use_processes = False
-        if (
+        if normalized_executor_mode == "process":
+            use_processes = True
+        elif normalized_executor_mode == "thread":
+            use_processes = False
+        elif (
             strategy_kwargs
             and "entry_script" in strategy_kwargs
             and "exit_script" in strategy_kwargs
         ):
             use_processes = True
+
+        def _is_broken_process_pool(exc: Exception) -> bool:
+            if isinstance(exc, BrokenProcessPool):
+                return True
+            message = str(exc).lower()
+            return (
+                "process pool is not usable anymore" in message
+                or "child process terminated abruptly" in message
+            )
+
+        def _publish_ticker_progress(
+            ticker: str,
+            result: dict[str, object],
+            completed_count: int,
+        ) -> None:
+            if pbar is not None:
+                pbar.update(1)
+            if progress_callback is not None:
+                pct = 5.0 + ((completed_count / max(1, total)) * 88.0)
+                ticker_payload = {
+                    "ticker": ticker,
+                    "completed": completed_count,
+                    "total": total,
+                }
+                ticker_payload.update(
+                    {
+                        "ticker": result.get("ticker", ticker),
+                        "error": result.get("error"),
+                        "return_pct": result.get("total_return_pct"),
+                        "win_rate_pct": result.get("win_rate_pct"),
+                        "profit_factor": result.get("profit_factor"),
+                        "sharpe": result.get("sharpe_ratio"),
+                        "max_dd_pct": result.get("max_drawdown_pct"),
+                        "trades": result.get("num_trades"),
+                        "trade_points": result.get("trade_points") or [],
+                    }
+                )
+                try:
+                    progress_callback(
+                        {
+                            "job": "backtest",
+                            "phase": "running",
+                            "pct": pct,
+                            "detail": f"{completed_count}/{total} tickers complete",
+                            "label": progress_label or "Backtest",
+                            "active": True,
+                            "payload": {
+                                "completed": completed_count,
+                                "total": total,
+                                "ticker_result": ticker_payload,
+                            },
+                        }
+                    )
+                except Exception:
+                    pass
+
+        def _run_ticker_inline(ticker: str) -> dict[str, object]:
+            try:
+                if use_processes:
+                    result = self.run_strategy(
+                        ticker=ticker,
+                        strategy_func=self.scripted_strategy,
+                        days=days,
+                        indicators_setup=indicators_setup,
+                        strategy_kwargs=strategy_kwargs,
+                    )
+                else:
+                    result = self.run_strategy(
+                        ticker=ticker,
+                        strategy_func=base_strategy,
+                        days=days,
+                        indicators_setup=indicators_setup,
+                        strategy_kwargs=strategy_kwargs,
+                    )
+                return dict(result)
+            except Exception as exc:
+                return {"ticker": ticker, "error": str(exc)}
+
+        def _finish_inline_fallback(
+            remaining_tickers: list[str], completed_count: int
+        ) -> int:
+            logger.warning(
+                "Process pool became unusable; falling back to inline execution for %d remaining tickers",
+                len(remaining_tickers),
+            )
+            for fallback_ticker in remaining_tickers:
+                inline_result = _run_ticker_inline(fallback_ticker)
+                results.append(inline_result)
+                completed_count += 1
+                _publish_ticker_progress(
+                    fallback_ticker,
+                    inline_result,
+                    completed_count,
+                )
+            return completed_count
 
         executor_cls = (
             concurrent.futures.ProcessPoolExecutor
@@ -1013,28 +1123,40 @@ class Backtester:
                 strategy_kwargs,
             )
             future_to_ticker = {}
+            completed = 0
+            submit_failed = False
             for t in tickers:
-                if use_processes:
-                    future = executor.submit(worker, t, *worker_args)
-                else:
-                    future = executor.submit(
-                        worker,
-                        t,
-                        *worker_args[:4],
-                        base_strategy,
-                        *worker_args[4:],
-                    )
+                try:
+                    if use_processes:
+                        future = executor.submit(worker, t, *worker_args)
+                    else:
+                        future = executor.submit(
+                            worker,
+                            t,
+                            *worker_args[:4],
+                            base_strategy,
+                            *worker_args[4:],
+                        )
+                except Exception as exc:
+                    if use_processes and _is_broken_process_pool(exc):
+                        submit_failed = True
+                        completed = _finish_inline_fallback(
+                            list(tickers),
+                            completed,
+                        )
+                        break
+                    raise
                 future_to_ticker[future] = t
             running_times = {}
             pending = set(future_to_ticker)
-            completed = 0
-            while pending:
+            while pending and not submit_failed:
                 done, _ = concurrent.futures.wait(
                     pending,
                     timeout=1.0,
                     return_when=concurrent.futures.FIRST_COMPLETED,
                 )
                 now = time.monotonic()
+                fell_back_to_inline = False
 
                 for future in pending:
                     if future.running() and future not in running_times:
@@ -1047,51 +1169,31 @@ class Backtester:
                     try:
                         result = future.result()
                     except Exception as exc:
+                        if use_processes and _is_broken_process_pool(exc):
+                            remaining_tickers = [
+                                queued_ticker
+                                for queued_ticker in tickers
+                                if queued_ticker == ticker
+                                or queued_ticker
+                                in {future_to_ticker[item] for item in pending}
+                            ]
+                            for pending_future in list(pending):
+                                pending_future.cancel()
+                            pending.clear()
+                            running_times.clear()
+                            completed = _finish_inline_fallback(
+                                remaining_tickers,
+                                completed,
+                            )
+                            fell_back_to_inline = True
+                            break
                         result = {"ticker": ticker, "error": str(exc)}
                     results.append(result)
                     completed += 1
+                    _publish_ticker_progress(ticker, result, completed)
 
-                    if pbar is not None:
-                        pbar.update(1)
-                    if progress_callback is not None:
-                        pct = 5.0 + ((completed / max(1, total)) * 88.0)
-                        ticker_payload = {
-                            "ticker": ticker,
-                            "completed": completed,
-                            "total": total,
-                        }
-                        if isinstance(result, dict):
-                            ticker_payload.update(
-                                {
-                                    "ticker": result.get("ticker", ticker),
-                                    "error": result.get("error"),
-                                    "return_pct": result.get("total_return_pct"),
-                                    "win_rate_pct": result.get("win_rate_pct"),
-                                    "profit_factor": result.get("profit_factor"),
-                                    "sharpe": result.get("sharpe_ratio"),
-                                    "max_dd_pct": result.get("max_drawdown_pct"),
-                                    "trades": result.get("num_trades"),
-                                    "trade_points": result.get("trade_points") or [],
-                                }
-                            )
-                        try:
-                            progress_callback(
-                                {
-                                    "job": "backtest",
-                                    "phase": "running",
-                                    "pct": pct,
-                                    "detail": f"{completed}/{total} tickers complete",
-                                    "label": progress_label or "Backtest",
-                                    "active": True,
-                                    "payload": {
-                                        "completed": completed,
-                                        "total": total,
-                                        "ticker_result": ticker_payload,
-                                    },
-                                }
-                            )
-                        except Exception:
-                            pass
+                if fell_back_to_inline:
+                    break
 
                 if task_timeout_seconds is not None and pending:
                     timed_out = [
@@ -1116,33 +1218,14 @@ class Backtester:
                             }
                         )
                         completed += 1
-                        if pbar is not None:
-                            pbar.update(1)
-                        if progress_callback is not None:
-                            pct = 5.0 + ((completed / max(1, total)) * 88.0)
-                            try:
-                                progress_callback(
-                                    {
-                                        "job": "backtest",
-                                        "phase": "running",
-                                        "pct": pct,
-                                        "detail": f"{completed}/{total} tickers complete",
-                                        "label": progress_label or "Backtest",
-                                        "active": True,
-                                        "payload": {
-                                            "completed": completed,
-                                            "total": total,
-                                            "ticker_result": {
-                                                "ticker": ticker,
-                                                "completed": completed,
-                                                "total": total,
-                                                "error": f"Timed out after {task_timeout_seconds} seconds",
-                                            },
-                                        },
-                                    }
-                                )
-                            except Exception:
-                                pass
+                        _publish_ticker_progress(
+                            ticker,
+                            {
+                                "ticker": ticker,
+                                "error": f"Timed out after {task_timeout_seconds} seconds",
+                            },
+                            completed,
+                        )
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
 

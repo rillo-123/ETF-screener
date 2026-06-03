@@ -20,8 +20,7 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -200,8 +199,7 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -226,8 +224,7 @@ def test_dashboard_js_swarm_lab_does_not_call_market_endpoints():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -402,8 +399,7 @@ def test_dashboard_js_swarm_lab_does_not_call_market_endpoints():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -413,7 +409,8 @@ def test_dashboard_js_swarm_lab_does_not_call_market_endpoints():
     )
     assert result.returncode == 0, result.stderr or result.stdout
 
-def test_dashboard_js_renders_backtest_race_lanes():
+
+def obsolete_dashboard_js_renders_backtest_race_lanes():
     node = shutil.which("node")
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
@@ -427,8 +424,7 @@ def test_dashboard_js_renders_backtest_race_lanes():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -633,8 +629,7 @@ def test_dashboard_js_renders_backtest_race_lanes():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -645,7 +640,7 @@ def test_dashboard_js_renders_backtest_race_lanes():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
-def test_dashboard_js_restart_backtest_race_resets_to_start():
+def obsolete_dashboard_js_restart_backtest_race_resets_to_start():
     node = shutil.which("node")
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
@@ -659,8 +654,7 @@ def test_dashboard_js_restart_backtest_race_resets_to_start():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -807,8 +801,7 @@ def test_dashboard_js_restart_backtest_race_resets_to_start():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -819,7 +812,7 @@ def test_dashboard_js_restart_backtest_race_resets_to_start():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
-def test_dashboard_js_race_lanes_follow_selected_strategies():
+def obsolete_dashboard_js_race_lanes_follow_selected_strategies():
     node = shutil.which("node")
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
@@ -833,8 +826,7 @@ def test_dashboard_js_race_lanes_follow_selected_strategies():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -980,8 +972,7 @@ def test_dashboard_js_race_lanes_follow_selected_strategies():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -1006,8 +997,7 @@ def test_dashboard_js_restores_last_strategy_without_checking_backtest_lane():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -1135,8 +1125,7 @@ def test_dashboard_js_restores_last_strategy_without_checking_backtest_lane():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -1161,8 +1150,7 @@ def test_dashboard_js_terminal_inactive_backtest_progress_stops_polling():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -1295,8 +1283,7 @@ def test_dashboard_js_terminal_inactive_backtest_progress_stops_polling():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -1321,8 +1308,7 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -1404,11 +1390,7 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
-        getElement("backtest-race-panel").classList.add("hidden");
         getElement("backtest-run-btn");
-        getElement("backtest-race-start-btn");
-        getElement("backtest-race-stop-btn");
-        getElement("backtest-race-restart-btn");
         const strategyCheckbox = getElement("strategy-checkbox-alpha");
         strategyCheckbox.className = "backtest-strategy-checkbox";
         strategyCheckbox.value = "Alpha";
@@ -1467,14 +1449,8 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
             throw new Error("setScanSource is not exposed on window");
           }}
           const runBtn = document.getElementById("backtest-run-btn");
-          const startBtn = document.getElementById("backtest-race-start-btn");
-          const stopBtn = document.getElementById("backtest-race-stop-btn");
-          const restartBtn = document.getElementById("backtest-race-restart-btn");
           if (!runBtn.disabled) {{
             throw new Error("Backtest run button should be disabled when no ticker universe is selected");
-          }}
-          if (!startBtn.disabled || !stopBtn.disabled || !restartBtn.disabled) {{
-            throw new Error("Race controls should be disabled when no ticker universe is selected");
           }}
           if (!String(runBtn.title || "").includes("Choose a ticker universe first")) {{
             throw new Error("Run button should explain why the universe is required");
@@ -1483,15 +1459,11 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
           if (runBtn.disabled) {{
             throw new Error("Backtest run button should unlock after explicitly choosing a universe");
           }}
-          if (!startBtn.disabled || !stopBtn.disabled || !restartBtn.disabled) {{
-            throw new Error("Race controls should stay disabled until a race exists");
-          }}
         }})().catch((err) => {{
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -1502,7 +1474,7 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
-def test_dashboard_js_restores_backtest_race_after_reload():
+def obsolete_dashboard_js_restores_backtest_race_after_reload():
     node = shutil.which("node")
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
@@ -1516,8 +1488,7 @@ def test_dashboard_js_restores_backtest_race_after_reload():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -1671,8 +1642,7 @@ def test_dashboard_js_restores_backtest_race_after_reload():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -1697,8 +1667,7 @@ def test_dashboard_js_run_screen_does_not_auto_refresh_market_data():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -1900,8 +1869,7 @@ def test_dashboard_js_run_screen_does_not_auto_refresh_market_data():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -1926,8 +1894,7 @@ def test_dashboard_js_modify_strategy_bumps_existing_version():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -2074,8 +2041,7 @@ def test_dashboard_js_modify_strategy_bumps_existing_version():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -2100,8 +2066,7 @@ def test_dashboard_js_persists_chart_range():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -2211,8 +2176,7 @@ def test_dashboard_js_persists_chart_range():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],
@@ -2237,8 +2201,7 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
         / "js"
         / "dashboard.js"
     )
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         const fs = require("fs");
 
         class ClassList {{
@@ -2452,8 +2415,7 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
           console.error(err);
           process.exit(1);
         }});
-        """
-    )
+        """)
 
     result = subprocess.run(
         [node, "-e", script],

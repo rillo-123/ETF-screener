@@ -143,6 +143,7 @@ def test_market_data_refresher_refreshes_and_rebuilds_shortlist(tmp_path, monkey
         def fetch_historical_data(
             self, symbol, days=365, start_date=None, end_date=None
         ):
+            del end_date
             dates = pd.date_range(end=pd.Timestamp(date.today()), periods=5, freq="B")
             return pd.DataFrame(
                 {
@@ -160,6 +161,7 @@ def test_market_data_refresher_refreshes_and_rebuilds_shortlist(tmp_path, monkey
 
     class FakeShortlistEngine:
         def __init__(self, db_path=None, metadata_path=None, storage=None):
+            del metadata_path
             self.db_path = db_path
 
         def build_shortlist(self, max_workers=None):
@@ -211,6 +213,7 @@ def test_market_data_refresher_uses_parallel_workers_for_sweden(tmp_path, monkey
         def fetch_historical_data(
             self, symbol, days=365, start_date=None, end_date=None
         ):
+            del end_date
             dates = pd.date_range(end=pd.Timestamp(date.today()), periods=5, freq="B")
             return pd.DataFrame(
                 {
@@ -233,7 +236,9 @@ def test_market_data_refresher_uses_parallel_workers_for_sweden(tmp_path, monkey
         def __enter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        def __exit__(self, exc_type, exc, _tb):
+            del exc_type
+            del exc
             return False
 
         def submit(self, fn, *args, **kwargs):
@@ -296,6 +301,7 @@ def test_market_data_refresher_zero_day_threshold_tops_up_yesterday(tmp_path):
         def fetch_historical_data(
             self, symbol, days=365, start_date=None, end_date=None
         ):
+            del end_date
             calls.append(symbol)
             return pd.DataFrame(
                 {
@@ -361,6 +367,7 @@ def test_market_data_refresher_uses_delta_window_for_stale_ticker(tmp_path):
         def fetch_historical_data(
             self, symbol, days=365, start_date=None, end_date=None
         ):
+            del end_date
             calls.append(
                 {
                     "symbol": symbol,
@@ -435,6 +442,7 @@ def test_market_data_refresher_preserves_timezone_aware_fresh_rows(tmp_path):
         def fetch_historical_data(
             self, symbol, days=365, start_date=None, end_date=None
         ):
+            del end_date
             fresh_dates = pd.date_range(
                 start=pd.Timestamp(
                     date.today() - timedelta(days=2), tz="Europe/Berlin"

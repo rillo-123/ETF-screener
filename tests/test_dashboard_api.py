@@ -1,5 +1,7 @@
 import json
 import sqlite3
+import threading
+import time
 from io import StringIO
 from unittest.mock import patch
 
@@ -78,7 +80,7 @@ def test_tab_bar_visible():
     assert ">Discovery<" not in html
     assert 'id="backtest-chart"' in html
     assert 'id="backtest-table-body"' in html
-    assert 'id="backtest-race-fuel"' in html
+    assert 'id="backtest-race-fuel"' not in html
     assert "Signal Window" in html
     assert 'id="shortlist-grid"' in html
     assert 'id="swarm-canvas"' in html
@@ -612,7 +614,9 @@ def test_backtest_matrix_returns_race_payload(monkeypatch):
     events_response = client.get(f"/api/backtest/events?run_id={data['run_id']}")
     assert events_response.status_code == 200
     events = events_response.json()["events"]
-    assert [event["seq"] for event in events] == sorted(event["seq"] for event in events)
+    assert [event["seq"] for event in events] == sorted(
+        event["seq"] for event in events
+    )
     assert any(event["type"] == "run_started" for event in events)
     assert any(
         event["type"] == "lane_started" and event["lane"] == "buy_the_dip"
@@ -1466,6 +1470,112 @@ def test_backtest_matrix_summary_ignores_zero_trade_rows(monkeypatch, tmp_path):
     assert data["summary"]["avg_return"] == 12.5
     assert data["summary"]["trades"] == 5
     assert data["strategy_summaries"][0]["trades"] == 5
+
+
+def test_backtest_matrix_all_strategies_limits_nested_parallelism(
+    monkeypatch, tmp_path
+):
+    strategies = ["alpha", "beta", "gamma", "delta", "epsilon"]
+    strategies_dir = tmp_path / "strategies"
+    strategies_dir.mkdir()
+    for name in strategies:
+        (strategies_dir / f"{name}.dsl").write_text(
+            "TRIGGER: close > ema_20\nEXIT: close < ema_20\n",
+            encoding="utf-8",
+        )
+
+    class FakeDb:
+        db_path = "fake-db"
+
+        def get_latest_market_date(self):
+            return "2026-06-02"
+
+    state = {
+        "calls": [],
+        "active": 0,
+        "max_active": 0,
+    }
+    lock = threading.Lock()
+    first_batch_ready = threading.Event()
+    release_first_batch = threading.Event()
+
+    def release_when_batch_ready():
+        assert first_batch_ready.wait(timeout=1.0)
+        time.sleep(0.05)
+        release_first_batch.set()
+
+    releaser = threading.Thread(target=release_when_batch_ready, daemon=True)
+    releaser.start()
+
+    def fake_evaluate(
+        strategy_path=None,
+        strategy_name=None,
+        exchange=None,
+        scan_scope=None,
+        ticker_list=None,
+        since_days=None,
+        progress_callback=None,
+        dsl_content=None,
+        max_workers=None,
+    ):
+        with lock:
+            state["calls"].append(
+                {
+                    "strategy_name": strategy_name,
+                    "max_workers": max_workers,
+                }
+            )
+            state["active"] += 1
+            state["max_active"] = max(state["max_active"], state["active"])
+            if state["active"] >= 4:
+                first_batch_ready.set()
+        release_first_batch.wait(timeout=1.0)
+        with lock:
+            state["active"] -= 1
+        return pd.DataFrame(
+            [
+                {
+                    "Ticker": f"{strategy_name.upper()}.DE",
+                    "Strategy": strategy_name,
+                    "Quality Score": 10.0,
+                    "Return (%)": 12.0,
+                    "Win Rate (%)": 60.0,
+                    "Profit Factor": 1.5,
+                    "Sharpe": 1.2,
+                    "Max DD (%)": 5.0,
+                    "Trades": 4,
+                    "Days Since Entry": 2,
+                }
+            ]
+        )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", lambda: FakeDb())
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.get_strategies",
+        lambda: list(strategies),
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._cached_backtest_universe",
+        lambda *args, **kwargs: ("AAA.DE", "BBB.DE"),
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies",
+        fake_evaluate,
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.os.cpu_count",
+        lambda: 8,
+    )
+
+    response = client.get("/api/backtest/matrix?all_strategies=true")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]["strategy_count"] == len(strategies)
+    assert {call["strategy_name"] for call in state["calls"]} == set(strategies)
+    assert all(call["max_workers"] == 2 for call in state["calls"])
+    assert state["max_active"] <= 4
 
 
 def test_backtest_endpoint_prefers_editor_dsl(monkeypatch, tmp_path):

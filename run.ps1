@@ -3,6 +3,7 @@ param(
     [switch]$Dashboard,
     [switch]$Screener,
     [switch]$Tests,
+    [Alias('StratFinder')]
     [switch]$Discovery,
     [switch]$MovieScan,
     [switch]$Backtest,
@@ -43,7 +44,6 @@ param(
     [string]$Exit = "(rsi_14 -gt 75)",
     [string]$Filter = "",
     [switch]$OpenResult,
-    [switch]$NoBrowser,
 
     [int]$MinConfidence = 70,
     [string]$OutFile = "logs/vulture_report.txt",
@@ -82,9 +82,10 @@ Single root launcher for the ETF Screener repo.
 
 Usage:
   .\run.ps1                 # Start the dashboard server
-  .\run.ps1 -Screener       # Start the dashboard server; use your existing browser at /?tab=screener
+  .\run.ps1 -Screener       # Start the dashboard server; open /?tab=screener manually
   .\run.ps1 -Tests -Parallel
   .\run.ps1 -Discovery -StrategyPath strategies/ -Plot 1
+  .\run.ps1 -StratFinder -StrategyPath strategies/ -Plot 1
   .\run.ps1 -MovieScan -TickerFilter '%ETF%'
   .\run.ps1 -Backtest -Entry "(ema_10 -gt ema_30)" -Exit "(rsi_14 -gt 75)"
   .\run.ps1 -FilteredPlots EXS1.DE EUNG.DE -Lookback 20
@@ -116,6 +117,9 @@ if ($launcherModes.Count -gt 1) {
 
 switch ($launcherModes[0]) {
     'dashboard' {
+        if ($Screener) {
+            Write-Host "Dashboard will be available at http://127.0.0.1:5000/?tab=screener" -ForegroundColor Cyan
+        }
         Invoke-Launcher -RelativePath 'scripts/run_dashboard.ps1'
     }
     'tests' {

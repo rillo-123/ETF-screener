@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 
 from ETF_screener.config_loader import get_paths
 from ETF_screener.backtester import (
@@ -16,6 +17,7 @@ from typing import Dict, List
 
 BLACKLIST_PATH = Path("config") / "blacklist.json"
 STRATEGY_EVAL_CACHE_VERSION = "strategy_eval_v2"
+logger = logging.getLogger(__name__)
 
 
 def _strip_dsl_comment(text: str) -> str:
@@ -275,7 +277,9 @@ def load_dsl_file(file_path):
 def _prepare_scan_expression(expr: str) -> str:
     """Convert DSL-style expressions into a pandas.eval-friendly form."""
     s = " ".join(
-        part for part in (_strip_dsl_comment(line) for line in str(expr or "").splitlines()) if part
+        part
+        for part in (_strip_dsl_comment(line) for line in str(expr or "").splitlines())
+        if part
     ).strip()
     if not s:
         return "False"
@@ -426,18 +430,20 @@ def _prepare_scan_expression(expr: str) -> str:
     )
 
 
-def _ensure_eval_helper_columns(eval_df: pd.DataFrame, prepared_expr: str) -> pd.DataFrame:
+def _ensure_eval_helper_columns(
+    eval_df: pd.DataFrame, prepared_expr: str
+) -> pd.DataFrame:
     """Materialize helper columns referenced by normalized DSL expressions."""
-    identifiers = set(re.findall(r"\b[a-z_][a-z0-9_]*\b", str(prepared_expr or "").lower()))
+    identifiers = set(
+        re.findall(r"\b[a-z_][a-z0-9_]*\b", str(prepared_expr or "").lower())
+    )
     alias_names = set(identifiers)
     for name in identifiers:
         if re.search(r"_d\d+$", name):
             alias_names.add(re.sub(r"_d\d+$", "", name))
 
     for name in list(alias_names):
-        match = re.fullmatch(
-            r"((?:st|supertrend)_(\d+)_(\d+)_is_(green|red))", name
-        )
+        match = re.fullmatch(r"((?:st|supertrend)_(\d+)_(\d+)_is_(green|red))", name)
         if match is None:
             continue
         if name in eval_df.columns:
@@ -454,14 +460,13 @@ def _ensure_eval_helper_columns(eval_df: pd.DataFrame, prepared_expr: str) -> pd
         else:
             eval_df[name] = eval_df["close"] < eval_df[st_col]
 
-    shifted = sorted(
-        (
-            (name, re.sub(r"_d\d+$", "", name), int(re.search(r"_d(\d+)$", name).group(1)))
-            for name in identifiers
-            if re.search(r"_d\d+$", name)
-        ),
-        key=lambda item: item[2],
-    )
+    shifted: list[tuple[str, str, int]] = []
+    for name in identifiers:
+        match = re.search(r"_d(\d+)$", name)
+        if not match:
+            continue
+        shifted.append((name, re.sub(r"_d\d+$", "", name), int(match.group(1))))
+    shifted.sort(key=lambda item: item[2])
     for name, base, delay in shifted:
         if name in eval_df.columns or base not in eval_df.columns:
             continue
@@ -838,6 +843,7 @@ def evaluate_strategies(
             days=500,
             strategy_kwargs=strat.get("kwargs"),
             max_workers=max_workers,
+            executor_mode="thread",
             show_progress=False,
             progress_label=f"{strat['name']} ({len(tickers)} tickers)",
             progress_callback=progress_callback,

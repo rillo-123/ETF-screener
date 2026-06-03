@@ -482,7 +482,9 @@ class MarketDataRefresher:
                     if completed < total:
                         time.sleep(0.1)
         else:
-            logger.info("Market refresh worker mode: parallel (%d workers)", worker_count)
+            logger.info(
+                "Market refresh worker mode: parallel (%d workers)", worker_count
+            )
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
                 futures = {
                     executor.submit(

@@ -748,9 +748,7 @@ END
     fig_json = json.loads(fig.to_json())
 
     exit_y = _trace_y(
-        next(
-            t for t in fig_json["data"] if t.get("name", "").startswith("Exit - ")
-        )
+        next(t for t in fig_json["data"] if t.get("name", "").startswith("Exit - "))
     )
     aggregated_y = _trace_y(
         next(t for t in fig_json["data"] if t.get("name") == "Aggregated")
@@ -886,9 +884,7 @@ END
     context_traces = [
         name for name in trace_names if str(name).startswith("Context - ")
     ]
-    exit_traces = [
-        name for name in trace_names if str(name).startswith("Exit - ")
-    ]
+    exit_traces = [name for name in trace_names if str(name).startswith("Exit - ")]
 
     assert context_traces, "Expected context ribbon trace"
     assert exit_traces, "Expected exit ribbon trace"
@@ -1128,4 +1124,3 @@ END
     assert "TSI" in trace_names
     assert "TSI Signal" in trace_names
     assert any(name.startswith("EMA 50") for name in trace_names)
-

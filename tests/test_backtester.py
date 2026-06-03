@@ -1,6 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
+from concurrent.futures.process import BrokenProcessPool
 from ETF_screener.backtester import Backtester, rsi_strategy, ema_cross_strategy
 
 
@@ -228,6 +229,86 @@ class TestBacktester:
         res = bt.run_strategy("AAPL", dummy_strat, indicators_setup=None)
         assert "num_trades" in res
         assert res["num_trades"] == 1
+
+    def test_run_parallel_backtest_falls_back_when_process_pool_breaks(
+        self, monkeypatch
+    ):
+        bt = Backtester(db_path="fake.db")
+        inline_calls = []
+
+        def fake_run_strategy(
+            self,
+            ticker,
+            strategy_func,
+            days=365,
+            indicators_setup=None,
+            strategy_kwargs=None,
+        ):
+            inline_calls.append(ticker)
+            return {
+                "ticker": ticker,
+                "total_return_pct": 2.5,
+                "win_rate_pct": 50.0,
+                "profit_factor": 1.1,
+                "sharpe_ratio": 0.7,
+                "max_drawdown_pct": 1.5,
+                "num_trades": 1,
+            }
+
+        class FakeFuture:
+            def __init__(self, ticker):
+                self.ticker = ticker
+
+            def running(self):
+                return True
+
+            def result(self):
+                raise BrokenProcessPool(
+                    "A child process terminated abruptly, the process pool is not usable anymore"
+                )
+
+            def cancel(self):
+                return True
+
+        class FakeExecutor:
+            def __init__(self, *args, **kwargs):
+                self.futures = []
+
+            def submit(self, worker, ticker, *args):
+                future = FakeFuture(ticker)
+                self.futures.append(future)
+                return future
+
+            def shutdown(self, wait=False, cancel_futures=True):
+                return None
+
+        def fake_wait(pending, timeout=None, return_when=None):
+            if not pending:
+                return set(), set()
+            first = next(iter(pending))
+            return {first}, set()
+
+        monkeypatch.setattr(Backtester, "run_strategy", fake_run_strategy)
+        monkeypatch.setattr(
+            "concurrent.futures.ProcessPoolExecutor",
+            FakeExecutor,
+        )
+        monkeypatch.setattr("concurrent.futures.wait", fake_wait)
+
+        results = bt.run_parallel_backtest(
+            ["AAA.DE", "BBB.DE"],
+            base_strategy=lambda df: df,
+            strategy_kwargs={
+                "entry_script": "close > ema_20",
+                "exit_script": "close < ema_20",
+            },
+            max_workers=2,
+            show_progress=False,
+        )
+
+        assert [result["ticker"] for result in results] == ["AAA.DE", "BBB.DE"]
+        assert all("error" not in result for result in results)
+        assert inline_calls == ["AAA.DE", "BBB.DE"]
 
     def test_scripted_strategy_handles_st_breakdown_cross_logic(self, bt):
         dates = pd.date_range(start="2024-01-01", periods=8)
