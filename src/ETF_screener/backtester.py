@@ -13,6 +13,7 @@ from ETF_screener.config_loader import get_paths
 from ETF_screener.database import ETFDatabase
 from ETF_screener.indicators import (
     calculate_adx,
+    calculate_anchored_vwap,
     calculate_ema,
     calculate_linreg_slope,
     calculate_macd,
@@ -476,6 +477,21 @@ class Backtester:
                         calculate_rsi,
                         base_c,
                         period=int(base_c.split("_")[1]),
+                    )
+                elif re.fullmatch(
+                    r"(?:avwap|anchored_vwap)_(low|high)_\d+",
+                    base_c,
+                ):
+                    parts = base_c.split("_")
+                    anchor = parts[-2]
+                    lookback = int(parts[-1])
+                    df_eval[base_c] = manager.get_indicator(
+                        df,
+                        ticker,
+                        calculate_anchored_vwap,
+                        f"anchored_vwap_{anchor}_{lookback}",
+                        anchor=anchor,
+                        lookback=lookback,
                     )
                 elif re.match(r"rsi_ema_\d+_\d+", base_c):
                     # rsi_ema_14_10

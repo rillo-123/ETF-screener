@@ -98,6 +98,8 @@ You can use any of the following base variables. Many support automatic period c
 | :--- | :--- | :--- |
 | `close`, `open`, `high`, `low`, `volume` | Standard OHLCV price data | `close > open` |
 | `ema_[N]` | Exponential Moving Average of period N | `ema_50`, `ema_200` |
+| `avwap_low_[N]` | Anchored VWAP from the lowest low in the last N bars | `avwap_low_20` |
+| `avwap_high_[N]` | Anchored VWAP from the highest high in the last N bars | `avwap_high_20` |
 | `rsi_[N]` | Relative Strength Index of period N | `rsi_14 < 30` |
 | `macd`, `macd_signal`, `macd_hist` | MACD components (12, 26, 9) | `macd > 0` |
 | `stoch_k`, `stoch_d` | Full Stochastic (14, 3) | `stoch_k > 80` |
@@ -105,6 +107,11 @@ You can use any of the following base variables. Many support automatic period c
 | `st_is_green` | Boolean alias for `close > supertrend` | `TRIGGER: st_is_green` |
 | `st_is_red` | Boolean alias for `close < supertrend` | `TRIGGER: st_is_red` |
 | `adx` | Average Directional Index (14) | `adx > 25` |
+
+Anchored VWAP notes:
+- `avwap_low_[N]` re-anchors to the most recent rolling N-bar swing low.
+- `avwap_high_[N]` re-anchors to the most recent rolling N-bar swing high.
+- `anchored_vwap_low_[N]` and `anchored_vwap_high_[N]` are accepted as verbose aliases.
 
 ### 2. Suffixes & Modifiers
 

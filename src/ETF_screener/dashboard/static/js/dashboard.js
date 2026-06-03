@@ -7434,14 +7434,14 @@ let backtestSourceMode = "saved";
         / ((1 + trades / 100.0) * (1 + maxDdPct / 10.0));
     }
 
-    function normalizeBacktestScatterRow(row) {
+    function normalizeBacktestMatrixRow(row) {
       if (!row || typeof row !== "object") {
         return null;
       }
       const ticker = String(row.ticker || row.Ticker || "").trim();
       const strategy = String(row.strategy || row.Strategy || "").trim();
       const trades = Math.max(0, Math.round(Number(row.trades ?? row.Trades ?? 0) || 0));
-      if (!ticker || !strategy || trades <= 0) {
+      if (!ticker || !strategy) {
         return null;
       }
       const normalized = {
@@ -7461,6 +7461,14 @@ let backtestSourceMode = "saved";
       return normalized;
     }
 
+    function normalizeBacktestScatterRow(row) {
+      const normalized = normalizeBacktestMatrixRow(row);
+      if (!normalized || Number(normalized.trades || 0) <= 0) {
+        return null;
+      }
+      return normalized;
+    }
+
     function normalizeBacktestTradePoint(rawPoint, fallbackIndex = 1) {
       const point = rawPoint && typeof rawPoint === "object" ? rawPoint : {};
       const tradeIndex = Math.max(1, Math.round(Number(point.trade_index ?? point.index ?? fallbackIndex) || fallbackIndex));
@@ -7477,8 +7485,8 @@ let backtestSourceMode = "saved";
     }
 
     function expandBacktestTradeDots(row, sourceRow = row) {
-      const aggregate = normalizeBacktestScatterRow(row);
-      if (!aggregate) {
+      const aggregate = normalizeBacktestMatrixRow(row);
+      if (!aggregate || Number(aggregate.trades || 0) <= 0) {
         return [];
       }
       const rawTradePoints = Array.isArray(sourceRow?.trade_points)
@@ -7521,12 +7529,12 @@ let backtestSourceMode = "saved";
       );
       let changed = false;
       incomingRows.forEach((item) => {
-        const row = normalizeBacktestScatterRow(item);
-        if (!row) {
+        const tableRow = normalizeBacktestMatrixRow(item);
+        if (!tableRow) {
           return;
         }
-        byKey.set(`${row.strategy}::${row.ticker}`, row);
-        expandBacktestTradeDots(row, item).forEach((dot) => {
+        byKey.set(`${tableRow.strategy}::${tableRow.ticker}`, tableRow);
+        expandBacktestTradeDots(tableRow, item).forEach((dot) => {
           const existing = dotsByKey.get(dot.dot_id);
           if (existing && dot.estimated && !existing.estimated) {
             return;
@@ -7564,10 +7572,12 @@ let backtestSourceMode = "saved";
 
     function updateBacktestSummaryCardsFromRows(summaryRows = backtestMatrixRows) {
       const rows = Array.isArray(summaryRows) ? summaryRows : [];
+      const scoredRows = rows.filter((row) => Number(row?.trades || 0) > 0);
+      const metricRows = scoredRows.length > 0 ? scoredRows : rows;
       const strategyCount = new Set(rows.map((row) => row.strategy).filter(Boolean)).size;
-      const returnValues = rows.map((row) => Number(row.return_pct)).filter(Number.isFinite);
-      const sharpeValues = rows.map((row) => Number(row.sharpe)).filter(Number.isFinite);
-      const qualityValues = rows.map((row) => Number(row.quality_score)).filter(Number.isFinite);
+      const returnValues = metricRows.map((row) => Number(row.return_pct)).filter(Number.isFinite);
+      const sharpeValues = metricRows.map((row) => Number(row.sharpe)).filter(Number.isFinite);
+      const qualityValues = metricRows.map((row) => Number(row.quality_score)).filter(Number.isFinite);
       const avg = (values) => values.length
         ? values.reduce((sum, value) => sum + value, 0) / values.length
         : 0;
@@ -7605,10 +7615,12 @@ let backtestSourceMode = "saved";
       (Array.isArray(rows) ? rows : []).forEach((row) => {
         const tr = document.createElement("tr");
         const strategyColor = getBacktestStrategyColor(row.strategy, strategyNames);
+        const tradeCount = Number(row.trades || 0);
+        const noTrades = tradeCount <= 0;
         tr.className = "hover:bg-slate-50 cursor-pointer";
         tr.onclick = () => {
           showTab("screener");
-          loadChart(row.ticker);
+          loadChart(row.ticker, row.strategy || "");
         };
         tr.innerHTML = `
             <td class="px-4 py-3 font-bold text-slate-800">${escapeHtml(row.ticker)}</td>
@@ -7624,7 +7636,14 @@ let backtestSourceMode = "saved";
             <td class="px-4 py-3 font-mono">${Number(row.sharpe || 0).toFixed(2)}</td>
             <td class="px-4 py-3 font-mono">${Number(row.profit_factor || 0).toFixed(2)}</td>
             <td class="px-4 py-3 font-mono">${Number(row.max_dd_pct || 0).toFixed(2)}%</td>
-            <td class="px-4 py-3 font-mono">${Number(row.trades || 0)}</td>
+            <td class="px-4 py-3 font-mono">
+              <span class="inline-flex items-center gap-2">
+                <span>${tradeCount}</span>
+                ${noTrades
+                  ? '<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">No trades</span>'
+                  : ""}
+              </span>
+            </td>
             <td class="px-4 py-3 font-mono">${Number(row.days_since_entry || 0)}</td>
           `;
         body.appendChild(tr);
@@ -8065,11 +8084,10 @@ let backtestSourceMode = "saved";
         body: JSON.stringify({ level: 'info', message: '[TABBAR] Tab bar rendered' })
       });
       tickerScanScope = normalizeScanScope(readStickyValue(LAST_SCAN_SCOPE_KEY, "xetra"));
-      tickerUniverseExplicitlyChosen = hasStickyValue(LAST_SCAN_SCOPE_KEY);
+      tickerUniverseExplicitlyChosen = false;
       if (tickerScanScope === "debug") {
         tickerScanScope = "xetra";
         writeStickyValue(LAST_SCAN_SCOPE_KEY, tickerScanScope);
-        tickerUniverseExplicitlyChosen = true;
       }
       swarmDebugAssetCount = normalizeSwarmDebugAssetCount(
         readStickyValue(LAST_SWARM_DEBUG_ASSET_COUNT_KEY, "24")
@@ -9194,7 +9212,7 @@ let backtestSourceMode = "saved";
       }
     }
 
-    async function loadChart(ticker) {
+    async function loadChart(ticker, strategyOverride = "") {
       console.log("loadChart starting for", ticker);
       currentTicker = ticker;
       storeTickerSelection(ticker);
@@ -9218,7 +9236,13 @@ let backtestSourceMode = "saved";
 
       try {
       const strategySelect = document.getElementById("strategy-select");
-      const strategyName = (strategySelect && strategySelect.value) ? strategySelect.value : currentStrategy;
+      const preferredStrategy = String(strategyOverride || "").trim();
+      const strategyName = preferredStrategy
+        || ((strategySelect && strategySelect.value) ? strategySelect.value : currentStrategy);
+      if (preferredStrategy) {
+        syncStrategySelections(preferredStrategy, { syncBacktestCheckboxes: false });
+        currentStrategy = preferredStrategy;
+      }
         const strategyPart = strategyName ? `&strategy=${encodeURIComponent(strategyName)}` : "";
         const url = `/api/chart/${ticker}?days=${currentDays}${strategyPart}`;
         console.info("loadChart request URL", url);

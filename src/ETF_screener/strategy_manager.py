@@ -84,6 +84,10 @@ class CachedStrategyManager:
             # Some indicators return multiple values and require OHLC
             res = func(df[high_col], df[low_col], df[price_col], **call_kwargs)
             result = res[0] if isinstance(res, tuple) else res
+        elif name.startswith(("avwap_", "anchored_vwap_")) or func.__name__ == (
+            "calculate_anchored_vwap"
+        ):
+            result = func(df, **call_kwargs)
         elif "series" in call_kwargs:
             # For functions like calculate_linreg_slope that take a pre-calculated series
             series = call_kwargs.pop("series")

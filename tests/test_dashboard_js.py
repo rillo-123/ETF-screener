@@ -1474,6 +1474,635 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
+def test_dashboard_js_keeps_screener_run_disabled_until_universe_is_explicitly_chosen():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for dashboard JavaScript smoke tests")
+
+    dashboard_js = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "ETF_screener"
+        / "dashboard"
+        / "static"
+        / "js"
+        / "dashboard.js"
+    )
+    script = textwrap.dedent(f"""
+        const fs = require("fs");
+
+        class ClassList {{
+          constructor() {{ this.values = new Set(); }}
+          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
+          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
+          contains(name) {{ return this.values.has(name); }}
+          toggle(name, force) {{
+            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
+            if (shouldAdd) this.values.add(name);
+            else this.values.delete(name);
+            return shouldAdd;
+          }}
+        }}
+
+        class Element {{
+          constructor(id = "") {{
+            this.id = id;
+            this.classList = new ClassList();
+            this.children = [];
+            this.dataset = {{}};
+            this.style = {{}};
+            this.options = [];
+            this.value = "";
+            this.textContent = "";
+            this.innerHTML = "";
+            this.disabled = false;
+            this.checked = false;
+            this.title = "";
+            this.className = "";
+            this.clientWidth = 900;
+            this.clientHeight = 520;
+          }}
+          addEventListener() {{}}
+          setAttribute(name, value) {{ this[name] = value; }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          remove() {{}}
+          focus() {{}}
+          getBoundingClientRect() {{
+            return {{ width: this.clientWidth, height: this.clientHeight, left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight }};
+          }}
+          getContext() {{
+            const gradient = {{ addColorStop() {{}} }};
+            const noop = () => {{}};
+            return {{
+              save: noop,
+              restore: noop,
+              scale: noop,
+              translate: noop,
+              rotate: noop,
+              clearRect: noop,
+              fillRect: noop,
+              beginPath: noop,
+              arc: noop,
+              ellipse: noop,
+              closePath: noop,
+              fill: noop,
+              stroke: noop,
+              moveTo: noop,
+              lineTo: noop,
+              createLinearGradient: () => gradient,
+              createRadialGradient: () => gradient,
+              lineCap: "",
+              lineJoin: "",
+              globalAlpha: 1,
+              fillStyle: "",
+              strokeStyle: "",
+              lineWidth: 1,
+            }};
+          }}
+        }}
+
+        const elements = new Map();
+        const getElement = (id) => {{
+          if (!elements.has(id)) elements.set(id, new Element(id));
+          return elements.get(id);
+        }};
+
+        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+          getElement(`tab-${{tab}}`).classList.add("hidden");
+          getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
+        }});
+        getElement("run-btn");
+
+        global.window = global;
+        global.window.addEventListener = () => {{}};
+        global.document = {{
+          body: new Element("body"),
+          createElement: (tag) => new Element(tag),
+          getElementById: getElement,
+          querySelectorAll: (selector) => {{
+            if (selector === ".tab-btn") {{
+              return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
+            }}
+            if (selector === ".backtest-strategy-checkbox") {{
+              return [];
+            }}
+            if (selector === "#scan-source-toggle .scan-source-btn, #swarm-scan-source-toggle .scan-source-btn") {{
+              return [];
+            }}
+            return [];
+          }},
+          addEventListener: (event, handler) => {{
+            if (event === "DOMContentLoaded" && typeof handler === "function") {{
+              handler();
+            }}
+          }},
+        }};
+        const storage = new Map();
+        storage.set("etf-discovery:last-scan-scope", "xetra");
+        global.localStorage = {{
+          getItem: (key) => storage.has(key) ? storage.get(key) : "",
+          setItem: (key, value) => {{ storage.set(key, String(value)); }},
+          removeItem: (key) => {{ storage.delete(key); }},
+        }};
+        global.fetch = async () => ({{
+          ok: true,
+          json: async () => ({{ items: [] }}),
+        }});
+        global.requestAnimationFrame = () => 1;
+        global.cancelAnimationFrame = () => {{}};
+        global.setTimeout = () => 1;
+        global.setInterval = () => 1;
+        global.clearInterval = () => {{}};
+        global.alert = () => {{}};
+        global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
+
+        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
+        Function(source)();
+
+        (async () => {{
+          if (window.dashboardReadyPromise) {{
+            await window.dashboardReadyPromise;
+          }}
+          if (typeof window.setScanSource !== "function") {{
+            throw new Error("setScanSource is not exposed on window");
+          }}
+          const runBtn = document.getElementById("run-btn");
+          if (!runBtn.disabled) {{
+            throw new Error("Screener run button should stay disabled until the universe is explicitly chosen");
+          }}
+          if (!String(runBtn.title || "").includes("Choose a ticker universe first")) {{
+            throw new Error("Screener run button should explain why the universe is required");
+          }}
+          await window.setScanSource("xetra");
+          if (runBtn.disabled) {{
+            throw new Error("Screener run button should unlock after explicitly choosing a universe");
+          }}
+        }})().catch((err) => {{
+          console.error(err);
+          process.exit(1);
+        }});
+        """)
+
+    result = subprocess.run(
+        [node, "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_dashboard_js_backtest_row_click_loads_chart_for_row_strategy():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for dashboard JavaScript smoke tests")
+
+    dashboard_js = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "ETF_screener"
+        / "dashboard"
+        / "static"
+        / "js"
+        / "dashboard.js"
+    )
+    script = textwrap.dedent(f"""
+        const fs = require("fs");
+
+        class ClassList {{
+          constructor() {{ this.values = new Set(); }}
+          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
+          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
+          contains(name) {{ return this.values.has(name); }}
+          toggle(name, force) {{
+            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
+            if (shouldAdd) this.values.add(name);
+            else this.values.delete(name);
+            return shouldAdd;
+          }}
+        }}
+
+        class Element {{
+          constructor(id = "") {{
+            this.id = id;
+            this.classList = new ClassList();
+            this.children = [];
+            this.dataset = {{}};
+            this.style = {{}};
+            this.options = [];
+            this.value = "";
+            this.textContent = "";
+            this.innerHTML = "";
+            this.disabled = false;
+            this.checked = false;
+            this.title = "";
+            this.className = "";
+            this.clientWidth = 900;
+            this.clientHeight = 520;
+          }}
+          addEventListener() {{}}
+          setAttribute(name, value) {{ this[name] = value; }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          remove() {{}}
+          focus() {{}}
+          getBoundingClientRect() {{
+            return {{ width: this.clientWidth, height: this.clientHeight, left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight }};
+          }}
+          getContext() {{
+            const gradient = {{ addColorStop() {{}} }};
+            const noop = () => {{}};
+            return {{
+              save: noop,
+              restore: noop,
+              scale: noop,
+              translate: noop,
+              rotate: noop,
+              clearRect: noop,
+              fillRect: noop,
+              beginPath: noop,
+              arc: noop,
+              ellipse: noop,
+              closePath: noop,
+              fill: noop,
+              stroke: noop,
+              moveTo: noop,
+              lineTo: noop,
+              createLinearGradient: () => gradient,
+              createRadialGradient: () => gradient,
+              lineCap: "",
+              lineJoin: "",
+              globalAlpha: 1,
+              fillStyle: "",
+              strokeStyle: "",
+              lineWidth: 1,
+            }};
+          }}
+        }}
+
+        const elements = new Map();
+        const getElement = (id) => {{
+          if (!elements.has(id)) elements.set(id, new Element(id));
+          return elements.get(id);
+        }};
+
+        [
+          "backtest-table-body",
+          "backtest-chart",
+          "plotly-chart",
+          "ticker-select",
+          "strategy-select",
+          "active-ticker-title",
+          "plotly-tools-actions",
+          "tab-screener",
+          "tab-shortlist",
+          "tab-swarm",
+          "tab-swarm-lab",
+          "tab-backtest",
+          "tab-btn-screener",
+          "tab-btn-shortlist",
+          "tab-btn-swarm",
+          "tab-btn-swarm-lab",
+          "tab-btn-backtest",
+          "backtest-selected-count",
+          "bt-strategy",
+          "bt-count",
+          "bt-best-quality",
+          "bt-avg-return",
+          "bt-avg-sharpe",
+        ].forEach(getElement);
+        getElement("tab-screener").classList.add("hidden");
+        getElement("tab-btn-screener").classList.add("tab-btn");
+        getElement("tab-btn-backtest").classList.add("tab-btn");
+
+        const strategySelect = getElement("strategy-select");
+        strategySelect.value = "supertrend_st_crossdown_ema50_slope_turnup";
+        strategySelect.options = [
+          {{ value: "" }},
+          {{ value: "supertrend_st_crossdown_ema50_slope_turnup" }},
+          {{ value: "anchored_vwap_reclaim" }},
+        ];
+
+        global.window = global;
+        global.window.addEventListener = () => {{}};
+        global.document = {{
+          body: new Element("body"),
+          createElement: (tag) => new Element(tag),
+          getElementById: getElement,
+          querySelectorAll: (selector) => {{
+            if (selector === ".tab-btn") {{
+              return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
+            }}
+            if (selector === ".backtest-strategy-checkbox") {{
+              return [];
+            }}
+            if (selector === "#scan-source-toggle .scan-source-btn, #swarm-scan-source-toggle .scan-source-btn") {{
+              return [];
+            }}
+            if (selector === ".plotly-tool-btn[data-mode]") {{
+              return [];
+            }}
+            return [];
+          }},
+          addEventListener: (event, handler) => {{
+            if (event === "DOMContentLoaded" && typeof handler === "function") {{
+              handler();
+            }}
+          }},
+        }};
+        global.localStorage = {{
+          getItem: () => "",
+          setItem: () => {{}},
+          removeItem: () => {{}},
+        }};
+        const fetchCalls = [];
+        global.fetch = async (url) => {{
+          fetchCalls.push(String(url));
+          if (String(url).includes("/api/chart/")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                strategy_name: "anchored_vwap_reclaim",
+                data: [{{ type: "scatter", x: ["2026-01-01"], y: [1] }}],
+                layout: {{}},
+              }}),
+            }};
+          }}
+          return {{
+            ok: true,
+            json: async () => ({{ items: [] }}),
+          }};
+        }};
+        global.requestAnimationFrame = () => 1;
+        global.cancelAnimationFrame = () => {{}};
+        global.setTimeout = (fn) => {{ if (typeof fn === "function") fn(); return 1; }};
+        global.setInterval = () => 1;
+        global.clearInterval = () => {{}};
+        global.alert = () => {{}};
+        global.Plotly = {{
+          newPlot: async () => {{}},
+          purge: () => {{}},
+          relayout: () => {{}},
+          downloadImage: () => {{}},
+        }};
+
+        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
+        Function(source)();
+
+        (async () => {{
+          if (window.dashboardReadyPromise) {{
+            await window.dashboardReadyPromise;
+          }}
+          window.mergeBacktestScatterRows([{{
+            ticker: "AAA.ST",
+            strategy: "anchored_vwap_reclaim",
+            quality_score: 10,
+            return_pct: 12,
+            win_rate_pct: 55,
+            profit_factor: 1.4,
+            sharpe: 1.1,
+            max_dd_pct: 5,
+            trades: 3,
+            days_since_entry: 2,
+          }}], {{ render: false }});
+          const body = document.getElementById("backtest-table-body");
+          if (!body.children.length) {{
+            throw new Error("Expected a rendered backtest row");
+          }}
+          await body.children[0].onclick();
+          const chartCall = fetchCalls.find((url) => url.includes("/api/chart/AAA.ST"));
+          if (!chartCall) {{
+            throw new Error("Expected chart fetch after clicking backtest row");
+          }}
+          if (!chartCall.includes("strategy=anchored_vwap_reclaim")) {{
+            throw new Error(`Expected clicked row strategy in chart URL, got: ${{chartCall}}`);
+          }}
+        }})().catch((err) => {{
+          console.error(err);
+          process.exit(1);
+        }});
+        """)
+
+    result = subprocess.run(
+        [node, "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_dashboard_js_backtest_table_keeps_zero_trade_rows_visible():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for dashboard JavaScript smoke tests")
+
+    dashboard_js = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "ETF_screener"
+        / "dashboard"
+        / "static"
+        / "js"
+        / "dashboard.js"
+    )
+    script = textwrap.dedent(f"""
+        const fs = require("fs");
+
+        class ClassList {{
+          constructor() {{ this.values = new Set(); }}
+          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
+          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
+          contains(name) {{ return this.values.has(name); }}
+          toggle(name, force) {{
+            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
+            if (shouldAdd) this.values.add(name);
+            else this.values.delete(name);
+            return shouldAdd;
+          }}
+        }}
+
+        class Element {{
+          constructor(id = "") {{
+            this.id = id;
+            this.classList = new ClassList();
+            this.children = [];
+            this.dataset = {{}};
+            this.style = {{}};
+            this.options = [];
+            this.value = "";
+            this.textContent = "";
+            this.innerHTML = "";
+            this.disabled = false;
+            this.checked = false;
+            this.title = "";
+            this.className = "";
+            this.clientWidth = 900;
+            this.clientHeight = 520;
+          }}
+          addEventListener() {{}}
+          setAttribute(name, value) {{ this[name] = value; }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          remove() {{}}
+          focus() {{}}
+          getBoundingClientRect() {{
+            return {{ width: this.clientWidth, height: this.clientHeight, left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight }};
+          }}
+          getContext() {{
+            const gradient = {{ addColorStop() {{}} }};
+            const noop = () => {{}};
+            return {{
+              save: noop,
+              restore: noop,
+              scale: noop,
+              translate: noop,
+              rotate: noop,
+              clearRect: noop,
+              fillRect: noop,
+              beginPath: noop,
+              arc: noop,
+              ellipse: noop,
+              closePath: noop,
+              fill: noop,
+              stroke: noop,
+              moveTo: noop,
+              lineTo: noop,
+              createLinearGradient: () => gradient,
+              createRadialGradient: () => gradient,
+              lineCap: "",
+              lineJoin: "",
+              globalAlpha: 1,
+              fillStyle: "",
+              strokeStyle: "",
+              lineWidth: 1,
+            }};
+          }}
+        }}
+
+        const elements = new Map();
+        const getElement = (id) => {{
+          if (!elements.has(id)) elements.set(id, new Element(id));
+          return elements.get(id);
+        }};
+
+        [
+          "backtest-table-body",
+          "backtest-chart",
+          "backtest-selected-count",
+          "bt-strategy",
+          "bt-count",
+          "bt-best-quality",
+          "bt-avg-return",
+          "bt-avg-sharpe",
+          "tab-screener",
+          "tab-shortlist",
+          "tab-swarm",
+          "tab-swarm-lab",
+          "tab-backtest",
+          "tab-btn-screener",
+          "tab-btn-shortlist",
+          "tab-btn-swarm",
+          "tab-btn-swarm-lab",
+          "tab-btn-backtest",
+        ].forEach(getElement);
+        getElement("tab-btn-screener").classList.add("tab-btn");
+        getElement("tab-btn-backtest").classList.add("tab-btn");
+
+        global.window = global;
+        global.window.addEventListener = () => {{}};
+        global.document = {{
+          body: new Element("body"),
+          createElement: (tag) => new Element(tag),
+          getElementById: getElement,
+          querySelectorAll: (selector) => {{
+            if (selector === ".tab-btn") {{
+              return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
+            }}
+            if (selector === ".backtest-strategy-checkbox") {{
+              return [];
+            }}
+            if (selector === "#scan-source-toggle .scan-source-btn, #swarm-scan-source-toggle .scan-source-btn") {{
+              return [];
+            }}
+            return [];
+          }},
+          addEventListener: (event, handler) => {{
+            if (event === "DOMContentLoaded" && typeof handler === "function") {{
+              handler();
+            }}
+          }},
+        }};
+        global.localStorage = {{
+          getItem: () => "",
+          setItem: () => {{}},
+          removeItem: () => {{}},
+        }};
+        global.fetch = async () => ({{
+          ok: true,
+          json: async () => ({{ items: [] }}),
+        }});
+        global.requestAnimationFrame = () => 1;
+        global.cancelAnimationFrame = () => {{}};
+        global.setTimeout = () => 1;
+        global.setInterval = () => 1;
+        global.clearInterval = () => {{}};
+        global.alert = () => {{}};
+        global.Plotly = {{ newPlot: async () => {{}}, purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
+
+        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
+        Function(source)();
+
+        (async () => {{
+          if (window.dashboardReadyPromise) {{
+            await window.dashboardReadyPromise;
+          }}
+          window.mergeBacktestScatterRows([
+            {{
+              ticker: "AAA.ST",
+              strategy: "alpha",
+              quality_score: 10,
+              return_pct: 12,
+              win_rate_pct: 55,
+              profit_factor: 1.4,
+              sharpe: 1.1,
+              max_dd_pct: 5,
+              trades: 3,
+              days_since_entry: 2,
+            }},
+            {{
+              ticker: "BBB.ST",
+              strategy: "beta",
+              quality_score: 0,
+              return_pct: 0,
+              win_rate_pct: 0,
+              profit_factor: 0,
+              sharpe: 0,
+              max_dd_pct: 0,
+              trades: 0,
+              days_since_entry: 7,
+            }},
+          ], {{ render: false }});
+          const body = document.getElementById("backtest-table-body");
+          if (body.children.length !== 2) {{
+            throw new Error(`Expected 2 table rows, got ${{body.children.length}}`);
+          }}
+          if (!String(body.children[1].innerHTML || "").includes("No trades")) {{
+            throw new Error("Expected zero-trade row to display a 'No trades' badge");
+          }}
+        }})().catch((err) => {{
+          console.error(err);
+          process.exit(1);
+        }});
+        """)
+
+    result = subprocess.run(
+        [node, "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
 def obsolete_dashboard_js_restores_backtest_race_after_reload():
     node = shutil.which("node")
     if not node:

@@ -431,6 +431,26 @@ class InteractivePlotter:
 
         return sorted(specs)
 
+    def _extract_anchored_vwap_names(
+        self, strategy_content: str | None
+    ) -> list[str]:
+        """Extract anchored VWAP tokens referenced in DSL content."""
+        if not strategy_content:
+            return []
+
+        found: list[str] = []
+        seen: set[str] = set()
+        for match in re.finditer(
+            r"\b((?:avwap|anchored_vwap)_(?:low|high)_\d+)\b",
+            strategy_content.lower(),
+        ):
+            token = match.group(1)
+            if token in seen:
+                continue
+            seen.add(token)
+            found.append(token)
+        return found
+
     def _extract_strategy_indicator_names(
         self, strategy_content: str | None
     ) -> list[str]:
@@ -465,6 +485,12 @@ class InteractivePlotter:
             r"\b(?:st|supertrend)_(\d+)_(\d+(?:\.\d+)?)\b", s
         ):
             add(f"supertrend_{period}_{mult}")
+
+        for match in re.finditer(
+            r"\b((?:avwap|anchored_vwap)_(?:low|high)_\d+)\b",
+            s,
+        ):
+            add(match.group(1))
 
         for token in (
             "macd",
@@ -512,6 +538,9 @@ class InteractivePlotter:
             parts = lower.split("_")
             if len(parts) >= 3:
                 return f"Supertrend {parts[1]} {parts[2]}"
+        if re.fullmatch(r"(?:avwap|anchored_vwap)_(low|high)_\d+", lower):
+            parts = lower.split("_")
+            return f"AVWAP {parts[-2].title()} {parts[-1]}"
         if lower.startswith("ema_"):
             suffix = lower[4:].replace("_", " ")
             return f"EMA {suffix}".strip()
@@ -985,6 +1014,7 @@ class InteractivePlotter:
                 f"supertrend_{period}_{mult}"
                 for period, mult in self._extract_supertrend_specs(strategy_content)
             ],
+            *self._extract_anchored_vwap_names(strategy_content),
         }
         strategy_panel_groups: list[dict] = []
         panel_buckets: dict[str, list[dict]] = {
@@ -1272,6 +1302,27 @@ class InteractivePlotter:
                     y=df[ema_col],
                     name=f"EMA {period}",
                     line=dict(color=ema_colors[idx % len(ema_colors)], width=1.2),
+                ),
+                row=1,
+                col=1,
+            )
+
+        avwap_names = self._extract_anchored_vwap_names(strategy_content)
+        avwap_colors = ["#0f766e", "#b45309", "#be123c", "#0369a1"]
+        for idx, avwap_name in enumerate(avwap_names):
+            avwap_col = self._find_column_case_insensitive(df, avwap_name)
+            if not avwap_col:
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=df["Date"],
+                    y=df[avwap_col],
+                    name=self._pretty_indicator_label(avwap_col),
+                    line=dict(
+                        color=avwap_colors[idx % len(avwap_colors)],
+                        width=1.4,
+                        dash="dot",
+                    ),
                 ),
                 row=1,
                 col=1,

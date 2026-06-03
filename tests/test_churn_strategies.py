@@ -156,6 +156,48 @@ def test_supertrend_st_crossdown_ema50_slope_turnup_strategy_triggers_on_ema50_s
     assert int((df_out[sig_col] == 1).sum()) == 1
 
 
+def test_avwap_ema20_pullback_reversal_strategy_triggers_on_bullish_reclaim():
+    bt = Backtester()
+    strategy_path = Path("strategies/avwap_ema20_pullback_reversal.dsl")
+    parsed = parse_dsl_content(strategy_path.read_text(encoding="utf-8"))
+
+    assert parsed["max_days"] == 10
+    assert "close > avwap_low_20" in parsed["filter"]
+    assert "between(close <= ema_20, 1, 3)" in parsed["filter"]
+    assert "(close > open)" in parsed["trigger"]
+    assert "(close > high_d1)" in parsed["trigger"]
+
+    dates = pd.date_range(start="2024-01-01", periods=7)
+    close = pd.Series([110.0, 111.0, 112.0, 111.0, 109.7, 112.2, 113.0])
+    open_ = pd.Series([109.0, 110.0, 111.0, 111.5, 110.2, 110.8, 112.4])
+
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "close": close,
+            "open": open_,
+            "high": pd.Series([111.0, 112.0, 113.0, 112.0, 110.9, 112.6, 113.4]),
+            "low": pd.Series([108.0, 109.0, 110.0, 109.5, 108.6, 110.5, 112.0]),
+            "volume": pd.Series(
+                [100000.0, 98000.0, 102000.0, 99000.0, 97000.0, 140000.0, 120000.0]
+            ),
+            "ema_20": pd.Series([108.5, 109.0, 109.5, 109.8, 110.0, 110.9, 111.4]),
+            "ema_50": pd.Series([106.0, 106.6, 107.2, 107.8, 108.2, 108.8, 109.3]),
+            "ema_200": pd.Series([100.0, 100.3, 100.6, 100.9, 101.2, 101.5, 101.8]),
+        }
+    )
+
+    res = bt.scripted_strategy(df, "TEST", parsed["entry"], parsed["exit"])
+    df_out = res["df"] if isinstance(res, dict) else res
+
+    assert df_out is not None
+    sig_col = "signal" if "signal" in df_out.columns else "Signal"
+    assert sig_col in df_out.columns
+    assert "avwap_low_20" in df_out.columns
+    assert df_out[sig_col].iloc[5] == 1
+    assert int((df_out[sig_col] == 1).sum()) >= 1
+
+
 def test_epi_a_st_fanout_phase_flags_jan_20_2026():
     bt = Backtester()
     with open("strategies/epi_a_st_fanout_phase.dsl", "r", encoding="utf-8") as handle:
@@ -382,3 +424,137 @@ def test_evaluate_strategies_rejects_entry_only_dsl(monkeypatch, tmp_path):
             dsl_content="TRIGGER: close > ema_20",
             strategy_name="NoExit",
         )
+
+
+def test_evaluate_strategies_does_not_apply_dsl_max_days_without_explicit_signal_window(
+    monkeypatch, tmp_path
+):
+    class FakeDb:
+        def get_latest_market_date(self):
+            return "2026-04-01"
+
+    class FakeBacktester:
+        def __init__(self, *args, **kwargs):
+            self.db_path = "fake-db"
+            self._db = FakeDb()
+            self.scripted_strategy = lambda *args, **kwargs: None
+
+        @property
+        def db(self):
+            return self._db
+
+        def run_parallel_backtest(self, *args, **kwargs):
+            df = pd.DataFrame(
+                {
+                    "close": [9.0, 10.0, 11.0, 12.0, 13.0],
+                    "close_d1": [8.0, 9.0, 10.0, 11.0, 12.0],
+                    "ema_20": [10.0] * 5,
+                    "ema_20_d1": [10.0] * 5,
+                    "signal": [0, 0, 1, 0, 0],
+                    "exit_condition": [False] * 5,
+                }
+            )
+            return [
+                {
+                    "ticker": "AAA.DE",
+                    "df": df,
+                    "total_return_pct": 2.5,
+                    "win_rate_pct": 50.0,
+                    "profit_factor": 1.1,
+                    "sharpe_ratio": 0.7,
+                    "max_drawdown_pct": 1.5,
+                    "num_trades": 1,
+                }
+            ]
+
+    def fake_cache_dir():
+        cache_dir = tmp_path / "strategy_eval"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+
+    monkeypatch.setattr(
+        "ETF_screener.scripts.churn_strategies.Backtester", FakeBacktester
+    )
+    monkeypatch.setattr(
+        "ETF_screener.scripts.churn_strategies._strategy_eval_cache_dir",
+        fake_cache_dir,
+    )
+    monkeypatch.setattr(
+        "ETF_screener.scripts.churn_strategies._cached_strategy_tickers",
+        lambda *args, **kwargs: ("AAA.DE",),
+    )
+
+    df = evaluate_strategies(
+        dsl_content="MAX_DAYS: 1\nTRIGGER: close > ema_20\nEXIT: close < ema_20",
+        strategy_name="MaxDaysOnly",
+    )
+
+    assert len(df) == 1
+    assert df.iloc[0]["Ticker"] == "AAA.DE"
+
+
+def test_evaluate_strategies_respects_explicit_signal_window_over_dsl_max_days(
+    monkeypatch, tmp_path
+):
+    class FakeDb:
+        def get_latest_market_date(self):
+            return "2026-04-01"
+
+    class FakeBacktester:
+        def __init__(self, *args, **kwargs):
+            self.db_path = "fake-db"
+            self._db = FakeDb()
+            self.scripted_strategy = lambda *args, **kwargs: None
+
+        @property
+        def db(self):
+            return self._db
+
+        def run_parallel_backtest(self, *args, **kwargs):
+            df = pd.DataFrame(
+                {
+                    "close": [9.0, 10.0, 11.0, 12.0, 13.0],
+                    "close_d1": [8.0, 9.0, 10.0, 11.0, 12.0],
+                    "ema_20": [10.0] * 5,
+                    "ema_20_d1": [10.0] * 5,
+                    "signal": [0, 0, 1, 0, 0],
+                    "exit_condition": [False] * 5,
+                }
+            )
+            return [
+                {
+                    "ticker": "AAA.DE",
+                    "df": df,
+                    "total_return_pct": 2.5,
+                    "win_rate_pct": 50.0,
+                    "profit_factor": 1.1,
+                    "sharpe_ratio": 0.7,
+                    "max_drawdown_pct": 1.5,
+                    "num_trades": 1,
+                }
+            ]
+
+    def fake_cache_dir():
+        cache_dir = tmp_path / "strategy_eval"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+
+    monkeypatch.setattr(
+        "ETF_screener.scripts.churn_strategies.Backtester", FakeBacktester
+    )
+    monkeypatch.setattr(
+        "ETF_screener.scripts.churn_strategies._strategy_eval_cache_dir",
+        fake_cache_dir,
+    )
+    monkeypatch.setattr(
+        "ETF_screener.scripts.churn_strategies._cached_strategy_tickers",
+        lambda *args, **kwargs: ("AAA.DE",),
+    )
+
+    df = evaluate_strategies(
+        dsl_content="MAX_DAYS: 12\nTRIGGER: close > ema_20\nEXIT: close < ema_20",
+        strategy_name="ExplicitWindow",
+        since_days=1,
+    )
+
+    assert df.empty

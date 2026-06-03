@@ -201,6 +201,32 @@ def test_prepare_eval_columns_supports_ema_slope_flip_helpers():
     ]
 
 
+def test_create_plot_draws_anchored_vwap_overlay_when_strategy_references_it():
+    dates = pd.date_range(start="2024-01-01", periods=5)
+    close = np.array([10.0, 9.0, 8.0, 9.0, 10.0])
+
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.array([1000.0] * 5),
+            "avwap_low_3": np.array([10.0, 9.0, 8.0, 8.5, 9.0]),
+        }
+    )
+
+    fig = InteractivePlotter().create_plot(
+        df,
+        "TEST",
+        strategy_content="TRIGGER: cross_up(close, avwap_low_3)\nEXIT: close < avwap_low_3",
+    )
+
+    trace_names = {getattr(t, "name", "") for t in fig.data}
+    assert "AVWAP Low 3" in trace_names
+
+
 def test_create_plot_hides_sell_signal_markers():
     dates = pd.date_range(start="2024-01-01", periods=5)
     close = np.array([100.0, 102.0, 101.0, 103.0, 102.0])

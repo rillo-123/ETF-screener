@@ -182,6 +182,79 @@ def calculate_ema(data: Any, period: int = 50) -> pd.Series:
     return series.ewm(span=period, adjust=False).mean()
 
 
+def calculate_anchored_vwap(
+    data: pd.DataFrame,
+    anchor: str = "low",
+    lookback: int = 20,
+    price_mode: str = "hlc3",
+) -> pd.Series:
+    """
+    Calculate a rolling anchored VWAP using the most recent swing extreme in a
+    trailing window as the anchor point.
+
+    Args:
+        data: OHLCV dataframe.
+        anchor: Either "low" for swing-low anchors or "high" for swing-high anchors.
+        lookback: Trailing bar window used to locate the anchor.
+        price_mode: Price source for VWAP. Supports "hlc3" or "close".
+    """
+    if not isinstance(data, pd.DataFrame):
+        raise TypeError("Anchored VWAP requires an OHLCV dataframe input.")
+
+    anchor_key = str(anchor).strip().lower()
+    if anchor_key not in {"low", "high"}:
+        raise ValueError("anchor must be 'low' or 'high'")
+
+    lookback = max(1, int(lookback))
+
+    high_col = "High" if "High" in data.columns else "high"
+    low_col = "Low" if "Low" in data.columns else "low"
+    close_col = "Close" if "Close" in data.columns else "close"
+    volume_col = "Volume" if "Volume" in data.columns else "volume"
+
+    high = pd.to_numeric(data[high_col], errors="coerce")
+    low = pd.to_numeric(data[low_col], errors="coerce")
+    close = pd.to_numeric(data[close_col], errors="coerce")
+    volume = pd.to_numeric(data[volume_col], errors="coerce").fillna(0.0)
+
+    if str(price_mode).strip().lower() == "close":
+        price = close
+    else:
+        price = (high + low + close) / 3.0
+
+    pv = (price * volume).fillna(0.0).to_numpy(dtype=float)
+    vol = volume.to_numpy(dtype=float)
+    high_values = high.to_numpy(dtype=float)
+    low_values = low.to_numpy(dtype=float)
+
+    pv_cumsum = np.cumsum(pv)
+    vol_cumsum = np.cumsum(vol)
+    out = np.full(len(data), np.nan, dtype=float)
+
+    for idx in range(len(data)):
+        start = max(0, idx - lookback + 1)
+        anchor_window = (
+            low_values[start : idx + 1]
+            if anchor_key == "low"
+            else high_values[start : idx + 1]
+        )
+        if np.isnan(anchor_window).all():
+            continue
+        if anchor_key == "low":
+            anchor_offset = int(np.nanargmin(anchor_window))
+        else:
+            anchor_offset = int(np.nanargmax(anchor_window))
+        anchor_idx = start + anchor_offset
+
+        pv_total = pv_cumsum[idx] - (pv_cumsum[anchor_idx - 1] if anchor_idx > 0 else 0.0)
+        vol_total = vol_cumsum[idx] - (
+            vol_cumsum[anchor_idx - 1] if anchor_idx > 0 else 0.0
+        )
+        out[idx] = pv_total / vol_total if vol_total else np.nan
+
+    return pd.Series(out, index=data.index, name=f"avwap_{anchor_key}_{lookback}")
+
+
 def calculate_macd(
     data: Any, fast: int = 12, slow: int = 26, signal: int = 9
 ) -> Tuple[pd.Series, pd.Series, pd.Series]:

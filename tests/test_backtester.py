@@ -146,6 +146,34 @@ class TestBacktester:
         assert "st_10_4_is_near_flat" in df_out.columns
         assert df_out["st_10_4_is_near_flat"].iloc[10:].max() == 1.0
 
+    def test_scripted_strategy_supports_anchored_vwap_helpers(self, bt):
+        dates = pd.date_range(start="2024-01-01", periods=5)
+        close = np.array([10.0, 9.0, 8.0, 9.0, 10.0])
+
+        df = pd.DataFrame(
+            {
+                "Date": dates,
+                "close": close,
+                "open": close,
+                "high": close + 1.0,
+                "low": close - 1.0,
+                "volume": np.full(5, 100000.0),
+            }
+        )
+
+        entry = "cross_up(close, avwap_low_3)"
+        exit_rule = "close < avwap_low_3"
+
+        res = bt.scripted_strategy(df, "TEST", entry, exit_rule)
+        df_out = res["df"] if isinstance(res, dict) else res
+
+        assert df_out is not None
+        assert "avwap_low_3" in df_out.columns
+        assert df_out["avwap_low_3"].tolist() == pytest.approx(
+            [10.0, 9.0, 8.0, 8.5, 9.0]
+        )
+        assert df_out["signal"].tolist() == [0, 0, 0, 1, 0]
+
     def test_scripted_strategy_supports_ema_slope_flip_helpers(self, bt):
         dates = pd.date_range(start="2024-01-01", periods=8)
         close = np.full(8, 100.0)

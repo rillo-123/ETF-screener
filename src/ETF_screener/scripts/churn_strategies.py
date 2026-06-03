@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Dict, List
 
 BLACKLIST_PATH = Path("config") / "blacklist.json"
-STRATEGY_EVAL_CACHE_VERSION = "strategy_eval_v2"
+STRATEGY_EVAL_CACHE_VERSION = "strategy_eval_v3"
 logger = logging.getLogger(__name__)
 
 
@@ -854,21 +854,18 @@ def evaluate_strategies(
 
             df = res.get("df")
             strategy_max_days = strat.get("max_days")
+            signal_window_days = (
+                min(since_days, strategy_max_days)
+                if since_days is not None and strategy_max_days is not None
+                else since_days
+            )
             recent_days = find_recent_entry_days(
                 df,
                 strat,
-                max_days=(
-                    min(since_days, strategy_max_days)
-                    if since_days is not None and strategy_max_days is not None
-                    else since_days if since_days is not None else strategy_max_days
-                ),
+                max_days=signal_window_days if since_days is not None else None,
             )
             recent_days_value = 999 if recent_days is None else int(recent_days)
-            max_allowed_days = (
-                min(since_days, strategy_max_days)
-                if since_days is not None and strategy_max_days is not None
-                else since_days if since_days is not None else strategy_max_days
-            )
+            max_allowed_days = signal_window_days
 
             if max_allowed_days is not None and recent_days_value > max_allowed_days:
                 continue
@@ -992,21 +989,18 @@ def churn_db(
                 df = res.get("df")
 
                 strategy_max_days = strat.get("max_days")
+                signal_window_days = (
+                    min(since_days, strategy_max_days)
+                    if since_days is not None and strategy_max_days is not None
+                    else since_days
+                )
                 recent_days = find_recent_entry_days(
                     df,
                     strat,
-                    max_days=(
-                        min(since_days, strategy_max_days)
-                        if since_days is not None and strategy_max_days is not None
-                        else since_days if since_days is not None else strategy_max_days
-                    ),
+                    max_days=signal_window_days if since_days is not None else None,
                 )
                 recent_days_value = 999 if recent_days is None else int(recent_days)
-                max_allowed_days = (
-                    min(since_days, strategy_max_days)
-                    if since_days is not None and strategy_max_days is not None
-                    else since_days if since_days is not None else strategy_max_days
-                )
+                max_allowed_days = signal_window_days
 
                 if (
                     max_allowed_days is not None
