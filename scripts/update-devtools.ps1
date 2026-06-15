@@ -1,3 +1,8 @@
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [switch]$ForceUpdate
+)
+
 $ErrorActionPreference = "Stop"
 
 $vsCodeChannels = @(
@@ -51,13 +56,51 @@ function Invoke-ExternalTool {
 }
 
 function Invoke-WingetCli {
-    param([string[]]$Arguments = @())
+    param(
+        [string[]]$Arguments = @(),
+        [switch]$Elevate
+    )
 
     $wingetCommand = Get-ToolCommand -Name "winget"
     if (-not $wingetCommand) {
         return [pscustomobject]@{
             ExitCode = 127
             Output = @("winget is not available")
+        }
+    }
+
+    if ($Elevate -and -not (Test-IsAdministrator)) {
+        $stdoutFile = [System.IO.Path]::GetTempFileName()
+        $stderrFile = [System.IO.Path]::GetTempFileName()
+        try {
+            $process = Start-Process -FilePath $wingetCommand.Source `
+                -ArgumentList $Arguments `
+                -Verb RunAs `
+                -Wait `
+                -PassThru `
+                -WindowStyle Hidden `
+                -RedirectStandardOutput $stdoutFile `
+                -RedirectStandardError $stderrFile
+
+            $output = @()
+            if (Test-Path $stdoutFile) {
+                $output += @(Get-Content $stdoutFile)
+            }
+            if (Test-Path $stderrFile) {
+                $output += @(Get-Content $stderrFile)
+            }
+
+            return [pscustomobject]@{
+                ExitCode = [int]$process.ExitCode
+                Output = $output
+            }
+        } catch {
+            return [pscustomobject]@{
+                ExitCode = 1
+                Output = @($_.Exception.Message)
+            }
+        } finally {
+            Remove-Item -LiteralPath @($stdoutFile, $stderrFile) -Force -ErrorAction SilentlyContinue
         }
     }
 
@@ -151,6 +194,8 @@ function Get-LatestPwshVersionFromWinget {
 }
 
 function Invoke-PwshMaintenance {
+    param([switch]$ForceUpdate)
+
     $result = [pscustomobject]@{
         Success = $true
         Status  = "Not run"
@@ -159,6 +204,38 @@ function Invoke-PwshMaintenance {
     Write-Host "Checking PowerShell (pwsh) installation..." -ForegroundColor Cyan
 
     $pwshInfo = Get-PwshInfo
+    if ($pwshInfo.InstallType -eq "dotnet-tool" -and $ForceUpdate) {
+        $dotnetCommand = Get-ToolCommand -Name "dotnet"
+        if (-not $dotnetCommand) {
+            Write-Host "dotnet is not available; cannot update the pwsh global tool." -ForegroundColor Yellow
+            $result.Success = $false
+            $result.Status = "Skipped (dotnet unavailable)"
+            return $result
+        }
+
+        Write-Host "Updating pwsh .NET global tool via dotnet..." -ForegroundColor Cyan
+        $dotnetResult = Invoke-ExternalTool -CommandPath $dotnetCommand.Source -Arguments @(
+            "tool",
+            "update",
+            "--global",
+            "PowerShell"
+        )
+        if ($dotnetResult.Output.Count -gt 0) {
+            Write-ExternalOutput -Lines $dotnetResult.Output
+        }
+
+        if ($dotnetResult.ExitCode -eq 0) {
+            Write-Host "PowerShell update complete via dotnet global tool." -ForegroundColor Green
+            $result.Status = "Updated via dotnet tool"
+        } else {
+            Write-Host "PowerShell update did not complete (dotnet exit code $($dotnetResult.ExitCode)); continuing with the current shell" -ForegroundColor Yellow
+            $result.Success = $false
+            $result.Status = "Update failed (dotnet exit code $($dotnetResult.ExitCode))"
+        }
+
+        return $result
+    }
+
     $latestVersion = Get-LatestPwshVersionFromWinget
     if ($null -eq $latestVersion) {
         Write-Host "Could not determine the latest PowerShell version from winget." -ForegroundColor Yellow
@@ -167,7 +244,7 @@ function Invoke-PwshMaintenance {
         return $result
     }
 
-    if ($pwshInfo.Version -and $pwshInfo.Version -ge $latestVersion) {
+    if (-not $ForceUpdate -and $pwshInfo.Version -and $pwshInfo.Version -ge $latestVersion) {
         Write-Host "PowerShell $($pwshInfo.Version) is already up to date." -ForegroundColor Green
         $result.Status = "Already current ($($pwshInfo.Version))"
         return $result
@@ -187,7 +264,7 @@ function Invoke-PwshMaintenance {
             return $result
         }
         "other" {
-            if ($pwshInfo.IsInstalled) {
+            if ($pwshInfo.IsInstalled -and -not $ForceUpdate) {
                 Write-Host "pwsh is not in a standard winget-managed location; continuing without auto-update" -ForegroundColor Yellow
                 $result.Status = "Skipped (unsupported install)"
                 return $result
@@ -195,14 +272,20 @@ function Invoke-PwshMaintenance {
         }
     }
 
+    $wingetElevate = $false
     if ($pwshInfo.IsInstalled -and $pwshInfo.InstallType -eq "msi" -and -not (Test-IsAdministrator)) {
-        Write-Host "This pwsh install uses a machine-wide MSI path. Re-run an elevated shell to update it automatically." -ForegroundColor Yellow
-        $result.Status = "Skipped (requires administrator)"
-        return $result
+        if ($ForceUpdate) {
+            Write-Host "ForceUpdate requested; prompting for elevation to update the machine-wide MSI install." -ForegroundColor Cyan
+            $wingetElevate = $true
+        } else {
+            Write-Host "This pwsh install uses a machine-wide MSI path. Re-run an elevated shell to update it automatically." -ForegroundColor Yellow
+            $result.Status = "Skipped (requires administrator)"
+            return $result
+        }
     }
 
     $wingetArgs = @(
-        if ($pwshInfo.IsInstalled) { "upgrade" } else { "install" }
+        $(if ($pwshInfo.IsInstalled) { "upgrade" } else { "install" })
         "--id", "Microsoft.PowerShell"
         "--exact"
         "--source", "winget"
@@ -211,20 +294,23 @@ function Invoke-PwshMaintenance {
         "--silent"
         "--disable-interactivity"
     )
+    if ($ForceUpdate) {
+        $wingetArgs += "--force"
+    }
 
     if (-not $pwshInfo.IsInstalled) {
         $wingetArgs += @("--scope", "user")
     }
 
     Write-Host "$(if ($pwshInfo.IsInstalled) { 'Updating' } else { 'Installing' }) PowerShell via winget..." -ForegroundColor Cyan
-    $wingetResult = Invoke-WingetCli -Arguments $wingetArgs
+    $wingetResult = Invoke-WingetCli -Arguments $wingetArgs -Elevate:$wingetElevate
     if ($wingetResult.Output.Count -gt 0) {
         Write-ExternalOutput -Lines $wingetResult.Output
     }
 
     if ($wingetResult.ExitCode -eq 0) {
         Write-Host "PowerShell update complete. Start a new shell to use version $latestVersion." -ForegroundColor Green
-        $result.Status = "$(if ($pwshInfo.IsInstalled) { 'Updated' } else { 'Installed' }) to $latestVersion"
+        $result.Status = "$(if ($ForceUpdate) { 'Forced update' } elseif ($pwshInfo.IsInstalled) { 'Updated' } else { 'Installed' }) to $latestVersion"
     } else {
         Write-Host "PowerShell update did not complete (winget exit code $($wingetResult.ExitCode)); continuing with the current shell" -ForegroundColor Yellow
         $result.Success = $false
@@ -371,7 +457,7 @@ function Invoke-UpdateDevtools {
             }
 
             Write-Host "$($channel.Name) VS Code ($($channel.WingetId)) was not found via winget; installing it now..." -ForegroundColor Yellow
-            $installResult = Invoke-WingetCli -Arguments @(
+            $installArgs = @(
                 "install",
                 "--id", $channel.WingetId,
                 "--exact",
@@ -379,6 +465,10 @@ function Invoke-UpdateDevtools {
                 "--accept-source-agreements",
                 "--accept-package-agreements"
             )
+            if ($ForceUpdate) {
+                $installArgs += "--force"
+            }
+            $installResult = Invoke-WingetCli -Arguments $installArgs
 
             if ($installResult.Output.Count -gt 0) {
                 Write-ExternalOutput -Lines $installResult.Output
@@ -392,13 +482,14 @@ function Invoke-UpdateDevtools {
                 $appStatus = "Install failed (exit code $($installResult.ExitCode))"
                 Write-Host "$($channel.Name) VS Code installation failed." -ForegroundColor Yellow
             }
-        } elseif ($packageRecord.Available) {
+        } elseif ($packageRecord.Available -or $ForceUpdate) {
             if ($vsCodeWasRunning) {
                 Write-Host "$($channel.Name) VS Code appears to be running; the upgrade may be blocked until it is closed." -ForegroundColor Yellow
             }
 
-            Write-Host "Upgrading $($channel.Name) VS Code from $($packageRecord.Version) to $($packageRecord.Available)..." -ForegroundColor Cyan
-            $upgradeResult = Invoke-WingetCli -Arguments @(
+            $targetVersion = if ($packageRecord.Available) { $packageRecord.Available } else { "latest available" }
+            Write-Host "Upgrading $($channel.Name) VS Code from $($packageRecord.Version) to $targetVersion..." -ForegroundColor Cyan
+            $upgradeArgs = @(
                 "upgrade",
                 "--id", $channel.WingetId,
                 "--exact",
@@ -406,13 +497,17 @@ function Invoke-UpdateDevtools {
                 "--accept-source-agreements",
                 "--accept-package-agreements"
             )
+            if ($ForceUpdate) {
+                $upgradeArgs += "--force"
+            }
+            $upgradeResult = Invoke-WingetCli -Arguments $upgradeArgs
 
             if ($upgradeResult.Output.Count -gt 0) {
                 Write-ExternalOutput -Lines $upgradeResult.Output
             }
 
             if ($upgradeResult.ExitCode -eq 0) {
-                $appStatus = "Updated to $($packageRecord.Available)"
+                $appStatus = if ($ForceUpdate -and -not $packageRecord.Available) { "Forced update completed" } else { "Updated to $($packageRecord.Available)" }
                 Write-Host "$($channel.Name) VS Code upgrade completed." -ForegroundColor Green
             } else {
                 $overallSuccess = $false
@@ -464,7 +559,7 @@ function Invoke-UpdateDevtools {
         }
     }
 
-    $pwshResult = Invoke-PwshMaintenance
+    $pwshResult = Invoke-PwshMaintenance -ForceUpdate:$ForceUpdate
     $pwshStatus = $pwshResult.Status
     if (-not $pwshResult.Success) {
         $overallSuccess = $false

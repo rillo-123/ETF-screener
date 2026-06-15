@@ -194,6 +194,7 @@
       color: rgba(203, 213, 225, 0.85);
       letter-spacing: 0.02em;
     }
+
   </style>
 </head>
 
@@ -209,17 +210,8 @@
         </div>
         <div id="nav-screener-controls" class="flex items-center space-x-4">
           <div class="flex items-center h-10">
-          <button onclick="toggleStrategyPanel()"
-            class="h-10 bg-indigo-600 hover:bg-indigo-700 text-white px-3 rounded-l-lg border border-indigo-500/50 flex items-center justify-center leading-none transition-all">
-            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
-              </path>
-            </svg>
-            Labs
-          </button>
           <button id="modify-btn" onclick="modifyStrategy()"
-            class="h-10 bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold px-3 border border-l-0 border-amber-400/60 transition-all flex items-center justify-center leading-none whitespace-nowrap"
+            class="h-10 bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold px-3 rounded-l-lg border border-amber-400/60 transition-all flex items-center justify-center leading-none whitespace-nowrap"
             title="Open strategy in editor to modify and save as a new file">
             <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -243,6 +235,7 @@
             </svg>
             Run Screener
           </button>
+          </div>
         <div id="nav-scan-progress"
             class="hidden ml-2 min-w-[250px] rounded-lg border border-indigo-500/30 bg-slate-800/90 px-2.5 py-1.5 shadow-sm">
             <div class="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-slate-400">
@@ -325,6 +318,12 @@
 
   <script>
     window.__dashboardPendingTab = window.__dashboardPendingTab || null;
+    if (!window.__dashboardPendingTab) {
+      const pendingTab = new URLSearchParams(window.location.search).get("tab");
+      if (pendingTab) {
+        window.__dashboardPendingTab = String(pendingTab || "").trim().toLowerCase();
+      }
+    }
     if (typeof window.showTab !== "function") {
       window.showTab = function (tab) {
         window.__dashboardPendingTab = String(tab || "").trim().toLowerCase();
@@ -334,24 +333,24 @@
 
   <!-- Tab Bar -->
   <div id="dashboard-tabs" class="flex space-x-3 bg-slate-800 px-6 pt-3 pb-2 border-b border-slate-700">
-    <button id="tab-btn-screener" class="tab-btn bg-rose-600 text-white font-bold py-2.5 px-5 rounded-lg border border-rose-400/50 shadow-sm"
+    <button id="tab-btn-screener" class="tab-btn active bg-rose-600 text-white font-bold py-2.5 px-5 rounded-lg border border-rose-400/50 shadow-sm"
       onclick="showTab('screener')">Screener</button>
     <button id="tab-btn-shortlist" class="tab-btn bg-sky-700 text-white font-bold py-2.5 px-5 rounded-lg border border-sky-400/40 shadow-sm"
       onclick="showTab('shortlist')">Shortlist</button>
     <button id="tab-btn-swarm" class="tab-btn bg-violet-700 text-white font-bold py-2.5 px-5 rounded-lg border border-violet-400/40 shadow-sm"
       onclick="showTab('swarm')">Swarm</button>
-    <button id="tab-btn-swarm-lab" class="tab-btn active bg-cyan-700 text-white font-bold py-2.5 px-5 rounded-lg border border-cyan-400/40 shadow-sm"
+    <button id="tab-btn-swarm-lab" class="tab-btn bg-cyan-700 text-white font-bold py-2.5 px-5 rounded-lg border border-cyan-400/40 shadow-sm"
       onclick="showTab('swarm-lab')">Swarm Lab</button>
     <button id="tab-btn-backtest" class="tab-btn bg-emerald-700 text-white font-bold py-2.5 px-5 rounded-lg border border-emerald-400/40 shadow-sm"
       onclick="showTab('backtest')">Backtester</button>
   </div>
 
   <!-- Tab Content Sections -->
-  <div id="tab-screener" class="hidden">
+  <div id="tab-screener">
     <div class="w-full flex gap-6 px-6 mt-6 pb-12">
       <!-- Sidebar for matching tickers -->
       <aside class="w-80 flex flex-col gap-4 overflow-hidden shrink-0">
-        <div class="bg-white shadow-xl rounded-xl p-4 overflow-hidden max-h-[65vh] border-t-4 border-indigo-500 flex flex-col">
+        <div id="screener-results-panel" class="bg-white shadow-xl rounded-xl p-4 overflow-hidden max-h-[65vh] border-t-4 border-indigo-500 flex flex-col">
           <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
             Top Matches
             <div class="flex items-center gap-2">
@@ -399,7 +398,7 @@
               </div>
               <div class="flex-1 min-h-0 flex flex-col">
                 <label class="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">DSL Editor</label>
-                <textarea id="strategy-editor" spellcheck="false"
+                <textarea id="strategy-editor" spellcheck="false" oninput="updateBacktestRunButtonState()"
                   class="flex-1 min-h-[260px] rounded border border-indigo-500/20 bg-slate-950 text-indigo-100 font-mono text-sm px-3 py-3 outline-none resize-none"
                   placeholder="TRIGGER: close > ema_20&#10;EXIT: close < ema_20"></textarea>
               </div>
@@ -432,7 +431,7 @@
             <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-blue-600"></span>Context</span>
             <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-amber-500"></span>Setup</span>
             <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-emerald-600"></span>Trigger</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-red-600"></span>Invalidate</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-red-600"></span>Exit</span>
             <span class="text-slate-400">Shown when strategy layers are evaluable on chart data.</span>
           </div>
           <div id="plotly-tools-dock">
@@ -781,12 +780,28 @@
 
   <div id="tab-backtest" class="hidden">
     <div class="p-6 space-y-6">
-      <div class="flex items-start justify-between gap-4">
-        <div>
+      <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_22rem] gap-6 items-start">
+        <div class="space-y-4">
           <h2 class="text-xl font-bold text-slate-800">Backtester</h2>
           <p class="text-sm text-slate-500">Evaluate saved strategies or the current editor draft and refine them with ranked quality metrics.</p>
+          <div class="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+            <div id="backtest-structure-panel" class="hidden overflow-hidden rounded-xl bg-white shadow border border-slate-200">
+              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
+                <div class="text-sm font-bold text-slate-700">Strategy Structure Radar</div>
+                <div class="mt-1 text-xs text-slate-500">DSL-derived structure scores for the active strategies.</div>
+              </div>
+              <div id="backtest-structure-chart" class="w-full h-[360px] xl:h-[400px]"></div>
+            </div>
+            <div id="backtest-behavior-panel" class="hidden overflow-hidden rounded-xl bg-white shadow border border-slate-200">
+              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
+                <div class="text-sm font-bold text-slate-700">Realized Behavior Radar</div>
+                <div class="mt-1 text-xs text-slate-500">Normalized backtest outcomes for the active strategies. Farther out is better on each axis; area alone is not the score.</div>
+              </div>
+              <div id="backtest-behavior-chart" class="w-full h-[360px] xl:h-[400px]"></div>
+            </div>
+          </div>
         </div>
-        <div class="flex flex-col items-end gap-3">
+        <div class="flex flex-col items-stretch xl:items-end gap-3">
           <div class="inline-flex rounded-lg border border-slate-300 bg-white p-1 shadow-sm">
             <button id="bt-source-saved" type="button" onclick="setBacktestSourceMode('saved')"
               class="rounded-md px-3 py-2 text-sm font-bold bg-indigo-600 text-white">Saved Strategy</button>
@@ -794,18 +809,41 @@
               class="rounded-md px-3 py-2 text-sm font-bold text-slate-600">Editor Draft</button>
           </div>
           <div class="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm w-full max-w-sm">
+            <label for="backtest-strategy-list" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              Saved Strategies
+            </label>
+            <div id="backtest-strategy-list"
+              class="mt-2 max-h-56 overflow-y-auto rounded-lg border border-slate-300 bg-white text-sm font-mono text-slate-800">
+              {% for strat in strategies %}
+              <label class="flex items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-b-0 hover:bg-slate-50">
+                <input type="checkbox" class="backtest-strategy-checkbox h-4 w-4 rounded border-slate-300 text-indigo-600"
+                  value="{{ strat }}" onchange="handleBacktestStrategyChooserChange()">
+                <span class="truncate">{{ strat }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <button id="backtest-select-all-btn" type="button" onclick="selectBacktestStrategies('all')"
+                class="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50">All</button>
+              <button id="backtest-select-none-btn" type="button" onclick="selectBacktestStrategies('none')"
+                class="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50">None</button>
+              <span id="backtest-selected-count" class="ml-auto text-[11px] font-bold uppercase tracking-wide text-slate-500">0 selected</span>
+            </div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm w-full max-w-sm">
             <label for="backtest-since-days" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">
               Signal Window
             </label>
             <div class="mt-2 flex items-center gap-2">
-              <input id="backtest-since-days" type="number" min="1" step="1" placeholder="Auto"
+              <input id="backtest-since-days" type="number" min="1" step="1" placeholder="Auto" oninput="updateBacktestRunButtonState()"
                 class="w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono text-slate-800 outline-none focus:border-indigo-400">
-              <span class="text-xs text-slate-500">Blank uses `MAX_DAYS` from the DSL</span>
+              <span class="text-xs text-slate-500">Blank shows the full backtest set; enter a value to filter recent signals</span>
             </div>
           </div>
-          <button id="backtest-run-btn" onclick="loadBacktestMetrics()"
-            class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-emerald-500/60 transition-all">
-            Evaluate Strategy
+          <button id="backtest-run-btn" onclick="loadBacktestMetrics()" disabled
+            class="bg-slate-300 text-slate-500 text-sm font-bold py-2 px-4 rounded-lg border border-slate-300 transition-all cursor-not-allowed"
+            title="Select at least one saved strategy, or switch to Editor Draft with DSL content.">
+            Evaluate Selected
           </button>
         </div>
       </div>
@@ -814,8 +852,38 @@
         Select a saved strategy or switch to Editor Draft to evaluate the current DSL in the GUI.
       </div>
 
+      <div id="backtest-progress-panel" class="hidden rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wide text-emerald-700">Backtest Progress</div>
+            <div id="backtest-progress-detail" class="mt-1 text-sm text-slate-600">Waiting...</div>
+          </div>
+          <div id="backtest-progress-percent" class="font-mono text-sm font-bold text-slate-700">0%</div>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <div class="mb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <span id="backtest-context-label">Request</span>
+              <span id="backtest-context-text">0%</span>
+            </div>
+            <div class="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div id="backtest-context-bar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300" style="width:0%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="mb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <span id="backtest-global-label">Backend</span>
+              <span id="backtest-global-text">Waiting...</span>
+            </div>
+            <div class="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div id="backtest-global-bar" class="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-300" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="backtest-content" class="hidden space-y-6">
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
           <div class="rounded-xl bg-white shadow p-4 border-t-4 border-emerald-500">
             <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Strategy</div>
             <div id="bt-strategy" class="mt-2 text-lg font-bold text-slate-800">-</div>
@@ -836,10 +904,30 @@
             <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Avg Sharpe</div>
             <div id="bt-avg-sharpe" class="mt-2 text-lg font-bold text-slate-800">0.00</div>
           </div>
+          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-violet-500">
+            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Best Structure</div>
+            <div id="bt-best-structure" class="mt-2 text-lg font-bold text-slate-800">0.00</div>
+          </div>
         </div>
 
         <div class="overflow-hidden rounded-xl bg-white shadow border border-slate-200">
-          <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-700">Quality Snapshot</div>
+          <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 flex flex-wrap items-end justify-between gap-3">
+            <div class="text-sm font-bold text-slate-700">2D Metric Map</div>
+            <div class="flex flex-wrap items-end gap-3">
+              <label class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                X Axis
+                <select id="backtest-x-axis" onchange="renderBacktestScatter()"
+                  class="mt-1 block rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-mono text-slate-800 outline-none focus:border-indigo-400">
+                </select>
+              </label>
+              <label class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Y Axis
+                <select id="backtest-y-axis" onchange="renderBacktestScatter()"
+                  class="mt-1 block rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-mono text-slate-800 outline-none focus:border-indigo-400">
+                </select>
+              </label>
+            </div>
+          </div>
           <div id="backtest-chart" class="w-full h-[360px]"></div>
         </div>
 
@@ -849,15 +937,77 @@
             <table class="min-w-full text-sm">
               <thead class="bg-slate-100 text-slate-600 uppercase text-xs tracking-wide">
                 <tr>
-                  <th class="px-4 py-3 text-left">Ticker</th>
-                  <th class="px-4 py-3 text-left">Quality</th>
-                  <th class="px-4 py-3 text-left">Return</th>
-                  <th class="px-4 py-3 text-left">Win Rate</th>
-                  <th class="px-4 py-3 text-left">Sharpe</th>
-                  <th class="px-4 py-3 text-left">PF</th>
-                  <th class="px-4 py-3 text-left">Max DD</th>
-                  <th class="px-4 py-3 text-left">Trades</th>
-                  <th class="px-4 py-3 text-left">Days Since Entry</th>
+                  <th class="px-4 py-3 text-left">
+                    <button id="backtest-sort-ticker" type="button" onclick="setBacktestTableSort('ticker')"
+                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      title="Sort by ticker">
+                      Ticker
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left">
+                    <button id="backtest-sort-strategy" type="button" onclick="setBacktestTableSort('strategy')"
+                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      title="Sort by strategy">
+                      Strategy
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left">
+                    <button id="backtest-sort-quality_score" type="button" onclick="setBacktestTableSort('quality_score')"
+                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      title="Sort by quality score">
+                      Quality
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left">
+                    <button id="backtest-sort-return_pct" type="button" onclick="setBacktestTableSort('return_pct')"
+                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      title="Sort by return">
+                      Return
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left">
+                    <button id="backtest-sort-win_rate_pct" type="button" onclick="setBacktestTableSort('win_rate_pct')"
+                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      title="Sort by win rate">
+                      Win Rate
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left">
+                    <button id="backtest-sort-sharpe" type="button" onclick="setBacktestTableSort('sharpe')"
+                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      title="Sort by sharpe">
+                      Sharpe
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left">
+                    <button id="backtest-sort-profit_factor" type="button" onclick="setBacktestTableSort('profit_factor')"
+                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      title="Sort by profit factor">
+                      PF
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left">
+                    <button id="backtest-sort-max_dd_pct" type="button" onclick="setBacktestTableSort('max_dd_pct')"
+                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      title="Sort by max drawdown">
+                      Max DD
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left">
+                    <button id="backtest-sort-trades" type="button" onclick="setBacktestTableSort('trades')"
+                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      title="Sort by trade count">
+                      Trades
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left">
+                    <button id="backtest-sort-days_since_entry" type="button" onclick="setBacktestTableSort('days_since_entry')"
+                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      title="Sort by days since entry">
+                      Days Since Entry
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left">Exclude</th>
                 </tr>
               </thead>
               <tbody id="backtest-table-body" class="divide-y divide-slate-100"></tbody>
@@ -868,7 +1018,7 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/dashboard-loader.js?v=20260507ax"></script>
+  <script type="module" src="/static/js/dashboard-loader.js?v=20260607exclude1"></script>
 
   <!-- ===============================================================
          Browser → Server log relay
@@ -876,7 +1026,7 @@
          each entry to /api/log so it appears in the server-side debug
          log file alongside all Python / uvicorn log records.
     ================================================================ -->
-  <script src="/static/js/browser-log-relay.js?v=20260507r"></script>
+  <script src="/static/js/browser-log-relay.js?v=20260515r1"></script>
 
   <!-- List Editor Modal -->
   <div id="list-modal"
@@ -990,6 +1140,7 @@
       </div>
     </div>
   </div>
+
 </body>
 
 </html>

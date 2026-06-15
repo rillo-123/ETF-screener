@@ -35,6 +35,38 @@ def test_parse_strategy_scripts_defaults_missing_exit_to_false():
     assert exit_script == "False"
 
 
+def test_supertrend_red_to_green_ema50_crossup_strategy_parses_as_expected():
+    from pathlib import Path
+
+    strategy_path = Path("strategies/supertrend_red_to_green_ema50_crossup.dsl")
+    content = strategy_path.read_text(encoding="utf-8")
+
+    entry_script, exit_script = parse_strategy_scripts(content)
+
+    assert "ema_200_slope > 0" in entry_script
+    assert "st_10_4 < ema_50" in entry_script
+    assert "st_10_4_d4 < ema_50_d4" in entry_script
+    assert "cross_up(st_10_4, ema_50)" in entry_script
+    assert "cross_down(st_10_4, ema_50)" in exit_script
+    assert "ema_200_slope <= 0" in exit_script
+
+
+def test_supertrend_st_crossdown_ema50_slope_turnup_strategy_parses_as_expected():
+    from pathlib import Path
+
+    strategy_path = Path("strategies/supertrend_st_crossdown_ema50_slope_turnup.dsl")
+    content = strategy_path.read_text(encoding="utf-8")
+
+    entry_script, exit_script = parse_strategy_scripts(content)
+
+    assert "ema_200_slope > 0" in entry_script
+    assert "st_10_4 < ema_50" in entry_script
+    assert "st_10_4_d6 >= ema_50_d6" in entry_script
+    assert "ema_50_slope_cross_up" in entry_script
+    assert "cross_up(st_10_4, ema_50)" in exit_script
+    assert "ema_200_slope <= 0" in exit_script
+
+
 def test_parse_strategy_blocks_preserves_block_order_and_fallback_sections():
     content = """
     FILTER: close > ema_200
@@ -51,7 +83,7 @@ def test_parse_strategy_blocks_preserves_block_order_and_fallback_sections():
     assert [block.name for block in blocks] == [
         "Setup",
         "TRIGGER_EVENT",
-        "Invalidate",
+        "Exit",
     ]
     assert [block.layer for block in blocks] == [2, 3, 4]
     assert blocks[0].expressions == ("(close > ema_200)",)

@@ -4,7 +4,7 @@ workflow_milestone.ps1
 Milestone maintenance workflow for the ETF Screener repo.
 
 What it does:
-  1. Updates plan.md and progress.md.
+  1. Updates the plan docs and progress.md.
   2. Runs the test suite.
   3. Optionally applies light auto-fixes when tests fail.
   4. Reruns the tests after those fixes.
@@ -12,7 +12,7 @@ What it does:
 
 Conversation convention:
   "Set the milestone" means the work should be carried to a clean checkpoint:
-    - update plan.md and progress.md
+    - update the plan docs and progress.md
     - run the full test suite
     - fix remaining bugs until everything passes
     - commit and push the finished checkpoint
@@ -27,7 +27,7 @@ Usage:
   .\workflow_milestone.ps1 -CommitMessage "chore: milestone sync"
   .\workflow_milestone.ps1 -- -Parallel -TimeoutSec 120
 
-Any extra arguments are forwarded to `run_all_tests.ps1`.
+Any extra arguments are forwarded to `scripts/run_all_tests.ps1`.
 #>
 
 param(
@@ -53,8 +53,8 @@ Usage:
   .\workflow_milestone.ps1 -- -Parallel -TimeoutSec 120
 
 Behavior:
-  1. Updates plan.md and progress.md with the current milestone outcome.
-  2. Runs run_all_tests.ps1.
+  1. Updates the plan docs and progress.md with the current milestone outcome.
+  2. Runs scripts/run_all_tests.ps1.
   3. Applies light auto-fixes with ruff and black if the tests fail.
   4. Reruns the tests after those fixes.
   5. Stops if tests are still failing; otherwise commits and pushes the current branch.
@@ -64,7 +64,7 @@ Conversation convention:
   until everything passes, and then commit/push the checkpoint. This script
   performs the repeatable gate/publish step after the code is ready.
 
-Any extra arguments are forwarded to run_all_tests.ps1.
+Any extra arguments are forwarded to scripts/run_all_tests.ps1.
 "@
     exit 0
 }
@@ -116,7 +116,7 @@ function Test-PythonModule {
 function Invoke-TestSuite {
     param([string[]]$RunnerArgs = @())
 
-    $runner = Join-Path $root 'run_all_tests.ps1'
+    $runner = Join-Path $root 'scripts\run_all_tests.ps1'
     if (-not (Test-Path $runner)) {
         throw "Test runner not found at $runner"
     }

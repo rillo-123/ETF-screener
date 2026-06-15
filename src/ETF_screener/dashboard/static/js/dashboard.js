@@ -92,6 +92,7 @@ let backtestSourceMode = "saved";
     let tickerUniverseLoadPromise = null;
     let tickerSelectLastValue = "";
     let tickerScanScope = "xetra";
+    let tickerUniverseExplicitlyChosen = false;
     let tickerListMode = "custom";
     let customTickerLists = [];
     let customTickerListActiveName = "My List";
@@ -101,6 +102,30 @@ let backtestSourceMode = "saved";
     let customTickerListDraftSourceName = "My List";
     let listBuilderExchange = "all";
     let listBuilderSearch = "";
+    let backtestMatrixRows = [];
+    let backtestTradeDotRows = [];
+    let backtestExcludedTickers = new Set();
+    let backtestStrategySummaries = [];
+    let backtestStrategyAxisCatalog = [];
+    let backtestMetricCatalog = [];
+    let backtestTableSortKey = "quality_score";
+    let backtestTableSortDirection = "desc";
+    let backtestScatterRenderTimer = null;
+    let backtestRaceState = null;
+    let backtestRaceCache = new Map();
+    let backtestRacePlaying = false;
+    let backtestRaceAnimationHandle = null;
+    let backtestRaceLastFrameTime = null;
+    let backtestRaceMotionHandle = null;
+    let backtestRaceLastMotionFrame = null;
+    let backtestRaceAbortController = null;
+    let backtestRaceCurrentSignature = "";
+    let backtestRaceFuelMetric = "return_pct";
+    let backtestRaceEventRunId = "";
+    let backtestRaceNextEventSeq = 1;
+    let backtestRaceEventFetchInFlight = false;
+    let backtestProgressStartedAt = 0;
+    let currentDays = 365 * 2;
     const SWARM_TIMELINE_MAX = 1000;
     const SWARM_HISTORY_DAYS = 420;
     const SWARM_HISTORY_LIMIT = 900;
@@ -124,7 +149,39 @@ let backtestSourceMode = "saved";
     const LAST_CUSTOM_LIST_KEY = "etf-discovery:last-custom-list";
     const LAST_CUSTOM_LIST_NAME_KEY = "etf-discovery:last-custom-list-name";
     const LAST_DASHBOARD_TAB_KEY = "etf-discovery:last-dashboard-tab";
-
+    const LAST_BACKTEST_RACE_KEY = "etf-discovery:last-backtest-race";
+    const LAST_BACKTEST_RACE_FUEL_KEY = "etf-discovery:last-backtest-race-fuel";
+    const BACKTEST_RACE_FUEL_METRICS = [
+      { key: "return_pct", label: "Profitability", kind: "percent" },
+      { key: "avg_quality_score", label: "Quality", kind: "score" },
+      { key: "sharpe", label: "Sharpe", kind: "ratio" },
+      { key: "win_rate_pct", label: "Win Rate", kind: "percent" },
+      { key: "profit_factor", label: "Profit Factor", kind: "ratio" },
+      { key: "trades", label: "Trades", kind: "count" },
+    ];
+    const BACKTEST_STRATEGY_COLORS = [
+      "#2563eb", "#dc2626", "#059669", "#d97706", "#7c3aed",
+      "#0891b2", "#be123c", "#4d7c0f", "#9333ea", "#0f766e",
+      "#ea580c", "#1d4ed8", "#b91c1c", "#047857", "#a16207",
+      "#db2777", "#0284c7", "#65a30d", "#c2410c", "#6d28d9",
+      "#0d9488", "#e11d48", "#4338ca", "#15803d", "#b45309",
+    ];
+    const BACKTEST_STRUCTURE_AXIS_DEFAULTS = [
+      { key: "trend_context", label: "Trend Context", max: 10 },
+      { key: "confirmation_depth", label: "Confirmation Depth", max: 10 },
+      { key: "trigger_precision", label: "Trigger Precision", max: 10 },
+      { key: "exit_discipline", label: "Exit Discipline", max: 10 },
+      { key: "risk_control", label: "Risk Control", max: 10 },
+      { key: "time_discipline", label: "Time Discipline", max: 10 },
+    ];
+    const BACKTEST_BEHAVIOR_AXIS_DEFAULTS = [
+      { key: "quality", label: "Quality", max: 10 },
+      { key: "profitability", label: "Return", max: 10 },
+      { key: "risk_adjusted", label: "Sharpe", max: 10 },
+      { key: "consistency", label: "Win Rate", max: 10 },
+      { key: "payoff_efficiency", label: "Profit Factor", max: 10 },
+      { key: "drawdown_control", label: "Drawdown Control", max: 10 },
+    ];
     function getDashboardTabs() {
       return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"]
         .map((name) => document.getElementById(`tab-${name}`))
@@ -145,9 +202,43 @@ let backtestSourceMode = "saved";
       }
     }
 
+    function hasStickyValue(key) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw !== null && raw !== undefined && String(raw).trim() !== "";
+      } catch (err) {
+        return false;
+      }
+    }
+
     function writeStickyValue(key, value) {
       try {
         localStorage.setItem(key, String(value ?? ""));
+      } catch (err) {
+        // Ignore storage failures in restricted environments.
+      }
+    }
+
+    function readBacktestRaceSnapshot() {
+      try {
+        const raw = localStorage.getItem(LAST_BACKTEST_RACE_KEY);
+        if (!raw) {
+          return null;
+        }
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function writeBacktestRaceSnapshot(snapshot) {
+      try {
+        if (!snapshot || typeof snapshot !== "object") {
+          localStorage.removeItem(LAST_BACKTEST_RACE_KEY);
+          return;
+        }
+        localStorage.setItem(LAST_BACKTEST_RACE_KEY, JSON.stringify(snapshot));
       } catch (err) {
         // Ignore storage failures in restricted environments.
       }
@@ -683,14 +774,18 @@ let backtestSourceMode = "saved";
     async function applyScanScopeSelection(mode) {
       const normalized = normalizeScanScope(mode);
       tickerScanScope = normalized;
+      tickerUniverseExplicitlyChosen = true;
       writeStickyValue(LAST_SCAN_SCOPE_KEY, normalized);
       updateScanScopeChrome();
+      updateRangeChrome();
+      updateScanActionButtonsState();
       loadMarketStatus(normalized).catch((err) => {
         console.warn("Could not refresh market status after scope change", err);
       });
       if ((normalized === "list" || normalized === "all_lists") && getScopeTickers(normalized).length === 0) {
         await openListEditorModal();
       }
+      updateBacktestRunButtonState();
       if (swarmLoaded || !document.getElementById("tab-swarm").classList.contains("hidden")) {
         loadSwarmWorld(true).catch((err) => {
           console.warn("Could not refresh swarm world after scope change", err);
@@ -969,6 +1064,7 @@ let backtestSourceMode = "saved";
       tickerListMode = "custom";
       writeStickyValue(LAST_LIST_MODE_KEY, tickerListMode);
       updateListSelectChrome();
+      updateBacktestRunButtonState();
       closeListEditorModal();
       showToast(
         saved.savedToServer
@@ -1052,6 +1148,9 @@ let backtestSourceMode = "saved";
         label.textContent = `${getRangeLabel(currentDays)} chart`;
       }
 
+      const universeReady = tickerUniverseExplicitlyChosen;
+      const universeReason = universeReady ? "" : "Choose a ticker universe first";
+
       RANGE_PRESETS.forEach((preset) => {
         const days = preset.days;
         const button = getRangeButton(days);
@@ -1062,6 +1161,9 @@ let backtestSourceMode = "saved";
         if (!button.dataset.baseClass) {
           button.dataset.baseClass = button.className;
         }
+        if (!button.dataset.baseTitle) {
+          button.dataset.baseTitle = button.title || "";
+        }
         button.className = button.dataset.baseClass;
         button.style.backgroundColor = active ? "#4f46e5" : "";
         button.style.borderColor = active ? "#818cf8" : "";
@@ -1069,6 +1171,8 @@ let backtestSourceMode = "saved";
         button.style.transform = active ? "translateY(-1px)" : "";
         button.setAttribute("aria-pressed", active ? "true" : "false");
         button.dataset.active = active ? "true" : "false";
+        button.disabled = !universeReady;
+        button.title = universeReady ? button.dataset.baseTitle || "" : universeReason;
       });
     }
 
@@ -1082,16 +1186,1121 @@ let backtestSourceMode = "saved";
       const content = document.getElementById("backtest-content");
       const body = document.getElementById("backtest-table-body");
       const chartDiv = document.getElementById("backtest-chart");
+      const racePanel = document.getElementById("backtest-race-panel");
 
       if (body) {
         body.innerHTML = "";
       }
+      backtestMatrixRows = [];
+      backtestTradeDotRows = [];
+      backtestExcludedTickers = new Set();
+      backtestStrategySummaries = [];
+      backtestStrategyAxisCatalog = backtestDefaultStructureAxisCatalog();
+      updateBacktestBestStructureCard([]);
+      setBacktestStructurePanelVisible(false);
+      setBacktestBehaviorPanelVisible(false);
+      updateBacktestTableHeaderState();
       if (chartDiv && window.Plotly) {
         Plotly.purge(chartDiv);
+      }
+      const structureChartDiv = document.getElementById("backtest-structure-chart");
+      if (structureChartDiv && window.Plotly) {
+        Plotly.purge(structureChartDiv);
+      }
+      const behaviorChartDiv = document.getElementById("backtest-behavior-chart");
+      if (behaviorChartDiv && window.Plotly) {
+        Plotly.purge(behaviorChartDiv);
+      }
+      if (racePanel && !backtestRaceState) {
+        racePanel.classList.add("hidden");
       }
       emptyState.textContent = message;
       emptyState.classList.remove("hidden");
       content.classList.add("hidden");
+    }
+
+    function prepareBacktestLiveResults(message = "Waiting for scored backtest rows...") {
+      const emptyState = document.getElementById("backtest-empty");
+      const content = document.getElementById("backtest-content");
+      const body = document.getElementById("backtest-table-body");
+      if (body) {
+        body.innerHTML = "";
+      }
+      if (emptyState) {
+        emptyState.textContent = message;
+        emptyState.classList.add("hidden");
+      }
+      if (content) {
+        content.classList.remove("hidden");
+      }
+      backtestMatrixRows = [];
+      backtestTradeDotRows = [];
+      backtestExcludedTickers = new Set();
+      backtestStrategySummaries = [];
+      backtestStrategyAxisCatalog = backtestDefaultStructureAxisCatalog();
+      updateBacktestBestStructureCard([]);
+      setBacktestStructurePanelVisible(false);
+      setBacktestBehaviorPanelVisible(false);
+      updateBacktestTableHeaderState();
+      populateBacktestAxisControls(backtestDefaultMetrics());
+      renderBacktestScatter();
+      renderBacktestStructureRadar();
+      renderBacktestBehaviorRadar();
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[char] || char);
+    }
+
+    function getBacktestRaceFuelConfig(key = backtestRaceFuelMetric) {
+      return BACKTEST_RACE_FUEL_METRICS.find((metric) => metric.key === key)
+        || BACKTEST_RACE_FUEL_METRICS[0];
+    }
+
+    function normalizeBacktestRaceFuelMetric(value) {
+      return getBacktestRaceFuelConfig(String(value || "return_pct")).key;
+    }
+
+    function getBacktestRaceFuelValue(lane, metricKey = backtestRaceFuelMetric) {
+      const key = normalizeBacktestRaceFuelMetric(metricKey);
+      if (key === "avg_quality_score") {
+        return Number(lane?.avg_quality_score ?? lane?.quality_score ?? 0) || 0;
+      }
+      return Number(lane?.[key] ?? 0) || 0;
+    }
+
+    function formatBacktestRaceFuelValue(value, metricKey = backtestRaceFuelMetric) {
+      const config = getBacktestRaceFuelConfig(metricKey);
+      const numeric = Number(value || 0);
+      if (config.kind === "percent") {
+        return formatBacktestPercent(numeric);
+      }
+      if (config.kind === "count") {
+        return Math.round(Math.max(0, numeric)).toLocaleString();
+      }
+      return numeric.toFixed(2);
+    }
+
+    function getBacktestRaceScaledFuel(lane, lanes, metricKey = backtestRaceFuelMetric) {
+      const values = Array.isArray(lanes)
+        ? lanes.map((item) => getBacktestRaceFuelValue(item, metricKey)).filter((value) => Number.isFinite(value))
+        : [];
+      const raw = getBacktestRaceFuelValue(lane, metricKey);
+      if (!values.length || !Number.isFinite(raw)) {
+        return 0;
+      }
+      const maxValue = Math.max(...values);
+      const minValue = Math.min(...values);
+      if (maxValue > 0) {
+        return Math.max(0, Math.min(100, (raw / maxValue) * 100));
+      }
+      if (maxValue === 0 && minValue < 0) {
+        return Math.max(0, Math.min(100, ((raw - minValue) / (0 - minValue)) * 100));
+      }
+      if (maxValue < 0) {
+        if (maxValue === minValue) {
+          return 100;
+        }
+        return Math.max(0, Math.min(100, ((raw - minValue) / (maxValue - minValue)) * 100));
+      }
+      return 0;
+    }
+
+    backtestRaceFuelMetric = normalizeBacktestRaceFuelMetric(
+      readStickyValue(LAST_BACKTEST_RACE_FUEL_KEY, "return_pct")
+    );
+
+    function getBacktestRaceNodes() {
+      return {
+        panel: document.getElementById("backtest-race-panel"),
+        track: document.getElementById("backtest-race-track"),
+        status: document.getElementById("backtest-race-status"),
+        progress: document.getElementById("backtest-race-progress"),
+        fuel: document.getElementById("backtest-race-fuel"),
+        start: document.getElementById("backtest-race-start-btn"),
+        stop: document.getElementById("backtest-race-stop-btn"),
+        restart: document.getElementById("backtest-race-restart-btn"),
+      };
+    }
+
+    function buildBacktestRaceSignature({ sourceMode, strategyName, strategies, signalDays, universeQuery }) {
+      const sortedStrategies = Array.isArray(strategies) ? strategies.map((item) => String(item || "").trim()).filter(Boolean) : [];
+      return [
+        String(sourceMode || "saved"),
+        String(strategyName || ""),
+        String(signalDays ?? "auto"),
+        sortedStrategies.join("|"),
+        String(universeQuery || ""),
+      ].join("::");
+    }
+
+    function computeBacktestRaceSpeedFactor(lane, minScore, maxScore) {
+      const raw = Number(
+        lane?.speed_score ?? lane?.avg_quality_score ?? lane?.quality_score ?? lane?.return_pct ?? 0
+      );
+      if (!Number.isFinite(raw)) {
+        return 1.0;
+      }
+      if (!Number.isFinite(minScore) || !Number.isFinite(maxScore) || maxScore === minScore) {
+        return 1.0;
+      }
+      const normalized = Math.max(0, Math.min(1, (raw - minScore) / (maxScore - minScore)));
+      return Number((0.55 + (normalized * 1.1)).toFixed(2));
+    }
+
+    function normalizeBacktestRaceLanes(lanes) {
+      const items = Array.isArray(lanes) ? lanes.map((lane, index) => ({
+        strategy: String(lane?.strategy || lane?.label || `Lane ${index + 1}`),
+        index: Number.isFinite(Number(lane?.index)) ? Number(lane.index) : index + 1,
+        status: String(lane?.status || "queued"),
+        progress_pct: Math.max(0, Math.min(100, Number(lane?.progress_pct ?? 0) || 0)),
+        visual_progress_pct: Math.max(
+          0,
+          Math.min(100, Number(lane?.visual_progress_pct ?? lane?.display_pct ?? lane?.progress_pct ?? 0) || 0)
+        ),
+        detail: String(lane?.detail || ""),
+        count: Number(lane?.count || 0),
+        ticker_count: Number(lane?.ticker_count || 0),
+        processed_tickers: Number(lane?.processed_tickers ?? lane?.completed_tickers ?? 0) || 0,
+        scored_tickers: Number(lane?.scored_tickers ?? lane?.count ?? 0) || 0,
+        no_trade_tickers: Number(lane?.no_trade_tickers ?? 0) || 0,
+        error_tickers: Number(lane?.error_tickers ?? 0) || 0,
+        completed_tickers: Number(lane?.completed_tickers || 0),
+        total_tickers: Number(lane?.total_tickers || lane?.ticker_count || 0),
+        last_ticker: String(lane?.last_ticker || ""),
+        best_ticker: String(lane?.best_ticker || ""),
+        best_return_pct: Number(lane?.best_return_pct || 0),
+        trades: Number(lane?.trades || 0),
+        quality_score: Number(lane?.quality_score || 0),
+        avg_quality_score: Number(lane?.avg_quality_score || 0),
+        return_pct: Number(lane?.return_pct || 0),
+        sharpe: Number(lane?.sharpe || 0),
+        win_rate_pct: Number(lane?.win_rate_pct || 0),
+        profit_factor: Number(lane?.profit_factor || 0),
+        max_dd_pct: Number(lane?.max_dd_pct || 0),
+        structure_score: Number(lane?.structure_score || 0),
+        structure_axes: normalizeBacktestStructureAxes(lane?.structure_axes, backtestStrategyAxisCatalog),
+        structure_tags: Array.isArray(lane?.structure_tags)
+          ? lane.structure_tags.map((tag) => String(tag || "")).filter(Boolean)
+          : [],
+        axis_order: Array.isArray(lane?.axis_order) && lane.axis_order.length > 0
+          ? lane.axis_order.map((item) => String(item || "")).filter(Boolean)
+          : normalizeBacktestStructureAxisCatalog(backtestStrategyAxisCatalog).map((axis) => axis.key),
+        speed_score: Number(lane?.speed_score ?? lane?.avg_quality_score ?? lane?.quality_score ?? lane?.return_pct ?? 0),
+        speed_factor: Number(lane?.speed_factor || 0),
+        display_pct: Math.max(0, Math.min(100, Number(lane?.display_pct ?? lane?.progress_pct ?? 0) || 0)),
+      })) : [];
+      const rawScores = items
+        .map((lane) => Number(lane.speed_score))
+        .filter((value) => Number.isFinite(value));
+      const minScore = rawScores.length ? Math.min(...rawScores) : NaN;
+      const maxScore = rawScores.length ? Math.max(...rawScores) : NaN;
+      return items.map((lane) => ({
+        ...lane,
+        speed_factor: lane.speed_factor > 0
+          ? lane.speed_factor
+          : computeBacktestRaceSpeedFactor(lane, minScore, maxScore),
+      }));
+    }
+
+    function createBacktestRaceState({
+      signature = "",
+      strategies = [],
+      lanes = [],
+      targetProgress = 0,
+      displayProgress = 0,
+      status = "idle",
+      playing = false,
+      activeStrategy = "",
+      detail = "",
+    } = {}) {
+      const normalizedLanes = normalizeBacktestRaceLanes(
+        lanes.length > 0
+          ? lanes
+          : strategies.map((strategy, index) => ({
+            strategy,
+            index: index + 1,
+            status: "queued",
+            progress_pct: 0,
+            visual_progress_pct: 0,
+            detail: "Queued",
+            speed_score: 0,
+            trades: 0,
+          }))
+      );
+      return {
+        signature,
+        strategies: Array.isArray(strategies) ? strategies.slice() : [],
+        lanes: normalizedLanes,
+        targetProgress: Math.max(0, Math.min(100, Number(targetProgress) || 0)),
+        displayProgress: Math.max(0, Math.min(100, Number(displayProgress) || 0)),
+        status,
+        playing,
+        activeStrategy,
+        detail,
+        motionTick: 0,
+      };
+    }
+
+    function persistBacktestRaceState() {
+      if (!backtestRaceState) {
+        writeBacktestRaceSnapshot(null);
+        return;
+      }
+      writeBacktestRaceSnapshot({
+        signature: backtestRaceState.signature || "",
+        strategies: Array.isArray(backtestRaceState.strategies) ? backtestRaceState.strategies.slice() : [],
+        lanes: Array.isArray(backtestRaceState.lanes)
+          ? backtestRaceState.lanes.map((lane) => ({ ...lane }))
+          : [],
+        targetProgress: Number(backtestRaceState.targetProgress || 0),
+        displayProgress: Number(backtestRaceState.displayProgress || 0),
+        status: String(backtestRaceState.status || "idle"),
+        activeStrategy: String(backtestRaceState.activeStrategy || ""),
+        detail: String(backtestRaceState.detail || ""),
+        motionTick: Number(backtestRaceState.motionTick || 0),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    function restoreBacktestRaceStateFromStorage() {
+      const snapshot = readBacktestRaceSnapshot();
+      if (!snapshot || !Array.isArray(snapshot.strategies) || snapshot.strategies.length === 0) {
+        return false;
+      }
+      backtestRaceState = createBacktestRaceState({
+        signature: String(snapshot.signature || ""),
+        strategies: snapshot.strategies.map((item) => String(item || "")).filter(Boolean),
+        lanes: Array.isArray(snapshot.lanes) ? snapshot.lanes : [],
+        targetProgress: Number(snapshot.targetProgress || 0),
+        displayProgress: Number(snapshot.displayProgress || snapshot.targetProgress || 0),
+        status: String(snapshot.status || "done") === "running" ? "paused" : String(snapshot.status || "done"),
+        activeStrategy: String(snapshot.activeStrategy || ""),
+        detail: String(snapshot.detail || "Restored cached race"),
+        playing: String(snapshot.status || "done") === "running",
+      });
+      backtestRaceState.motionTick = Number(snapshot.motionTick || 0);
+      backtestRaceCache.set(backtestRaceState.signature, {
+        ...backtestRaceState,
+        lanes: Array.isArray(backtestRaceState.lanes) ? backtestRaceState.lanes.map((lane) => ({ ...lane })) : [],
+      });
+      renderBacktestRace();
+      setBacktestRacePanelVisible(true);
+      ensureBacktestRaceMotionLoop();
+      return true;
+    }
+
+    function updateBacktestRaceButtons() {
+      const nodes = getBacktestRaceNodes();
+      const readiness = getBacktestRunReadiness();
+      const enabled = Boolean(readiness.ready);
+      const hasRace = Boolean(backtestRaceState && Array.isArray(backtestRaceState.lanes) && backtestRaceState.lanes.length > 0);
+      const requestActive = Boolean(backtestRaceAbortController);
+      if (nodes.start) {
+        nodes.start.disabled = !enabled || !hasRace;
+        nodes.start.textContent = requestActive && backtestRacePlaying
+          ? "Running"
+          : requestActive
+            ? "Resume"
+            : hasRace
+              ? "Run Again"
+              : "Start";
+        nodes.start.title = !enabled
+          ? readiness.reason
+          : requestActive
+            ? "Resume the visible race"
+            : hasRace
+              ? "Start a fresh backtest run"
+              : "Run a backtest first";
+      }
+      if (nodes.stop) {
+        nodes.stop.disabled = !enabled || (!hasRace && !requestActive);
+        nodes.stop.title = !enabled
+          ? readiness.reason
+          : hasRace || requestActive
+            ? "Stop the current race"
+            : "Start a backtest first";
+      }
+      if (nodes.restart) {
+        nodes.restart.disabled = !enabled || !hasRace;
+        nodes.restart.title = !enabled
+          ? readiness.reason
+          : hasRace
+            ? "Restart the current race from the beginning"
+            : "Run a backtest first";
+      }
+    }
+
+    function setBacktestRacePanelVisible(show) {
+      const nodes = getBacktestRaceNodes();
+      if (!nodes.panel) {
+        return;
+      }
+      nodes.panel.classList.toggle("hidden", !show);
+      updateBacktestRaceButtons();
+    }
+
+    function ensureBacktestRaceMotionLoop() {
+      if (!backtestRaceState || !Array.isArray(backtestRaceState.lanes) || backtestRaceState.lanes.length === 0) {
+        if (backtestRaceMotionHandle) {
+          cancelAnimationFrame(backtestRaceMotionHandle);
+        }
+        backtestRaceMotionHandle = null;
+        backtestRaceLastMotionFrame = null;
+        return;
+      }
+      if (!backtestRacePlaying) {
+        if (backtestRaceMotionHandle) {
+          cancelAnimationFrame(backtestRaceMotionHandle);
+        }
+        backtestRaceMotionHandle = null;
+        backtestRaceLastMotionFrame = null;
+        return;
+      }
+      if (backtestRaceMotionHandle) {
+        return;
+      }
+      const step = (timestamp) => {
+        if (!backtestRaceState || !Array.isArray(backtestRaceState.lanes) || backtestRaceState.lanes.length === 0) {
+          backtestRaceMotionHandle = null;
+          backtestRaceLastMotionFrame = null;
+          return;
+        }
+        if (backtestRaceLastMotionFrame === null) {
+          backtestRaceLastMotionFrame = timestamp;
+        }
+        const delta = Math.max(0, (timestamp - backtestRaceLastMotionFrame) / 1000.0);
+        backtestRaceLastMotionFrame = timestamp;
+        backtestRaceState.motionTick = Number(backtestRaceState.motionTick || 0) + (delta * 90);
+        backtestRaceState.lanes = backtestRaceState.lanes.map((lane) => {
+          const current = Number(lane.visual_progress_pct ?? lane.progress_pct ?? 0);
+          const backend = Number(lane.progress_pct || 0);
+          const laneBoost = Number(lane.speed_factor || 1.0);
+          const speedStep = 12 * laneBoost;
+          const catchUp = Math.max(0, backend - current) * 0.12;
+          const next = Math.min(100, current + ((speedStep + catchUp) * delta));
+          return {
+            ...lane,
+            visual_progress_pct: Math.max(current, next),
+          };
+        });
+        persistBacktestRaceState();
+        renderBacktestRace();
+        if (!backtestRacePlaying) {
+          backtestRaceMotionHandle = null;
+          backtestRaceLastMotionFrame = null;
+          return;
+        }
+        backtestRaceMotionHandle = requestAnimationFrame(step);
+      };
+      backtestRaceMotionHandle = requestAnimationFrame(step);
+    }
+
+    function getBacktestRaceLeaderReturn(lanes) {
+      if (!Array.isArray(lanes) || lanes.length === 0) {
+        return 0;
+      }
+      return lanes.reduce((max, lane) => {
+        const value = Number(lane?.return_pct ?? 0) || 0;
+        return value > max ? value : max;
+      }, 0);
+    }
+
+    function getBacktestRaceMinReturn(lanes) {
+      if (!Array.isArray(lanes) || lanes.length === 0) {
+        return 0;
+      }
+      return lanes.reduce((min, lane) => {
+        const value = Number(lane?.return_pct ?? 0) || 0;
+        return value < min ? value : min;
+      }, 0);
+    }
+
+    function getBacktestRaceScaledProfitability(lane, leaderReturn, floorReturn) {
+      const raw = Number(lane?.return_pct ?? 0) || 0;
+      if (!Number.isFinite(raw)) {
+        return 0;
+      }
+      if (Number.isFinite(leaderReturn) && leaderReturn > 0) {
+        return Math.max(0, Math.min(100, (raw / leaderReturn) * 100));
+      }
+      if (Number.isFinite(leaderReturn) && leaderReturn === 0 && Number.isFinite(floorReturn) && floorReturn < 0) {
+        const normalized = (raw - floorReturn) / (0 - floorReturn);
+        return Math.max(0, Math.min(100, normalized * 100));
+      }
+      if (Number.isFinite(leaderReturn) && leaderReturn < 0) {
+        const minReturn = Number.isFinite(floorReturn) ? floorReturn : leaderReturn;
+        if (leaderReturn === minReturn) {
+          return 100;
+        }
+        const normalized = (raw - minReturn) / (leaderReturn - minReturn);
+        return Math.max(0, Math.min(100, normalized * 100));
+      }
+      return 0;
+    }
+
+    function formatBacktestPercent(value) {
+      const numeric = Number(value || 0);
+      const prefix = numeric > 0 ? "+" : "";
+      return `${prefix}${numeric.toFixed(2)}%`;
+    }
+
+    function isBacktestRaceTerminalStatus(status) {
+      const cleaned = String(status || "").trim().toLowerCase();
+      return ["done", "complete", "completed", "finished", "success", "succeeded"].includes(cleaned);
+    }
+
+    function formatBacktestWorkProgress(race, fallbackText = "") {
+      const workCompleted = Number(race?.work_completed ?? NaN);
+      const workTotal = Number(race?.work_total ?? NaN);
+      if (Number.isFinite(workCompleted) && Number.isFinite(workTotal) && workTotal > 0) {
+        return `${Math.max(0, Math.round(workCompleted)).toLocaleString()}/${Math.round(workTotal).toLocaleString()} checks`;
+      }
+      return fallbackText;
+    }
+
+    function resetBacktestRaceState({ keepPanelVisible = false } = {}) {
+      backtestRacePlaying = false;
+      backtestRaceLastFrameTime = null;
+      if (backtestRaceAnimationHandle) {
+        cancelAnimationFrame(backtestRaceAnimationHandle);
+      }
+      backtestRaceAnimationHandle = null;
+      if (backtestRaceMotionHandle) {
+        cancelAnimationFrame(backtestRaceMotionHandle);
+      }
+      backtestRaceMotionHandle = null;
+      backtestRaceLastMotionFrame = null;
+      if (backtestRaceAbortController) {
+        backtestRaceAbortController.abort();
+      }
+      backtestRaceAbortController = null;
+      backtestRaceState = null;
+      backtestRaceCurrentSignature = "";
+      if (!keepPanelVisible) {
+        setBacktestRacePanelVisible(false);
+      } else {
+        updateBacktestRaceButtons();
+      }
+    }
+
+    function renderBacktestRace() {
+      const nodes = getBacktestRaceNodes();
+      if (!nodes.panel || !nodes.track) {
+        return;
+      }
+      bindBacktestRaceControls();
+      if (!backtestRaceState || !Array.isArray(backtestRaceState.lanes) || backtestRaceState.lanes.length === 0) {
+        nodes.track.innerHTML = `
+          <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+            Run a backtest to line up the lanes.
+          </div>
+        `;
+        if (nodes.status) {
+          nodes.status.textContent = "Waiting for a run...";
+        }
+        if (nodes.progress) {
+          nodes.progress.textContent = "0%";
+        }
+        updateBacktestRaceButtons();
+        return;
+      }
+
+      const displayProgress = Math.max(
+        0,
+        Math.min(100, Number(backtestRaceState.displayProgress ?? backtestRaceState.targetProgress ?? 0) || 0)
+      );
+      const motionTick = Number(backtestRaceState.motionTick || 0);
+      const lanes = backtestRaceState.lanes.map((lane) => ({ ...lane }));
+      const fuelMetric = getBacktestRaceFuelConfig();
+      const visualProgress = lanes.length > 0
+        ? lanes.reduce((sum, lane) => sum + Math.max(0, Math.min(100, Number(lane.progress_pct ?? 0) || 0)), 0) / lanes.length
+        : displayProgress;
+      const statusText = backtestRaceState.status === "running"
+        ? (backtestRacePlaying
+          ? `Running ${backtestRaceState.activeStrategy || "race"}`
+          : `Paused at ${Math.round(visualProgress)}%`)
+        : backtestRaceState.status === "done"
+          ? (backtestRaceState.detail || "Done")
+          : backtestRaceState.status === "stopped"
+            ? (backtestRaceState.detail || `Stopped at ${Math.round(visualProgress)}%`)
+          : backtestRaceState.status === "failed"
+            ? (backtestRaceState.detail || "Failed")
+            : backtestRaceState.detail || "Ready";
+
+      if (nodes.status) {
+        nodes.status.textContent = statusText;
+      }
+
+      if (nodes.progress) {
+        nodes.progress.textContent = `${Math.round(visualProgress)}% run`;
+      }
+
+      const strategyNames = lanes.map((item) => item.strategy);
+      const laneMarkup = lanes.map((lane) => {
+        const strategyColor = getBacktestStrategyColor(lane.strategy, strategyNames);
+        const rawLaneProgress = Math.max(
+          0,
+          Math.min(100, Number(lane.progress_pct ?? 0) || 0)
+        );
+        const visualLaneProgress = Math.max(
+          rawLaneProgress,
+          Math.max(
+            0,
+            Math.min(100, Number(lane.visual_progress_pct ?? lane.display_pct ?? rawLaneProgress) || 0)
+          )
+        );
+        const fuelProgress = getBacktestRaceScaledFuel(lane, lanes, fuelMetric.key);
+        const laneIsComplete = isBacktestRaceTerminalStatus(lane.status);
+        const raceIsLive = backtestRaceState.status === "running" || backtestRacePlaying;
+        const profitability = Number(lane.return_pct ?? 0);
+        const laneStatus = laneIsComplete
+          ? "Complete"
+          : lane.status === "running"
+            ? "Running"
+              : lane.status === "failed"
+                ? "Failed"
+                : "Queued";
+        const quality = Number(lane.avg_quality_score ?? lane.quality_score ?? 0);
+        const tradeCount = Math.max(0, Math.round(Number(lane.trades ?? 0) || 0));
+        const processedTickers = Math.max(0, Math.round(Number(lane.processed_tickers ?? lane.completed_tickers ?? 0) || 0));
+        const scoredTickers = Math.max(0, Math.round(Number(lane.scored_tickers ?? lane.count ?? 0) || 0));
+        const noTradeTickers = Math.max(0, Math.round(Number(lane.no_trade_tickers ?? 0) || 0));
+        const errorTickers = Math.max(0, Math.round(Number(lane.error_tickers ?? 0) || 0));
+        const totalTickers = Math.max(0, Math.round(Number(lane.total_tickers ?? lane.ticker_count ?? 0) || 0));
+        const fuelValue = getBacktestRaceFuelValue(lane, fuelMetric.key);
+        const hasScoredData = scoredTickers > 0 || tradeCount > 0;
+        const dataWidth = Number(Math.max(0, Math.min(100, hasScoredData ? fuelProgress : 0)).toFixed(2));
+        const markerWidth = dataWidth;
+        const laneNudge = Math.sin((motionTick / 12.5) + lane.index) * (backtestRacePlaying ? 0.8 : 0.3);
+        const structureScore = Number(lane.structure_score || 0);
+        return `
+          <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm">
+            <div class="mb-1.5 flex items-center justify-between gap-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <span class="flex min-w-0 items-center gap-2">
+                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background: ${strategyColor};"></span>
+                <span class="truncate">${escapeHtml(lane.strategy)}</span>
+              </span>
+              <div class="flex items-center gap-2">
+                <span class="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-mono text-[10px] text-slate-600">${processedTickers}/${totalTickers || "?"}</span>
+                <span class="font-mono">${escapeHtml(laneStatus)}</span>
+              </div>
+            </div>
+            <div class="relative h-9 overflow-hidden rounded-md border border-slate-200 bg-white">
+              <div class="absolute inset-x-2 top-1/2 h-2 -translate-y-1/2 rounded-full bg-slate-200"></div>
+              <div class="absolute inset-y-0 left-2 right-2 overflow-hidden rounded-md">
+                <div data-role="fuel-fill" class="absolute inset-y-0 left-0 h-full rounded-md bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-300 opacity-90" style="width: ${dataWidth}%"></div>
+              </div>
+              <div class="absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border border-white shadow-sm transition-transform duration-150 ease-out"
+                   style="left: calc(${markerWidth}% + ${laneNudge}px); transform: translate(-50%, -50%); background: ${strategyColor}; box-shadow: 0 0 0 2px rgba(255,255,255,0.7), 0 4px 10px rgba(15,23,42,0.18);"></div>
+            </div>
+            <div class="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+              <span class="font-mono">Processed ${processedTickers.toLocaleString()}${totalTickers ? `/${totalTickers.toLocaleString()}` : ""}</span>
+              <span class="font-mono">Scored ${scoredTickers.toLocaleString()}</span>
+              <span class="font-mono">No trade ${noTradeTickers.toLocaleString()}</span>
+              ${errorTickers > 0 ? `<span class="font-mono text-rose-600">Errors ${errorTickers.toLocaleString()}</span>` : ""}
+              <span class="font-mono">Fuel ${escapeHtml(fuelMetric.label)} ${formatBacktestRaceFuelValue(fuelValue, fuelMetric.key)}</span>
+              <span class="font-mono">Trades ${tradeCount.toLocaleString()}</span>
+              <span class="font-mono ${profitability >= 0 ? "text-emerald-600" : "text-rose-600"}">Profitability ${formatBacktestPercent(profitability)}</span>
+              <span>Quality ${quality.toFixed(2)}</span>
+              <span>Structure ${structureScore.toFixed(2)}</span>
+              <span class="font-mono">${rawLaneProgress.toFixed(0)}% run</span>
+              <span class="font-mono text-slate-400">${hasScoredData ? `${fuelMetric.label} data ${dataWidth.toFixed(0)}%` : "No scored data"}</span>
+            </div>
+            <div class="mt-1 text-[11px] text-slate-400">${escapeHtml(lane.detail || "Queued")}</div>
+          </div>
+        `;
+      }).join("");
+
+      nodes.track.innerHTML = `
+        <div class="space-y-3">
+          ${laneMarkup}
+        </div>
+      `;
+      setBacktestRacePanelVisible(true);
+      updateBacktestRaceButtons();
+      ensureBacktestRaceMotionLoop();
+    }
+
+    function seedBacktestRaceState({
+      signature = "",
+      strategies = [],
+      lanes = [],
+      targetProgress = 0,
+      displayProgress = 0,
+      status = "queued",
+      activeStrategy = "",
+      detail = "",
+    } = {}) {
+      backtestRaceCurrentSignature = signature;
+      backtestRaceState = createBacktestRaceState({
+        signature,
+        strategies,
+        lanes,
+        targetProgress,
+        displayProgress,
+        status,
+        activeStrategy,
+        detail,
+        playing: backtestRacePlaying,
+      });
+      persistBacktestRaceState();
+      renderBacktestRace();
+      return backtestRaceState;
+    }
+
+    function updateBacktestRaceFromSnapshot(snapshot) {
+      const race = snapshot && snapshot.backtest_race ? snapshot.backtest_race : snapshot;
+      if (!race || typeof race !== "object") {
+        return false;
+      }
+      const lanes = Array.isArray(race.lanes) ? race.lanes : [];
+      const strategies = Array.isArray(race.selected_strategies) ? race.selected_strategies : lanes.map((lane) => lane.strategy).filter(Boolean);
+      const runId = String(race.run_id || snapshot?.run_id || "");
+      if (runId && runId !== backtestRaceEventRunId) {
+        backtestRaceEventRunId = runId;
+        backtestRaceNextEventSeq = 1;
+      }
+      const signature = buildBacktestRaceSignature({
+        sourceMode: backtestSourceMode,
+        strategyName: strategies[0] || "",
+        strategies,
+        signalDays: getBacktestSignalDays(),
+        universeQuery: getUniverseFilterParams().toString(),
+      });
+      const cached = backtestRaceCache.get(signature);
+      const incoming = cached && cached.lanes && lanes.length === 0 ? cached.lanes : lanes;
+      const previousLanes = backtestRaceState && backtestRaceState.signature === signature
+        ? backtestRaceState.lanes
+        : [];
+      const incomingByStrategy = new Map(
+        incoming
+          .map((lane) => [String(lane?.strategy || ""), lane])
+          .filter(([strategy]) => Boolean(strategy))
+      );
+      const previousByStrategy = new Map(
+        previousLanes
+          .map((lane) => [String(lane?.strategy || ""), lane])
+          .filter(([strategy]) => Boolean(strategy))
+      );
+      const nextLanes = strategies.length > 0
+        ? strategies.map((strategy, index) => {
+          const incomingLane = incomingByStrategy.get(String(strategy)) || {};
+          const previousLane = previousByStrategy.get(String(strategy)) || {};
+          return {
+            ...previousLane,
+            ...incomingLane,
+            strategy,
+            index: Number(incomingLane.index ?? previousLane.index ?? index + 1),
+            status: String(incomingLane.status || previousLane.status || "queued"),
+            progress_pct: Number(incomingLane.progress_pct ?? previousLane.progress_pct ?? 0) || 0,
+            visual_progress_pct: Number(previousLane.visual_progress_pct ?? incomingLane.visual_progress_pct ?? incomingLane.progress_pct ?? previousLane.progress_pct ?? 0) || 0,
+            detail: String(incomingLane.detail || previousLane.detail || "Queued"),
+            speed_score: Number(incomingLane.speed_score ?? previousLane.speed_score ?? 0) || 0,
+          };
+        })
+        : incoming;
+      const nextState = createBacktestRaceState({
+        signature,
+        strategies,
+        lanes: nextLanes,
+        targetProgress: Number(race.pct ?? snapshot?.pct ?? 0) || 0,
+        displayProgress: backtestRaceState && backtestRaceState.signature === signature
+          ? Number(backtestRaceState.displayProgress || 0)
+          : Number(race.pct ?? snapshot?.pct ?? 0) || 0,
+        status: String(race.phase || snapshot?.phase || "running"),
+        activeStrategy: String(race.active_strategy || race.activeStrategy || ""),
+        detail: String(race.detail || snapshot?.detail || ""),
+        playing: backtestRacePlaying,
+      });
+      backtestRaceState = nextState;
+      backtestRaceCache.set(signature, {
+        ...nextState,
+        lanes: nextState.lanes.map((lane) => ({ ...lane })),
+      });
+      syncBacktestStrategySummariesFromRaceState();
+      persistBacktestRaceState();
+      renderBacktestRace();
+      renderBacktestStructureRadar();
+      renderBacktestBehaviorRadar();
+      return true;
+    }
+
+    function applyBacktestRaceEvent(event) {
+      if (!event || typeof event !== "object") {
+        return false;
+      }
+      const eventType = String(event.type || "");
+      const laneName = String(event.lane || event.payload?.strategy || "");
+      const payload = event.payload && typeof event.payload === "object" ? event.payload : {};
+      if (eventType === "ticker_done") {
+        mergeBacktestScatterRows(payload, { render: true });
+      }
+      if (!backtestRaceState || !Array.isArray(backtestRaceState.lanes)) {
+        return false;
+      }
+      if (!laneName && eventType !== "run_done") {
+        return false;
+      }
+
+      if (eventType === "run_done") {
+        backtestRaceState.status = "done";
+        backtestRaceState.detail = `${Number(payload.rows_scored || 0)} rows scored`;
+        backtestRaceState.targetProgress = 100;
+        backtestRaceState.displayProgress = 100;
+        renderBacktestRace();
+        return true;
+      }
+
+      const laneIndex = backtestRaceState.lanes.findIndex((lane) => String(lane.strategy) === laneName);
+      if (laneIndex < 0) {
+        return false;
+      }
+      const lane = { ...backtestRaceState.lanes[laneIndex] };
+      if (eventType === "lane_started") {
+        lane.status = "running";
+        lane.detail = "Started";
+        lane.progress_pct = Math.max(0, Number(lane.progress_pct || 0));
+      } else if (eventType === "ticker_done") {
+        const laneSnapshot = payload.lane && typeof payload.lane === "object" ? payload.lane : {};
+        Object.assign(lane, laneSnapshot);
+        lane.status = "running";
+        lane.progress_pct = Math.max(0, Math.min(100, Number(payload.progress_pct ?? lane.progress_pct ?? 0) || 0));
+        lane.completed_tickers = Number(payload.completed ?? lane.completed_tickers ?? 0) || 0;
+        lane.total_tickers = Number(payload.total ?? lane.total_tickers ?? 0) || 0;
+        lane.processed_tickers = Number(payload.processed ?? payload.completed ?? lane.processed_tickers ?? lane.completed_tickers ?? 0) || 0;
+        lane.scored_tickers = Number(payload.scored_tickers ?? lane.scored_tickers ?? lane.count ?? 0) || 0;
+        lane.no_trade_tickers = Number(payload.no_trade_tickers ?? lane.no_trade_tickers ?? 0) || 0;
+        lane.error_tickers = Number(payload.error_tickers ?? lane.error_tickers ?? 0) || 0;
+        lane.last_ticker = String(payload.ticker || lane.last_ticker || "");
+        lane.detail = lane.total_tickers
+          ? `${lane.processed_tickers}/${lane.total_tickers} tickers, last ${lane.last_ticker || "-"}`
+          : `Last ${lane.last_ticker || "ticker"} complete`;
+      } else if (eventType === "lane_cached") {
+        lane.status = "done";
+        lane.progress_pct = 100;
+        lane.detail = String(payload.detail || "Loaded cached results");
+      } else if (eventType === "lane_done") {
+        const laneSnapshot = payload.lane && typeof payload.lane === "object" ? payload.lane : {};
+        Object.assign(lane, laneSnapshot);
+        lane.status = "done";
+        lane.progress_pct = 100;
+        lane.detail = String(lane.detail || `${Number(payload.rows_scored || 0)} rows scored`);
+      } else {
+        return false;
+      }
+      backtestRaceState.lanes[laneIndex] = lane;
+      syncBacktestStrategySummariesFromRaceState();
+      persistBacktestRaceState();
+      renderBacktestRace();
+      renderBacktestStructureRadar();
+      renderBacktestBehaviorRadar();
+      return true;
+    }
+
+    async function pollBacktestRaceEvents(runId = backtestRaceEventRunId) {
+      const safeRunId = String(runId || "");
+      if (backtestRaceEventFetchInFlight) {
+        return false;
+      }
+      backtestRaceEventFetchInFlight = true;
+      try {
+        const params = new URLSearchParams({
+          after_seq: String(backtestRaceNextEventSeq - 1),
+        });
+        if (safeRunId) {
+          params.set("run_id", safeRunId);
+        }
+        const resp = await fetch(`/api/backtest/events?${params.toString()}`, { cache: "no-store" });
+        if (!resp.ok) {
+          return false;
+        }
+        const data = await resp.json();
+        const events = Array.isArray(data.events) ? data.events : [];
+        events.forEach((event) => {
+          applyBacktestRaceEvent(event);
+          const seq = Number(event.seq || 0);
+          if (Number.isFinite(seq)) {
+            backtestRaceNextEventSeq = Math.max(backtestRaceNextEventSeq, seq + 1);
+          }
+        });
+        if (Number(data.next_seq) > 0) {
+          backtestRaceNextEventSeq = Math.max(backtestRaceNextEventSeq, Number(data.next_seq));
+        }
+        return events.length > 0;
+      } catch (err) {
+        console.warn("Backtest race event poll failed", err);
+        return false;
+      } finally {
+        backtestRaceEventFetchInFlight = false;
+      }
+    }
+
+    function startBacktestRacePlayback({ autoplay = true } = {}) {
+      if (!backtestRaceState || !Array.isArray(backtestRaceState.lanes) || backtestRaceState.lanes.length === 0) {
+        return;
+      }
+      backtestRacePlaying = Boolean(autoplay);
+      backtestRaceState.playing = backtestRacePlaying;
+      backtestRaceState.status = "running";
+      persistBacktestRaceState();
+      backtestRaceLastFrameTime = null;
+      updateBacktestRaceButtons();
+      if (!backtestRacePlaying) {
+        renderBacktestRace();
+        return;
+      }
+      ensureBacktestRaceMotionLoop();
+      renderBacktestRace();
+    }
+
+    function pauseBacktestRacePlayback() {
+      backtestRacePlaying = false;
+      if (backtestRaceState) {
+        backtestRaceState.playing = false;
+        persistBacktestRaceState();
+      }
+      if (backtestRaceAnimationHandle) {
+        cancelAnimationFrame(backtestRaceAnimationHandle);
+      }
+      backtestRaceAnimationHandle = null;
+      if (backtestRaceMotionHandle) {
+        cancelAnimationFrame(backtestRaceMotionHandle);
+      }
+      backtestRaceMotionHandle = null;
+      backtestRaceLastFrameTime = null;
+      backtestRaceLastMotionFrame = null;
+      updateBacktestRaceButtons();
+      renderBacktestRace();
+    }
+
+    function stopBacktestRacePlayback({ abortRequest = true } = {}) {
+      if (abortRequest && backtestRaceAbortController) {
+        backtestRaceAbortController.abort();
+      }
+      pauseBacktestRacePlayback();
+      if (backtestRaceState) {
+        backtestRaceState.status = "stopped";
+        backtestRaceState.detail = "Stopped";
+        persistBacktestRaceState();
+        renderBacktestRace();
+      }
+    }
+
+    function buildBacktestRaceSeedLanes(strategies = []) {
+      return Array.isArray(strategies) ? strategies.map((strategy, index) => ({
+        strategy,
+        index: index + 1,
+        status: "queued",
+        progress_pct: 0,
+        visual_progress_pct: 0,
+        detail: "Queued",
+        speed_score: 0,
+      })) : [];
+    }
+
+    function syncBacktestRaceLanesToCurrentSelection({ onlyWhenRaceExists = true } = {}) {
+      if (backtestRaceAbortController) {
+        return false;
+      }
+
+      const nodes = getBacktestRaceNodes();
+      const hasRace = Boolean(backtestRaceState && Array.isArray(backtestRaceState.lanes) && backtestRaceState.lanes.length > 0);
+      const panelVisible = Boolean(nodes.panel && !nodes.panel.classList.contains("hidden"));
+      if (onlyWhenRaceExists && !hasRace && !panelVisible) {
+        return false;
+      }
+
+      const strategySelect = document.getElementById("strategy-select");
+      const selectedStrategies = backtestSourceMode === "editor"
+        ? [strategySelect?.value || "Editor Draft"]
+        : getBacktestSelectedStrategies();
+      const strategies = selectedStrategies
+        .map((strategy) => String(strategy || "").trim())
+        .filter(Boolean);
+
+      if (strategies.length === 0) {
+        resetBacktestRaceState({ keepPanelVisible: false });
+        renderBacktestRace();
+        return true;
+      }
+
+      const signature = buildBacktestRaceSignature({
+        sourceMode: backtestSourceMode,
+        strategyName: backtestSourceMode === "editor" ? (strategySelect?.value || "Editor Draft") : (strategies[0] || ""),
+        strategies,
+        signalDays: getBacktestSignalDays(),
+        universeQuery: getUniverseFilterParams().toString(),
+      });
+      const existingStrategies = backtestRaceState && Array.isArray(backtestRaceState.strategies)
+        ? backtestRaceState.strategies.map((strategy) => String(strategy || ""))
+        : [];
+      if (
+        backtestRaceState
+        && backtestRaceState.signature === signature
+        && existingStrategies.join("|") === strategies.join("|")
+      ) {
+        return false;
+      }
+
+      backtestRacePlaying = false;
+      seedBacktestRaceState({
+        signature,
+        strategies,
+        lanes: buildBacktestRaceSeedLanes(strategies),
+        targetProgress: 0,
+        displayProgress: 0,
+        status: "queued",
+        activeStrategy: strategies[0] || "",
+        detail: "Ready to run selected strategies.",
+      });
+      setBacktestRacePanelVisible(true);
+      return true;
+    }
+
+    function restartBacktestRacePlayback() {
+      const selectedStrategies = getBacktestSelectedStrategies();
+      const restartStrategies = selectedStrategies.length > 0
+        ? selectedStrategies
+        : backtestRaceState && Array.isArray(backtestRaceState.strategies) && backtestRaceState.strategies.length > 0
+          ? backtestRaceState.strategies.slice()
+          : [];
+      const restartSignature = backtestRaceState && backtestRaceState.signature
+        ? backtestRaceState.signature
+        : buildBacktestRaceSignature({
+          sourceMode: backtestSourceMode,
+          strategyName: restartStrategies[0] || (document.getElementById("strategy-select")?.value || "Editor Draft"),
+          strategies: restartStrategies,
+          signalDays: getBacktestSignalDays(),
+          universeQuery: getUniverseFilterParams().toString(),
+        });
+      if (backtestRaceAbortController) {
+        backtestRaceAbortController.abort();
+      }
+      pauseBacktestRacePlayback();
+      if (restartSignature) {
+        backtestRaceCache.delete(restartSignature);
+      }
+      writeBacktestRaceSnapshot(null);
+      seedBacktestRaceState({
+        signature: restartSignature,
+        strategies: restartStrategies,
+        lanes: buildBacktestRaceSeedLanes(restartStrategies),
+        targetProgress: 0,
+        displayProgress: 0,
+        status: "running",
+        activeStrategy: restartStrategies[0] || "",
+        detail: "Restarting from the beginning...",
+      });
+      void loadBacktestMetrics({ restartRace: true });
+    }
+
+    function bindBacktestRaceControls() {
+      const nodes = getBacktestRaceNodes();
+      if (nodes.fuel) {
+        if (nodes.fuel.value !== backtestRaceFuelMetric) {
+          nodes.fuel.value = backtestRaceFuelMetric;
+        }
+        if (nodes.fuel.dataset.bound !== "1") {
+          nodes.fuel.dataset.bound = "1";
+          nodes.fuel.addEventListener("change", () => {
+            backtestRaceFuelMetric = normalizeBacktestRaceFuelMetric(nodes.fuel.value);
+            writeStickyValue(LAST_BACKTEST_RACE_FUEL_KEY, backtestRaceFuelMetric);
+            renderBacktestRace();
+          });
+        }
+      }
+      if (nodes.start && nodes.start.dataset.bound !== "1") {
+        nodes.start.dataset.bound = "1";
+        nodes.start.addEventListener("click", () => {
+          const readiness = getBacktestRunReadiness();
+          if (!readiness.ready) {
+            return;
+          }
+
+          if (backtestRaceAbortController) {
+            if (
+              backtestRaceState
+              && Array.isArray(backtestRaceState.lanes)
+              && backtestRaceState.lanes.length > 0
+              && !backtestRacePlaying
+            ) {
+              startBacktestRacePlayback({ autoplay: true });
+            }
+            return;
+          }
+
+          void loadBacktestMetrics({ restartRace: true });
+        });
+      }
+      if (nodes.stop && nodes.stop.dataset.bound !== "1") {
+        nodes.stop.dataset.bound = "1";
+        nodes.stop.addEventListener("click", () => {
+          stopBacktestRacePlayback({ abortRequest: true });
+        });
+      }
+      if (nodes.restart && nodes.restart.dataset.bound !== "1") {
+        nodes.restart.dataset.bound = "1";
+        nodes.restart.addEventListener("click", () => {
+          restartBacktestRacePlayback();
+        });
+      }
+    }
+
+    function getBacktestProgressNodes() {
+      return {
+        panel: document.getElementById("backtest-progress-panel"),
+        detail: document.getElementById("backtest-progress-detail"),
+        percent: document.getElementById("backtest-progress-percent"),
+        contextLabel: document.getElementById("backtest-context-label"),
+        contextText: document.getElementById("backtest-context-text"),
+        contextBar: document.getElementById("backtest-context-bar"),
+        globalLabel: document.getElementById("backtest-global-label"),
+        globalText: document.getElementById("backtest-global-text"),
+        globalBar: document.getElementById("backtest-global-bar"),
+      };
+    }
+
+    function setBacktestProgress(state = {}) {
+      const nodes = getBacktestProgressNodes();
+      if (state.show === true && nodes.panel) {
+        nodes.panel.classList.remove("hidden");
+      } else if (state.show === false && nodes.panel) {
+        nodes.panel.classList.add("hidden");
+      }
+
+      const contextPct = state.contextPct !== undefined
+        ? Math.max(0, Math.min(100, Number(state.contextPct) || 0))
+        : null;
+      const globalPct = state.globalPct !== undefined
+        ? Math.max(0, Math.min(100, Number(state.globalPct) || 0))
+        : null;
+
+      if (state.detail && nodes.detail) nodes.detail.textContent = state.detail;
+      if (state.contextLabel && nodes.contextLabel) nodes.contextLabel.textContent = state.contextLabel;
+      if (state.contextText && nodes.contextText) nodes.contextText.textContent = state.contextText;
+      if (contextPct !== null && nodes.contextBar) nodes.contextBar.style.width = `${contextPct}%`;
+      if (state.contextWorking !== undefined && nodes.contextBar) {
+        nodes.contextBar.classList.toggle("animate-pulse", Boolean(state.contextWorking));
+      }
+
+      if (state.globalLabel && nodes.globalLabel) nodes.globalLabel.textContent = state.globalLabel;
+      if (state.globalText && nodes.globalText) nodes.globalText.textContent = state.globalText;
+      if (globalPct !== null && nodes.globalBar) nodes.globalBar.style.width = `${globalPct}%`;
+      if (state.globalWorking !== undefined && nodes.globalBar) {
+        nodes.globalBar.classList.toggle("animate-pulse", Boolean(state.globalWorking));
+      }
+
+      const visiblePct = globalPct !== null ? globalPct : contextPct;
+      if (visiblePct !== null && nodes.percent) {
+        nodes.percent.textContent = `${Math.round(visiblePct)}%`;
+      }
     }
 
     function setShortlistEmptyState(message) {
@@ -5793,13 +7002,14 @@ let backtestSourceMode = "saved";
       }
     }
 
-    async function ensureGuiMarketBackbone() {
+    async function ensureGuiMarketBackbone(options = {}) {
+      const allowRefresh = options.allowRefresh !== false;
       if (normalizeScanScope(tickerScanScope) === "debug") {
         return { status: null, refreshed: false, debug: true };
       }
       const status = await loadMarketStatus(tickerScanScope);
       let refreshed = false;
-      if (status && status.is_stale && !marketDataAutoRefreshAttempted) {
+      if (allowRefresh && status && status.is_stale && !marketDataAutoRefreshAttempted) {
         marketDataAutoRefreshAttempted = true;
         await refreshMarketData();
         refreshed = true;
@@ -5842,7 +7052,7 @@ let backtestSourceMode = "saved";
         swarmLabAnimationHandle = null;
       }
       if (tab === 'backtest') {
-        loadBacktestMetrics();
+        updateBacktestRunButtonState();
       } else if (tab === 'shortlist') {
         ensureGuiMarketBackbone().catch((err) => {
           console.warn("Auto-refresh check failed", err);
@@ -5857,7 +7067,7 @@ let backtestSourceMode = "saved";
 
     window.showTab = showTab;
 
-    const DEFAULT_DASHBOARD_TAB = "swarm-lab";
+    const DEFAULT_DASHBOARD_TAB = "screener";
     let dashboardDefaultTabApplied = false;
 
     function applyDefaultDashboardTab() {
@@ -5875,7 +7085,8 @@ let backtestSourceMode = "saved";
         showTab(pendingTab);
         return;
       }
-      showTab(DEFAULT_DASHBOARD_TAB);
+      const savedTab = normalizeDashboardTab(readStickyValue(LAST_DASHBOARD_TAB_KEY, DEFAULT_DASHBOARD_TAB));
+      showTab(savedTab);
     }
 
     function resetDashboardTabPreference() {
@@ -5889,53 +7100,6 @@ let backtestSourceMode = "saved";
       const shortlistRefreshBtn = document.getElementById("shortlist-refresh-btn");
       const marketStatus = document.getElementById("shortlist-market-status");
       const shortlistStatus = document.getElementById("shortlist-status");
-      let marketProgressInterval = null;
-      let marketPhase = "checking";
-      let marketProgress = 0;
-
-      const updateMarketProgress = (state) => {
-        setNavScanProgress({
-          show: true,
-          contextLabel: state.contextLabel || "Market",
-          contextText: state.contextText || "WORKING",
-          contextPct: state.contextPct ?? marketProgress,
-          contextWorking: state.contextWorking ?? true,
-        });
-      };
-
-      const startMarketProgress = () => {
-        if (marketProgressInterval) {
-          clearInterval(marketProgressInterval);
-        }
-        marketProgressInterval = setInterval(() => {
-          if (marketPhase === "checking") {
-            marketProgress = Math.min(22, marketProgress + 1.5);
-            updateMarketProgress({
-              contextLabel: "Market",
-              contextText: "Checking...",
-              contextPct: marketProgress,
-            });
-            return;
-          }
-          if (marketPhase === "refreshing") {
-            marketProgress = Math.min(88, marketProgress + Math.max(0.6, (88 - marketProgress) * 0.08));
-            updateMarketProgress({
-              contextLabel: "Market",
-              contextText: `${Math.round(marketProgress)}%`,
-              contextPct: marketProgress,
-            });
-            return;
-          }
-          if (marketPhase === "rebuilding") {
-            marketProgress = Math.min(96, marketProgress + Math.max(0.4, (96 - marketProgress) * 0.06));
-            updateMarketProgress({
-              contextLabel: "Market",
-              contextText: "Rebuilding...",
-              contextPct: marketProgress,
-            });
-          }
-        }, 320);
-      };
 
       if (marketRefreshBtn) {
         marketRefreshBtn.disabled = true;
@@ -5960,15 +7124,14 @@ let backtestSourceMode = "saved";
       }
 
       try {
-        updateMarketProgress({
+        setNavScanProgress({
+          show: true,
           contextLabel: "Market",
           contextText: "Checking...",
           contextPct: 0,
           contextWorking: false,
         });
         startJobProgressPolling("market-refresh", "Global");
-        startMarketProgress();
-        marketPhase = "refreshing";
         const resp = await fetch(`/api/market-data/refresh?depth=400&max_workers=8&force=true&stale_after_days=0&source=${encodeURIComponent(source)}`, {
           method: "POST",
         });
@@ -5977,8 +7140,8 @@ let backtestSourceMode = "saved";
           throw new Error(data.detail || "Market refresh failed");
         }
 
-        marketPhase = "rebuilding";
-        updateMarketProgress({
+        setNavScanProgress({
+          show: true,
           contextLabel: "Market",
           contextText: "Rebuilding...",
           contextPct: 94,
@@ -5987,8 +7150,8 @@ let backtestSourceMode = "saved";
         shortlistLoaded = false;
         await loadMarketStatus();
         await loadShortlist(true);
-        marketPhase = "done";
-        updateMarketProgress({
+        setNavScanProgress({
+          show: true,
           contextLabel: "Market",
           contextText: "100%",
           contextPct: 100,
@@ -6000,8 +7163,8 @@ let backtestSourceMode = "saved";
           marketStatus.className = "text-xs font-bold uppercase tracking-wide text-rose-600";
           marketStatus.textContent = `Market refresh failed: ${err.message || err}`;
         }
-        marketPhase = "done";
-        updateMarketProgress({
+        setNavScanProgress({
+          show: true,
           contextLabel: "Market",
           contextText: "FAILED",
           contextPct: 100,
@@ -6009,10 +7172,6 @@ let backtestSourceMode = "saved";
         });
         showToast(`Market refresh failed: ${err.message || err}`, true);
       } finally {
-        if (marketProgressInterval) {
-          clearInterval(marketProgressInterval);
-        }
-        marketProgressInterval = null;
         stopJobProgressPolling();
         setNavScanProgress({
           show: false,
@@ -6104,9 +7263,8 @@ let backtestSourceMode = "saved";
         savedBtn.className = `rounded-md px-3 py-2 text-sm font-bold ${backtestSourceMode === 'saved' ? 'bg-indigo-600 text-white' : 'text-slate-600'}`;
         editorBtn.className = `rounded-md px-3 py-2 text-sm font-bold ${backtestSourceMode === 'editor' ? 'bg-indigo-600 text-white' : 'text-slate-600'}`;
       }
-      if (!document.getElementById("tab-backtest").classList.contains("hidden")) {
-        loadBacktestMetrics();
-      }
+      syncBacktestRaceLanesToCurrentSelection();
+      updateBacktestRunButtonState();
     }
 
     function getBacktestSignalDays() {
@@ -6125,17 +7283,1121 @@ let backtestSourceMode = "saved";
       return Math.floor(value);
     }
 
-    async function loadBacktestMetrics() {
+    function getBacktestSelectedStrategies() {
+      return Array.from(document.querySelectorAll(".backtest-strategy-checkbox"))
+        .filter((input) => Boolean(input.checked))
+        .map((input) => input.value)
+        .filter(Boolean);
+    }
+
+    function syncBacktestStrategyCheckboxChrome() {
+      document.querySelectorAll(".backtest-strategy-checkbox").forEach((input) => {
+        const row = input.closest ? input.closest("label") : null;
+        if (!row) {
+          return;
+        }
+        row.classList.toggle("bg-emerald-50", Boolean(input.checked));
+        row.classList.toggle("text-emerald-900", Boolean(input.checked));
+        row.style.backgroundColor = input.checked ? "#ecfdf5" : "";
+        row.style.fontWeight = input.checked ? "700" : "";
+      });
+    }
+
+    function updateBacktestStrategyCount() {
+      const countNode = document.getElementById("backtest-selected-count");
+      if (!countNode) {
+        return;
+      }
+      const selectedCount = getBacktestSelectedStrategies().length;
+      countNode.textContent = `${selectedCount} selected`;
+    }
+
+    function getBacktestRunReadiness() {
+      if (!tickerUniverseExplicitlyChosen) {
+        return { ready: false, reason: "Choose a ticker universe first" };
+      }
+
+      if (backtestSourceMode === "editor") {
+        return getActiveEditorDsl()
+          ? { ready: true, reason: "Evaluate editor draft" }
+          : { ready: false, reason: "Editor Draft needs DSL content" };
+      }
+
+      if (getBacktestSelectedStrategies().length === 0) {
+        return { ready: false, reason: "Select at least one saved strategy" };
+      }
+
+      const universeParams = getUniverseFilterParams();
+      const scope = universeParams.get("scan_scope");
+      if ((scope === "list" || scope === "all_lists") && !universeParams.get("ticker_list")) {
+        return { ready: false, reason: "Choose tickers for the selected list universe" };
+      }
+
+      return { ready: true, reason: "Evaluate selected strategies" };
+    }
+
+    function updateBacktestRunButtonState() {
+      const runBtn = document.getElementById("backtest-run-btn");
+      if (!runBtn || runBtn.dataset.running === "1") {
+        return;
+      }
+
+      const readiness = getBacktestRunReadiness();
+      runBtn.disabled = !readiness.ready;
+      runBtn.title = readiness.reason;
+      runBtn.className = readiness.ready
+        ? "bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-emerald-500/60 transition-all"
+        : "bg-slate-300 text-slate-500 text-sm font-bold py-2 px-4 rounded-lg border border-slate-300 transition-all cursor-not-allowed";
+      updateBacktestRaceButtons();
+    }
+
+    function selectBacktestStrategies(mode) {
+      const selectAll = mode === "all";
+      document.querySelectorAll(".backtest-strategy-checkbox").forEach((input) => {
+        input.checked = selectAll;
+      });
+      syncBacktestStrategyCheckboxChrome();
+      handleBacktestStrategyChooserChange();
+    }
+
+    function handleBacktestStrategyChooserChange() {
+      syncBacktestStrategyCheckboxChrome();
+      const selected = getBacktestSelectedStrategies();
+      updateBacktestStrategyCount();
+      const primary = selected.length === 1 ? selected[0] : "";
+      if (primary) {
+        updateEditorContent(primary);
+      } else {
+        getStrategySelects().forEach((select) => {
+          select.value = "";
+        });
+        currentStrategy = "";
+      }
+      syncBacktestRaceLanesToCurrentSelection();
+      updateBacktestRunButtonState();
+    }
+
+    function bindBacktestStrategyChooserControls() {
+      const allBtn = document.getElementById("backtest-select-all-btn");
+      const noneBtn = document.getElementById("backtest-select-none-btn");
+      if (allBtn && allBtn.dataset.bound !== "1") {
+        allBtn.dataset.bound = "1";
+        allBtn.addEventListener("click", () => selectBacktestStrategies("all"));
+      }
+      if (noneBtn && noneBtn.dataset.bound !== "1") {
+        noneBtn.dataset.bound = "1";
+        noneBtn.addEventListener("click", () => selectBacktestStrategies("none"));
+      }
+      document.querySelectorAll(".backtest-strategy-checkbox").forEach((input) => {
+        if (input.dataset.bound === "1") {
+          return;
+        }
+        input.dataset.bound = "1";
+        input.addEventListener("change", handleBacktestStrategyChooserChange);
+      });
+    }
+
+    function backtestDefaultMetrics() {
+      return [
+        { key: "quality_score", label: "Quality Score", kind: "score" },
+        { key: "return_pct", label: "Return (%)", kind: "percent" },
+        { key: "win_rate_pct", label: "Win Rate (%)", kind: "percent" },
+        { key: "sharpe", label: "Sharpe", kind: "ratio" },
+        { key: "profit_factor", label: "Profit Factor", kind: "ratio" },
+        { key: "max_dd_pct", label: "Max Drawdown (%)", kind: "percent" },
+        { key: "trades", label: "Trades", kind: "count" },
+        { key: "days_since_entry", label: "Days Since Entry", kind: "days" },
+      ];
+    }
+
+    function backtestDefaultStructureAxisCatalog() {
+      return BACKTEST_STRUCTURE_AXIS_DEFAULTS.map((item) => ({ ...item }));
+    }
+
+    function backtestDefaultBehaviorAxisCatalog() {
+      return BACKTEST_BEHAVIOR_AXIS_DEFAULTS.map((item) => ({ ...item }));
+    }
+
+    function clampBacktestRadarValue(value, max = 10) {
+      return Math.max(0, Math.min(max, Number(value || 0) || 0));
+    }
+
+    function scaleBacktestRadarMetric(value, { min = 0, max = 1, invert = false } = {}) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || max <= min) {
+        return 0;
+      }
+      const normalized = Math.max(0, Math.min(1, (numeric - min) / (max - min)));
+      const scaled = (invert ? 1 - normalized : normalized) * 10;
+      return Number(scaled.toFixed(2));
+    }
+
+    function normalizeBacktestStructureAxisCatalog(catalog) {
+      const rawItems = Array.isArray(catalog) && catalog.length > 0
+        ? catalog
+        : backtestDefaultStructureAxisCatalog();
+      return rawItems.map((item, index) => ({
+        key: String(item?.key || BACKTEST_STRUCTURE_AXIS_DEFAULTS[index]?.key || `axis_${index + 1}`),
+        label: String(item?.label || BACKTEST_STRUCTURE_AXIS_DEFAULTS[index]?.label || `Axis ${index + 1}`),
+        max: Math.max(1, Number(item?.max || BACKTEST_STRUCTURE_AXIS_DEFAULTS[index]?.max || 10) || 10),
+      }));
+    }
+
+    function normalizeBacktestStructureAxes(axes, axisCatalog = backtestStrategyAxisCatalog) {
+      const safeAxes = axes && typeof axes === "object" ? axes : {};
+      const catalog = normalizeBacktestStructureAxisCatalog(axisCatalog);
+      return catalog.reduce((acc, axis) => {
+        acc[axis.key] = clampBacktestRadarValue(safeAxes[axis.key], axis.max);
+        return acc;
+      }, {});
+    }
+
+    function backtestStrategySummaryHasBehaviorData(summary) {
+      if (!summary || typeof summary !== "object") {
+        return false;
+      }
+      return [
+        summary.avg_quality_score,
+        summary.quality_score,
+        summary.return_pct,
+        summary.sharpe,
+        summary.win_rate_pct,
+        summary.profit_factor,
+        summary.max_dd_pct,
+        summary.trades,
+        summary.scored_tickers,
+      ].some((value) => Number(value || 0) !== 0);
+    }
+
+    function deriveBacktestBehaviorProfile(summary) {
+      const quality = Number(summary?.avg_quality_score ?? summary?.quality_score ?? 0) || 0;
+      const returnPct = Number(summary?.return_pct ?? 0) || 0;
+      const sharpe = Number(summary?.sharpe ?? 0) || 0;
+      const winRatePct = Number(summary?.win_rate_pct ?? 0) || 0;
+      const profitFactor = Number(summary?.profit_factor ?? 0) || 0;
+      const maxDdPct = Number(summary?.max_dd_pct ?? 0) || 0;
+      const axisOrder = backtestDefaultBehaviorAxisCatalog().map((axis) => axis.key);
+      const behaviorAxes = {
+        quality: scaleBacktestRadarMetric(quality, { min: 0, max: 20 }),
+        profitability: scaleBacktestRadarMetric(returnPct, { min: -10, max: 20 }),
+        risk_adjusted: scaleBacktestRadarMetric(sharpe, { min: -0.5, max: 2.5 }),
+        consistency: scaleBacktestRadarMetric(winRatePct, { min: 30, max: 70 }),
+        payoff_efficiency: scaleBacktestRadarMetric(profitFactor, { min: 0.8, max: 2.0 }),
+        drawdown_control: scaleBacktestRadarMetric(maxDdPct, { min: 2, max: 20, invert: true }),
+      };
+      const values = axisOrder.map((key) => Number(behaviorAxes[key] || 0));
+      const behaviorScore = values.length
+        ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2))
+        : 0;
+      return {
+        behavior_score: behaviorScore,
+        behavior_axes: axisOrder.reduce((acc, key) => {
+          acc[key] = clampBacktestRadarValue(behaviorAxes[key]);
+          return acc;
+        }, {}),
+        axis_order: axisOrder,
+        raw_metrics: {
+          quality,
+          profitability: returnPct,
+          risk_adjusted: sharpe,
+          consistency: winRatePct,
+          payoff_efficiency: profitFactor,
+          drawdown_control: maxDdPct,
+        },
+      };
+    }
+
+    function normalizeBacktestStrategySummary(summary, index = 0, axisCatalog = backtestStrategyAxisCatalog) {
+      const catalog = normalizeBacktestStructureAxisCatalog(axisCatalog);
+      const normalized = {
+        strategy: String(summary?.strategy || summary?.label || `Strategy ${index + 1}`),
+        quality_score: Number(summary?.quality_score || 0) || 0,
+        avg_quality_score: Number(summary?.avg_quality_score ?? summary?.quality_score ?? 0) || 0,
+        return_pct: Number(summary?.return_pct || 0) || 0,
+        sharpe: Number(summary?.sharpe || 0) || 0,
+        win_rate_pct: Number(summary?.win_rate_pct || 0) || 0,
+        profit_factor: Number(summary?.profit_factor || 0) || 0,
+        max_dd_pct: Number(summary?.max_dd_pct || 0) || 0,
+        trades: Number(summary?.trades || 0) || 0,
+        scored_tickers: Number(summary?.scored_tickers ?? summary?.count ?? 0) || 0,
+        total_tickers: Number(summary?.total_tickers ?? summary?.ticker_count ?? summary?.count ?? 0) || 0,
+        structure_score: Number(summary?.structure_score || 0) || 0,
+        structure_axes: normalizeBacktestStructureAxes(summary?.structure_axes, catalog),
+        structure_tags: Array.isArray(summary?.structure_tags)
+          ? summary.structure_tags.map((tag) => String(tag || "")).filter(Boolean)
+          : [],
+        axis_order: Array.isArray(summary?.axis_order) && summary.axis_order.length > 0
+          ? summary.axis_order.map((item) => String(item || "")).filter(Boolean)
+          : catalog.map((axis) => axis.key),
+      };
+      normalized.behavior_profile = deriveBacktestBehaviorProfile(normalized);
+      normalized.has_behavior_data = backtestStrategySummaryHasBehaviorData(normalized);
+      return normalized;
+    }
+
+    function updateBacktestBestStructureCard(summaries = backtestStrategySummaries) {
+      const node = document.getElementById("bt-best-structure");
+      if (!node) {
+        return;
+      }
+      const best = (Array.isArray(summaries) ? summaries : [])
+        .map((item) => Number(item?.structure_score || 0))
+        .filter(Number.isFinite);
+      node.textContent = (best.length ? Math.max(...best) : 0).toFixed(2);
+    }
+
+    function setBacktestStructurePanelVisible(show) {
+      const panel = document.getElementById("backtest-structure-panel");
+      if (!panel) {
+        return;
+      }
+      panel.classList.toggle("hidden", !show);
+    }
+
+    function setBacktestBehaviorPanelVisible(show) {
+      const panel = document.getElementById("backtest-behavior-panel");
+      if (!panel) {
+        return;
+      }
+      panel.classList.toggle("hidden", !show);
+    }
+
+    function syncBacktestStrategySummariesFromRaceState() {
+      if (!backtestRaceState || !Array.isArray(backtestRaceState.lanes) || backtestRaceState.lanes.length === 0) {
+        return false;
+      }
+      backtestStrategySummaries = backtestRaceState.lanes.map((lane, index) => (
+        normalizeBacktestStrategySummary(lane, index, backtestStrategyAxisCatalog)
+      ));
+      updateBacktestBestStructureCard(backtestStrategySummaries);
+      setBacktestStructurePanelVisible(backtestStrategySummaries.length > 0);
+      return true;
+    }
+
+    function setBacktestStructureData({
+      summaries = [],
+      strategyProfile = null,
+      axisCatalog = null,
+      strategyName = "",
+    } = {}) {
+      backtestStrategyAxisCatalog = normalizeBacktestStructureAxisCatalog(axisCatalog);
+      const sourceSummaries = Array.isArray(summaries) && summaries.length > 0
+        ? summaries
+        : (strategyProfile && typeof strategyProfile === "object"
+          ? [{
+            strategy: String(strategyName || "Editor Draft"),
+            ...strategyProfile,
+          }]
+          : []);
+      backtestStrategySummaries = sourceSummaries.map((item, index) => (
+        normalizeBacktestStrategySummary(item, index, backtestStrategyAxisCatalog)
+      ));
+      if (!backtestStrategySummaries.length) {
+        syncBacktestStrategySummariesFromRaceState();
+      }
+      updateBacktestBestStructureCard(backtestStrategySummaries);
+      setBacktestStructurePanelVisible(backtestStrategySummaries.length > 0);
+      renderBacktestStructureRadar();
+      renderBacktestBehaviorRadar();
+    }
+
+    function getBacktestMetricLabel(key) {
+      const metric = backtestMetricCatalog.find((item) => item.key === key);
+      return metric ? metric.label : key;
+    }
+
+    function formatBacktestBehaviorRawMetric(key, value) {
+      const numeric = Number(value || 0);
+      if (key === "profitability" || key === "consistency" || key === "drawdown_control") {
+        return `${numeric.toFixed(2)}%`;
+      }
+      return numeric.toFixed(2);
+    }
+
+    function hashBacktestStrategyName(strategy) {
+      const text = String(strategy || "Other");
+      let hash = 0;
+      for (let index = 0; index < text.length; index += 1) {
+        hash = ((hash * 31) + text.charCodeAt(index)) >>> 0;
+      }
+      return hash;
+    }
+
+    function uniqueBacktestStrategyNames(strategies) {
+      const seen = new Set();
+      const names = [];
+      (Array.isArray(strategies) ? strategies : []).forEach((item) => {
+        const name = String(item || "").trim();
+        if (!name || seen.has(name)) {
+          return;
+        }
+        seen.add(name);
+        names.push(name);
+      });
+      return names;
+    }
+
+    function getBacktestStrategyColorMap(strategies) {
+      const names = uniqueBacktestStrategyNames(strategies);
+      const usedIndexes = new Set();
+      const colorMap = new Map();
+      names.forEach((name, order) => {
+        let colorIndex = hashBacktestStrategyName(name) % BACKTEST_STRATEGY_COLORS.length;
+        let attempts = 0;
+        while (usedIndexes.has(colorIndex) && attempts < BACKTEST_STRATEGY_COLORS.length) {
+          colorIndex = (colorIndex + 1) % BACKTEST_STRATEGY_COLORS.length;
+          attempts += 1;
+        }
+        if (attempts >= BACKTEST_STRATEGY_COLORS.length) {
+          colorIndex = order % BACKTEST_STRATEGY_COLORS.length;
+        }
+        usedIndexes.add(colorIndex);
+        colorMap.set(name, BACKTEST_STRATEGY_COLORS[colorIndex]);
+      });
+      return colorMap;
+    }
+
+    function getBacktestStrategyColor(strategy, strategies = []) {
+      const name = String(strategy || "Other").trim() || "Other";
+      const colorMap = getBacktestStrategyColorMap([...uniqueBacktestStrategyNames(strategies), name]);
+      return colorMap.get(name) || BACKTEST_STRATEGY_COLORS[0];
+    }
+
+    function getBacktestGroupColor(group, groups = []) {
+      return getBacktestStrategyColor(group, groups);
+    }
+
+    function inferBacktestExchange(ticker) {
+      const symbol = String(ticker || "").toUpperCase();
+      if (symbol.endsWith(".ST") || symbol.endsWith(".SS")) {
+        return "sweden";
+      }
+      if (symbol.endsWith(".DE") || symbol.endsWith(".F") || symbol.endsWith(".DU") || symbol.endsWith(".HM") || symbol.endsWith(".SG") || symbol.endsWith(".BE") || symbol.endsWith(".MU")) {
+        return "xetra";
+      }
+      return "unknown";
+    }
+
+    function computeBacktestLiveQuality(row) {
+      const quality = Number(row.quality_score);
+      if (Number.isFinite(quality) && quality !== 0) {
+        return quality;
+      }
+      const returnPct = Number(row.return_pct || 0);
+      const winRatePct = Number(row.win_rate_pct || 0);
+      const sharpe = Number(row.sharpe || 0);
+      const maxDdPct = Number(row.max_dd_pct || 0);
+      const trades = Number(row.trades || 0);
+      return returnPct
+        * (winRatePct / 100)
+        * (sharpe + 1)
+        / ((1 + trades / 100.0) * (1 + maxDdPct / 10.0));
+    }
+
+    function normalizeBacktestTickerKey(ticker) {
+      return String(ticker || "").trim().toUpperCase();
+    }
+
+    function isBacktestTickerExcluded(ticker) {
+      const key = normalizeBacktestTickerKey(ticker);
+      return key ? backtestExcludedTickers.has(key) : false;
+    }
+
+    function setBacktestTickerExcluded(ticker, excluded, { renderTable = true, renderScatter = true } = {}) {
+      const key = normalizeBacktestTickerKey(ticker);
+      if (!key) {
+        return false;
+      }
+      const isExcluded = Boolean(excluded);
+      const changed = isExcluded
+        ? !backtestExcludedTickers.has(key)
+        : backtestExcludedTickers.has(key);
+      if (!changed) {
+        return false;
+      }
+      if (isExcluded) {
+        backtestExcludedTickers.add(key);
+      } else {
+        backtestExcludedTickers.delete(key);
+      }
+      if (renderTable) {
+        renderBacktestTable(backtestMatrixRows);
+      }
+      if (renderScatter) {
+        scheduleBacktestScatterRender();
+      }
+      return true;
+    }
+
+    function normalizeBacktestMatrixRow(row) {
+      if (!row || typeof row !== "object") {
+        return null;
+      }
+      const ticker = String(row.ticker || row.Ticker || "").trim();
+      const strategy = String(row.strategy || row.Strategy || "").trim();
+      const trades = Math.max(0, Math.round(Number(row.trades ?? row.Trades ?? 0) || 0));
+      if (!ticker || !strategy) {
+        return null;
+      }
+      const normalized = {
+        ticker,
+        strategy,
+        exchange: String(row.exchange || row.Exchange || inferBacktestExchange(ticker)),
+        quality_score: Number(row.quality_score ?? row["Quality Score"] ?? 0) || 0,
+        return_pct: Number(row.return_pct ?? row["Return (%)"] ?? 0) || 0,
+        win_rate_pct: Number(row.win_rate_pct ?? row["Win Rate (%)"] ?? 0) || 0,
+        profit_factor: Number(row.profit_factor ?? row["Profit Factor"] ?? 0) || 0,
+        sharpe: Number(row.sharpe ?? row.Sharpe ?? 0) || 0,
+        max_dd_pct: Number(row.max_dd_pct ?? row["Max DD (%)"] ?? 0) || 0,
+        trades,
+        days_since_entry: Number(row.days_since_entry ?? row["Days Since Entry"] ?? 999) || 999,
+      };
+      normalized.quality_score = Number(computeBacktestLiveQuality(normalized).toFixed(2));
+      return normalized;
+    }
+
+    function normalizeBacktestScatterRow(row) {
+      const normalized = normalizeBacktestMatrixRow(row);
+      if (!normalized || Number(normalized.trades || 0) <= 0) {
+        return null;
+      }
+      return normalized;
+    }
+
+    function normalizeBacktestTradePoint(rawPoint, fallbackIndex = 1) {
+      const point = rawPoint && typeof rawPoint === "object" ? rawPoint : {};
+      const tradeIndex = Math.max(1, Math.round(Number(point.trade_index ?? point.index ?? fallbackIndex) || fallbackIndex));
+      const gainPct = Number(point.gain_pct ?? point.profit_pct ?? point.return_pct ?? point.profit ?? 0);
+      return {
+        trade_index: tradeIndex,
+        trade_gain_pct: Number.isFinite(gainPct) ? gainPct : 0,
+        buy_date: String(point.buy_date || point.entry_date || ""),
+        sell_date: String(point.sell_date || point.exit_date || point.date || ""),
+        buy_price: Number(point.buy_price ?? point.entry_price ?? 0) || 0,
+        sell_price: Number(point.sell_price ?? point.exit_price ?? point.price ?? 0) || 0,
+        estimated: false,
+      };
+    }
+
+    function expandBacktestTradeDots(row, sourceRow = row) {
+      const aggregate = normalizeBacktestMatrixRow(row);
+      if (!aggregate || Number(aggregate.trades || 0) <= 0) {
+        return [];
+      }
+      const rawTradePoints = Array.isArray(sourceRow?.trade_points)
+        ? sourceRow.trade_points
+        : (Array.isArray(sourceRow?.trades_detail) ? sourceRow.trades_detail : []);
+      const realPoints = rawTradePoints
+        .map((point, index) => normalizeBacktestTradePoint(point, index + 1))
+        .filter((point) => Number.isFinite(point.trade_gain_pct));
+      const points = realPoints.length > 0
+        ? realPoints
+        : [{
+          trade_index: 1,
+          trade_gain_pct: Number(aggregate.return_pct || 0),
+          buy_date: "",
+          sell_date: "",
+          buy_price: 0,
+          sell_price: 0,
+          estimated: true,
+        }];
+      return points.map((point) => ({
+        ...aggregate,
+        ...point,
+        dot_id: `${aggregate.strategy}::${aggregate.ticker}::${point.trade_index}`,
+      }));
+    }
+
+    function getBacktestTradeDotSize(row) {
+      const gainPct = Math.max(0, Number(row?.trade_gain_pct ?? 0) || 0);
+      const diameter = 7 + (Math.log1p(gainPct) * 5.2);
+      return Math.max(7, Math.min(30, diameter));
+    }
+
+    function getBacktestTableSortConfig() {
+      return [
+        { key: "ticker", label: "Ticker", defaultDirection: "asc" },
+        { key: "strategy", label: "Strategy", defaultDirection: "asc" },
+        { key: "quality_score", label: "Quality", defaultDirection: "desc" },
+        { key: "return_pct", label: "Return", defaultDirection: "desc" },
+        { key: "win_rate_pct", label: "Win Rate", defaultDirection: "desc" },
+        { key: "sharpe", label: "Sharpe", defaultDirection: "desc" },
+        { key: "profit_factor", label: "PF", defaultDirection: "desc" },
+        { key: "max_dd_pct", label: "Max DD", defaultDirection: "asc" },
+        { key: "trades", label: "Trades", defaultDirection: "desc" },
+        { key: "days_since_entry", label: "Days Since Entry", defaultDirection: "asc" },
+      ];
+    }
+
+    function getBacktestTableSortDescriptor(key) {
+      return getBacktestTableSortConfig().find((entry) => entry.key === key) || null;
+    }
+
+    function getBacktestTableSortValue(row, key) {
+      if (!row || typeof row !== "object") {
+        return "";
+      }
+      if (key === "ticker" || key === "strategy" || key === "exchange") {
+        return String(row[key] || "").toUpperCase();
+      }
+      return Number(row[key] || 0);
+    }
+
+    function sortBacktestTableRows(rows) {
+      const safeRows = Array.isArray(rows) ? [...rows] : [];
+      const descriptor = getBacktestTableSortDescriptor(backtestTableSortKey) || getBacktestTableSortDescriptor("quality_score");
+      const sortKey = descriptor ? descriptor.key : "quality_score";
+      const direction = backtestTableSortDirection === "asc" ? 1 : -1;
+      return safeRows.sort((left, right) => {
+        const leftValue = getBacktestTableSortValue(left, sortKey);
+        const rightValue = getBacktestTableSortValue(right, sortKey);
+        let primary = 0;
+        if (typeof leftValue === "string" || typeof rightValue === "string") {
+          primary = String(leftValue).localeCompare(String(rightValue));
+        } else {
+          primary = Number(leftValue) - Number(rightValue);
+        }
+        if (primary !== 0) {
+          return primary * direction;
+        }
+        const qualityDelta = Number(right?.quality_score || 0) - Number(left?.quality_score || 0);
+        if (qualityDelta !== 0) {
+          return qualityDelta;
+        }
+        const tickerDelta = String(left?.ticker || "").localeCompare(String(right?.ticker || ""));
+        if (tickerDelta !== 0) {
+          return tickerDelta;
+        }
+        return String(left?.strategy || "").localeCompare(String(right?.strategy || ""));
+      });
+    }
+
+    function updateBacktestTableHeaderState() {
+      getBacktestTableSortConfig().forEach((entry) => {
+        const button = document.getElementById(`backtest-sort-${entry.key}`);
+        if (!button) {
+          return;
+        }
+        const isActive = backtestTableSortKey === entry.key;
+        const suffix = isActive ? (backtestTableSortDirection === "asc" ? " ^" : " v") : "";
+        button.textContent = `${entry.label}${suffix}`;
+        button.className = `inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 ${isActive ? "bg-slate-200 text-slate-900" : ""}`;
+        button.setAttribute("aria-sort", isActive ? (backtestTableSortDirection === "asc" ? "ascending" : "descending") : "none");
+      });
+    }
+
+    function setBacktestTableSort(key) {
+      const descriptor = getBacktestTableSortDescriptor(key);
+      if (!descriptor) {
+        return;
+      }
+      if (backtestTableSortKey === descriptor.key) {
+        backtestTableSortDirection = backtestTableSortDirection === "asc" ? "desc" : "asc";
+      } else {
+        backtestTableSortKey = descriptor.key;
+        backtestTableSortDirection = descriptor.defaultDirection;
+      }
+      updateBacktestTableHeaderState();
+      renderBacktestTable(backtestMatrixRows);
+    }
+
+    function mergeBacktestScatterRows(rows, { render = true } = {}) {
+      const incomingRows = Array.isArray(rows) ? rows : [rows];
+      const byKey = new Map(
+        backtestMatrixRows.map((row) => [`${row.strategy}::${row.ticker}`, row])
+      );
+      const dotsByKey = new Map(
+        backtestTradeDotRows.map((row) => [row.dot_id || `${row.strategy}::${row.ticker}::${row.trade_index}`, row])
+      );
+      let changed = false;
+      incomingRows.forEach((item) => {
+        const tableRow = normalizeBacktestMatrixRow(item);
+        if (!tableRow) {
+          return;
+        }
+        byKey.set(`${tableRow.strategy}::${tableRow.ticker}`, tableRow);
+        expandBacktestTradeDots(tableRow, item).forEach((dot) => {
+          const existing = dotsByKey.get(dot.dot_id);
+          if (existing && dot.estimated && !existing.estimated) {
+            return;
+          }
+          dotsByKey.set(dot.dot_id, dot);
+        });
+        changed = true;
+      });
+      if (!changed) {
+        return false;
+      }
+      backtestMatrixRows = Array.from(byKey.values()).sort((left, right) => (
+        Number(right.quality_score || 0) - Number(left.quality_score || 0)
+      ));
+      backtestTradeDotRows = Array.from(dotsByKey.values()).sort((left, right) => (
+        Number(right.trade_gain_pct || 0) - Number(left.trade_gain_pct || 0)
+      ));
+      updateBacktestSummaryCardsFromRows();
+      renderBacktestTable(backtestMatrixRows);
+      if (render) {
+        scheduleBacktestScatterRender();
+      }
+      return true;
+    }
+
+    function scheduleBacktestScatterRender() {
+      if (backtestScatterRenderTimer) {
+        return;
+      }
+      backtestScatterRenderTimer = setTimeout(() => {
+        backtestScatterRenderTimer = null;
+        renderBacktestScatter();
+      }, 150);
+    }
+
+    function updateBacktestSummaryCardsFromRows(summaryRows = backtestMatrixRows) {
+      const rows = Array.isArray(summaryRows) ? summaryRows : [];
+      const scoredRows = rows.filter((row) => Number(row?.trades || 0) > 0);
+      const metricRows = scoredRows.length > 0 ? scoredRows : rows;
+      const strategyCount = new Set(rows.map((row) => row.strategy).filter(Boolean)).size;
+      const returnValues = metricRows.map((row) => Number(row.return_pct)).filter(Number.isFinite);
+      const sharpeValues = metricRows.map((row) => Number(row.sharpe)).filter(Number.isFinite);
+      const qualityValues = metricRows.map((row) => Number(row.quality_score)).filter(Number.isFinite);
+      const avg = (values) => values.length
+        ? values.reduce((sum, value) => sum + value, 0) / values.length
+        : 0;
+      const strategyNode = document.getElementById("bt-strategy");
+      const countNode = document.getElementById("bt-count");
+      const bestQualityNode = document.getElementById("bt-best-quality");
+      const avgReturnNode = document.getElementById("bt-avg-return");
+      const avgSharpeNode = document.getElementById("bt-avg-sharpe");
+      if (strategyNode) {
+        strategyNode.textContent = strategyCount > 1 ? `${strategyCount} strategies` : (rows[0]?.strategy || "Running");
+      }
+      if (countNode) {
+        countNode.textContent = String(rows.length);
+      }
+      if (bestQualityNode) {
+        bestQualityNode.textContent = (qualityValues.length ? Math.max(...qualityValues) : 0).toFixed(2);
+      }
+      if (avgReturnNode) {
+        avgReturnNode.textContent = `${avg(returnValues).toFixed(2)}%`;
+      }
+      if (avgSharpeNode) {
+        avgSharpeNode.textContent = avg(sharpeValues).toFixed(2);
+      }
+    }
+
+    function renderBacktestTable(rows) {
+      const body = document.getElementById("backtest-table-body");
+      if (!body) {
+        return;
+      }
+      updateBacktestTableHeaderState();
+      const strategyNames = uniqueBacktestStrategyNames(
+        (Array.isArray(rows) ? rows : []).map((row) => row.strategy)
+      );
+      const displayedRows = sortBacktestTableRows(rows).slice(0, 100);
+      body.innerHTML = "";
+      displayedRows.forEach((row) => {
+        const tr = document.createElement("tr");
+        const strategyColor = getBacktestStrategyColor(row.strategy, strategyNames);
+        const tradeCount = Number(row.trades || 0);
+        const noTrades = tradeCount <= 0;
+        const excludedTicker = isBacktestTickerExcluded(row.ticker);
+        tr.className = `hover:bg-slate-50 cursor-pointer ${excludedTicker ? "bg-slate-50/80" : ""}`;
+        tr.style.opacity = excludedTicker ? "0.72" : "1";
+        tr.onclick = () => {
+          showTab("screener");
+          loadChart(row.ticker, row.strategy || "");
+        };
+        tr.innerHTML = `
+            <td class="px-4 py-3 font-bold text-slate-800">${escapeHtml(row.ticker)}</td>
+            <td class="px-4 py-3 font-mono text-slate-600">
+              <span class="inline-flex min-w-0 items-center gap-2">
+                <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background: ${strategyColor};"></span>
+                <span>${escapeHtml(row.strategy || "")}</span>
+              </span>
+            </td>
+            <td class="px-4 py-3 font-mono text-indigo-700">${Number(row.quality_score || 0).toFixed(2)}</td>
+            <td class="px-4 py-3 font-mono ${Number(row.return_pct || 0) >= 0 ? "text-emerald-600" : "text-rose-600"}">${Number(row.return_pct || 0).toFixed(2)}%</td>
+            <td class="px-4 py-3 font-mono">${Number(row.win_rate_pct || 0).toFixed(2)}%</td>
+            <td class="px-4 py-3 font-mono">${Number(row.sharpe || 0).toFixed(2)}</td>
+            <td class="px-4 py-3 font-mono">${Number(row.profit_factor || 0).toFixed(2)}</td>
+            <td class="px-4 py-3 font-mono">${Number(row.max_dd_pct || 0).toFixed(2)}%</td>
+            <td class="px-4 py-3 font-mono">
+              <span class="inline-flex items-center gap-2">
+                <span>${tradeCount}</span>
+                ${noTrades
+                  ? '<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">No trades</span>'
+                  : ""}
+              </span>
+            </td>
+            <td class="px-4 py-3 font-mono">${Number(row.days_since_entry || 0)}</td>
+          `;
+        const excludeCell = document.createElement("td");
+        excludeCell.className = "px-4 py-3";
+        excludeCell.onclick = (event) => {
+          if (event && typeof event.stopPropagation === "function") {
+            event.stopPropagation();
+          }
+        };
+        const excludeLabel = document.createElement("label");
+        excludeLabel.className = "inline-flex cursor-pointer items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500";
+        excludeLabel.onclick = (event) => {
+          if (event && typeof event.stopPropagation === "function") {
+            event.stopPropagation();
+          }
+        };
+        const excludeCheckbox = document.createElement("input");
+        excludeCheckbox.type = "checkbox";
+        excludeCheckbox.className = "h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-rose-600 focus:ring-rose-400";
+        excludeCheckbox.checked = excludedTicker;
+        excludeCheckbox.setAttribute("aria-label", `Exclude ${row.ticker} from scatter plot`);
+        excludeCheckbox.title = "Exclude this ticker from the 2D scatter plot";
+        excludeCheckbox.onclick = (event) => {
+          if (event && typeof event.stopPropagation === "function") {
+            event.stopPropagation();
+          }
+        };
+        excludeCheckbox.onchange = (event) => {
+          if (event && typeof event.stopPropagation === "function") {
+            event.stopPropagation();
+          }
+          setBacktestTickerExcluded(row.ticker, Boolean(event?.target?.checked));
+        };
+        const excludeText = document.createElement("span");
+        excludeText.textContent = "Exclude";
+        excludeLabel.appendChild(excludeCheckbox);
+        excludeLabel.appendChild(excludeText);
+        excludeCell.appendChild(excludeLabel);
+        tr.appendChild(excludeCell);
+        body.appendChild(tr);
+      });
+    }
+
+    window.setBacktestTableSort = setBacktestTableSort;
+
+    function populateBacktestAxisControls(metrics) {
+      backtestMetricCatalog = Array.isArray(metrics) && metrics.length > 0 ? metrics : backtestDefaultMetrics();
+      const xSelect = document.getElementById("backtest-x-axis");
+      const ySelect = document.getElementById("backtest-y-axis");
+      if (!xSelect || !ySelect) {
+        return;
+      }
+
+      const previousX = xSelect.value || "sharpe";
+      const previousY = ySelect.value || "return_pct";
+      [xSelect, ySelect].forEach((select) => {
+        select.innerHTML = "";
+        backtestMetricCatalog.forEach((metric) => {
+          const opt = document.createElement("option");
+          opt.value = metric.key;
+          opt.textContent = metric.label;
+          select.appendChild(opt);
+        });
+      });
+      const keys = new Set(backtestMetricCatalog.map((metric) => metric.key));
+      xSelect.value = keys.has(previousX) ? previousX : "sharpe";
+      ySelect.value = keys.has(previousY) ? previousY : "return_pct";
+      if (!keys.has(xSelect.value)) {
+        xSelect.value = backtestMetricCatalog[0]?.key || "";
+      }
+      if (!keys.has(ySelect.value)) {
+        ySelect.value = backtestMetricCatalog[1]?.key || backtestMetricCatalog[0]?.key || "";
+      }
+    }
+
+    function renderBacktestScatter() {
+      const chartDiv = document.getElementById("backtest-chart");
+      if (!chartDiv || !window.Plotly) {
+        return;
+      }
+      const rows = Array.isArray(backtestTradeDotRows) && backtestTradeDotRows.length > 0
+        ? backtestTradeDotRows.filter((row) => !isBacktestTickerExcluded(row.ticker))
+        : [];
+      if (rows.length === 0) {
+        Plotly.purge(chartDiv);
+        return;
+      }
+
+      const xKey = document.getElementById("backtest-x-axis")?.value || "sharpe";
+      const yKey = document.getElementById("backtest-y-axis")?.value || "return_pct";
+      const colorBy = "strategy";
+      const groups = new Map();
+      rows.forEach((row) => {
+        const x = Number(row[xKey]);
+        const y = Number(row[yKey]);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          return;
+        }
+        const group = String(row[colorBy] || "Other");
+        if (!groups.has(group)) {
+          groups.set(group, []);
+        }
+        groups.get(group).push(row);
+      });
+      const strategyNames = Array.from(groups.keys());
+
+      const traces = Array.from(groups.entries()).map(([group, groupRows]) => ({
+        type: "scatter",
+        mode: "markers",
+        name: group,
+        x: groupRows.map((row) => Number(row[xKey])),
+        y: groupRows.map((row) => Number(row[yKey])),
+        text: groupRows.map((row) => `${row.strategy} / ${row.ticker}`),
+        customdata: groupRows.map((row) => [
+          row.strategy,
+          row.ticker,
+          row.exchange,
+          Number(row.quality_score || 0).toFixed(2),
+          Number(row.return_pct || 0).toFixed(2),
+          Number(row.sharpe || 0).toFixed(2),
+          Number(row.win_rate_pct || 0).toFixed(2),
+          Number(row.max_dd_pct || 0).toFixed(2),
+          Number(row.trades || 0),
+          Number(row.days_since_entry || 0),
+          Number(row.trade_index || 0),
+          Number(row.trade_gain_pct || 0).toFixed(2),
+          row.estimated ? "estimated avg" : "actual",
+          row.sell_date || "",
+        ]),
+        marker: {
+          size: groupRows.map((row) => getBacktestTradeDotSize(row)),
+          color: getBacktestGroupColor(colorBy === "strategy" ? group : groupRows[0]?.strategy || group, strategyNames),
+          opacity: 0.78,
+          line: { color: "#ffffff", width: 1 },
+        },
+        hovertemplate:
+          "<b>%{customdata[0]}</b><br>" +
+          "Ticker: %{customdata[1]}<br>" +
+          "Universe: %{customdata[2]}<br>" +
+          `${getBacktestMetricLabel(xKey)}: %{x:.2f}<br>` +
+          `${getBacktestMetricLabel(yKey)}: %{y:.2f}<br>` +
+          "Quality: %{customdata[3]}<br>" +
+          "Return: %{customdata[4]}%<br>" +
+          "Sharpe: %{customdata[5]}<br>" +
+          "Win Rate: %{customdata[6]}%<br>" +
+          "Max DD: %{customdata[7]}%<br>" +
+          "Trades: %{customdata[8]}<br>" +
+          "Trade #: %{customdata[10]}<br>" +
+          "Trade gain: %{customdata[11]}% (%{customdata[12]})<br>" +
+          "Exit: %{customdata[13]}<br>" +
+          "Days Since Entry: %{customdata[9]}<extra></extra>",
+      }));
+
+      Plotly.newPlot(chartDiv, traces, {
+        paper_bgcolor: "#ffffff",
+        plot_bgcolor: "#ffffff",
+        margin: { l: 60, r: 20, t: 24, b: 55 },
+        xaxis: { title: getBacktestMetricLabel(xKey), zeroline: true, automargin: true },
+        yaxis: { title: getBacktestMetricLabel(yKey), zeroline: true, automargin: true },
+        legend: { orientation: "h", y: -0.24 },
+      }, {
+        responsive: true,
+        displayModeBar: false,
+        displaylogo: false,
+      });
+    }
+
+    function renderBacktestStructureRadar() {
+      const chartDiv = document.getElementById("backtest-structure-chart");
+      if (!chartDiv || !window.Plotly) {
+        return;
+      }
+      const axisCatalog = normalizeBacktestStructureAxisCatalog(backtestStrategyAxisCatalog);
+      const summaries = (Array.isArray(backtestStrategySummaries) ? backtestStrategySummaries : [])
+        .map((summary, index) => normalizeBacktestStrategySummary(summary, index, axisCatalog))
+        .filter((summary) => summary.strategy);
+      if (!summaries.length) {
+        setBacktestStructurePanelVisible(false);
+        Plotly.purge(chartDiv);
+        return;
+      }
+      setBacktestStructurePanelVisible(true);
+
+      const sorted = [...summaries].sort((left, right) => (
+        Number(right.structure_score || 0) - Number(left.structure_score || 0)
+      ));
+      const strategyNames = sorted.map((item) => item.strategy);
+      const axisLabelsByKey = new Map(axisCatalog.map((axis) => [axis.key, axis.label]));
+      const maxAxis = axisCatalog.reduce((max, axis) => Math.max(max, Number(axis.max || 10) || 10), 10);
+      const traces = sorted.map((summary) => {
+        const axisOrder = Array.isArray(summary.axis_order) && summary.axis_order.length > 0
+          ? summary.axis_order.filter((key) => axisLabelsByKey.has(key))
+          : axisCatalog.map((axis) => axis.key);
+        const theta = axisOrder.map((key) => axisLabelsByKey.get(key) || key);
+        const r = axisOrder.map((key) => Number(summary.structure_axes?.[key] || 0));
+        const closedTheta = theta.concat(theta[0] || "");
+        const closedR = r.concat(r[0] ?? 0);
+        const tags = Array.isArray(summary.structure_tags) ? summary.structure_tags : [];
+        return {
+          type: "scatterpolar",
+          mode: "lines+markers",
+          fill: "toself",
+          name: summary.strategy,
+          theta: closedTheta,
+          r: closedR,
+          line: {
+            color: getBacktestStrategyColor(summary.strategy, strategyNames),
+            width: 2.5,
+          },
+          marker: {
+            color: getBacktestStrategyColor(summary.strategy, strategyNames),
+            size: 6,
+          },
+          opacity: 0.55,
+          customdata: closedTheta.map((axisLabel, idx) => [
+            summary.strategy,
+            Number(summary.structure_score || 0).toFixed(2),
+            axisLabel,
+            Number(closedR[idx] || 0).toFixed(2),
+            tags.join(", "),
+          ]),
+          hovertemplate:
+            "<b>%{customdata[0]}</b><br>" +
+            "Structure Score: %{customdata[1]}<br>" +
+            "Axis: %{customdata[2]}<br>" +
+            "Value: %{customdata[3]}<br>" +
+            "Tags: %{customdata[4]}<extra></extra>",
+        };
+      });
+
+      Plotly.newPlot(chartDiv, traces, {
+        paper_bgcolor: "#ffffff",
+        plot_bgcolor: "#ffffff",
+        margin: { l: 40, r: 40, t: 28, b: 28 },
+        legend: { orientation: "h", y: -0.12 },
+        polar: {
+          bgcolor: "#ffffff",
+          radialaxis: {
+            visible: true,
+            range: [0, maxAxis],
+            tickfont: { size: 10 },
+            gridcolor: "#dbe4f0",
+            linecolor: "#cbd5e1",
+          },
+          angularaxis: {
+            tickfont: { size: 11, color: "#475569" },
+            gridcolor: "#e2e8f0",
+            linecolor: "#cbd5e1",
+          },
+        },
+      }, {
+        responsive: true,
+        displayModeBar: false,
+        displaylogo: false,
+      });
+    }
+
+    function renderBacktestBehaviorRadar() {
+      const chartDiv = document.getElementById("backtest-behavior-chart");
+      if (!chartDiv || !window.Plotly) {
+        return;
+      }
+      const axisCatalog = backtestDefaultBehaviorAxisCatalog();
+      const summaries = (Array.isArray(backtestStrategySummaries) ? backtestStrategySummaries : [])
+        .map((summary, index) => normalizeBacktestStrategySummary(summary, index, backtestStrategyAxisCatalog))
+        .filter((summary) => summary.strategy && summary.has_behavior_data);
+      if (!summaries.length) {
+        setBacktestBehaviorPanelVisible(false);
+        Plotly.purge(chartDiv);
+        return;
+      }
+      setBacktestBehaviorPanelVisible(true);
+
+      const sorted = [...summaries]
+        .map((summary) => ({
+          ...summary,
+          behavior_profile: summary.behavior_profile || deriveBacktestBehaviorProfile(summary),
+        }))
+        .sort((left, right) => (
+          Number(right.behavior_profile?.behavior_score || 0) - Number(left.behavior_profile?.behavior_score || 0)
+        ));
+      const strategyNames = sorted.map((item) => item.strategy);
+      const axisLabelsByKey = new Map(axisCatalog.map((axis) => [axis.key, axis.label]));
+      const traces = sorted.map((summary) => {
+        const profile = summary.behavior_profile || deriveBacktestBehaviorProfile(summary);
+        const axisOrder = Array.isArray(profile.axis_order) && profile.axis_order.length > 0
+          ? profile.axis_order.filter((key) => axisLabelsByKey.has(key))
+          : axisCatalog.map((axis) => axis.key);
+        const theta = axisOrder.map((key) => axisLabelsByKey.get(key) || key);
+        const r = axisOrder.map((key) => Number(profile.behavior_axes?.[key] || 0));
+        const closedTheta = theta.concat(theta[0] || "");
+        const closedR = r.concat(r[0] ?? 0);
+        const closedKeys = axisOrder.concat(axisOrder[0] || "");
+        return {
+          type: "scatterpolar",
+          mode: "lines+markers",
+          fill: "toself",
+          name: summary.strategy,
+          theta: closedTheta,
+          r: closedR,
+          line: {
+            color: getBacktestStrategyColor(summary.strategy, strategyNames),
+            width: 2.5,
+          },
+          marker: {
+            color: getBacktestStrategyColor(summary.strategy, strategyNames),
+            size: 6,
+          },
+          opacity: 0.55,
+          customdata: closedTheta.map((axisLabel, idx) => {
+            const axisKey = closedKeys[idx] || axisOrder[0] || "";
+            const rawValue = profile.raw_metrics?.[axisKey] ?? 0;
+            return [
+              summary.strategy,
+              Number(profile.behavior_score || 0).toFixed(2),
+              axisLabel,
+              Number(closedR[idx] || 0).toFixed(2),
+              formatBacktestBehaviorRawMetric(axisKey, rawValue),
+            ];
+          }),
+          hovertemplate:
+            "<b>%{customdata[0]}</b><br>" +
+            "Behavior Score: %{customdata[1]}<br>" +
+            "Axis: %{customdata[2]}<br>" +
+            "Normalized: %{customdata[3]} / 10<br>" +
+            "Raw: %{customdata[4]}<extra></extra>",
+        };
+      });
+
+      Plotly.newPlot(chartDiv, traces, {
+        paper_bgcolor: "#ffffff",
+        plot_bgcolor: "#ffffff",
+        margin: { l: 40, r: 40, t: 28, b: 28 },
+        legend: { orientation: "h", y: -0.12 },
+        polar: {
+          bgcolor: "#ffffff",
+          radialaxis: {
+            visible: true,
+            range: [0, 10],
+            tickfont: { size: 10 },
+            gridcolor: "#dbe4f0",
+            linecolor: "#cbd5e1",
+          },
+          angularaxis: {
+            tickfont: { size: 11, color: "#475569" },
+            gridcolor: "#e2e8f0",
+            linecolor: "#cbd5e1",
+          },
+        },
+      }, {
+        responsive: true,
+        displayModeBar: false,
+        displaylogo: false,
+      });
+    }
+
+    async function loadBacktestMetrics({ restartRace = false } = {}) {
       const strategySelect = document.getElementById("strategy-select");
       const strategyName = strategySelect && strategySelect.value ? strategySelect.value : "";
+      const selectedStrategies = getBacktestSelectedStrategies();
+      const effectiveStrategies = selectedStrategies.length > 0 ? selectedStrategies : (strategyName ? [strategyName] : []);
+      const activeSavedStrategy = effectiveStrategies[0] || "";
       const editorDsl = getActiveEditorDsl();
       const runBtn = document.getElementById("backtest-run-btn");
-      const body = document.getElementById("backtest-table-body");
-      const chartDiv = document.getElementById("backtest-chart");
       const content = document.getElementById("backtest-content");
       const signalDays = getBacktestSignalDays();
 
-      if (backtestSourceMode === "saved" && !strategyName) {
+      if (backtestSourceMode === "saved" && !activeSavedStrategy) {
         setBacktestEmptyState("Select a saved strategy first, then open Backtester to score it.");
         return;
       }
@@ -6143,7 +8405,13 @@ let backtestSourceMode = "saved";
         setBacktestEmptyState("Editor Draft is selected, but the Labs editor is empty.");
         return;
       }
-      if ((normalizeScanScope(tickerScanScope) === "list" || normalizeScanScope(tickerScanScope) === "all_lists") && getScopeTickers(tickerScanScope).length === 0) {
+      if (!tickerUniverseExplicitlyChosen) {
+        setBacktestEmptyState("Choose a ticker universe first before running Backtester.");
+        return;
+      }
+      const universeParams = getUniverseFilterParams();
+      const chosenScope = universeParams.get("scan_scope");
+      if ((chosenScope === "list" || chosenScope === "all_lists") && !universeParams.get("ticker_list")) {
         await openListEditorModal();
         setBacktestEmptyState("Choose some tickers for the saved list before running Backtester.");
         return;
@@ -6156,7 +8424,13 @@ let backtestSourceMode = "saved";
         contextPct: 0,
         contextWorking: false,
       });
-      startJobProgressPolling("backtest", "Global");
+      if (backtestRaceAbortController) {
+        backtestRaceAbortController.abort();
+      }
+      backtestRaceAbortController = typeof AbortController !== "undefined"
+        ? new AbortController()
+        : null;
+      backtestProgressStartedAt = Date.now();
       setNavScanProgress({
         show: true,
         globalLabel: "Global",
@@ -6164,53 +8438,60 @@ let backtestSourceMode = "saved";
         globalPct: 0,
         globalWorking: true,
       });
+      setBacktestProgress({
+        show: true,
+        detail: "Preparing backtest...",
+        contextLabel: "Request",
+        contextText: "0%",
+        contextPct: 0,
+        contextWorking: false,
+        globalLabel: "Backend",
+        globalText: "Preparing...",
+        globalPct: 0,
+        globalWorking: true,
+      });
 
-      let btFakeProg = 0;
-      let btWorkingPhase = false;
       let btProgressInterval = null;
-      const startBacktestProgress = () => {
-        btProgressInterval = setInterval(() => {
-          const nodes = getNavScanProgressNodes();
-          if (!nodes.contextBar || !nodes.contextText) return;
 
-          if (btFakeProg < 90) {
-            btFakeProg = Math.min(90, btFakeProg + Math.max(0.45, (90 - btFakeProg) * 0.1));
-            setNavScanProgress({
-              contextLabel: "Backtest",
-              contextText: `${Math.round(btFakeProg)}%`,
-              contextPct: btFakeProg,
-            });
-            return;
-          }
-
-          if (!btWorkingPhase) {
-            btWorkingPhase = true;
-            setNavScanProgress({
-              contextLabel: "Backtest",
-              contextText: "WORKING",
-              contextPct: 90,
-              contextWorking: true,
-            });
-          }
-
-          const contextPulse = 88 + Math.round(4 * (0.5 + 0.5 * Math.sin(Date.now() / 400)));
-          setNavScanProgress({
-            contextLabel: "Backtest",
-            contextText: "WORKING",
-            contextPct: contextPulse,
-            contextWorking: true,
-          });
-        }, 300);
-      };
-      startBacktestProgress();
-
-      setBacktestEmptyState(`Evaluating ${backtestSourceMode === 'editor' ? 'Editor Draft' : strategyName}...`);
+      const runLabel = backtestSourceMode === "editor"
+        ? "Editor Draft"
+        : `${effectiveStrategies.length} saved strateg${effectiveStrategies.length === 1 ? "y" : "ies"}`;
+      prepareBacktestLiveResults(`Evaluating ${runLabel}...`);
+      const raceSignature = buildBacktestRaceSignature({
+        sourceMode: backtestSourceMode,
+        strategyName: backtestSourceMode === "editor" ? (strategyName || "Editor Draft") : (effectiveStrategies[0] || ""),
+        strategies: effectiveStrategies,
+        signalDays,
+        universeQuery: universeParams.toString(),
+      });
+      const cachedRace = restartRace ? null : backtestRaceCache.get(raceSignature);
+      const seededLanes = cachedRace && Array.isArray(cachedRace.lanes)
+        ? cachedRace.lanes.map((lane, index) => ({
+          ...lane,
+          index: index + 1,
+          status: "queued",
+          progress_pct: 0,
+          visual_progress_pct: 0,
+          detail: "Queued",
+        }))
+        : [];
+      seedBacktestRaceState({
+        signature: raceSignature,
+        strategies: effectiveStrategies.length > 0 ? effectiveStrategies : [strategyName || "Editor Draft"],
+        lanes: seededLanes,
+        targetProgress: cachedRace ? cachedRace.targetProgress || 0 : 0,
+        displayProgress: 0,
+        status: "running",
+        activeStrategy: effectiveStrategies[0] || strategyName || "Editor Draft",
+        detail: restartRace ? "Restarting from the beginning..." : "Queued on backend...",
+      });
+      startBacktestRacePlayback({ autoplay: true });
       runBtn.disabled = true;
       runBtn.textContent = "Evaluating...";
+      runBtn.dataset.running = "1";
 
       try {
-        await ensureGuiMarketBackbone();
-        startJobProgressPolling("backtest", "Global");
+        await ensureGuiMarketBackbone({ allowRefresh: false });
         setNavScanProgress({
           show: true,
           contextLabel: "Backtest",
@@ -6222,8 +8503,21 @@ let backtestSourceMode = "saved";
           globalPct: 0,
           globalWorking: true,
         });
-        let url = `/api/backtest?limit=25`;
-        const universeParams = getUniverseFilterParams();
+        setBacktestProgress({
+          show: true,
+          detail: "Queued on backend...",
+          contextLabel: "Request",
+          contextText: "Queued...",
+          contextPct: 1,
+          contextWorking: true,
+          globalLabel: "Backend",
+          globalText: "Waiting...",
+          globalPct: 0,
+          globalWorking: true,
+        });
+        let url = backtestSourceMode === "editor"
+          ? `/api/backtest?limit=1000`
+          : `/api/backtest/matrix?limit=1000`;
         const universeQuery = universeParams.toString();
         if (universeQuery) {
           url += `&${universeQuery}`;
@@ -6235,61 +8529,95 @@ let backtestSourceMode = "saved";
           url += `&strategy=${encodeURIComponent(strategyName || 'Editor Draft')}`;
           url += `&dsl_content=${encodeURIComponent(editorDsl)}`;
         } else {
-          url += `&strategy=${encodeURIComponent(strategyName)}`;
+          const strategyCount = document.querySelectorAll(".backtest-strategy-checkbox").length;
+          if (effectiveStrategies.length === strategyCount && strategyCount > 0) {
+            url += `&all_strategies=true`;
+          } else {
+            url += `&strategies=${encodeURIComponent(effectiveStrategies.join(","))}`;
+          }
         }
-        const resp = await fetch(url);
+        const requestStartedAt = Date.now();
+        backtestProgressStartedAt = requestStartedAt;
+        const responsePromise = fetch(url, backtestRaceAbortController ? { signal: backtestRaceAbortController.signal } : undefined);
+        startJobProgressPolling("backtest", "Global");
+        const resp = await responsePromise;
         const data = await resp.json();
         if (!resp.ok) {
           throw new Error(data.detail || "Backtest request failed");
         }
 
         document.getElementById("bt-strategy").textContent =
-          `${data.strategy_name || strategyName || "Editor Draft"} (${data.source_type === "editor" ? "Editor Draft" : "Saved Strategy"})`;
+          data.source_type === "saved_matrix"
+            ? `${Number(data.summary?.strategy_count || effectiveStrategies.length || 0)} strategies`
+            : `${data.strategy_name || strategyName || "Editor Draft"} (${data.source_type === "editor" ? "Editor Draft" : "Saved Strategy"})`;
         document.getElementById("bt-count").textContent = String(data.summary?.count || 0);
         document.getElementById("bt-best-quality").textContent = Number(data.summary?.best_quality || 0).toFixed(2);
         document.getElementById("bt-avg-return").textContent = `${Number(data.summary?.avg_return || 0).toFixed(2)}%`;
         document.getElementById("bt-avg-sharpe").textContent = Number(data.summary?.avg_sharpe || 0).toFixed(2);
+        setBacktestStructureData({
+          summaries: data.strategy_summaries,
+          strategyProfile: data.strategy_profile,
+          axisCatalog: data.strategy_axis_catalog,
+          strategyName: data.strategy_name || strategyName || "Editor Draft",
+        });
 
-        body.innerHTML = "";
+        if (data.race || Array.isArray(data.strategy_summaries)) {
+          updateBacktestRaceFromSnapshot({
+            backtest_race: data.race || {
+              selected_strategies: data.strategies || effectiveStrategies,
+              lanes: data.strategy_summaries || [],
+              pct: 100,
+              phase: "done",
+              detail: `Finished ${Number(data.summary?.count || 0)} rows scored.`,
+              active_strategy: effectiveStrategies[effectiveStrategies.length - 1] || "",
+            },
+          });
+          backtestRaceCache.set(raceSignature, {
+            ...backtestRaceState,
+            lanes: Array.isArray(backtestRaceState?.lanes)
+              ? backtestRaceState.lanes.map((lane) => ({ ...lane }))
+              : [],
+          });
+        }
+
         const rows = Array.isArray(data.rows) ? data.rows : [];
         if (rows.length === 0) {
-          setBacktestEmptyState(`No scored results were returned for ${data.strategy_name || strategyName || 'Editor Draft'}.`);
+          const body = document.getElementById("backtest-table-body");
+          if (body) {
+            body.innerHTML = "";
+          }
+          if (window.Plotly) {
+            const scatterChartDiv = document.getElementById("backtest-chart");
+            if (scatterChartDiv) {
+              Plotly.purge(scatterChartDiv);
+            }
+          }
+          if (backtestMatrixRows.length === 0 && backtestStrategySummaries.length === 0) {
+            setBacktestEmptyState(`No scored results were returned for ${data.strategy_name || strategyName || 'Editor Draft'}.`);
+          } else {
+            document.getElementById("backtest-empty").classList.add("hidden");
+            content.classList.remove("hidden");
+          }
+          setBacktestProgress({
+            show: true,
+            detail: "Finished, but no scored rows were returned.",
+            contextLabel: "Request",
+            contextText: "100%",
+            contextPct: 100,
+            contextWorking: false,
+            globalLabel: "Backend",
+            globalText: "100%",
+            globalPct: 100,
+            globalWorking: false,
+          });
           return;
         }
 
-        rows.forEach((row) => {
-          const tr = document.createElement("tr");
-          tr.className = "hover:bg-slate-50 cursor-pointer";
-          tr.onclick = () => {
-            showTab('screener');
-            loadChart(row.ticker);
-          };
-          tr.innerHTML = `
-            <td class="px-4 py-3 font-bold text-slate-800">${row.ticker}</td>
-            <td class="px-4 py-3 font-mono text-indigo-700">${Number(row.quality_score || 0).toFixed(2)}</td>
-            <td class="px-4 py-3 font-mono ${Number(row.return_pct || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${Number(row.return_pct || 0).toFixed(2)}%</td>
-            <td class="px-4 py-3 font-mono">${Number(row.win_rate_pct || 0).toFixed(2)}%</td>
-            <td class="px-4 py-3 font-mono">${Number(row.sharpe || 0).toFixed(2)}</td>
-            <td class="px-4 py-3 font-mono">${Number(row.profit_factor || 0).toFixed(2)}</td>
-            <td class="px-4 py-3 font-mono">${Number(row.max_dd_pct || 0).toFixed(2)}%</td>
-            <td class="px-4 py-3 font-mono">${Number(row.trades || 0)}</td>
-            <td class="px-4 py-3 font-mono">${Number(row.days_since_entry || 0)}</td>
-          `;
-          body.appendChild(tr);
-        });
-
-        if (chartDiv) {
-          const chart = data.chart || { data: [], layout: {} };
-          if (chart.data && chart.data.length > 0 && window.Plotly) {
-            await Plotly.newPlot(chartDiv, chart.data, chart.layout || {}, {
-              responsive: true,
-              displayModeBar: false,
-              displaylogo: false,
-            });
-          } else if (window.Plotly) {
-            Plotly.purge(chartDiv);
-          }
-        }
+        populateBacktestAxisControls(data.metrics || backtestDefaultMetrics());
+        mergeBacktestScatterRows(rows, { render: false });
+        renderBacktestScatter();
+        renderBacktestStructureRadar();
+        renderBacktestBehaviorRadar();
 
         document.getElementById("backtest-empty").classList.add("hidden");
         content.classList.remove("hidden");
@@ -6305,8 +8633,46 @@ let backtestSourceMode = "saved";
           globalPct: 100,
           globalWorking: false,
         });
+        setBacktestProgress({
+          show: true,
+          detail: `Finished ${rows.length} plotted rows.`,
+          contextLabel: "Request",
+          contextText: "100%",
+          contextPct: 100,
+          contextWorking: false,
+          globalLabel: "Backend",
+          globalText: "100%",
+          globalPct: 100,
+          globalWorking: false,
+        });
         await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (err) {
+        if (err && err.name === "AbortError") {
+          setBacktestEmptyState("Backtest stopped.");
+          setNavScanProgress({
+            contextLabel: "Backtest",
+            contextText: "STOPPED",
+            contextPct: 0,
+            contextWorking: false,
+            globalLabel: "Global",
+            globalText: "STOPPED",
+            globalPct: 0,
+            globalWorking: false,
+          });
+          setBacktestProgress({
+            show: true,
+            detail: "Stopped by user.",
+            contextLabel: "Request",
+            contextText: "STOPPED",
+            contextPct: 0,
+            contextWorking: false,
+            globalLabel: "Backend",
+            globalText: "STOPPED",
+            globalPct: 0,
+            globalWorking: false,
+          });
+          return;
+        }
         if (btProgressInterval) clearInterval(btProgressInterval);
         btProgressInterval = null;
         setBacktestEmptyState(`Backtest error: ${err.message || err}`);
@@ -6320,14 +8686,28 @@ let backtestSourceMode = "saved";
           globalPct: 100,
           globalWorking: false,
         });
+        setBacktestProgress({
+          show: true,
+          detail: `Failed: ${err.message || err}`,
+          contextLabel: "Request",
+          contextText: "FAILED",
+          contextPct: 100,
+          contextWorking: false,
+          globalLabel: "Backend",
+          globalText: "FAILED",
+          globalPct: 100,
+          globalWorking: false,
+        });
         await new Promise((resolve) => setTimeout(resolve, 250));
       } finally {
         if (btProgressInterval) clearInterval(btProgressInterval);
         btProgressInterval = null;
         stopJobProgressPolling();
+        backtestRaceAbortController = null;
         resetScanUI();
-        runBtn.disabled = false;
-        runBtn.textContent = "Evaluate Strategy";
+        delete runBtn.dataset.running;
+        runBtn.textContent = "Evaluate Selected";
+        updateBacktestRunButtonState();
       }
     }
     // Show default tab on load
@@ -6339,6 +8719,7 @@ let backtestSourceMode = "saved";
         body: JSON.stringify({ level: 'info', message: '[TABBAR] Tab bar rendered' })
       });
       tickerScanScope = normalizeScanScope(readStickyValue(LAST_SCAN_SCOPE_KEY, "xetra"));
+      tickerUniverseExplicitlyChosen = false;
       if (tickerScanScope === "debug") {
         tickerScanScope = "xetra";
         writeStickyValue(LAST_SCAN_SCOPE_KEY, tickerScanScope);
@@ -6347,6 +8728,7 @@ let backtestSourceMode = "saved";
         readStickyValue(LAST_SWARM_DEBUG_ASSET_COUNT_KEY, "24")
       );
       updateScanScopeChrome();
+      updateRangeChrome();
       updateListSelectChrome();
       await ensureTickerUniverseLoaded();
       const loadedList = await loadCustomTickerListFromServer();
@@ -6476,7 +8858,6 @@ let backtestSourceMode = "saved";
       applyDefaultDashboardTab();
     });
     applyDefaultDashboardTab();
-    let currentDays = 365 * 2;
     let currentTicker = "";
     let currentStrategy = "";
     let sourceStrategyName = ""; // tracks what strategy is being modified
@@ -6594,6 +8975,57 @@ let backtestSourceMode = "saved";
       }
     }
 
+    function getStrategySelects() {
+      return ["strategy-select"]
+        .map((id) => document.getElementById(id))
+        .filter(Boolean);
+    }
+
+    function syncStrategySelections(strategyName, { syncBacktestCheckboxes = true } = {}) {
+      const value = strategyName || "";
+      getStrategySelects().forEach((select) => {
+        const hasOption = !value || Array.from(select.options).some((opt) => opt.value === value);
+        select.value = hasOption ? value : "";
+      });
+      if (syncBacktestCheckboxes) {
+        document.querySelectorAll(".backtest-strategy-checkbox").forEach((input) => {
+          input.checked = value ? input.value === value : false;
+        });
+      }
+      updateBacktestStrategyCount();
+      syncBacktestStrategyCheckboxChrome();
+    }
+
+    function renderBacktestStrategyChooser(strategies, selectedName = "") {
+      const list = document.getElementById("backtest-strategy-list");
+      if (!list) {
+        return;
+      }
+      list.innerHTML = "";
+      strategies.forEach((strategy) => {
+        const label = document.createElement("label");
+        label.className = "flex items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-b-0 hover:bg-slate-50";
+
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.className = "backtest-strategy-checkbox h-4 w-4 rounded border-slate-300 text-indigo-600";
+        input.value = strategy;
+        input.checked = Boolean(selectedName && selectedName === strategy);
+        input.addEventListener("change", handleBacktestStrategyChooserChange);
+
+        const text = document.createElement("span");
+        text.className = "truncate";
+        text.textContent = strategy;
+
+        label.appendChild(input);
+        label.appendChild(text);
+        list.appendChild(label);
+      });
+      updateBacktestStrategyCount();
+      syncBacktestStrategyCheckboxChrome();
+      bindBacktestStrategyChooserControls();
+    }
+
     async function restoreLastCompletedStrategy() {
       const strategySelect = document.getElementById("strategy-select");
       if (!strategySelect) {
@@ -6611,9 +9043,8 @@ let backtestSourceMode = "saved";
         return "";
       }
 
-      strategySelect.value = savedStrategy;
       currentStrategy = savedStrategy;
-      await updateEditorContent(savedStrategy);
+      await updateEditorContent(savedStrategy, { syncBacktestCheckboxes: false });
       return savedStrategy;
     }
 
@@ -6622,16 +9053,21 @@ let backtestSourceMode = "saved";
       try {
         const resp = await fetch("/api/strategies");
         const strategies = await resp.json();
-        const sel = document.getElementById("strategy-select");
-        const prev = selectName || sel.value;
-        sel.innerHTML = '<option value="">-- No Active Strategy --</option>';
-        strategies.forEach(s => {
-          const opt = document.createElement("option");
-          opt.value = s;
-          opt.textContent = s;
-          sel.appendChild(opt);
+        const selects = [
+          ...getStrategySelects(),
+        ].filter(Boolean);
+        selects.forEach((sel) => {
+          const prev = selectName || sel.value;
+          sel.innerHTML = '<option value="">-- No Active Strategy --</option>';
+          strategies.forEach((s) => {
+            const opt = document.createElement("option");
+            opt.value = s;
+            opt.textContent = s;
+            sel.appendChild(opt);
+          });
+          if (prev) sel.value = prev;
         });
-        if (prev) sel.value = prev;
+        renderBacktestStrategyChooser(strategies, selectName || "");
       } catch (e) {
         console.error("Failed to refresh strategies dropdown", e);
       }
@@ -6643,7 +9079,9 @@ let backtestSourceMode = "saved";
       panel.classList.toggle("hidden");
     }
 
-    async function updateEditorContent(strategyName) {
+    async function updateEditorContent(strategyName, { syncBacktestCheckboxes = true } = {}) {
+      syncStrategySelections(strategyName, { syncBacktestCheckboxes });
+      currentStrategy = strategyName || "";
       const strategyEditor = document.getElementById("strategy-editor");
       const strategyFilename = document.getElementById("strategy-filename");
 
@@ -6657,6 +9095,7 @@ let backtestSourceMode = "saved";
       if (!strategyName) {
         strategyEditor.value = "";
         strategyFilename.value = "";
+        updateBacktestRunButtonState();
         return;
       }
       try {
@@ -6667,8 +9106,10 @@ let backtestSourceMode = "saved";
         const data = await resp.json();
         strategyEditor.value = data.content;
         strategyFilename.value = strategyName;
+        updateBacktestRunButtonState();
       } catch (err) {
         console.error("Failed to load strategy", err);
+        updateBacktestRunButtonState();
       }
     }
 
@@ -6912,12 +9353,22 @@ let backtestSourceMode = "saved";
       const active = Boolean(snapshot.active);
       const pctValue = Number(snapshot.pct);
       const pct = Number.isFinite(pctValue) ? Math.max(0, Math.min(100, pctValue)) : 0;
+      const terminal = phase === "done" || phase === "failed";
 
-      if (!job || !active) {
+      if (!job) {
         return false;
       }
       if (expectedJob && job !== expectedJob) {
         return false;
+      }
+      if (!active && !terminal) {
+        return false;
+      }
+      if (job === "backtest" && backtestProgressStartedAt > 0) {
+        const snapshotTime = Date.parse(String(snapshot.updated_at || ""));
+        if (Number.isFinite(snapshotTime) && snapshotTime < backtestProgressStartedAt - 1000) {
+          return false;
+        }
       }
 
       const label = String(snapshot.label || navScanProgressJob || "Global");
@@ -6936,8 +9387,30 @@ let backtestSourceMode = "saved";
         globalPct: pct,
         globalWorking: active && phase !== "done" && phase !== "failed",
       });
-
-      return !active && (phase === "done" || phase === "failed");
+      if (job === "backtest") {
+        let backtestWorkText = "";
+        if (snapshot.payload && typeof snapshot.payload === "object") {
+          updateBacktestRaceFromSnapshot(snapshot.payload);
+          backtestWorkText = formatBacktestWorkProgress(snapshot.payload.backtest_race, text);
+          const runId = String(snapshot.payload.backtest_race?.run_id || snapshot.payload.run_id || "");
+          void pollBacktestRaceEvents(runId);
+        } else if (backtestRaceState) {
+          backtestRaceState.targetProgress = pct;
+          backtestRaceState.status = phase;
+          backtestRaceState.detail = detail || backtestRaceState.detail || "";
+          renderBacktestRace();
+        }
+        const backtestText = backtestWorkText || text;
+        setBacktestProgress({
+          show: true,
+          detail: backtestText,
+          globalLabel: label,
+          globalText: backtestText,
+          globalPct: pct,
+          globalWorking: active && phase !== "done" && phase !== "failed",
+        });
+      }
+      return !active && terminal;
     }
 
     function startJobProgressPolling(expectedJob, fallbackLabel = "Global") {
@@ -7021,10 +9494,26 @@ let backtestSourceMode = "saved";
       }
     }
 
-    function resetScanUI() {
-      const spinner = document.getElementById("loading-spinner");
+    function updateScanActionButtonsState() {
+      const readiness = tickerUniverseExplicitlyChosen
+        ? { ready: true, reason: "Run screener" }
+        : { ready: false, reason: "Choose a ticker universe first" };
       const scanBtn = document.getElementById("scan-btn");
       const runBtn = document.getElementById("run-btn");
+
+      if (scanBtn && scanBtn.dataset.running !== "1") {
+        scanBtn.disabled = !readiness.ready;
+        scanBtn.title = readiness.reason;
+      }
+
+      if (runBtn && runBtn.dataset.running !== "1") {
+        runBtn.disabled = !readiness.ready;
+        runBtn.title = readiness.reason;
+      }
+    }
+
+    function resetScanUI() {
+      const spinner = document.getElementById("loading-spinner");
       const list = document.getElementById("ticker-list");
 
       stopJobProgressPolling();
@@ -7041,27 +9530,9 @@ let backtestSourceMode = "saved";
         globalWorking: false,
       });
 
-      if (scanBtn) {
-        scanBtn.textContent = "Run Scanner";
-        scanBtn.classList.add("bg-indigo-600");
-        scanBtn.classList.remove("bg-indigo-400");
-        scanBtn.disabled = false;
-      }
-
-      if (runBtn) {
-        runBtn.innerHTML = `
-            <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M5 3l14 9-14 9V3z"></path>
-            </svg>
-            Run Screener
-          `;
-        runBtn.classList.remove("bg-emerald-500", "cursor-wait");
-        runBtn.classList.add("bg-green-600");
-        runBtn.disabled = false;
-      }
-
       if (list) list.style.opacity = "1.0";
       scanAbortController = null;
+      updateScanActionButtonsState();
     }
 
     async function runScreen(customDsl = null) {
@@ -7072,6 +9543,11 @@ let backtestSourceMode = "saved";
       const strategySelect = document.getElementById("strategy-select");
       const errorSection = document.getElementById("error-section");
       const errorList = document.getElementById("error-list");
+
+      if (!tickerUniverseExplicitlyChosen) {
+        resetScanUI();
+        return;
+      }
 
       if ((normalizeScanScope(tickerScanScope) === "list" || normalizeScanScope(tickerScanScope) === "all_lists") && getScopeTickers(tickerScanScope).length === 0) {
         await openListEditorModal();
@@ -7121,7 +9597,7 @@ let backtestSourceMode = "saved";
       if (list) list.style.opacity = "0.5";
 
       try {
-        await ensureGuiMarketBackbone();
+        await ensureGuiMarketBackbone({ allowRefresh: false });
         startJobProgressPolling("screen", "Global");
         setNavScanProgress({
           show: true,
@@ -7142,7 +9618,7 @@ let backtestSourceMode = "saved";
         }
         if (customDsl) {
           url += `${universeQuery ? "&" : "?"}dsl_content=${encodeURIComponent(customDsl)}`;
-          strategySelect.value = "";
+          syncStrategySelections("");
           currentStrategy = "";
         } else if (strategySelect.value) {
           url += `${universeQuery ? "&" : "?"}strategy=${strategySelect.value}`;
@@ -7371,7 +9847,7 @@ let backtestSourceMode = "saved";
       }
     }
 
-    async function loadChart(ticker) {
+    async function loadChart(ticker, strategyOverride = "") {
       console.log("loadChart starting for", ticker);
       currentTicker = ticker;
       storeTickerSelection(ticker);
@@ -7395,7 +9871,13 @@ let backtestSourceMode = "saved";
 
       try {
       const strategySelect = document.getElementById("strategy-select");
-      const strategyName = (strategySelect && strategySelect.value) ? strategySelect.value : currentStrategy;
+      const preferredStrategy = String(strategyOverride || "").trim();
+      const strategyName = preferredStrategy
+        || ((strategySelect && strategySelect.value) ? strategySelect.value : currentStrategy);
+      if (preferredStrategy) {
+        syncStrategySelections(preferredStrategy, { syncBacktestCheckboxes: false });
+        currentStrategy = preferredStrategy;
+      }
         const strategyPart = strategyName ? `&strategy=${encodeURIComponent(strategyName)}` : "";
         const url = `/api/chart/${ticker}?days=${currentDays}${strategyPart}`;
         console.info("loadChart request URL", url);
@@ -7552,6 +10034,7 @@ let backtestSourceMode = "saved";
       .addEventListener("change", (e) => {
         updateEditorContent(e.target.value);
         currentStrategy = e.target.value || "";
+        syncBacktestRaceLanesToCurrentSelection();
       });
 
     // Initialize
@@ -7560,10 +10043,19 @@ let backtestSourceMode = "saved";
       if (restoredStrategy) {
         console.info("Restored last completed strategy", restoredStrategy);
       }
+      restoreBacktestRaceStateFromStorage();
       const restoredDays = readSavedChartRangeDays();
       if (restoredDays !== null) {
         currentDays = restoredDays;
       }
+      populateBacktestAxisControls(backtestDefaultMetrics());
+      bindBacktestStrategyChooserControls();
+      bindBacktestRaceControls();
+      renderBacktestRace();
+      updateBacktestStrategyCount();
+      syncBacktestStrategyCheckboxChrome();
+      updateScanActionButtonsState();
+      updateBacktestRunButtonState();
       updateRangeChrome();
       await loadMarketStatus();
       syncExportMatchesButtonState();
@@ -7576,14 +10068,21 @@ let backtestSourceMode = "saved";
 
     Object.assign(window, {
       applyDsl,
+      applyJobProgressSnapshot,
       closeModifyModal,
       closeListEditorModal,
       openListEditorModal,
+      handleBacktestStrategyChooserChange,
       loadBacktestMetrics,
       loadShortlist,
       loadSwarmWorld,
       loadSwarmLab,
+      mergeBacktestScatterRows,
+      prepareBacktestLiveResults,
+      renderBacktestScatter,
       saveListEditor,
+      selectBacktestStrategies,
+      updateBacktestRunButtonState,
       modifyStrategy,
       openSelectedSwarmTicker,
       refreshMarketData,
@@ -7609,6 +10108,8 @@ let backtestSourceMode = "saved";
       setSwarmLabSpeed,
       setSwarmLabZoom,
       setRange,
+      startJobProgressPolling,
+      stopJobProgressPolling,
       dashboardReadyPromise,
       setShortlistFilter,
       setSwarmAgentsPerNode,

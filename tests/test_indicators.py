@@ -6,6 +6,7 @@ import pytest
 
 from ETF_screener.indicators import (
     add_indicators,
+    calculate_anchored_vwap,
     calculate_ema,
     calculate_supertrend,
 )
@@ -38,6 +39,20 @@ class TestIndicators:
         assert ema.notna().sum() > 0
         # EMA should not be constant for varying prices
         assert not (ema == ema.iloc[0]).all()
+
+    def test_calculate_anchored_vwap_from_rolling_low(self):
+        df = pd.DataFrame(
+            {
+                "High": [11.0, 10.0, 9.0, 10.0],
+                "Low": [9.0, 8.0, 7.0, 8.0],
+                "Close": [10.0, 9.0, 8.0, 9.0],
+                "Volume": [100.0, 100.0, 100.0, 100.0],
+            }
+        )
+
+        avwap = calculate_anchored_vwap(df, anchor="low", lookback=3)
+
+        assert avwap.tolist() == pytest.approx([10.0, 9.0, 8.0, 8.5])
 
     def test_calculate_supertrend(self, sample_data):
         """Test Supertrend calculation."""

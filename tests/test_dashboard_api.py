@@ -1,5 +1,7 @@
 import json
 import sqlite3
+import threading
+import time
 from io import StringIO
 from unittest.mock import patch
 
@@ -47,6 +49,7 @@ def test_tab_bar_visible():
     assert log_relay_js.status_code == 200
     dashboard_source = html + dashboard_js.text + log_relay_js.text
     assert 'id="dashboard-tabs"' in html
+    assert 'id="stratfinder-btn"' not in html
     assert 'id="scan-source-toggle"' in html
     assert 'id="scan-source-xetra"' in html
     assert 'id="scan-source-sweden"' in html
@@ -59,6 +62,16 @@ def test_tab_bar_visible():
     assert 'id="swarm-scan-source-all-lists"' in html
     assert 'id="list-edit-btn"' in html
     assert ">Screener<" in html
+    assert "StratFinder" not in html
+    assert 'id="stratfinder-modal"' not in html
+    assert 'id="stratfinder-modal-d"' not in html
+    assert 'id="stratfinder-modal-exchange"' not in html
+    assert 'id="stratfinder-progress"' not in html
+    assert 'id="stratfinder-results-panel"' not in html
+    assert 'id="stratfinder-summary"' not in html
+    assert 'id="stratfinder-results"' not in html
+    assert 'id="stratfinder-result-count"' not in html
+    assert 'id="export-stratfinder-btn"' not in html
     assert ">Shortlist<" in html
     assert ">Swarm<" in html
     assert ">Swarm Lab<" in html
@@ -67,6 +80,7 @@ def test_tab_bar_visible():
     assert ">Discovery<" not in html
     assert 'id="backtest-chart"' in html
     assert 'id="backtest-table-body"' in html
+    assert 'id="backtest-race-fuel"' not in html
     assert "Signal Window" in html
     assert 'id="shortlist-grid"' in html
     assert 'id="swarm-canvas"' in html
@@ -455,6 +469,372 @@ def test_backtest_endpoint_honors_scan_scope_list(monkeypatch):
     assert captured["ticker_list"] == "BBB.ST"
 
 
+def test_backtest_endpoint_rejects_entry_only_strategy(monkeypatch):
+    def fake_evaluate_strategies(**kwargs):
+        raise ValueError("Selected strategy(ies) require an exit criterion: NoExit")
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies", fake_evaluate_strategies
+    )
+
+    response = client.get(
+        "/api/backtest?dsl_content=TRIGGER:%20close%20%3E%20ema_50&strategy_name=NoExit"
+    )
+
+    assert response.status_code == 400
+    assert "exit criterion" in response.json()["detail"]
+
+
+def test_backtest_matrix_returns_race_payload(monkeypatch):
+    captured_progress = []
+
+    def fake_evaluate_strategies(**kwargs):
+        strategy_name = kwargs["strategy_name"]
+        progress_callback = kwargs.get("progress_callback")
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "job": "backtest",
+                    "phase": "running",
+                    "pct": 50.0,
+                    "detail": "1/2 tickers complete",
+                    "active": True,
+                    "payload": {
+                        "completed": 1,
+                        "total": 2,
+                        "ticker_result": {
+                            "ticker": (
+                                "AAA.DE" if strategy_name == "buy_the_dip" else "BBB.ST"
+                            ),
+                            "completed": 1,
+                            "total": 2,
+                            "return_pct": (
+                                12.0 if strategy_name == "buy_the_dip" else 3.0
+                            ),
+                            "win_rate_pct": 60.0,
+                            "profit_factor": 1.4,
+                            "sharpe": 1.1,
+                            "max_dd_pct": 4.0,
+                            "trades": 2,
+                        },
+                    },
+                }
+            )
+        if strategy_name == "buy_the_dip":
+            return pd.DataFrame(
+                [
+                    {
+                        "Ticker": "AAA.DE",
+                        "Strategy": strategy_name,
+                        "Quality Score": 4.5,
+                        "Return (%)": 6.0,
+                        "Win Rate (%)": 61.0,
+                        "Profit Factor": 1.4,
+                        "Sharpe": 1.2,
+                        "Max DD (%)": 8.0,
+                        "Trades": 5,
+                        "Days Since Entry": 4,
+                    }
+                ]
+            )
+        return pd.DataFrame(
+            [
+                {
+                    "Ticker": "BBB.ST",
+                    "Strategy": strategy_name,
+                    "Quality Score": 2.0,
+                    "Return (%)": 2.5,
+                    "Win Rate (%)": 54.0,
+                    "Profit Factor": 1.1,
+                    "Sharpe": 0.6,
+                    "Max DD (%)": 4.0,
+                    "Trades": 3,
+                    "Days Since Entry": 7,
+                }
+            ]
+        )
+
+    def fake_set_job_progress(*args, **kwargs):
+        captured_progress.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies", fake_evaluate_strategies
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._set_job_progress", fake_set_job_progress
+    )
+
+    response = client.get("/api/backtest/matrix?strategies=buy_the_dip,loose_trend")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["source_type"] == "saved_matrix"
+    assert data["run_id"]
+    assert data["race"]["run_id"] == data["run_id"]
+    assert data["summary"]["strategy_count"] == 2
+    assert len(data["strategy_summaries"]) == 2
+    assert data["strategy_summaries"][0]["strategy"] == "buy_the_dip"
+    assert data["strategy_summaries"][0]["status"] == "done"
+    assert data["strategy_summaries"][0]["progress_pct"] == 100.0
+    assert data["race"]["completed"] == 2
+    assert len(data["race"]["lanes"]) == 2
+
+    payload_calls = [
+        call
+        for call in captured_progress
+        if call["kwargs"].get("payload")
+        and "backtest_race" in call["kwargs"]["payload"]
+    ]
+    assert payload_calls
+    last_payload = payload_calls[-1]["kwargs"]["payload"]["backtest_race"]
+    assert last_payload["total"] == 2
+    assert len(last_payload["lanes"]) == 2
+    assert last_payload["lanes"][0]["strategy"] == "buy_the_dip"
+    live_payload = next(
+        call["kwargs"]["payload"]["backtest_race"]
+        for call in payload_calls
+        if call["kwargs"]["payload"]["backtest_race"]["lanes"][0].get(
+            "completed_tickers"
+        )
+    )
+    assert live_payload["lanes"][0]["completed_tickers"] == 1
+    assert live_payload["lanes"][0]["processed_tickers"] == 1
+    assert live_payload["lanes"][0]["total_tickers"] == 2
+    assert live_payload["lanes"][0]["scored_tickers"] == 1
+    assert live_payload["lanes"][0]["no_trade_tickers"] == 0
+    assert live_payload["lanes"][0]["error_tickers"] == 0
+    assert live_payload["lanes"][0]["last_ticker"] == "AAA.DE"
+    assert live_payload["lanes"][0]["return_pct"] == 12.0
+    assert live_payload["lanes"][0]["trades"] == 2
+    assert live_payload["lanes"][0]["win_rate_pct"] == 60.0
+    assert live_payload["lanes"][0]["profit_factor"] == 1.4
+    assert live_payload["lanes"][0]["sharpe"] == 1.1
+    assert live_payload["lanes"][0]["avg_quality_score"] > 0
+
+    events_response = client.get(f"/api/backtest/events?run_id={data['run_id']}")
+    assert events_response.status_code == 200
+    events = events_response.json()["events"]
+    assert [event["seq"] for event in events] == sorted(
+        event["seq"] for event in events
+    )
+    assert any(event["type"] == "run_started" for event in events)
+    assert any(
+        event["type"] == "lane_started" and event["lane"] == "buy_the_dip"
+        for event in events
+    )
+    ticker_events = [event for event in events if event["type"] == "ticker_done"]
+    assert ticker_events
+    first_ticker = ticker_events[0]["payload"]
+    assert first_ticker["strategy"] == "buy_the_dip"
+    assert first_ticker["ticker"] == "AAA.DE"
+    assert first_ticker["scored"] is True
+    assert first_ticker["no_trade"] is False
+    assert first_ticker["cache_hit"] is False
+    assert first_ticker["work_key"]
+    assert any(event["type"] == "run_done" for event in events)
+
+    after_response = client.get(
+        f"/api/backtest/events?run_id={data['run_id']}&after_seq={events[0]['seq']}"
+    )
+    after_events = after_response.json()["events"]
+    assert after_events
+    assert all(event["seq"] > events[0]["seq"] for event in after_events)
+
+
+def test_backtest_matrix_live_race_payload_averages_ticker_metrics(monkeypatch):
+    captured_progress = []
+
+    def fake_evaluate_strategies(**kwargs):
+        progress_callback = kwargs.get("progress_callback")
+        if progress_callback is not None:
+            for completed, return_pct, trades in [
+                (1, 12.0, 2),
+                (2, 99.0, 0),
+                (3, 6.0, 4),
+            ]:
+                progress_callback(
+                    {
+                        "job": "backtest",
+                        "phase": "running",
+                        "pct": (100.0 / 3.0) * completed,
+                        "detail": f"{completed}/3 tickers complete",
+                        "active": completed < 3,
+                        "payload": {
+                            "completed": completed,
+                            "total": 3,
+                            "ticker_result": {
+                                "ticker": f"AAA{completed}.DE",
+                                "completed": completed,
+                                "total": 3,
+                                "return_pct": return_pct,
+                                "win_rate_pct": 60.0,
+                                "profit_factor": 1.5,
+                                "sharpe": 1.0,
+                                "max_dd_pct": 5.0,
+                                "trades": trades,
+                            },
+                        },
+                    }
+                )
+        return pd.DataFrame(
+            [
+                {
+                    "Ticker": "AAA1.DE",
+                    "Strategy": kwargs["strategy_name"],
+                    "Quality Score": 4.5,
+                    "Return (%)": 6.0,
+                    "Win Rate (%)": 61.0,
+                    "Profit Factor": 1.4,
+                    "Sharpe": 1.2,
+                    "Max DD (%)": 8.0,
+                    "Trades": 5,
+                    "Days Since Entry": 4,
+                }
+            ]
+        )
+
+    def fake_set_job_progress(*args, **kwargs):
+        captured_progress.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies", fake_evaluate_strategies
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._set_job_progress", fake_set_job_progress
+    )
+
+    response = client.get("/api/backtest/matrix?strategies=buy_the_dip")
+    assert response.status_code == 200
+
+    payloads = [
+        call["kwargs"]["payload"]["backtest_race"]
+        for call in captured_progress
+        if call["kwargs"].get("payload")
+        and "backtest_race" in call["kwargs"]["payload"]
+    ]
+    live_payload = next(
+        payload
+        for payload in payloads
+        if payload["lanes"][0].get("completed_tickers") == 3
+    )
+    lane = live_payload["lanes"][0]
+    assert lane["completed_tickers"] == 3
+    assert lane["processed_tickers"] == 3
+    assert lane["total_tickers"] == 3
+    assert lane["scored_tickers"] == 2
+    assert lane["no_trade_tickers"] == 1
+    assert lane["error_tickers"] == 0
+    assert lane["return_pct"] == 9.0
+    assert lane["trades"] == 6
+    assert lane["last_ticker"] == "AAA3.DE"
+    assert lane["best_ticker"] == "AAA1.DE"
+    assert lane["best_return_pct"] == 12.0
+    assert lane["avg_quality_score"] > 0
+
+
+def test_backtest_matrix_emits_cached_lane_event(monkeypatch):
+    captured_progress = []
+
+    def fake_evaluate_strategies(**kwargs):
+        progress_callback = kwargs.get("progress_callback")
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "job": "backtest",
+                    "phase": "done",
+                    "pct": 100.0,
+                    "detail": "Loaded cached results for 1 rows",
+                    "active": False,
+                }
+            )
+        return pd.DataFrame(
+            [
+                {
+                    "Ticker": "AAA.DE",
+                    "Strategy": kwargs["strategy_name"],
+                    "Quality Score": 4.5,
+                    "Return (%)": 6.0,
+                    "Win Rate (%)": 61.0,
+                    "Profit Factor": 1.4,
+                    "Sharpe": 1.2,
+                    "Max DD (%)": 8.0,
+                    "Trades": 5,
+                    "Days Since Entry": 4,
+                }
+            ]
+        )
+
+    def fake_set_job_progress(*args, **kwargs):
+        captured_progress.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies", fake_evaluate_strategies
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._set_job_progress", fake_set_job_progress
+    )
+
+    response = client.get("/api/backtest/matrix?strategies=buy_the_dip")
+    assert response.status_code == 200
+    run_id = response.json()["run_id"]
+
+    events = client.get(f"/api/backtest/events?run_id={run_id}").json()["events"]
+    cached_events = [event for event in events if event["type"] == "lane_cached"]
+    assert cached_events
+    cached_payload = cached_events[0]["payload"]
+    assert cached_payload["strategy"] == "buy_the_dip"
+    assert cached_payload["cache_hit"] is True
+    assert cached_payload["work_key"]
+    assert cached_payload["detail"] == "Loaded cached results for 1 rows"
+    cached_ticker_events = [
+        event
+        for event in events
+        if event["type"] == "ticker_done" and event["payload"].get("cache_hit")
+    ]
+    assert cached_ticker_events
+    cached_ticker = cached_ticker_events[0]["payload"]
+    assert cached_ticker["ticker"] == "AAA.DE"
+    assert cached_ticker["trades"] == 5
+    assert cached_ticker["scored"] is True
+    assert cached_ticker["lane"]["trades"] == 5
+    assert cached_ticker["lane"]["scored_tickers"] == 1
+
+
+def test_job_progress_endpoint_sanitizes_non_finite_payloads():
+    app_fast._clear_job_progress()
+    app_fast._set_job_progress(
+        "backtest",
+        "running",
+        pct=float("nan"),
+        label="Backtest Matrix",
+        detail="Streaming live progress",
+        payload={
+            "backtest_race": {
+                "pct": float("nan"),
+                "lanes": [
+                    {
+                        "strategy": "alpha",
+                        "avg_quality_score": float("nan"),
+                        "structure_axes": {"trend_context": float("inf")},
+                    }
+                ],
+            }
+        },
+    )
+
+    response = client.get("/api/job-progress")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["pct"] == 0.0
+    assert data["payload"]["backtest_race"]["pct"] == 0.0
+    lane = data["payload"]["backtest_race"]["lanes"][0]
+    assert lane["avg_quality_score"] == 0.0
+    assert lane["structure_axes"]["trend_context"] == 0.0
+
+    app_fast._clear_job_progress()
+
+
 def test_custom_ticker_list_api_roundtrip(monkeypatch, tmp_path):
     config_path = tmp_path / "custom_ticker_list.json"
     monkeypatch.setattr(
@@ -748,14 +1128,16 @@ def test_swarm_history_endpoint_returns_cached_close_history(monkeypatch):
         ]
     )
     conn = sqlite3.connect(":memory:", check_same_thread=False)
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE etf_data (
             ticker TEXT,
             date TEXT,
             close REAL,
             dividends REAL
         )
-        """)
+        """
+    )
     conn.executemany(
         "INSERT INTO etf_data (ticker, date, close, dividends) VALUES (?, ?, ?, ?)",
         [
@@ -971,9 +1353,273 @@ def test_backtest_endpoint_returns_ranked_metrics(monkeypatch, tmp_path):
     assert data["source_type"] == "saved"
     assert data["summary"]["count"] == 1
     assert data["summary"]["avg_sharpe"] == 1.4
+    assert data["csv_path"]
+    assert data["strategy_axis_catalog"][0]["key"] == "trend_context"
+    assert data["strategy_profile"]["structure_score"] > 0
+    assert data["strategy_summaries"][0]["structure_score"] > 0
+    assert "structure_axes" in data["strategy_summaries"][0]
+    assert data["race"]["lanes"][0]["structure_score"] > 0
+    exported = pd.read_csv(data["csv_path"])
+    assert exported["Trades"].tolist() == [7]
+    assert "df" not in exported.columns
     assert data["rows"][0]["ticker"] == "AAA.DE"
     assert data["rows"][0]["quality_score"] == 12.34
     assert data["chart"]["data"][0]["type"] == "bar"
+
+
+def test_backtest_matrix_endpoint_runs_selected_strategies_in_universe(
+    monkeypatch, tmp_path
+):
+    strategies_dir = tmp_path / "strategies"
+    strategies_dir.mkdir()
+    (strategies_dir / "alpha.dsl").write_text(
+        "TRIGGER: close > ema_20\nEXIT: close < ema_20\n", encoding="utf-8"
+    )
+    (strategies_dir / "beta.dsl").write_text(
+        "TRIGGER: close > ema_50\nEXIT: close < ema_50\n", encoding="utf-8"
+    )
+
+    captured = []
+
+    def fake_evaluate(
+        strategy_path=None,
+        strategy_name=None,
+        exchange=None,
+        scan_scope=None,
+        ticker_list=None,
+        since_days=None,
+        progress_callback=None,
+        dsl_content=None,
+    ):
+        captured.append(
+            {
+                "strategy_path": strategy_path,
+                "strategy_name": strategy_name,
+                "exchange": exchange,
+                "scan_scope": scan_scope,
+                "ticker_list": ticker_list,
+                "since_days": since_days,
+            }
+        )
+        return pd.DataFrame(
+            [
+                {
+                    "Ticker": f"{strategy_name.upper()}.DE",
+                    "Strategy": strategy_name,
+                    "Quality Score": 10.0 if strategy_name == "alpha" else 8.0,
+                    "Return (%)": 12.0,
+                    "Win Rate (%)": 60.0,
+                    "Profit Factor": 1.5,
+                    "Sharpe": 1.2,
+                    "Max DD (%)": 5.0,
+                    "Trades": 4,
+                    "Days Since Entry": 2,
+                }
+            ]
+        )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies",
+        fake_evaluate,
+    )
+
+    response = client.get(
+        "/api/backtest/matrix?strategies=alpha,beta&scan_scope=xetra&exchange=xetra&signal_days=21"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [call["strategy_name"] for call in captured] == ["alpha", "beta"]
+    assert all(call["exchange"] == "xetra" for call in captured)
+    assert all(call["scan_scope"] == "xetra" for call in captured)
+    assert all(call["since_days"] == 21 for call in captured)
+    assert data["source_type"] == "saved_matrix"
+    assert data["summary"]["strategy_count"] == 2
+    assert data["summary"]["count"] == 2
+    assert data["metrics"][0]["key"] == "quality_score"
+    assert data["strategy_axis_catalog"][0]["key"] == "trend_context"
+    assert all("structure_score" in lane for lane in data["strategy_summaries"])
+    assert all("structure_axes" in lane for lane in data["strategy_summaries"])
+    assert all("structure_tags" in lane for lane in data["strategy_summaries"])
+    assert data["rows"][0]["strategy"] == "alpha"
+    assert data["rows"][0]["exchange"] == "xetra"
+    assert data["csv_path"]
+    exported = pd.read_csv(data["csv_path"])
+    assert set(exported["Strategy"]) == {"alpha", "beta"}
+    assert exported["Trades"].sum() == 8
+
+
+def test_backtest_matrix_summary_ignores_zero_trade_rows(monkeypatch, tmp_path):
+    strategies_dir = tmp_path / "strategies"
+    strategies_dir.mkdir()
+    (strategies_dir / "alpha.dsl").write_text(
+        "TRIGGER: close > ema_20\nEXIT: close < ema_20\n", encoding="utf-8"
+    )
+
+    def fake_evaluate(
+        strategy_path=None,
+        strategy_name=None,
+        exchange=None,
+        scan_scope=None,
+        ticker_list=None,
+        since_days=None,
+        progress_callback=None,
+        dsl_content=None,
+    ):
+        return pd.DataFrame(
+            [
+                {
+                    "Ticker": "AAA.DE",
+                    "Strategy": strategy_name,
+                    "Quality Score": 0.0,
+                    "Return (%)": 0.0,
+                    "Win Rate (%)": 0.0,
+                    "Profit Factor": 0.0,
+                    "Sharpe": 0.0,
+                    "Max DD (%)": 0.0,
+                    "Trades": 0,
+                    "Days Since Entry": 0,
+                },
+                {
+                    "Ticker": "BBB.DE",
+                    "Strategy": strategy_name,
+                    "Quality Score": 15.0,
+                    "Return (%)": 12.5,
+                    "Win Rate (%)": 65.0,
+                    "Profit Factor": 1.9,
+                    "Sharpe": 1.6,
+                    "Max DD (%)": 4.0,
+                    "Trades": 5,
+                    "Days Since Entry": 2,
+                },
+            ]
+        )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies",
+        fake_evaluate,
+    )
+
+    response = client.get(
+        "/api/backtest/matrix?strategies=alpha&scan_scope=xetra&exchange=xetra&signal_days=21"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]["strategy_count"] == 1
+    assert data["summary"]["count"] == 2
+    assert data["rows"][0]["strategy"] == "alpha"
+    assert data["summary"]["avg_return"] == 12.5
+    assert data["summary"]["trades"] == 5
+    assert data["strategy_summaries"][0]["trades"] == 5
+
+
+def test_backtest_matrix_all_strategies_limits_nested_parallelism(
+    monkeypatch, tmp_path
+):
+    strategies = ["alpha", "beta", "gamma", "delta", "epsilon"]
+    strategies_dir = tmp_path / "strategies"
+    strategies_dir.mkdir()
+    for name in strategies:
+        (strategies_dir / f"{name}.dsl").write_text(
+            "TRIGGER: close > ema_20\nEXIT: close < ema_20\n",
+            encoding="utf-8",
+        )
+
+    class FakeDb:
+        db_path = "fake-db"
+
+        def get_latest_market_date(self):
+            return "2026-06-02"
+
+    state = {
+        "calls": [],
+        "active": 0,
+        "max_active": 0,
+    }
+    lock = threading.Lock()
+    first_batch_ready = threading.Event()
+    release_first_batch = threading.Event()
+
+    def release_when_batch_ready():
+        assert first_batch_ready.wait(timeout=1.0)
+        time.sleep(0.05)
+        release_first_batch.set()
+
+    releaser = threading.Thread(target=release_when_batch_ready, daemon=True)
+    releaser.start()
+
+    def fake_evaluate(
+        strategy_path=None,
+        strategy_name=None,
+        exchange=None,
+        scan_scope=None,
+        ticker_list=None,
+        since_days=None,
+        progress_callback=None,
+        dsl_content=None,
+        max_workers=None,
+    ):
+        with lock:
+            state["calls"].append(
+                {
+                    "strategy_name": strategy_name,
+                    "max_workers": max_workers,
+                }
+            )
+            state["active"] += 1
+            state["max_active"] = max(state["max_active"], state["active"])
+            if state["active"] >= 4:
+                first_batch_ready.set()
+        release_first_batch.wait(timeout=1.0)
+        with lock:
+            state["active"] -= 1
+        return pd.DataFrame(
+            [
+                {
+                    "Ticker": f"{strategy_name.upper()}.DE",
+                    "Strategy": strategy_name,
+                    "Quality Score": 10.0,
+                    "Return (%)": 12.0,
+                    "Win Rate (%)": 60.0,
+                    "Profit Factor": 1.5,
+                    "Sharpe": 1.2,
+                    "Max DD (%)": 5.0,
+                    "Trades": 4,
+                    "Days Since Entry": 2,
+                }
+            ]
+        )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", lambda: FakeDb())
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.get_strategies",
+        lambda: list(strategies),
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._cached_backtest_universe",
+        lambda *args, **kwargs: ("AAA.DE", "BBB.DE"),
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.evaluate_strategies",
+        fake_evaluate,
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.os.cpu_count",
+        lambda: 8,
+    )
+
+    response = client.get("/api/backtest/matrix?all_strategies=true")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]["strategy_count"] == len(strategies)
+    assert {call["strategy_name"] for call in state["calls"]} == set(strategies)
+    assert all(call["max_workers"] == 2 for call in state["calls"])
+    assert state["max_active"] <= 4
 
 
 def test_backtest_endpoint_prefers_editor_dsl(monkeypatch, tmp_path):

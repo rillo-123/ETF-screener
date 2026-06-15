@@ -414,7 +414,7 @@ class PortfolioPlotter:
                                 rf"\b{word}\b", f"`{actual_col}`", processed_expr
                             )
 
-                    return df_eval.eval(processed_expr)
+                    return df_eval.eval(processed_expr, engine="python")
                 except Exception:
                     # Very simple fallback for "close > ema_50" or similar
                     return pd.Series([False] * len(df_eval), index=df_eval.index)

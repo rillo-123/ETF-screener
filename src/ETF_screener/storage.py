@@ -1,16 +1,16 @@
-from ETF_screener.config_loader import get_paths
-
 """Data storage utilities for parquet files."""
 
 from pathlib import Path
 
 import pandas as pd
 
+from ETF_screener.config_loader import get_paths
+
 
 class ParquetStorage:
     """Handle parquet data storage and retrieval."""
 
-    def __init__(self, data_dir: str = None):
+    def __init__(self, data_dir: str | None = None):
         """
         Initialize storage.
 

@@ -26,10 +26,10 @@ $matrix = @(
 Describe 'run_all_tests.ps1 option matrix' {
     BeforeAll {
         $repoRoot   = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-        $scriptPath = Join-Path $repoRoot 'run_all_tests.ps1'
+        $scriptPath = Join-Path $repoRoot 'scripts\run_all_tests.ps1'
 
         if (-not (Test-Path $scriptPath)) {
-            throw "Could not find run_all_tests.ps1 at $scriptPath"
+            throw "Could not find scripts/run_all_tests.ps1 at $scriptPath"
         }
 
         $commonArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath)
@@ -69,7 +69,7 @@ Describe 'run_all_tests.ps1 option matrix' {
         }
     }
 
-    It "run_all_tests.ps1 <ScriptArgs> exits <ExpectedExitCode>" -ForEach $matrix {
+    It "scripts/run_all_tests.ps1 <ScriptArgs> exits <ExpectedExitCode>" -ForEach $matrix {
         $result = Invoke-Runner -ScriptArgs $ScriptArgs
 
         if ($result.ExitCode -ne $ExpectedExitCode) {

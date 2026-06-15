@@ -1,0 +1,43 @@
+# Locked decisions
+
+- Keep a root plan.md entrypoint plus companion files under plan/ tracked in the repo so workflow automation has one stable anchor without forcing the whole plan into a single file.
+
+- Prefer cached artifacts over request-time recomputation whenever the snapshot is fresh.
+- Distinguish clearly between `data as of` and `computed at`; rebuilding the shortlist alone should never pretend to make stale market data fresh.
+- Use parallel threads for per-ticker shortlist analysis because this path is mostly storage reads plus moderate indicator work.
+- Use parallel threads for stale market-data refresh, but write refreshed artifacts back sequentially so we avoid SQLite threading trouble.
+- Prefer delta fetches over full-history refills whenever local ticker history already exists; only fall back to a deeper full fetch when the cache is genuinely too thin.
+- Treat the dashboard `Refresh Market Data` action as a latest-available top-up for the active tracked universe, not a "fresh enough within a few days" no-op.
+- Exclude blacklisted and inactive tickers from freshness debt unless an explicit revalidation workflow is added later.
+- Keep the shortlist engine ETF-first; DSL remains optional and secondary.
+- Keep the existing graphics and chart and ribbon work as the drill-down view rather than removing it.
+- Keep the Swarm tab cache-first by deriving it from shortlist artifacts instead of building a separate scoring pipeline.
+- Keep Swarm simulation browser-side for now, but avoid letting the Jinja template become the application bundle; static JavaScript files are the baseline for the next modular split.
+- Keep the local dashboard runner watching `*.js` files now that browser code lives under `src/ETF_screener/dashboard/static/js`.
+- Prefer explicit user actions over auto-running scans when switching context or selecting a strategy.
+- Treat the top bar as the primary universe selector: exchange and user-defined list should stay sticky, and the chart ticker picker should remain a secondary hidden control.
+- Keep the list chooser minimal. If a custom list has not been defined, `My List` should remain the default visible option rather than offering an `All Tickers` escape hatch.
+- Prefer the lightweight list modal over browser prompts for editing ticker lists.
+- Treat `config/custom_ticker_list.json` as the source of truth for the user's saved ticker list, with localStorage only acting as a fallback cache.
+- Prefer company-name and issuer search in the list builder when tickers are terse, especially for the Swedish exchange.
+- Keep the list name alongside the tickers in `config/custom_ticker_list.json`; one named list is enough for now.
+- Model Swarm agents as small mutable genomes instead of hard-coded dots: indicator windows, thresholds, jump behavior, spawn limits, and mutation rate should all be traits.
+- Treat Swarm behavior as explicit DNA rule modules where parameters and action weights can mutate over generations.
+- Interpret EMA cross behavior as a true fast or slow EMA crossover, for example EMA 30 crossing EMA 50.
+- Save top-agent DNA through the dashboard backend after each completed Swarm run; keep it as the latest config snapshot until run history or audit requirements are clearer.
+- Keep ticker node coordinates fixed during simulation so users can build spatial memory of the ETF map.
+- Do not generate dummy Swarm tickers now that the charged sphere is self-organizing; empty grid intersections remain only implicit gaps in local perception.
+- Retire local Chebyshev grid sense for the spherical Swarm behavior model; agents now have total knowledge of available real tickers and decide from their own global criteria.
+- Treat Swarm population as agents per alternating grid node, default `100`, with a hard effective cap of `5000`.
+- Treat dividends as part of investable agent energy when yfinance provides them; fall back to price-only behavior when dividends are absent.
+- Use inflation as a universal hurdle, not as a penalty for sitting still.
+- Treat ticker survival separately from agent survival: agents can die below zero, but real ticker nodes remain visible unless the ETF is delisted or removed from the active universe.
+- Keep top-agent DNA meaningful to a human investor by saving both numeric genome parameters and plain-language behavior rules.
+- Keep Swarm visual semantics legible: tickers should be larger than agents, ticker color should stay neutral, and zoomed-out views may intentionally aggregate or fuzz fine detail.
+- Treat the sphere or projection Swarm world as both the visual layer and the conceptual investment landscape; do not preserve grid movement if it makes jumping unintuitive.
+- Treat global jumping as the next meaningful behavior experiment: an agent may jump away from a winning position when its DNA says another ticker has a stronger global setup, such as low RSI, EMA cross, dividend preference, or drawdown avoidance.
+- Model ticker layout on the sphere as positive charges on a frictionless surface: ticker charge scales with simulated wealth, ticker nodes repel each other, and the solver must avoid artificial equator clumping.
+- Treat the Swarm timeline as a replayable simulation over historical market dates, with explicit play, stop, and restart controls instead of a purely ambient animation.
+- Keep a root `plan.md` entrypoint plus companion files under `plan/` tracked in the repo.
+- Refresh both plan docs and `progress.md` on every future implementation turn when state changes meaningfully.
+- Treat "set the milestone" as shorthand for: update the plan docs and `progress.md`, run the full quality gate, fix remaining failures until the repo is green, then commit and push the checkpoint.

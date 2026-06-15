@@ -23,8 +23,9 @@ BEGIN TRIGGER
 TRIGGER: was_true(ema_100 <= ema_200, 5)
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT: ema_30 < ema_50
 EXIT: ema_50 < ema_100
 EXIT: ema_100 < ema_200
 END
+

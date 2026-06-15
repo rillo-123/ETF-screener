@@ -1,18 +1,19 @@
-from ETF_screener.config_loader import get_paths
-
 """SQLite database interface for ETF data persistence."""
 
 import sqlite3
+import time
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 
+from ETF_screener.config_loader import get_paths
+
 
 class ETFDatabase:
     """SQLite database for storing and querying ETF data."""
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize database connection.
 
@@ -54,6 +55,31 @@ class ETFDatabase:
                 cursor.execute(
                     f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
                 )
+
+    def _retry_locked_write(
+        self, write_fn, *, retries: int = 5, delay: float = 0.15
+    ) -> None:
+        """Retry a short-lived SQLite lock with a fresh connection."""
+        last_error: sqlite3.OperationalError | None = None
+        for attempt in range(retries):
+            conn = self._connect()
+            try:
+                write_fn(conn)
+                conn.commit()
+                return
+            except sqlite3.OperationalError as exc:
+                conn.rollback()
+                last_error = exc
+                message = str(exc).lower()
+                if "locked" not in message and "busy" not in message:
+                    raise
+                if attempt >= retries - 1:
+                    raise
+                time.sleep(delay * (attempt + 1))
+            finally:
+                conn.close()
+        if last_error is not None:
+            raise last_error
 
     def _init_db(self) -> None:
         """Initialize database with schema."""
@@ -258,46 +284,46 @@ class ETFDatabase:
             st_lower: Supertrend lower band
             signal: Trading signal
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
 
-        cursor.execute(
-            """
-            INSERT INTO etf_data
-            (ticker, date, open, high, low, close, dividends, volume, ema_50, supertrend,
-             st_upper, st_lower, signal)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(ticker, date) DO UPDATE SET
-                open = excluded.open,
-                high = excluded.high,
-                low = excluded.low,
-                close = excluded.close,
-                dividends = excluded.dividends,
-                volume = excluded.volume,
-                ema_50 = excluded.ema_50,
-                supertrend = excluded.supertrend,
-                st_upper = excluded.st_upper,
-                st_lower = excluded.st_lower,
-                signal = excluded.signal
-            """,
-            (
-                ticker.upper(),
-                date,
-                open_price,
-                high,
-                low,
-                close,
-                0.0,
-                volume,
-                ema_50,
-                supertrend,
-                st_upper,
-                st_lower,
-                signal,
-            ),
-        )
+        def _write(conn: sqlite3.Connection) -> None:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO etf_data
+                (ticker, date, open, high, low, close, dividends, volume, ema_50, supertrend,
+                 st_upper, st_lower, signal)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ticker, date) DO UPDATE SET
+                    open = excluded.open,
+                    high = excluded.high,
+                    low = excluded.low,
+                    close = excluded.close,
+                    dividends = excluded.dividends,
+                    volume = excluded.volume,
+                    ema_50 = excluded.ema_50,
+                    supertrend = excluded.supertrend,
+                    st_upper = excluded.st_upper,
+                    st_lower = excluded.st_lower,
+                    signal = excluded.signal
+                """,
+                (
+                    ticker.upper(),
+                    date,
+                    open_price,
+                    high,
+                    low,
+                    close,
+                    0.0,
+                    volume,
+                    ema_50,
+                    supertrend,
+                    st_upper,
+                    st_lower,
+                    signal,
+                ),
+            )
 
-        conn.commit()
+        self._retry_locked_write(_write)
 
     def insert_dataframe(self, df: pd.DataFrame, ticker: str) -> None:
         """
@@ -307,9 +333,6 @@ class ETFDatabase:
             df: DataFrame with columns: Date, Open, High, Low, Close, Volume, etc.
             ticker: ETF ticker symbol
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
         data_to_insert = []
         for _, row in df.iterrows():
             # Standardize date to YYYY-MM-DD
@@ -342,29 +365,31 @@ class ETFDatabase:
                 )
             )
 
-        cursor.executemany(
-            """
-            INSERT INTO etf_data
-            (ticker, date, open, high, low, close, dividends, volume, ema_50, supertrend,
-             st_upper, st_lower, signal)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(ticker, date) DO UPDATE SET
-                open = excluded.open,
-                high = excluded.high,
-                low = excluded.low,
-                close = excluded.close,
-                dividends = excluded.dividends,
-                volume = excluded.volume,
-                ema_50 = excluded.ema_50,
-                supertrend = excluded.supertrend,
-                st_upper = excluded.st_upper,
-                st_lower = excluded.st_lower,
-                signal = excluded.signal
-            """,
-            data_to_insert,
-        )
+        def _write(conn: sqlite3.Connection) -> None:
+            cursor = conn.cursor()
+            cursor.executemany(
+                """
+                INSERT INTO etf_data
+                (ticker, date, open, high, low, close, dividends, volume, ema_50, supertrend,
+                 st_upper, st_lower, signal)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ticker, date) DO UPDATE SET
+                    open = excluded.open,
+                    high = excluded.high,
+                    low = excluded.low,
+                    close = excluded.close,
+                    dividends = excluded.dividends,
+                    volume = excluded.volume,
+                    ema_50 = excluded.ema_50,
+                    supertrend = excluded.supertrend,
+                    st_upper = excluded.st_upper,
+                    st_lower = excluded.st_lower,
+                    signal = excluded.signal
+                """,
+                data_to_insert,
+            )
 
-        conn.commit()
+        self._retry_locked_write(_write)
 
     def get_etf_data(
         self,

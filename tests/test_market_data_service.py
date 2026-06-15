@@ -1,5 +1,6 @@
 import json
 from datetime import date, timedelta
+from concurrent.futures import Future
 
 import pandas as pd
 
@@ -142,6 +143,7 @@ def test_market_data_refresher_refreshes_and_rebuilds_shortlist(tmp_path, monkey
         def fetch_historical_data(
             self, symbol, days=365, start_date=None, end_date=None
         ):
+            del end_date
             dates = pd.date_range(end=pd.Timestamp(date.today()), periods=5, freq="B")
             return pd.DataFrame(
                 {
@@ -159,6 +161,7 @@ def test_market_data_refresher_refreshes_and_rebuilds_shortlist(tmp_path, monkey
 
     class FakeShortlistEngine:
         def __init__(self, db_path=None, metadata_path=None, storage=None):
+            del metadata_path
             self.db_path = db_path
 
         def build_shortlist(self, max_workers=None):
@@ -193,6 +196,82 @@ def test_market_data_refresher_refreshes_and_rebuilds_shortlist(tmp_path, monkey
     assert stored["dividends"].sum() == 0.15
 
 
+def test_market_data_refresher_uses_parallel_workers_for_sweden(tmp_path, monkeypatch):
+    db_path = tmp_path / "etfs.db"
+    etfs_path = tmp_path / "sweden.json"
+    etfs_path.write_text(
+        json.dumps(
+            {
+                "AAA.ST": {"name": "Alpha Sweden ETF"},
+                "BBB.ST": {"name": "Beta Sweden ETF"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeFetcher:
+        def fetch_historical_data(
+            self, symbol, days=365, start_date=None, end_date=None
+        ):
+            del end_date
+            dates = pd.date_range(end=pd.Timestamp(date.today()), periods=5, freq="B")
+            return pd.DataFrame(
+                {
+                    "Date": dates,
+                    "Open": [100, 101, 102, 103, 104],
+                    "High": [101, 102, 103, 104, 105],
+                    "Low": [99, 100, 101, 102, 103],
+                    "Close": [100, 101, 102, 103, 104],
+                    "Dividends": [0, 0, 0, 0, 0],
+                    "Volume": [100000, 100000, 100000, 100000, 100000],
+                }
+            )
+
+    captured = {"max_workers": None}
+
+    class FakeExecutor:
+        def __init__(self, max_workers=None):
+            captured["max_workers"] = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, _tb):
+            del exc_type
+            del exc
+            return False
+
+        def submit(self, fn, *args, **kwargs):
+            future = Future()
+            future.set_result(fn(*args, **kwargs))
+            return future
+
+    monkeypatch.setattr(
+        "ETF_screener.market_data_service.ThreadPoolExecutor", FakeExecutor
+    )
+    monkeypatch.setattr(
+        "ETF_screener.market_data_service.as_completed",
+        lambda futures: list(futures),
+    )
+
+    refresher = MarketDataRefresher(
+        db_path=str(db_path),
+        etfs_file=str(etfs_path),
+        fetcher=FakeFetcher(),
+        storage=ParquetStorage(data_dir=str(tmp_path / "parquet")),
+    )
+
+    result = refresher.refresh_market_data(
+        force=True,
+        max_workers=1,
+        rebuild_shortlist=False,
+    )
+
+    assert captured["max_workers"] == 2
+    assert result["refreshed"] == 2
+    assert result["failed"] == 0
+
+
 def test_market_data_refresher_zero_day_threshold_tops_up_yesterday(tmp_path):
     db_path = tmp_path / "etfs.db"
     etfs_path = tmp_path / "etfs.json"
@@ -222,6 +301,7 @@ def test_market_data_refresher_zero_day_threshold_tops_up_yesterday(tmp_path):
         def fetch_historical_data(
             self, symbol, days=365, start_date=None, end_date=None
         ):
+            del end_date
             calls.append(symbol)
             return pd.DataFrame(
                 {
@@ -287,6 +367,7 @@ def test_market_data_refresher_uses_delta_window_for_stale_ticker(tmp_path):
         def fetch_historical_data(
             self, symbol, days=365, start_date=None, end_date=None
         ):
+            del end_date
             calls.append(
                 {
                     "symbol": symbol,
@@ -361,6 +442,7 @@ def test_market_data_refresher_preserves_timezone_aware_fresh_rows(tmp_path):
         def fetch_historical_data(
             self, symbol, days=365, start_date=None, end_date=None
         ):
+            del end_date
             fresh_dates = pd.date_range(
                 start=pd.Timestamp(
                     date.today() - timedelta(days=2), tz="Europe/Berlin"

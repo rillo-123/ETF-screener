@@ -1,16 +1,23 @@
+"""FastAPI dashboard application."""
+
+# mypy: ignore-errors
+
 import inspect
 import asyncio
 import hashlib
+import os
 import random
 import re
 import json
 import logging as _logging_mod
 import math
+import uuid
+from collections import deque
 from functools import lru_cache
 from datetime import date, datetime, timezone
 from io import StringIO
 import pandas as pd
-from typing import Optional
+from typing import Any, Optional
 from pathlib import Path
 from threading import Lock
 
@@ -22,7 +29,11 @@ from fastapi.templating import Jinja2Templates
 from ETF_screener.database import ETFDatabase
 from ETF_screener.backtester import Backtester
 from ETF_screener.config_loader import get_paths
-from ETF_screener.dsl_parser import parse_strategy_scripts
+from ETF_screener.dsl_parser import (
+    STRATEGY_STRUCTURE_AXIS_CATALOG,
+    parse_strategy_scripts,
+    parse_strategy_structure_profile,
+)
 from ETF_screener.logging_setup import setup_logging, get_log_file
 from ETF_screener.market_data_service import MarketDataRefresher
 from ETF_screener.shortlist_engine import ETFShortlistEngine
@@ -35,13 +46,15 @@ from ETF_screener.scripts.churn_strategies import (
 )
 
 try:
-    from ETF_screener.plotter_plotly import InteractivePlotter
+    from ETF_screener.plotter_plotly import InteractivePlotter as _InteractivePlotter
 except ModuleNotFoundError as exc:
     # Keep the dashboard API importable when Plotly is not installed. Chart
     # endpoints will surface a clearer error if they are invoked.
     if exc.name != "plotly" and not str(exc.name).startswith("plotly"):
         raise
-    InteractivePlotter = None
+    _InteractivePlotter = None
+
+InteractivePlotter: Any | None = _InteractivePlotter
 
 app = FastAPI(title="ETF Discovery Lab API")
 
@@ -59,6 +72,18 @@ SWEDEN_METADATA_PATH = Path("config") / "sweden.json"
 LEGACY_ETFS_METADATA_PATH = Path("config") / "etfs.json"
 BLACKLIST_PATH = Path("config") / "blacklist.json"
 SCREEN_EXPORTS_DIR = Path("data") / "exports"
+BACKTEST_EXPORTS_DIR = Path("data") / "backtests"
+BACKTEST_METRICS = [
+    {"key": "quality_score", "label": "Quality Score", "kind": "score"},
+    {"key": "return_pct", "label": "Return (%)", "kind": "percent"},
+    {"key": "win_rate_pct", "label": "Win Rate (%)", "kind": "percent"},
+    {"key": "sharpe", "label": "Sharpe", "kind": "ratio"},
+    {"key": "profit_factor", "label": "Profit Factor", "kind": "ratio"},
+    {"key": "max_dd_pct", "label": "Max Drawdown (%)", "kind": "percent"},
+    {"key": "trades", "label": "Trades", "kind": "count"},
+    {"key": "days_since_entry", "label": "Days Since Entry", "kind": "days"},
+]
+BACKTEST_STRATEGY_AXIS_CATALOG = [dict(item) for item in STRATEGY_STRUCTURE_AXIS_CATALOG]
 _JOB_PROGRESS_LOCK = Lock()
 _JOB_PROGRESS_STATE: dict[str, object] = {
     "job": None,
@@ -69,7 +94,12 @@ _JOB_PROGRESS_STATE: dict[str, object] = {
     "active": False,
     "updated_at": None,
     "error": None,
+    "payload": None,
 }
+_BACKTEST_EVENT_LOCK = Lock()
+_BACKTEST_EVENT_RUNS: dict[str, dict[str, object]] = {}
+_BACKTEST_EVENT_MAX_RUNS = 8
+_BACKTEST_EVENT_MAX_EVENTS = 2000
 
 
 def _safe_float(val, default=None):
@@ -79,6 +109,33 @@ def _safe_float(val, default=None):
         return default if (math.isnan(f) or math.isinf(f)) else f
     except (TypeError, ValueError):
         return default
+
+
+def _json_safe_value(value: object) -> object:
+    """Recursively coerce progress/event payloads into JSON-safe primitives."""
+    if isinstance(value, dict):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe_value(item) for item in value]
+    if isinstance(value, float):
+        return 0.0 if not math.isfinite(value) else value
+    if isinstance(value, (str, int, bool)) or value is None:
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    if hasattr(value, "item"):
+        try:
+            return _json_safe_value(value.item())
+        except Exception:
+            pass
+    try:
+        if pd.isna(value):
+            return 0.0
+    except Exception:
+        pass
+    return str(value)
 
 
 def _load_metadata_file_map(path: Path) -> dict[str, dict[str, object]]:
@@ -111,7 +168,9 @@ def _set_job_progress(
     detail: str | None = None,
     active: bool = True,
     error: str | None = None,
+    payload: object | None = None,
 ) -> None:
+    safe_pct = max(0.0, min(100.0, _finite_number(pct, 0.0)))
     with _JOB_PROGRESS_LOCK:
         _JOB_PROGRESS_STATE.update(
             {
@@ -119,10 +178,11 @@ def _set_job_progress(
                 "phase": phase,
                 "label": label or str(job or "Job").replace("-", " ").title(),
                 "detail": detail or "",
-                "pct": max(0.0, min(100.0, float(pct))),
+                "pct": safe_pct,
                 "active": active,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "error": error,
+                "payload": _json_safe_value(payload),
             }
         )
 
@@ -140,6 +200,7 @@ def _clear_job_progress(job: str | None = None) -> None:
                     "active": False,
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                     "error": None,
+                    "payload": None,
                 }
             )
 
@@ -155,6 +216,7 @@ def _update_job_progress(state: dict[str, object]) -> None:
     detail = str(state.get("detail") or "").strip() or None
     active = bool(state.get("active", True))
     error = state.get("error")
+    payload = state.get("payload")
     _set_job_progress(
         job,
         phase,
@@ -163,7 +225,124 @@ def _update_job_progress(state: dict[str, object]) -> None:
         detail=detail,
         active=active,
         error=str(error) if error else None,
+        payload=payload,
     )
+
+
+def _new_backtest_race_run(strategy_names: list[str]) -> str:
+    """Create a thread-safe event buffer for one backtest race run."""
+    run_id = uuid.uuid4().hex
+    with _BACKTEST_EVENT_LOCK:
+        _BACKTEST_EVENT_RUNS[run_id] = {
+            "run_id": run_id,
+            "strategies": list(strategy_names),
+            "events": deque(maxlen=_BACKTEST_EVENT_MAX_EVENTS),
+            "next_seq": 1,
+            "active": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if len(_BACKTEST_EVENT_RUNS) > _BACKTEST_EVENT_MAX_RUNS:
+            oldest = sorted(
+                _BACKTEST_EVENT_RUNS.values(),
+                key=lambda item: str(item.get("created_at") or ""),
+            )[0]
+            _BACKTEST_EVENT_RUNS.pop(str(oldest["run_id"]), None)
+    return run_id
+
+
+def _work_item_key(
+    *,
+    run_id: str,
+    strategy_name: str,
+    ticker: object | None = None,
+    market_data_version: object | None = None,
+    params: object | None = None,
+) -> str:
+    payload = {
+        "strategy": str(strategy_name or ""),
+        "ticker": str(ticker or ""),
+        "market_data_version": str(market_data_version or ""),
+        "params": params or {},
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
+def _append_backtest_race_event(
+    run_id: str,
+    event_type: str,
+    *,
+    lane: str | None = None,
+    payload: dict[str, object] | None = None,
+    active: bool | None = None,
+) -> dict[str, object] | None:
+    """Append a sequenced race event for worker/lane consumers."""
+    with _BACKTEST_EVENT_LOCK:
+        run = _BACKTEST_EVENT_RUNS.get(run_id)
+        if not run:
+            return None
+        seq = int(run.get("next_seq") or 1)
+        run["next_seq"] = seq + 1
+        if active is not None:
+            run["active"] = bool(active)
+        run["updated_at"] = datetime.now(timezone.utc).isoformat()
+        event = {
+            "run_id": run_id,
+            "seq": seq,
+            "type": str(event_type),
+            "lane": lane or "",
+            "payload": _json_safe_value(payload or {}),
+            "ts": run["updated_at"],
+        }
+        events = run.get("events")
+        if isinstance(events, deque):
+            events.append(event)
+        return event
+
+
+def _get_backtest_race_events(
+    run_id: str | None = None,
+    *,
+    after_seq: int = 0,
+    limit: int = 200,
+) -> dict[str, object]:
+    with _BACKTEST_EVENT_LOCK:
+        selected_run_id = run_id
+        if not selected_run_id and _BACKTEST_EVENT_RUNS:
+            latest = sorted(
+                _BACKTEST_EVENT_RUNS.values(),
+                key=lambda item: str(item.get("created_at") or ""),
+            )[-1]
+            selected_run_id = str(latest["run_id"])
+        run = _BACKTEST_EVENT_RUNS.get(str(selected_run_id or ""))
+        if not run:
+            return {
+                "run_id": selected_run_id or "",
+                "active": False,
+                "events": [],
+                "next_seq": int(after_seq) + 1,
+                "latest_seq": int(after_seq),
+            }
+        safe_after = max(0, int(after_seq or 0))
+        safe_limit = max(1, min(int(limit or 200), 1000))
+        events = [
+            dict(event)
+            for event in list(run.get("events") or [])
+            if int(event.get("seq") or 0) > safe_after
+        ][:safe_limit]
+        latest_seq = int(run.get("next_seq") or 1) - 1
+        return {
+            "run_id": str(run["run_id"]),
+            "active": bool(run.get("active")),
+            "strategies": list(run.get("strategies") or []),
+            "events": events,
+            "next_seq": (int(events[-1]["seq"]) + 1) if events else safe_after + 1,
+            "latest_seq": latest_seq,
+        }
 
 
 def _rank_matches(matches: list[dict]) -> list[dict]:
@@ -249,6 +428,462 @@ def load_strategy_content(name):
     return ""
 
 
+def _finite_number(value: object, default: float = 0.0) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(number):
+        return default
+    return number
+
+
+def _backtest_ticker_exchange_bucket(ticker: object) -> str:
+    symbol = str(ticker or "").upper()
+    if symbol.endswith((".ST", ".SS")):
+        return "sweden"
+    if symbol.endswith((".DE", ".F", ".DU", ".HM", ".SG", ".BE", ".MU")):
+        return "xetra"
+    return "unknown"
+
+
+def _backtest_row_from_series(row: pd.Series) -> dict[str, object]:
+    ticker = str(row.get("Ticker", ""))
+    return {
+        "ticker": ticker,
+        "strategy": str(row.get("Strategy", "")),
+        "exchange": _backtest_ticker_exchange_bucket(ticker),
+        "quality_score": round(_finite_number(row.get("Quality Score")), 2),
+        "return_pct": round(_finite_number(row.get("Return (%)")), 2),
+        "win_rate_pct": round(_finite_number(row.get("Win Rate (%)")), 2),
+        "profit_factor": round(_finite_number(row.get("Profit Factor")), 2),
+        "sharpe": round(_finite_number(row.get("Sharpe")), 2),
+        "max_dd_pct": round(_finite_number(row.get("Max DD (%)")), 2),
+        "trades": int(_finite_number(row.get("Trades"), 0.0)),
+        "days_since_entry": int(_finite_number(row.get("Days Since Entry"), 999.0)),
+    }
+
+
+def _normalize_structure_profile(
+    profile: object | None,
+) -> dict[str, object]:
+    safe_profile = profile if isinstance(profile, dict) else {}
+    axes = safe_profile.get("structure_axes")
+    safe_axes = axes if isinstance(axes, dict) else {}
+    normalized_axes = {
+        str(item["key"]): round(_finite_number(safe_axes.get(item["key"]), 0.0), 2)
+        for item in BACKTEST_STRATEGY_AXIS_CATALOG
+    }
+    tags = safe_profile.get("structure_tags")
+    safe_tags = (
+        [str(tag) for tag in tags if str(tag).strip()]
+        if isinstance(tags, list)
+        else []
+    )
+    axis_order = safe_profile.get("axis_order")
+    safe_axis_order = (
+        [str(item) for item in axis_order if str(item).strip()]
+        if isinstance(axis_order, list)
+        else [str(item["key"]) for item in BACKTEST_STRATEGY_AXIS_CATALOG]
+    )
+    return {
+        "structure_score": round(
+            _finite_number(safe_profile.get("structure_score"), 0.0), 2
+        ),
+        "structure_axes": normalized_axes,
+        "structure_tags": safe_tags,
+        "axis_order": safe_axis_order,
+    }
+
+
+def _backtest_strategy_profile(
+    strategy_name: str, dsl_content: str | None = None
+) -> dict[str, object]:
+    content = dsl_content if dsl_content is not None else load_strategy_content(strategy_name)
+    return _normalize_structure_profile(parse_strategy_structure_profile(content))
+
+
+def _backtest_ticker_result_from_series(
+    row: pd.Series,
+    *,
+    completed: int,
+    total: int,
+) -> dict[str, object]:
+    return {
+        "ticker": str(row.get("Ticker", "")),
+        "completed": int(completed),
+        "total": int(total),
+        "return_pct": round(_finite_number(row.get("Return (%)")), 2),
+        "win_rate_pct": round(_finite_number(row.get("Win Rate (%)")), 2),
+        "profit_factor": round(_finite_number(row.get("Profit Factor")), 2),
+        "sharpe": round(_finite_number(row.get("Sharpe")), 2),
+        "max_dd_pct": round(_finite_number(row.get("Max DD (%)")), 2),
+        "trades": int(_finite_number(row.get("Trades"), 0.0)),
+        "quality_score": round(_finite_number(row.get("Quality Score")), 2),
+        "days_since_entry": int(_finite_number(row.get("Days Since Entry"), 999.0)),
+    }
+
+
+def _trade_rows_for_summary(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    if "Trades" not in df.columns:
+        return df
+    trade_mask = pd.to_numeric(df["Trades"], errors="coerce").fillna(0) > 0
+    trade_rows = df.loc[trade_mask].copy()
+    return trade_rows if not trade_rows.empty else df
+
+
+def _trade_count_for_summary(df: pd.DataFrame) -> int:
+    if df is None or df.empty or "Trades" not in df.columns:
+        return 0
+    trade_mask = pd.to_numeric(df["Trades"], errors="coerce").fillna(0) > 0
+    trade_rows = df.loc[trade_mask].copy()
+    trades = pd.to_numeric(trade_rows["Trades"], errors="coerce").fillna(0)
+    return int(max(0, round(float(trades.sum()))))
+
+
+def _backtest_strategy_summary_from_frame(
+    strategy_name: str,
+    df: pd.DataFrame,
+    *,
+    index: int,
+    status: str = "done",
+    progress_pct: float = 100.0,
+    detail: str = "",
+    structure_profile: dict[str, object] | None = None,
+) -> dict[str, object]:
+    count = int(len(df))
+    ticker_count = (
+        int(df["Ticker"].nunique()) if not df.empty and "Ticker" in df.columns else 0
+    )
+    if df.empty:
+        trade_rows = df
+    elif "Trades" in df.columns:
+        trade_mask = pd.to_numeric(df["Trades"], errors="coerce").fillna(0) > 0
+        trade_rows = df.loc[trade_mask].copy()
+    else:
+        trade_rows = df.copy()
+    scored_tickers = (
+        int(trade_rows["Ticker"].nunique())
+        if not trade_rows.empty and "Ticker" in trade_rows.columns
+        else int(len(trade_rows))
+    )
+    no_trade_tickers = max(0, ticker_count - scored_tickers)
+
+    quality_series = (
+        trade_rows["Quality Score"]
+        if not trade_rows.empty and "Quality Score" in trade_rows.columns
+        else pd.Series(dtype=float)
+    )
+    return_series = (
+        trade_rows["Return (%)"]
+        if not trade_rows.empty and "Return (%)" in trade_rows.columns
+        else pd.Series(dtype=float)
+    )
+    sharpe_series = (
+        trade_rows["Sharpe"]
+        if not trade_rows.empty and "Sharpe" in trade_rows.columns
+        else pd.Series(dtype=float)
+    )
+    win_rate_series = (
+        trade_rows["Win Rate (%)"]
+        if not trade_rows.empty and "Win Rate (%)" in trade_rows.columns
+        else pd.Series(dtype=float)
+    )
+    profit_factor_series = (
+        trade_rows["Profit Factor"]
+        if not trade_rows.empty and "Profit Factor" in trade_rows.columns
+        else pd.Series(dtype=float)
+    )
+    max_dd_series = (
+        trade_rows["Max DD (%)"]
+        if not trade_rows.empty and "Max DD (%)" in trade_rows.columns
+        else pd.Series(dtype=float)
+    )
+
+    best_quality = _finite_number(
+        quality_series.max() if not quality_series.empty else 0.0
+    )
+    avg_quality = _finite_number(
+        quality_series.mean() if not quality_series.empty else 0.0
+    )
+    avg_return = _finite_number(
+        return_series.mean() if not return_series.empty else 0.0
+    )
+    avg_sharpe = _finite_number(
+        sharpe_series.mean() if not sharpe_series.empty else 0.0
+    )
+    avg_win_rate = _finite_number(
+        win_rate_series.mean() if not win_rate_series.empty else 0.0
+    )
+    avg_profit_factor = _finite_number(
+        profit_factor_series.mean() if not profit_factor_series.empty else 0.0
+    )
+    avg_max_dd = _finite_number(
+        max_dd_series.mean() if not max_dd_series.empty else 0.0
+    )
+    best_ticker = ""
+    best_return = _finite_number(
+        return_series.max() if not return_series.empty else 0.0
+    )
+    if (
+        not trade_rows.empty
+        and "Ticker" in trade_rows.columns
+        and "Return (%)" in trade_rows.columns
+    ):
+        best_idx = pd.to_numeric(trade_rows["Return (%)"], errors="coerce").idxmax()
+        if pd.notna(best_idx):
+            best_ticker = str(trade_rows.loc[best_idx, "Ticker"])
+
+    normalized_profile = _normalize_structure_profile(structure_profile)
+
+    return {
+        "strategy": strategy_name,
+        "index": int(index),
+        "status": status,
+        "progress_pct": round(max(0.0, min(100.0, float(progress_pct))), 2),
+        "detail": detail,
+        "count": count,
+        "ticker_count": ticker_count,
+        "processed_tickers": ticker_count,
+        "scored_tickers": scored_tickers,
+        "no_trade_tickers": no_trade_tickers,
+        "error_tickers": 0,
+        "completed_tickers": ticker_count,
+        "total_tickers": ticker_count,
+        "last_ticker": "",
+        "best_ticker": best_ticker,
+        "best_return_pct": round(best_return, 2),
+        "trades": _trade_count_for_summary(df),
+        "quality_score": round(best_quality, 2),
+        "avg_quality_score": round(avg_quality, 2),
+        "return_pct": round(avg_return, 2),
+        "sharpe": round(avg_sharpe, 2),
+        "win_rate_pct": round(avg_win_rate, 2),
+        "profit_factor": round(avg_profit_factor, 2),
+        "max_dd_pct": round(avg_max_dd, 2),
+        "speed_score": round(avg_quality, 2),
+        "structure_score": normalized_profile["structure_score"],
+        "structure_axes": normalized_profile["structure_axes"],
+        "structure_tags": normalized_profile["structure_tags"],
+        "axis_order": normalized_profile["axis_order"],
+    }
+
+
+def _empty_backtest_live_stats() -> dict[str, object]:
+    return {
+        "completed": 0,
+        "total": 0,
+        "scored": 0,
+        "no_trade": 0,
+        "errors": 0,
+        "return_sum": 0.0,
+        "quality_sum": 0.0,
+        "sharpe_sum": 0.0,
+        "win_rate_sum": 0.0,
+        "profit_factor_sum": 0.0,
+        "max_dd_sum": 0.0,
+        "trades_sum": 0.0,
+        "best_return": None,
+        "best_ticker": "",
+        "last_ticker": "",
+    }
+
+
+def _backtest_live_quality_score(
+    return_pct: float,
+    win_rate_pct: float,
+    sharpe: float,
+    max_dd_pct: float,
+    trades: float,
+) -> float:
+    return _finite_number(
+        return_pct
+        * (win_rate_pct / 100.0)
+        * (sharpe + 1.0)
+        / ((1.0 + trades / 100.0) * (1.0 + max_dd_pct / 10.0))
+    )
+
+
+def _apply_backtest_live_ticker_result(
+    lane: dict[str, object],
+    stats: dict[str, object],
+    ticker_result: object,
+) -> None:
+    if not isinstance(ticker_result, dict):
+        return
+
+    completed = int(_finite_number(ticker_result.get("completed"), 0.0))
+    total = int(_finite_number(ticker_result.get("total"), 0.0))
+    ticker = str(ticker_result.get("ticker") or "").strip()
+    stats["completed"] = max(int(stats.get("completed") or 0), completed)
+    stats["total"] = max(int(stats.get("total") or 0), total)
+    if ticker:
+        stats["last_ticker"] = ticker
+
+    processed = int(stats.get("completed") or 0)
+    total_tickers = int(stats.get("total") or 0)
+    scored = int(stats.get("scored") or 0)
+    no_trade = int(stats.get("no_trade") or 0)
+    errors = int(stats.get("errors") or 0)
+
+    def _update_lane_counters() -> None:
+        lane.update(
+            {
+                "ticker_count": total_tickers,
+                "processed_tickers": processed,
+                "completed_tickers": processed,
+                "total_tickers": total_tickers,
+                "scored_tickers": scored,
+                "no_trade_tickers": no_trade,
+                "error_tickers": errors,
+                "count": scored,
+                "last_ticker": ticker or str(stats.get("last_ticker") or ""),
+            }
+        )
+
+    if ticker_result.get("error"):
+        stats["errors"] = errors + 1
+        errors = int(stats.get("errors") or 0)
+        _update_lane_counters()
+        return
+
+    return_pct = _finite_number(ticker_result.get("return_pct"), 0.0)
+    win_rate_pct = _finite_number(ticker_result.get("win_rate_pct"), 0.0)
+    profit_factor = _finite_number(ticker_result.get("profit_factor"), 0.0)
+    sharpe = _finite_number(ticker_result.get("sharpe"), 0.0)
+    max_dd_pct = _finite_number(ticker_result.get("max_dd_pct"), 0.0)
+    trades = _finite_number(ticker_result.get("trades"), 0.0)
+    if trades <= 0:
+        stats["no_trade"] = no_trade + 1
+        no_trade = int(stats.get("no_trade") or 0)
+        _update_lane_counters()
+        return
+
+    scored = int(stats.get("scored") or 0) + 1
+    quality_score = _finite_number(ticker_result.get("quality_score"), math.nan)
+    if not math.isfinite(quality_score):
+        quality_score = _backtest_live_quality_score(
+            return_pct, win_rate_pct, sharpe, max_dd_pct, trades
+        )
+
+    stats["scored"] = scored
+    stats["return_sum"] = float(stats.get("return_sum") or 0.0) + return_pct
+    stats["quality_sum"] = float(stats.get("quality_sum") or 0.0) + quality_score
+    stats["sharpe_sum"] = float(stats.get("sharpe_sum") or 0.0) + sharpe
+    stats["win_rate_sum"] = float(stats.get("win_rate_sum") or 0.0) + win_rate_pct
+    stats["profit_factor_sum"] = (
+        float(stats.get("profit_factor_sum") or 0.0) + profit_factor
+    )
+    stats["max_dd_sum"] = float(stats.get("max_dd_sum") or 0.0) + max_dd_pct
+    stats["trades_sum"] = float(stats.get("trades_sum") or 0.0) + trades
+
+    best_return = stats.get("best_return")
+    if best_return is None or return_pct > float(best_return):
+        stats["best_return"] = return_pct
+        stats["best_ticker"] = ticker
+
+    lane.update(
+        {
+            "count": scored,
+            "ticker_count": total_tickers,
+            "processed_tickers": processed,
+            "completed_tickers": processed,
+            "total_tickers": total_tickers,
+            "scored_tickers": scored,
+            "no_trade_tickers": no_trade,
+            "error_tickers": errors,
+            "last_ticker": ticker,
+            "best_ticker": str(stats.get("best_ticker") or ""),
+            "best_return_pct": round(_finite_number(stats.get("best_return")), 2),
+            "return_pct": round(float(stats["return_sum"]) / scored, 2),
+            "quality_score": round(float(stats["quality_sum"]) / scored, 2),
+            "avg_quality_score": round(float(stats["quality_sum"]) / scored, 2),
+            "sharpe": round(float(stats["sharpe_sum"]) / scored, 2),
+            "win_rate_pct": round(float(stats["win_rate_sum"]) / scored, 2),
+            "profit_factor": round(float(stats["profit_factor_sum"]) / scored, 2),
+            "max_dd_pct": round(float(stats["max_dd_sum"]) / scored, 2),
+            "trades": int(max(0, round(float(stats["trades_sum"])))),
+            "speed_score": round(float(stats["quality_sum"]) / scored, 2),
+        }
+    )
+
+
+def _backtest_race_payload(
+    strategy_names: list[str],
+    strategy_summaries: list[dict[str, object]],
+    *,
+    run_id: str | None = None,
+    active_strategy: str | None,
+    completed: int,
+    total: int,
+    pct: float,
+    phase: str,
+    detail: str,
+    work_completed: int | None = None,
+    work_total: int | None = None,
+    ticker_count: int | None = None,
+) -> dict[str, object]:
+    return {
+        "run_id": run_id or "",
+        "selected_strategies": list(strategy_names),
+        "active_strategy": active_strategy or "",
+        "completed": int(completed),
+        "total": int(total),
+        "work_completed": int(work_completed if work_completed is not None else 0),
+        "work_total": int(work_total if work_total is not None else 0),
+        "ticker_count": int(ticker_count if ticker_count is not None else 0),
+        "strategy_count": int(len(strategy_names)),
+        "pct": round(max(0.0, min(100.0, float(pct))), 2),
+        "phase": phase,
+        "detail": detail,
+        "lanes": [
+            {
+                **lane,
+            }
+            for lane in strategy_summaries
+        ],
+    }
+
+
+def _evaluate_strategy_frame(**kwargs) -> pd.DataFrame:
+    signature = inspect.signature(evaluate_strategies)
+    accepts_kwargs = any(
+        param.kind == inspect.Parameter.VAR_KEYWORD
+        for param in signature.parameters.values()
+    )
+    filtered = (
+        kwargs
+        if accepts_kwargs
+        else {k: v for k, v in kwargs.items() if k in signature.parameters}
+    )
+    return evaluate_strategies(**filtered)
+
+
+def _parse_strategy_selection(strategies: Optional[str]) -> list[str]:
+    return [
+        item.strip()
+        for item in re.split(r"[\s,;]+", str(strategies or ""))
+        if item.strip()
+    ]
+
+
+def _backtest_matrix_worker_plan(total_strategies: int) -> tuple[int, int]:
+    """Bound nested backtest parallelism so "all strategies" stays stable."""
+    safe_total = max(1, int(total_strategies))
+    cpu_budget = max(1, min(os.cpu_count() or 4, 8))
+    strategy_concurrency = min(safe_total, max(1, min(4, cpu_budget)))
+    if safe_total == 1:
+        ticker_workers = min(4, cpu_budget)
+    else:
+        ticker_workers = max(
+            1,
+            min(4, cpu_budget // max(1, strategy_concurrency)),
+        )
+    return strategy_concurrency, ticker_workers
+
+
 @lru_cache(maxsize=4)
 def _cached_dashboard_tickers(
     db_path: str, latest_market_date: str | None
@@ -272,6 +907,74 @@ def _cached_dashboard_tickers(
         return tuple(
             str(ticker) for ticker in tickers if str(ticker).upper() not in blacklist
         )
+
+
+@lru_cache(maxsize=4)
+def _cached_dashboard_universe(
+    db_path: str, latest_market_date: str | None
+) -> tuple[dict[str, object], ...]:
+    """Cache the list-builder ticker universe with metadata until market data advances."""
+    tickers = _cached_dashboard_tickers(db_path, latest_market_date)
+    metadata_map = _cached_etf_metadata_map()
+    db_metadata: dict[str, dict[str, object]] = {}
+
+    if tickers:
+        with ETFDatabase(db_path=db_path) as db:
+            conn = db._get_connection()
+            metadata_df = pd.read_sql_query(
+                "SELECT ticker, name, issuer, asset_class, region, source FROM etf_metadata",
+                conn,
+            )
+        db_metadata = {
+            str(row.get("ticker", "")).upper(): {
+                "name": row.get("name"),
+                "issuer": row.get("issuer"),
+                "asset_class": row.get("asset_class"),
+                "region": row.get("region"),
+                "source": row.get("source"),
+            }
+            for _, row in metadata_df.iterrows()
+            if str(row.get("ticker", "")).strip()
+        }
+
+    items: list[dict[str, object]] = []
+    for ticker in tickers:
+        upper_ticker = str(ticker).upper()
+        db_info = db_metadata.get(upper_ticker, {})
+        fallback_info = metadata_map.get(upper_ticker, {})
+        source_hint = str(
+            db_info.get("source") or fallback_info.get("source") or ""
+        ).lower()
+        exchange = _backtest_ticker_exchange_bucket(upper_ticker)
+        if "sweden" in source_hint:
+            exchange = "sweden"
+        elif "xetra" in source_hint or "etfs.json" in source_hint:
+            exchange = "xetra"
+
+        name = (
+            str(
+                db_info.get("name") or fallback_info.get("name") or upper_ticker
+            ).strip()
+            or upper_ticker
+        )
+        items.append(
+            {
+                "ticker": upper_ticker,
+                "name": name,
+                "label": name,
+                "issuer": str(
+                    db_info.get("issuer") or fallback_info.get("issuer") or ""
+                ).strip(),
+                "asset_class": str(
+                    db_info.get("asset_class") or fallback_info.get("asset_class") or ""
+                ).strip(),
+                "region": str(
+                    db_info.get("region") or fallback_info.get("region") or ""
+                ).strip(),
+                "exchange": exchange,
+            }
+        )
+    return tuple(items)
 
 
 @lru_cache(maxsize=1)
@@ -305,9 +1008,115 @@ def _cached_blacklist_tickers() -> set[str]:
     return set()
 
 
+@lru_cache(maxsize=8)
+def _cached_screen_universe(
+    db_path: str, latest_market_date: str | None
+) -> tuple[str, ...]:
+    """Cache the expensive ticker-universe query until market data advances."""
+    blacklist = _cached_blacklist_tickers()
+    with ETFDatabase(db_path=db_path) as db:
+        conn = db._get_connection()
+        universe_query = """
+            WITH ranked AS (
+                SELECT
+                    ticker,
+                    date,
+                    volume,
+                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
+                FROM etf_data
+            ),
+            agg AS (
+                SELECT
+                    ticker,
+                    MAX(date) AS last_date,
+                    COUNT(*) AS total_rows,
+                    SUM(CASE WHEN volume > 0 THEN 1 ELSE 0 END) AS nonzero_volume_rows,
+                    SUM(CASE WHEN rn <= 30 THEN 1 ELSE 0 END) AS recent_rows,
+                    SUM(CASE WHEN rn <= 30 AND volume = 0 THEN 1 ELSE 0 END) AS recent_zero_volume_rows
+                FROM ranked
+                GROUP BY ticker
+            )
+            SELECT ticker
+            FROM agg
+            WHERE total_rows >= 50
+              AND nonzero_volume_rows >= 10
+              AND recent_rows >= 10
+              AND recent_zero_volume_rows < 2
+              AND last_date >= date('now', '-180 day')
+        """
+        universe_df = pd.read_sql_query(universe_query, conn)
+        return tuple(
+            sorted(
+                str(ticker).upper()
+                for ticker in universe_df["ticker"].tolist()
+                if str(ticker).upper() not in blacklist
+            )
+        )
+
+
+@lru_cache(maxsize=8)
+def _cached_backtest_universe(
+    db_path: str, latest_market_date: str | None
+) -> tuple[str, ...]:
+    """Cache the raw backtest ticker universe until market data advances."""
+    blacklist = _cached_blacklist_tickers()
+    with ETFDatabase(db_path=db_path) as db:
+        conn = db._get_connection()
+        tickers = pd.read_sql_query(
+            "SELECT DISTINCT ticker FROM etf_data ORDER BY ticker", conn
+        )["ticker"].tolist()
+    return tuple(
+        str(ticker).upper()
+        for ticker in tickers
+        if str(ticker).upper() not in blacklist
+    )
+
+
 def _screen_exports_dir() -> Path:
     SCREEN_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
     return SCREEN_EXPORTS_DIR
+
+
+def _backtest_exports_dir() -> Path:
+    BACKTEST_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    return BACKTEST_EXPORTS_DIR
+
+
+def _build_backtest_export_frame(df: pd.DataFrame) -> pd.DataFrame:
+    columns = [
+        "Ticker",
+        "Strategy",
+        "Return (%)",
+        "Win Rate (%)",
+        "Profit Factor",
+        "Sharpe",
+        "Max DD (%)",
+        "Trades",
+        "Days Since Entry",
+        "Quality Score",
+    ]
+    if df is None or df.empty:
+        return pd.DataFrame(columns=columns)
+    frame = df.copy()
+    if "df" in frame.columns:
+        frame = frame.drop(columns=["df"])
+    ordered = [column for column in columns if column in frame.columns]
+    extras = [column for column in frame.columns if column not in ordered]
+    return frame[ordered + extras]
+
+
+def _write_backtest_results_csv(
+    df: pd.DataFrame,
+    *,
+    label: str = "backtest",
+) -> Path:
+    export_dir = _backtest_exports_dir()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_label = re.sub(r"[^A-Za-z0-9._-]+", "_", label or "backtest").strip("_")
+    csv_path = export_dir / f"{safe_label or 'backtest'}_{timestamp}.csv"
+    frame = _build_backtest_export_frame(df)
+    frame.to_csv(csv_path, index=False, float_format="%.2f")
+    return csv_path
 
 
 def _build_top_matches_export_frame(
@@ -517,7 +1326,6 @@ def _swarm_debug_shortlist_frame(
                 "components_json": json.dumps(components),
             }
         )
-
     return pd.DataFrame(rows)
 
 
@@ -588,150 +1396,6 @@ def _swarm_debug_history_payload(
         "as_of_date": latest_date,
         "history": history,
     }
-
-
-def _ticker_exchange_bucket(
-    ticker: str,
-    label: str = "",
-    region: str = "",
-    market: str = "",
-) -> str:
-    upper_ticker = str(ticker or "").upper()
-    upper_label = str(label or "").upper()
-    upper_region = str(region or "").upper()
-    upper_market = str(market or "").upper()
-    if (
-        upper_market == "STO"
-        or upper_market == "SWEDEN"
-        or upper_ticker.endswith(".ST")
-        or upper_ticker.endswith(".SE")
-        or upper_ticker.endswith(".SS")
-        or "SWEDEN" in upper_region
-        or "STOCKHOLM" in upper_region
-        or "STOCKHOLM" in upper_label
-        or "SWED" in upper_label
-        or "SWE" in upper_ticker
-    ):
-        return "sweden"
-    if (
-        upper_ticker.endswith(".DE")
-        or upper_ticker.endswith(".F")
-        or "." not in upper_ticker
-    ):
-        return "xetra"
-    return "all"
-
-
-@lru_cache(maxsize=4)
-def _cached_dashboard_universe(
-    db_path: str, latest_market_date: str | None
-) -> tuple[dict[str, object], ...]:
-    """Cache the richer ticker universe for the modal builder."""
-    config_metadata = _cached_etf_metadata_map()
-    blacklist = _cached_blacklist_tickers()
-    rows: list[dict[str, object]] = []
-
-    with ETFDatabase(db_path=db_path) as db:
-        conn = db._get_connection()
-        ticker_rows = list(_cached_dashboard_tickers(db_path, latest_market_date))
-        try:
-            metadata_df = pd.read_sql_query(
-                "SELECT ticker, name, issuer, asset_class, region, country, market FROM etf_metadata",
-                conn,
-            )
-        except Exception:
-            metadata_df = pd.DataFrame()
-
-    metadata_map: dict[str, dict[str, object]] = {}
-    if not metadata_df.empty:
-        for _, row in metadata_df.iterrows():
-            ticker = str(row.get("ticker") or "").upper()
-            if not ticker:
-                continue
-            metadata_map[ticker] = {
-                "name": row.get("name"),
-                "issuer": row.get("issuer"),
-                "asset_class": row.get("asset_class"),
-                "region": row.get("region"),
-                "country": row.get("country"),
-                "market": row.get("market"),
-            }
-
-    ticker_rows = sorted(
-        set(ticker_rows) | set(config_metadata.keys()) | set(metadata_map.keys())
-    )
-
-    for ticker in ticker_rows:
-        ticker_key = str(ticker).upper()
-        if ticker_key in blacklist:
-            continue
-        meta = dict(config_metadata.get(ticker_key, {}))
-        meta.update(metadata_map.get(ticker_key, {}))
-        name = str(meta.get("name") or ticker_key)
-        issuer = str(meta.get("issuer") or "")
-        asset_class = str(meta.get("asset_class") or "")
-        region = str(meta.get("region") or meta.get("country") or "")
-        market = str(meta.get("market") or "")
-        rows.append(
-            {
-                "ticker": ticker_key,
-                "name": name,
-                "label": name,
-                "issuer": issuer,
-                "asset_class": asset_class,
-                "region": region,
-                "market": market,
-                "exchange": _ticker_exchange_bucket(ticker_key, name, region, market),
-            }
-        )
-
-    return tuple(rows)
-
-
-@lru_cache(maxsize=8)
-def _cached_screen_universe(
-    db_path: str, latest_market_date: str | None
-) -> tuple[str, ...]:
-    """Cache the expensive ticker-universe query until market data advances."""
-    blacklist = _cached_blacklist_tickers()
-    with ETFDatabase(db_path=db_path) as db:
-        conn = db._get_connection()
-        universe_query = """
-            WITH ranked AS (
-                SELECT
-                    ticker,
-                    date,
-                    volume,
-                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
-                FROM etf_data
-            ),
-            agg AS (
-                SELECT
-                    ticker,
-                    MAX(date) AS last_date,
-                    COUNT(*) AS total_rows,
-                    SUM(CASE WHEN volume > 0 THEN 1 ELSE 0 END) AS nonzero_volume_rows,
-                    SUM(CASE WHEN rn <= 30 THEN 1 ELSE 0 END) AS recent_rows,
-                    SUM(CASE WHEN rn <= 30 AND volume = 0 THEN 1 ELSE 0 END) AS recent_zero_volume_rows
-                FROM ranked
-                GROUP BY ticker
-            )
-            SELECT ticker
-            FROM agg
-            WHERE total_rows >= 50
-              AND nonzero_volume_rows >= 10
-              AND recent_rows >= 10
-              AND recent_zero_volume_rows < 2
-              AND last_date >= date('now', '-180 day')
-        """
-        universe_df = pd.read_sql_query(universe_query, conn)
-        return tuple(
-            sorted(
-                str(ticker).upper()
-                for ticker in universe_df["ticker"].tolist()
-                if str(ticker).upper() not in blacklist
-            )
-        )
 
 
 # Database access function (FastAPI style)
@@ -1088,7 +1752,19 @@ def _save_custom_ticker_list_payload(payload: object) -> dict:
 async def job_progress():
     """Return the latest dashboard job progress snapshot."""
     with _JOB_PROGRESS_LOCK:
-        return dict(_JOB_PROGRESS_STATE)
+        return _json_safe_value(dict(_JOB_PROGRESS_STATE))
+
+
+@app.get("/api/backtest/events")
+async def backtest_events(
+    run_id: Optional[str] = None,
+    after_seq: int = 0,
+    limit: int = 200,
+):
+    """Return sequenced race events for a backtest run."""
+    return _json_safe_value(
+        _get_backtest_race_events(run_id, after_seq=after_seq, limit=limit)
+    )
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -1221,6 +1897,14 @@ def refresh_market_data(
     safe_workers = max(1, min(int(max_workers), 16))
     safe_stale_after_days = max(0, min(int(stale_after_days), 30))
     metadata_path, collection_mode = _market_source_config(source)
+    logger.info(
+        "Dashboard market refresh requested: source=%s force=%s stale_after_days=%s depth=%s max_workers=%s",
+        source or "default",
+        force,
+        safe_stale_after_days,
+        safe_depth,
+        safe_workers,
+    )
     refresher = MarketDataRefresher(
         db_path=str(get_db().db_path),
         etfs_file=str(metadata_path),
@@ -1247,7 +1931,16 @@ def refresh_market_data(
             detail="Preparing market refresh",
             active=True,
         )
-        return refresher.refresh_market_data(**refresh_kwargs)
+        result = refresher.refresh_market_data(**refresh_kwargs)
+        logger.info(
+            "Dashboard market refresh finished: requested=%s refreshed=%s failed=%s shortlist_rebuilt=%s latest_market_date=%s",
+            result.get("requested"),
+            result.get("refreshed"),
+            result.get("failed"),
+            result.get("shortlist_rebuilt"),
+            result.get("latest_market_date"),
+        )
+        return result
     except Exception as e:
         _set_job_progress(
             "market-refresh",
@@ -1269,6 +1962,12 @@ def _refresh_market_data_for_gui(
 ) -> dict[str, object] | None:
     """Top up market data for GUI-driven actions when a user asks for it."""
     metadata_path, collection_mode = _market_source_config(source)
+    logger.info(
+        "Dashboard GUI refresh starting: source=%s metadata=%s collection_mode=%s",
+        source or "default",
+        metadata_path,
+        collection_mode,
+    )
     refresher = MarketDataRefresher(
         db_path=str(get_db().db_path),
         etfs_file=str(metadata_path),
@@ -1295,7 +1994,15 @@ def _refresh_market_data_for_gui(
             detail="Preparing market refresh",
             active=True,
         )
-        return refresher.refresh_market_data(**refresh_kwargs)
+        result = refresher.refresh_market_data(**refresh_kwargs)
+        logger.info(
+            "Dashboard GUI refresh finished: requested=%s refreshed=%s failed=%s shortlist_rebuilt=%s",
+            result.get("requested"),
+            result.get("refreshed"),
+            result.get("failed"),
+            result.get("shortlist_rebuilt"),
+        )
+        return result
     except Exception as e:
         logger.warning("GUI market refresh failed: %s", e, exc_info=True)
         return None
@@ -2167,6 +2874,8 @@ async def backtest_view(
     dsl_text = (dsl_content or "").strip()
     source_type = "editor" if dsl_text else "saved"
     signal_window_days = signal_days if signal_days is not None else since_days
+    profile_strategy_name = strategy_name or "Editor Draft"
+    structure_profile = _backtest_strategy_profile(profile_strategy_name, dsl_text or None)
 
     if not strategy_name and not dsl_text:
         _set_job_progress(
@@ -2186,6 +2895,9 @@ async def backtest_view(
                 "avg_return": 0.0,
                 "avg_sharpe": 0.0,
             },
+            "strategy_profile": structure_profile,
+            "strategy_summaries": [],
+            "strategy_axis_catalog": BACKTEST_STRATEGY_AXIS_CATALOG,
             "rows": [],
             "chart": {"data": [], "layout": {}},
         }
@@ -2223,6 +2935,18 @@ async def backtest_view(
         if "progress_callback" in inspect.signature(evaluate_strategies).parameters:
             evaluate_kwargs["progress_callback"] = _update_job_progress
         df = await asyncio.to_thread(evaluate_strategies, **evaluate_kwargs)
+    except ValueError as e:
+        logger.error("Backtest validation failed for %s: %s", strategy_name, e)
+        _set_job_progress(
+            "backtest",
+            "failed",
+            pct=100.0,
+            label="Backtest",
+            detail=str(e),
+            active=False,
+            error=str(e),
+        )
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(
             "Backtest endpoint failed for %s: %s", strategy_name, e, exc_info=True
@@ -2239,6 +2963,10 @@ async def backtest_view(
         raise HTTPException(status_code=500, detail=str(e))
 
     if df.empty:
+        csv_path = _write_backtest_results_csv(
+            df,
+            label=f"backtest_{strategy_name or 'editor_draft'}",
+        )
         _set_job_progress(
             "backtest",
             "done",
@@ -2248,20 +2976,61 @@ async def backtest_view(
             active=False,
         )
         return {
-            "strategy_name": strategy_name or "Editor Draft",
+            "strategy_name": profile_strategy_name,
             "source_type": source_type,
+            "csv_path": str(csv_path),
             "summary": {
                 "count": 0,
                 "best_quality": 0.0,
                 "avg_return": 0.0,
                 "avg_sharpe": 0.0,
             },
+            "strategy_profile": structure_profile,
+            "strategy_summaries": [
+                _backtest_strategy_summary_from_frame(
+                    profile_strategy_name,
+                    df,
+                    index=1,
+                    status="done",
+                    progress_pct=100.0,
+                    detail="No scored rows",
+                    structure_profile=structure_profile,
+                )
+            ],
+            "strategy_axis_catalog": BACKTEST_STRATEGY_AXIS_CATALOG,
+            "race": _backtest_race_payload(
+                [profile_strategy_name],
+                [
+                    _backtest_strategy_summary_from_frame(
+                        profile_strategy_name,
+                        df,
+                        index=1,
+                        status="done",
+                        progress_pct=100.0,
+                        detail="No scored rows",
+                        structure_profile=structure_profile,
+                    )
+                ],
+                active_strategy=profile_strategy_name,
+                completed=1,
+                total=1,
+                pct=100.0,
+                phase="done",
+                detail="No scored rows",
+                ticker_count=0,
+                work_completed=0,
+                work_total=0,
+            ),
             "rows": [],
             "chart": {"data": [], "layout": {}},
         }
 
     safe_limit = max(1, min(int(limit), 100))
     view = df.head(safe_limit).copy()
+    csv_path = _write_backtest_results_csv(
+        df,
+        label=f"backtest_{strategy_name or 'editor_draft'}",
+    )
     rows = []
     for _, row in view.iterrows():
         rows.append(
@@ -2313,17 +3082,865 @@ async def backtest_view(
         active=False,
     )
 
+    strategy_summary = _backtest_strategy_summary_from_frame(
+        profile_strategy_name,
+        df,
+        index=1,
+        status="done",
+        progress_pct=100.0,
+        detail=f"{len(df)} rows scored",
+        structure_profile=structure_profile,
+    )
+
     return {
-        "strategy_name": strategy_name or "Editor Draft",
+        "strategy_name": profile_strategy_name,
         "source_type": source_type,
+        "csv_path": str(csv_path),
         "summary": {
             "count": int(len(df)),
             "best_quality": round(float(df["Quality Score"].max()), 2),
-            "avg_return": round(float(df["Return (%)"].mean()), 2),
-            "avg_sharpe": round(float(df["Sharpe"].mean()), 2),
+            "avg_return": round(
+                float(_trade_rows_for_summary(df)["Return (%)"].mean()), 2
+            ),
+            "avg_sharpe": round(float(_trade_rows_for_summary(df)["Sharpe"].mean()), 2),
+            "trades": _trade_count_for_summary(df),
         },
+        "strategy_profile": structure_profile,
+        "strategy_summaries": [strategy_summary],
+        "strategy_axis_catalog": BACKTEST_STRATEGY_AXIS_CATALOG,
+        "race": _backtest_race_payload(
+            [profile_strategy_name],
+            [strategy_summary],
+            active_strategy=profile_strategy_name,
+            completed=1,
+            total=1,
+            pct=100.0,
+            phase="done",
+            detail=f"{len(df)} rows scored",
+            ticker_count=int(df["Ticker"].nunique()) if not df.empty else 0,
+            work_completed=int(df["Ticker"].nunique()) if not df.empty else 0,
+            work_total=int(df["Ticker"].nunique()) if not df.empty else 0,
+        ),
         "rows": rows,
         "chart": chart,
+    }
+
+
+@app.get("/api/backtest/matrix")
+async def backtest_matrix_view(
+    strategies: Optional[str] = None,
+    all_strategies: bool = False,
+    limit: int = 1000,
+    signal_days: Optional[int] = None,
+    since_days: Optional[int] = None,
+    refresh: bool = False,
+    scan_scope: Optional[str] = None,
+    exchange: Optional[str] = None,
+    ticker_list: Optional[str] = None,
+):
+    """Evaluate multiple saved strategies and return rows for flexible 2D plotting."""
+    requested = _parse_strategy_selection(strategies)
+    available = get_strategies()
+    if all_strategies or any(item.lower() == "all" for item in requested):
+        strategy_names = available
+    else:
+        strategy_names = requested
+
+    strategy_names = list(dict.fromkeys(strategy_names))
+    if not strategy_names:
+        return {
+            "source_type": "saved_matrix",
+            "strategies": [],
+            "metrics": BACKTEST_METRICS,
+            "strategy_axis_catalog": BACKTEST_STRATEGY_AXIS_CATALOG,
+            "summary": {
+                "count": 0,
+                "strategy_count": 0,
+                "ticker_count": 0,
+                "best_quality": 0.0,
+                "avg_return": 0.0,
+                "avg_sharpe": 0.0,
+            },
+            "rows": [],
+        }
+
+    missing = [
+        name
+        for name in strategy_names
+        if not (Path("strategies") / f"{name}.dsl").exists()
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Strategy not found: {', '.join(missing[:5])}",
+        )
+
+    signal_window_days = signal_days if signal_days is not None else since_days
+    frames: list[pd.DataFrame] = []
+    total_strategies = len(strategy_names)
+    db = get_db()
+    latest_market_date = db.get_latest_market_date()
+    ticker_universe = filter_tickers_by_exchange_and_list(
+        list(_cached_backtest_universe(_db_path_for(db), latest_market_date)),
+        exchange=exchange,
+        ticker_list=ticker_list,
+        scan_scope=scan_scope,
+    )
+    estimated_ticker_count = len(ticker_universe)
+    total_work_items = total_strategies * estimated_ticker_count
+    strategy_concurrency, ticker_workers = _backtest_matrix_worker_plan(
+        total_strategies
+    )
+    logger.info(
+        "Backtest matrix worker plan: strategies=%d strategy_concurrency=%d ticker_workers=%d estimated_tickers=%d",
+        total_strategies,
+        strategy_concurrency,
+        ticker_workers,
+        estimated_ticker_count,
+    )
+    strategy_worker_semaphore = asyncio.Semaphore(strategy_concurrency)
+    run_id = _new_backtest_race_run(strategy_names)
+    strategy_profiles = {
+        name: _backtest_strategy_profile(name)
+        for name in strategy_names
+    }
+    _append_backtest_race_event(
+        run_id,
+        "run_started",
+        payload={
+            "strategies": list(strategy_names),
+            "strategy_count": total_strategies,
+            "ticker_count": estimated_ticker_count,
+            "work_total": total_work_items,
+            "work_completed": 0,
+            "scan_scope": scan_scope or "",
+            "exchange": exchange or "",
+            "ticker_list_count": len(_parse_strategy_selection(ticker_list)),
+        },
+        active=True,
+    )
+    strategy_summaries = [
+        {
+            "strategy": name,
+            "index": idx,
+            "status": "queued",
+            "progress_pct": 0.0,
+            "detail": "Queued",
+            "count": 0,
+            "ticker_count": estimated_ticker_count,
+            "processed_tickers": 0,
+            "scored_tickers": 0,
+            "no_trade_tickers": 0,
+            "error_tickers": 0,
+            "completed_tickers": 0,
+            "total_tickers": estimated_ticker_count,
+            "last_ticker": "",
+            "best_ticker": "",
+            "best_return_pct": 0.0,
+            "quality_score": 0.0,
+            "avg_quality_score": 0.0,
+            "return_pct": 0.0,
+            "sharpe": 0.0,
+            "win_rate_pct": 0.0,
+            "profit_factor": 0.0,
+            "max_dd_pct": 0.0,
+            "speed_score": 0.0,
+            "structure_score": round(
+                _finite_number(strategy_profiles[name].get("structure_score"), 0.0), 2
+            ),
+            "structure_axes": dict(
+                strategy_profiles[name].get("structure_axes", {})
+            ),
+            "structure_tags": list(
+                strategy_profiles[name].get("structure_tags", [])
+            ),
+            "axis_order": list(strategy_profiles[name].get("axis_order", [])),
+        }
+        for idx, name in enumerate(strategy_names, start=1)
+    ]
+    live_strategy_stats = [_empty_backtest_live_stats() for _ in strategy_names]
+
+    def _publish_race_state(
+        *,
+        active_strategy: str | None,
+        current_index: int,
+        current_pct: float,
+        phase: str,
+        detail: str,
+        active: bool = True,
+        error: str | None = None,
+    ) -> None:
+        completed_total = sum(
+            1
+            for lane in strategy_summaries
+            if str(lane.get("status")) in {"done", "failed"}
+        )
+        all_done = completed_total >= total_strategies
+        any_failed = any(
+            str(lane.get("status")) == "failed" for lane in strategy_summaries
+        )
+        lane_progress_sum = sum(
+            max(0.0, min(100.0, _finite_number(lane.get("progress_pct"), 0.0)))
+            for lane in strategy_summaries
+        )
+        known_work_total = sum(
+            max(0, int(_finite_number(lane.get("total_tickers"), 0.0)))
+            for lane in strategy_summaries
+        )
+        if known_work_total <= 0:
+            known_work_total = total_work_items
+        completed_work_items = 0
+        for lane in strategy_summaries:
+            lane_total = max(0, int(_finite_number(lane.get("total_tickers"), 0.0)))
+            lane_completed = max(
+                0, int(_finite_number(lane.get("completed_tickers"), 0.0))
+            )
+            if str(lane.get("status")) in {"done", "failed"} and lane_total > 0:
+                lane_completed = lane_total
+            completed_work_items += min(lane_completed, lane_total or lane_completed)
+        if not all_done and 0 <= current_index < len(strategy_summaries):
+            current_lane_pct = max(0.0, min(100.0, float(current_pct)))
+            existing_lane_pct = max(
+                0.0,
+                min(
+                    100.0,
+                    _finite_number(
+                        strategy_summaries[current_index].get("progress_pct"), 0.0
+                    ),
+                ),
+            )
+            lane_progress_sum += max(0.0, current_lane_pct - existing_lane_pct)
+            lane_total = max(
+                0,
+                int(
+                    _finite_number(
+                        strategy_summaries[current_index].get("total_tickers"),
+                        float(estimated_ticker_count),
+                    )
+                ),
+            )
+            existing_completed = max(
+                0,
+                int(
+                    _finite_number(
+                        strategy_summaries[current_index].get("completed_tickers"), 0.0
+                    )
+                ),
+            )
+            current_completed = int(
+                round((current_lane_pct / 100.0) * max(1, lane_total))
+            )
+            completed_work_items += max(0, current_completed - existing_completed)
+        overall_pct = (
+            (completed_work_items / max(1, known_work_total)) * 100.0
+            if known_work_total > 0
+            else lane_progress_sum / max(1, total_strategies)
+        )
+        if all_done:
+            job_phase = "failed" if any_failed or phase == "failed" else "done"
+        elif phase == "failed" and total_strategies <= 1:
+            job_phase = "failed"
+        else:
+            job_phase = "running"
+        job_active = (active or not all_done) and job_phase not in {"done", "failed"}
+        display_work_total = known_work_total or total_work_items
+        work_detail = (
+            f"{completed_work_items}/{display_work_total} ticker-strategy checks"
+            if display_work_total > 0
+            else detail
+        )
+        race_payload = _backtest_race_payload(
+            strategy_names,
+            strategy_summaries,
+            run_id=run_id,
+            active_strategy=active_strategy,
+            completed=completed_total,
+            total=total_strategies,
+            pct=overall_pct,
+            phase=job_phase,
+            detail=work_detail if job_phase == "running" else detail,
+            work_completed=completed_work_items,
+            work_total=display_work_total,
+            ticker_count=estimated_ticker_count,
+        )
+        _set_job_progress(
+            "backtest",
+            job_phase,
+            pct=overall_pct,
+            label="Backtest Matrix",
+            detail=work_detail if job_phase == "running" else detail,
+            active=job_active,
+            error=error,
+            payload={"backtest_race": race_payload},
+        )
+
+    _publish_race_state(
+        active_strategy=None,
+        current_index=0,
+        current_pct=0.0,
+        phase="starting",
+        detail=f"Preparing {total_strategies} strategies...",
+        active=True,
+    )
+
+    try:
+        if refresh:
+            _refresh_market_data_for_gui(source=scan_scope or exchange)
+        strategy_state_lock = Lock()
+
+        async def _run_strategy_worker(index: int, strategy_name: str):
+            async with strategy_worker_semaphore:
+                current_index = index - 1
+                start_detail = f"{strategy_name} ({index}/{total_strategies})"
+                loaded_from_eval_cache = False
+                _append_backtest_race_event(
+                    run_id,
+                    "lane_started",
+                    lane=strategy_name,
+                    payload={
+                        "strategy": strategy_name,
+                        "index": index,
+                        "work_items": "ticker_universe",
+                    },
+                    active=True,
+                )
+                with strategy_state_lock:
+                    strategy_summaries[current_index].update(
+                        {
+                            "status": "running",
+                            "progress_pct": 0.0,
+                            "detail": start_detail,
+                        }
+                    )
+                _publish_race_state(
+                    active_strategy=strategy_name,
+                    current_index=current_index,
+                    current_pct=0.0,
+                    phase="running",
+                    detail=start_detail,
+                    active=True,
+                )
+
+                def _strategy_progress_callback(
+                    state: dict[str, object],
+                    *,
+                    _index=current_index,
+                    _strategy_name=strategy_name,
+                ) -> None:
+                    if not isinstance(state, dict):
+                        return
+                    phase = str(state.get("phase") or "running")
+                    active = bool(state.get("active", True))
+                    detail = (
+                        str(state.get("detail") or "").strip()
+                        or f"{_strategy_name} running"
+                    )
+                    pct_value = _safe_float(state.get("pct"), 0.0) or 0.0
+                    payload = state.get("payload")
+                    ticker_result = (
+                        payload.get("ticker_result")
+                        if isinstance(payload, dict)
+                        else None
+                    )
+                    nonlocal loaded_from_eval_cache
+                    if (
+                        phase == "done"
+                        and not active
+                        and not isinstance(ticker_result, dict)
+                    ):
+                        loaded_from_eval_cache = True
+                    with strategy_state_lock:
+                        if isinstance(payload, dict):
+                            _apply_backtest_live_ticker_result(
+                                strategy_summaries[_index],
+                                live_strategy_stats[_index],
+                                ticker_result,
+                            )
+                        strategy_summaries[_index]["status"] = (
+                            "done" if phase == "done" or not active else "running"
+                        )
+                        strategy_summaries[_index]["progress_pct"] = round(
+                            max(0.0, min(100.0, float(pct_value))), 2
+                        )
+                        completed_tickers = int(
+                            strategy_summaries[_index].get("completed_tickers") or 0
+                        )
+                        total_tickers = int(
+                            strategy_summaries[_index].get("total_tickers") or 0
+                        )
+                        last_ticker = str(
+                            strategy_summaries[_index].get("last_ticker") or ""
+                        )
+                        if last_ticker and total_tickers:
+                            strategy_summaries[_index][
+                                "detail"
+                            ] = f"{completed_tickers}/{total_tickers} tickers, last {last_ticker}"
+                        else:
+                            strategy_summaries[_index]["detail"] = detail
+                        lane_snapshot = dict(strategy_summaries[_index])
+                    if isinstance(ticker_result, dict):
+                        ticker = str(ticker_result.get("ticker") or "").strip()
+                        trades = _finite_number(ticker_result.get("trades"), 0.0)
+                        event_payload = {
+                            **ticker_result,
+                            "strategy": _strategy_name,
+                            "progress_pct": round(
+                                max(0.0, min(100.0, float(pct_value))), 2
+                            ),
+                            "scored": not bool(ticker_result.get("error"))
+                            and float(trades) > 0,
+                            "no_trade": not bool(ticker_result.get("error"))
+                            and float(trades) <= 0,
+                            "cache_hit": False,
+                            "work_key": _work_item_key(
+                                run_id=run_id,
+                                strategy_name=_strategy_name,
+                                ticker=ticker,
+                                params={
+                                    "signal_days": signal_window_days,
+                                    "scan_scope": scan_scope,
+                                    "exchange": exchange,
+                                },
+                            ),
+                            "lane": lane_snapshot,
+                        }
+                        _append_backtest_race_event(
+                            run_id,
+                            "ticker_done",
+                            lane=_strategy_name,
+                            payload=event_payload,
+                            active=True,
+                        )
+                    elif phase == "done" and not active:
+                        _append_backtest_race_event(
+                            run_id,
+                            "lane_cached",
+                            lane=_strategy_name,
+                            payload={
+                                "strategy": _strategy_name,
+                                "detail": detail,
+                                "progress_pct": round(
+                                    max(0.0, min(100.0, float(pct_value))), 2
+                                ),
+                                "cache_hit": True,
+                                "work_key": _work_item_key(
+                                    run_id=run_id,
+                                    strategy_name=_strategy_name,
+                                    params={
+                                        "signal_days": signal_window_days,
+                                        "scan_scope": scan_scope,
+                                        "exchange": exchange,
+                                    },
+                                ),
+                            },
+                            active=True,
+                        )
+                    _publish_race_state(
+                        active_strategy=_strategy_name,
+                        current_index=_index,
+                        current_pct=float(pct_value),
+                        phase=phase,
+                        detail=str(strategy_summaries[_index].get("detail") or detail),
+                        active=active,
+                    )
+
+                strat_path = Path("strategies") / f"{strategy_name}.dsl"
+                evaluate_kwargs = {
+                    "strategy_path": strat_path.as_posix(),
+                    "strategy_name": strategy_name,
+                    "dsl_content": None,
+                    "progress_callback": _strategy_progress_callback,
+                    "since_days": signal_window_days,
+                    "scan_scope": scan_scope,
+                    "exchange": exchange,
+                    "ticker_list": ticker_list,
+                    "max_workers": ticker_workers,
+                }
+                try:
+                    df = await asyncio.to_thread(
+                        _evaluate_strategy_frame, **evaluate_kwargs
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Backtest worker failed for %s: %s",
+                        strategy_name,
+                        exc,
+                        exc_info=True,
+                    )
+                    with strategy_state_lock:
+                        strategy_summaries[current_index].update(
+                            {
+                                "status": "failed",
+                                "detail": str(exc),
+                                "progress_pct": 100.0,
+                            }
+                        )
+                    _publish_race_state(
+                        active_strategy=strategy_name,
+                        current_index=current_index,
+                        current_pct=100.0,
+                        phase="failed",
+                        detail=str(exc),
+                        active=False,
+                        error=str(exc),
+                    )
+                    return current_index, pd.DataFrame(), exc
+
+                if loaded_from_eval_cache and not df.empty:
+                    total_cached_rows = int(len(df))
+                    for completed, (_, row) in enumerate(df.iterrows(), start=1):
+                        ticker_result = _backtest_ticker_result_from_series(
+                            row,
+                            completed=completed,
+                            total=total_cached_rows,
+                        )
+                        pct_value = 5.0 + (
+                            (completed / max(1, total_cached_rows)) * 88.0
+                        )
+                        with strategy_state_lock:
+                            _apply_backtest_live_ticker_result(
+                                strategy_summaries[current_index],
+                                live_strategy_stats[current_index],
+                                ticker_result,
+                            )
+                            strategy_summaries[current_index]["status"] = "running"
+                            strategy_summaries[current_index]["progress_pct"] = round(
+                                max(0.0, min(100.0, float(pct_value))), 2
+                            )
+                            strategy_summaries[current_index][
+                                "detail"
+                            ] = f"{completed}/{total_cached_rows} cached rows, last {ticker_result['ticker']}"
+                            lane_snapshot = dict(strategy_summaries[current_index])
+                        _append_backtest_race_event(
+                            run_id,
+                            "ticker_done",
+                            lane=strategy_name,
+                            payload={
+                                **ticker_result,
+                                "strategy": strategy_name,
+                                "progress_pct": round(
+                                    max(0.0, min(100.0, float(pct_value))), 2
+                                ),
+                                "scored": not bool(ticker_result.get("error"))
+                                and _finite_number(ticker_result.get("trades"), 0.0)
+                                > 0,
+                                "no_trade": not bool(ticker_result.get("error"))
+                                and _finite_number(ticker_result.get("trades"), 0.0)
+                                <= 0,
+                                "cache_hit": True,
+                                "work_key": _work_item_key(
+                                    run_id=run_id,
+                                    strategy_name=strategy_name,
+                                    ticker=ticker_result.get("ticker"),
+                                    params={
+                                        "signal_days": signal_window_days,
+                                        "scan_scope": scan_scope,
+                                        "exchange": exchange,
+                                    },
+                                ),
+                                "lane": lane_snapshot,
+                            },
+                            active=True,
+                        )
+                        _publish_race_state(
+                            active_strategy=strategy_name,
+                            current_index=current_index,
+                            current_pct=float(pct_value),
+                            phase="running",
+                            detail=strategy_summaries[current_index]["detail"],
+                            active=True,
+                        )
+
+                strategy_summary = _backtest_strategy_summary_from_frame(
+                    strategy_name,
+                    df,
+                    index=index,
+                    status="done",
+                    progress_pct=100.0,
+                    detail=(
+                        f"{len(df)} rows scored" if not df.empty else "No scored rows"
+                    ),
+                    structure_profile=strategy_profiles.get(strategy_name),
+                )
+                with strategy_state_lock:
+                    completed_tickers = int(
+                        strategy_summaries[current_index].get("completed_tickers") or 0
+                    )
+                    processed_tickers = int(
+                        strategy_summaries[current_index].get("processed_tickers") or 0
+                    )
+                    scored_tickers = int(
+                        strategy_summaries[current_index].get("scored_tickers") or 0
+                    )
+                    no_trade_tickers = int(
+                        strategy_summaries[current_index].get("no_trade_tickers") or 0
+                    )
+                    error_tickers = int(
+                        strategy_summaries[current_index].get("error_tickers") or 0
+                    )
+                    total_tickers = int(
+                        strategy_summaries[current_index].get("total_tickers") or 0
+                    )
+                    best_ticker = str(
+                        strategy_summaries[current_index].get("best_ticker") or ""
+                    )
+                    best_return_pct = _finite_number(
+                        strategy_summaries[current_index].get("best_return_pct"), 0.0
+                    )
+                    strategy_summaries[current_index].update(strategy_summary)
+                    if completed_tickers <= 0:
+                        completed_tickers = int(
+                            strategy_summary.get("completed_tickers") or 0
+                        )
+                    if processed_tickers <= 0:
+                        processed_tickers = int(
+                            strategy_summary.get("processed_tickers")
+                            or completed_tickers
+                        )
+                    if scored_tickers <= 0:
+                        scored_tickers = int(
+                            strategy_summary.get("scored_tickers") or 0
+                        )
+                    if no_trade_tickers <= 0:
+                        no_trade_tickers = int(
+                            strategy_summary.get("no_trade_tickers") or 0
+                        )
+                    if error_tickers <= 0:
+                        error_tickers = int(strategy_summary.get("error_tickers") or 0)
+                    if total_tickers <= 0:
+                        total_tickers = int(strategy_summary.get("total_tickers") or 0)
+                    if not best_ticker:
+                        best_ticker = str(strategy_summary.get("best_ticker") or "")
+                    if best_return_pct == 0.0:
+                        best_return_pct = _finite_number(
+                            strategy_summary.get("best_return_pct"), 0.0
+                        )
+                    strategy_summaries[current_index][
+                        "completed_tickers"
+                    ] = completed_tickers
+                    strategy_summaries[current_index][
+                        "processed_tickers"
+                    ] = processed_tickers
+                    strategy_summaries[current_index]["scored_tickers"] = scored_tickers
+                    strategy_summaries[current_index][
+                        "no_trade_tickers"
+                    ] = no_trade_tickers
+                    strategy_summaries[current_index]["error_tickers"] = error_tickers
+                    strategy_summaries[current_index]["total_tickers"] = total_tickers
+                    strategy_summaries[current_index]["best_ticker"] = best_ticker
+                    strategy_summaries[current_index]["best_return_pct"] = round(
+                        best_return_pct, 2
+                    )
+                    strategy_summaries[current_index]["status"] = "done"
+                    strategy_summaries[current_index]["progress_pct"] = 100.0
+                    strategy_summaries[current_index]["detail"] = (
+                        f"{len(df)} rows scored" if not df.empty else "No scored rows"
+                    )
+                _publish_race_state(
+                    active_strategy=strategy_name,
+                    current_index=current_index,
+                    current_pct=100.0,
+                    phase="done",
+                    detail=strategy_summaries[current_index]["detail"],
+                    active=False,
+                )
+                _append_backtest_race_event(
+                    run_id,
+                    "lane_done",
+                    lane=strategy_name,
+                    payload={
+                        "strategy": strategy_name,
+                        "index": index,
+                        "rows_scored": int(len(df)),
+                        "ticker_count": int(
+                            strategy_summaries[current_index].get("total_tickers") or 0
+                        ),
+                        "completed_tickers": int(
+                            strategy_summaries[current_index].get("completed_tickers")
+                            or 0
+                        ),
+                        "processed_tickers": int(
+                            strategy_summaries[current_index].get("processed_tickers")
+                            or 0
+                        ),
+                        "scored_tickers": int(
+                            strategy_summaries[current_index].get("scored_tickers") or 0
+                        ),
+                        "no_trade_tickers": int(
+                            strategy_summaries[current_index].get("no_trade_tickers")
+                            or 0
+                        ),
+                        "error_tickers": int(
+                            strategy_summaries[current_index].get("error_tickers") or 0
+                        ),
+                        "lane": dict(strategy_summaries[current_index]),
+                    },
+                    active=True,
+                )
+                return current_index, df, None
+
+        tasks = [
+            asyncio.create_task(_run_strategy_worker(index, strategy_name))
+            for index, strategy_name in enumerate(strategy_names, start=1)
+        ]
+        results = await asyncio.gather(*tasks)
+        first_error: Exception | None = None
+        first_error_status = 500
+        for _, df, err in results:
+            if err is not None:
+                if first_error is None:
+                    first_error = err
+                    first_error_status = 400 if isinstance(err, ValueError) else 500
+                continue
+            if not df.empty:
+                frames.append(df)
+        if first_error is not None:
+            raise HTTPException(status_code=first_error_status, detail=str(first_error))
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.error("Backtest matrix validation failed: %s", e)
+        _set_job_progress(
+            "backtest",
+            "failed",
+            pct=100.0,
+            label="Backtest Matrix",
+            detail=str(e),
+            active=False,
+            error=str(e),
+        )
+        _publish_race_state(
+            active_strategy=None,
+            current_index=max(0, total_strategies - 1),
+            current_pct=100.0,
+            phase="failed",
+            detail=str(e),
+            active=False,
+            error=str(e),
+        )
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Backtest matrix endpoint failed: %s", e, exc_info=True)
+        _set_job_progress(
+            "backtest",
+            "failed",
+            pct=100.0,
+            label="Backtest Matrix",
+            detail=str(e),
+            active=False,
+            error=str(e),
+        )
+        _publish_race_state(
+            active_strategy=None,
+            current_index=max(0, total_strategies - 1),
+            current_pct=100.0,
+            phase="failed",
+            detail=str(e),
+            active=False,
+            error=str(e),
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if frames:
+        df = pd.concat(frames, ignore_index=True)
+        if "Quality Score" in df.columns:
+            df = df.sort_values(by="Quality Score", ascending=False)
+    else:
+        df = pd.DataFrame()
+
+    safe_limit = max(1, min(int(limit), 5000))
+    view = df.head(safe_limit).copy() if not df.empty else df
+    rows = [_backtest_row_from_series(row) for _, row in view.iterrows()]
+    csv_label = (
+        "backtest_matrix_"
+        + "_".join(strategy_names[:3])
+        + (f"_plus_{len(strategy_names) - 3}" if len(strategy_names) > 3 else "")
+    )
+    csv_path = _write_backtest_results_csv(df, label=csv_label)
+
+    _set_job_progress(
+        "backtest",
+        "done",
+        pct=100.0,
+        label="Backtest Matrix",
+        detail=f"{len(df)} rows scored",
+        active=False,
+        payload={
+            "backtest_race": _backtest_race_payload(
+                strategy_names,
+                strategy_summaries,
+                run_id=run_id,
+                active_strategy=strategy_names[-1] if strategy_names else None,
+                completed=total_strategies,
+                total=total_strategies,
+                pct=100.0,
+                phase="done",
+                detail=f"{len(df)} rows scored",
+            )
+        },
+    )
+    _append_backtest_race_event(
+        run_id,
+        "run_done",
+        payload={
+            "rows_scored": int(len(df)),
+            "strategy_count": int(len(strategy_names)),
+            "ticker_count": int(df["Ticker"].nunique()) if not df.empty else 0,
+        },
+        active=False,
+    )
+
+    return {
+        "source_type": "saved_matrix",
+        "run_id": run_id,
+        "csv_path": str(csv_path),
+        "strategies": strategy_names,
+        "strategy_summaries": strategy_summaries,
+        "strategy_axis_catalog": BACKTEST_STRATEGY_AXIS_CATALOG,
+        "race": _backtest_race_payload(
+            strategy_names,
+            strategy_summaries,
+            run_id=run_id,
+            active_strategy=strategy_names[-1] if strategy_names else None,
+            completed=total_strategies,
+            total=total_strategies,
+            pct=100.0,
+            phase="done",
+            detail=f"{len(df)} rows scored",
+        ),
+        "metrics": BACKTEST_METRICS,
+        "universe": {
+            "scan_scope": scan_scope or "",
+            "exchange": exchange or "",
+            "ticker_list_count": len(_parse_strategy_selection(ticker_list)),
+        },
+        "summary": {
+            "count": int(len(df)),
+            "returned": int(len(rows)),
+            "strategy_count": int(len(strategy_names)),
+            "ticker_count": int(df["Ticker"].nunique()) if not df.empty else 0,
+            "best_quality": round(
+                _finite_number(df["Quality Score"].max() if not df.empty else 0.0), 2
+            ),
+            "avg_return": round(
+                _finite_number(
+                    _trade_rows_for_summary(df)["Return (%)"].mean()
+                    if not df.empty
+                    else 0.0
+                ),
+                2,
+            ),
+            "avg_sharpe": round(
+                _finite_number(
+                    _trade_rows_for_summary(df)["Sharpe"].mean()
+                    if not df.empty
+                    else 0.0
+                ),
+                2,
+            ),
+            "trades": _trade_count_for_summary(df),
+        },
+        "rows": rows,
     }
 
 

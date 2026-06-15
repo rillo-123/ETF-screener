@@ -113,6 +113,9 @@ def movie_scanner(
     path = Path(strat_path)
     if path.is_file():
         res = load_dsl_file(path)
+        if not res.get("has_valid_exit", False):
+            print(f"Skipping {path.stem}: strategy has no exit criterion.")
+            return
         strategies.append(
             {
                 "name": path.stem,
@@ -128,6 +131,9 @@ def movie_scanner(
             if "strat_cache" in dsl_file.parts:
                 continue
             res = load_dsl_file(dsl_file)
+            if not res.get("has_valid_exit", False):
+                print(f"Skipping {dsl_file.stem}: strategy has no exit criterion.")
+                continue
             strategies.append(
                 {
                     "name": dsl_file.stem,

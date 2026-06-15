@@ -3,7 +3,7 @@
 # Setup: require MACD to be in a pullback/rebuild zone.
 # Qualify: require participation quality before allowing entries.
 # Trigger: enter on a fresh MACD signal-line reclaim.
-# Invalidate: define states that disqualify buys and force exits.
+# Exit: define states that disqualify buys and force exits.
 
 BEGIN CONTEXT
 FILTER: close > ema_200
@@ -23,6 +23,7 @@ BEGIN TRIGGER
 TRIGGER: cross_up(macd, macd_signal) OR (macd > macd_signal AND macd_d1 <= macd_signal_d1)
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT: cross_down(macd, macd_signal) OR close < ema_50
 END
+

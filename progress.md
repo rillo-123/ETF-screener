@@ -1,4 +1,41 @@
+
 # Progress
+
+## 2026-06-15 11:44:27 +02:00
+
+- Added a DSL-first strategy structure profiler and threaded its normalized scores through the backtest API, race payloads, and dashboard comparisons.
+- Sanitized job-progress and backtest event payloads so NaN and infinity cannot break the browser progress surface.
+- Split the root plan into a stable plan.md entrypoint plus companion files under plan/ and updated the workflow helpers to keep that structure current automatically.
+- Verified the checkpoint with .\run.ps1 -Tests; the full pytest and Playwright dashboard suite passed.
+- Next resume point: On main, use the new structure-scoring surface in live strategy comparison and then split dashboard.js into smaller domain modules.
+
+## 2026-06-03 00:00:00 +02:00
+
+- Stabilized the dashboard backtester for large saved-strategy runs, especially the `all_strategies=true` edge case.
+- Added a bounded backtest worker plan in `src/ETF_screener/dashboard/app_fast.py` so strategy fan-out and per-strategy ticker workers stay capped instead of multiplying into too many concurrent subprocesses.
+- Changed dashboard strategy evaluation in `src/ETF_screener/scripts/churn_strategies.py` to force thread-mode execution, which avoids the Windows `ProcessPoolExecutor` failure path for GUI-triggered DSL backtests.
+- Added a fallback in `src/ETF_screener/backtester.py` so a broken process pool degrades into inline execution for the remaining tickers instead of aborting the whole run.
+- Tightened regression coverage with new backtester, dashboard API, churn-strategy, and Playwright checks for the process-pool failure path and the all-strategies request shape.
+- Cleared the remaining `mypy` failure from the June 2, 2026 test log by fixing the inline fallback return typing in `src/ETF_screener/backtester.py`.
+- Verified with targeted `pytest`, `mypy`, `black --check`, and `ruff` runs; the live failure we traced in the old log was coming from a stale dashboard process still serving pre-patch code.
+- Current status: the code path on disk is patched and verified; after restarting the dashboard server, the backtester should no longer fail with the broken process-pool popup for the same all-strategies scenario.
+- Next resume point: restart the live dashboard server, rerun the all-strategies backtest once, and if anything still fails inspect the newest `logs/debug_*.log` rather than the stale June 2 process log.
+
+## 2026-05-22 00:00:03 +02:00
+
+- Added a new early-entry strategy, `supertrend_st_crossdown_ema50_slope_turnup.dsl`, that keeps `ema_200_slope > 0`, requires a recent Supertrend crossdown below `ema_50`, and triggers when `ema_50_slope` turns positive.
+- Updated the DSL parser coverage and added a churn/backtest smoke test so the new trigger and setup window are both verified.
+- Verified with `python -m pytest -q tests/test_dsl_parser.py tests/test_churn_strategies.py`; all 13 tests passed.
+- Current status: the early-entry milestone is set and the repo notes now reflect the new strategy checkpoint.
+- Next resume point: if you want to tune it further, decide whether to shorten the Supertrend lookback window or widen it by a few bars.
+
+## 2026-05-15 16:03:13 +02:00
+
+- Collapsed the user-facing launcher surface into a single root `run.ps1` frontend and moved the dashboard implementation into `scripts/run_dashboard.ps1`.
+- Redirected the old root `run_*.ps1` entrypoints into the scripts folder, updated the dashboard bootstrap flow, and pointed the workflow/test callers at `scripts/run_all_tests.ps1`.
+- Updated the README so the launch examples now center on `run.ps1` instead of the individual root wrappers.
+- Verified the dashboard API/JS tests still pass after the launcher refactor.
+- Next resume point: run the new `run.ps1` frontend end to end and confirm the dashboard launcher behaves as expected.
 
 ## 2026-05-10 14:36:19 +02:00
 

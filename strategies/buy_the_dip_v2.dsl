@@ -3,7 +3,7 @@
 # Setup: require a pullback that still respects the higher trend.
 # Trigger: demand a fresh reclaim signal to open.
 # Qualify: require healthy participation.
-# Invalidate: define break conditions that disqualify buys and close positions.
+# Exit: define break conditions that disqualify buys and close positions.
 
 BEGIN CONTEXT
 FILTER: close > ema_200
@@ -23,5 +23,9 @@ END
 
 BEGIN QUALIFY
 FILTER: volume > vol_ema_20
+END
+
+BEGIN EXIT
+EXIT: close < ema_50 OR cross_down(st_10_4_is_green, 0.5)
 END
 

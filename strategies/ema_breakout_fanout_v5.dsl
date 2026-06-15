@@ -18,4 +18,8 @@ BEGIN TRIGGER
 TRIGGER:  between(close <= ema_50, 5, now)
 END
 
+BEGIN EXIT
+EXIT:  cross_down(ema_20, ema_100)
+END
+
 

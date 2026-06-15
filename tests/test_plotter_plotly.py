@@ -43,9 +43,9 @@ END
     plotter = InteractivePlotter()
     fig = plotter.create_plot(df, "TEST", strategy_content=strategy_content)
 
-    # Block name "CONTEXT_REGIME" keeps its trace id while rendering a readable annotation label.
+    # Block name "CONTEXT_REGIME" is rendered as a readable display label.
     context_traces = [
-        t for t in fig.data if getattr(t, "name", "") == "Context_Regime - #2563eb"
+        t for t in fig.data if getattr(t, "name", "") == "Context Regime - #2563eb"
     ]
     assert context_traces, "Expected context ribbon trace to be present"
 
@@ -199,6 +199,32 @@ def test_prepare_eval_columns_supports_ema_slope_flip_helpers():
         False,
         False,
     ]
+
+
+def test_create_plot_draws_anchored_vwap_overlay_when_strategy_references_it():
+    dates = pd.date_range(start="2024-01-01", periods=5)
+    close = np.array([10.0, 9.0, 8.0, 9.0, 10.0])
+
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.array([1000.0] * 5),
+            "avwap_low_3": np.array([10.0, 9.0, 8.0, 8.5, 9.0]),
+        }
+    )
+
+    fig = InteractivePlotter().create_plot(
+        df,
+        "TEST",
+        strategy_content="TRIGGER: cross_up(close, avwap_low_3)\nEXIT: close < avwap_low_3",
+    )
+
+    trace_names = {getattr(t, "name", "") for t in fig.data}
+    assert "AVWAP Low 3" in trace_names
 
 
 def test_create_plot_hides_sell_signal_markers():
@@ -539,7 +565,7 @@ END
     fig = InteractivePlotter().create_plot(
         df, "TEST", strategy_content=strategy_content
     )
-    trigger_trace = next(
+    _trigger_trace = next(
         t
         for t in fig.data
         if getattr(t, "name", "").startswith("Trigger")
@@ -667,7 +693,7 @@ BEGIN TRIGGER
 TRIGGER: trigger_ok > 0.5
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT: risk_ok > 0.5
 END
 """
@@ -702,7 +728,7 @@ END
     assert aggregated_y[4] == 0
 
 
-def test_invalidate_ribbon_only_draws_when_ready_stack_is_vetoed():
+def test_exit_ribbon_only_draws_when_ready_stack_is_vetoed():
     dates = pd.date_range(start="2024-01-01", periods=5)
     df = pd.DataFrame(
         {
@@ -737,7 +763,7 @@ BEGIN TRIGGER
 TRIGGER: trigger_ok > 0.5
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT: risk_ok > 0.5
 END
 """
@@ -747,21 +773,19 @@ END
     )
     fig_json = json.loads(fig.to_json())
 
-    invalidate_y = _trace_y(
-        next(
-            t for t in fig_json["data"] if t.get("name", "").startswith("Invalidate - ")
-        )
+    exit_y = _trace_y(
+        next(t for t in fig_json["data"] if t.get("name", "").startswith("Exit - "))
     )
     aggregated_y = _trace_y(
         next(t for t in fig_json["data"] if t.get("name") == "Aggregated")
     )
 
     # Risk is true on indices 0, 1, 2, but only index 2 has Context + Setup + Trigger lined up.
-    assert invalidate_y[0] == 0
-    assert invalidate_y[1] == 0
-    assert invalidate_y[2] > 0
-    assert invalidate_y[3] == 0
-    assert invalidate_y[4] == 0
+    assert exit_y[0] == 0
+    assert exit_y[1] == 0
+    assert exit_y[2] > 0
+    assert exit_y[3] == 0
+    assert exit_y[4] == 0
 
     # The veto removes the only would-be aggregate bar.
     assert np.all(aggregated_y == 0)
@@ -842,7 +866,7 @@ def test_prepare_eval_columns_st_red_uses_supertrend_line():
     assert np.array_equal(actual, expected)
 
 
-def test_context_and_invalidate_ribbons_render_with_is_red_history():
+def test_context_and_exit_ribbons_render_with_is_red_history():
     dates = pd.date_range(start="2024-01-01", periods=4)
     close = np.array([100.0, 99.0, 101.0, 102.0])
     st = np.array([101.0, 100.0, 100.0, 99.5])
@@ -873,7 +897,7 @@ BEGIN TRIGGER
 TRIGGER: st_10_4_is_green
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT: close < ema_50
 END
 """
@@ -886,12 +910,10 @@ END
     context_traces = [
         name for name in trace_names if str(name).startswith("Context - ")
     ]
-    invalidate_traces = [
-        name for name in trace_names if str(name).startswith("Invalidate - ")
-    ]
+    exit_traces = [name for name in trace_names if str(name).startswith("Exit - ")]
 
     assert context_traces, "Expected context ribbon trace"
-    assert invalidate_traces, "Expected invalidate ribbon trace"
+    assert exit_traces, "Expected exit ribbon trace"
 
 
 def test_supertrend_overlay_ignores_stale_green_flag_and_uses_line_relation():

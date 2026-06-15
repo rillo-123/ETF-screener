@@ -3,7 +3,7 @@
 # Setup: require pullback-to-trend structure to still be intact.
 # Trigger: enter on fresh momentum reclaim.
 # Qualify: keep only liquid continuation.
-# Invalidate: define invalidation states.
+# Exit: define exit states.
 
 BEGIN CONTEXT
 FILTER: close > ema_200
@@ -23,6 +23,7 @@ BEGIN QUALIFY
 FILTER: volume > vol_ema_20
 END
 
-BEGIN INVALIDATE
+BEGIN EXIT
 EXIT: close < ema_50 OR (close < ema_20 AND close_d1 >= ema_20_d1)
 END
+

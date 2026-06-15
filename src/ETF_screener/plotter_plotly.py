@@ -305,6 +305,7 @@ class InteractivePlotter:
     ) -> tuple[np.ndarray, list[dict]]:
         """Evaluate a ribbon into a lane mask plus concrete overlay traces."""
         label = str(ribbon.get("label", "Indicator"))
+        display_label = self._compact_ribbon_label(label)
         layers = ribbon.get("layers", [])
         ribbon_condition = str(ribbon.get("condition", "")).strip()
         is_trigger_lane = "trigger" in label.lower()
@@ -357,7 +358,7 @@ class InteractivePlotter:
                     "mask": mask_np,
                     "color": color,
                     "alpha": alpha,
-                    "name": f"{label} - {color}",
+                    "name": f"{display_label} - {color}",
                     "hovertemplate": self._ribbon_hovertemplate(ribbon, color),
                     "show_markers": is_trigger_lane,
                 }
@@ -387,9 +388,10 @@ class InteractivePlotter:
             return None
 
         if isinstance(result, pd.Series):
-            return result.fillna(False).to_numpy(dtype=bool)
+            series_bool: np.ndarray = result.fillna(False).to_numpy(dtype=bool)
+            return series_bool
         if isinstance(result, np.ndarray):
-            return result.astype(bool)
+            return np.asarray(result, dtype=bool)  # type: ignore[no-any-return]
         if np.isscalar(result):
             return np.full(length, bool(result), dtype=bool)
         return None
@@ -429,6 +431,26 @@ class InteractivePlotter:
 
         return sorted(specs)
 
+    def _extract_anchored_vwap_names(
+        self, strategy_content: str | None
+    ) -> list[str]:
+        """Extract anchored VWAP tokens referenced in DSL content."""
+        if not strategy_content:
+            return []
+
+        found: list[str] = []
+        seen: set[str] = set()
+        for match in re.finditer(
+            r"\b((?:avwap|anchored_vwap)_(?:low|high)_\d+)\b",
+            strategy_content.lower(),
+        ):
+            token = match.group(1)
+            if token in seen:
+                continue
+            seen.add(token)
+            found.append(token)
+        return found
+
     def _extract_strategy_indicator_names(
         self, strategy_content: str | None
     ) -> list[str]:
@@ -464,6 +486,12 @@ class InteractivePlotter:
         ):
             add(f"supertrend_{period}_{mult}")
 
+        for match in re.finditer(
+            r"\b((?:avwap|anchored_vwap)_(?:low|high)_\d+)\b",
+            s,
+        ):
+            add(match.group(1))
+
         for token in (
             "macd",
             "macd_signal",
@@ -491,12 +519,12 @@ class InteractivePlotter:
     ) -> str | None:
         """Return the actual DataFrame column matching `column_name`, ignoring case."""
         if column_name in df.columns:
-            return column_name
+            return str(column_name)
 
         lower_name = str(column_name).lower()
         for col in df.columns:
             if str(col).lower() == lower_name:
-                return col
+                return str(col)
         return None
 
     def _pretty_indicator_label(self, column_name: str) -> str:
@@ -510,6 +538,9 @@ class InteractivePlotter:
             parts = lower.split("_")
             if len(parts) >= 3:
                 return f"Supertrend {parts[1]} {parts[2]}"
+        if re.fullmatch(r"(?:avwap|anchored_vwap)_(low|high)_\d+", lower):
+            parts = lower.split("_")
+            return f"AVWAP {parts[-2].title()} {parts[-1]}"
         if lower.startswith("ema_"):
             suffix = lower[4:].replace("_", " ")
             return f"EMA {suffix}".strip()
@@ -572,7 +603,15 @@ class InteractivePlotter:
 
     def _compact_ribbon_label(self, label: str) -> str:
         # Convert DSL block names into readable left-gutter labels.
-        words = str(label).replace("_", " ").strip().split()
+        normalized = str(label).replace("_", " ").strip()
+        if not normalized:
+            return str(label)
+
+        lowered = normalized.lower()
+        if lowered == "risk" or "exit" in lowered:
+            return "Exit"
+
+        words = normalized.split()
         if not words:
             return str(label)
         return " ".join(word[:1].upper() + word[1:].lower() for word in words)
@@ -637,7 +676,7 @@ class InteractivePlotter:
             "Layer 1 Context": "#3b82f6",
             "Layer 2 Setup": "#d97706",
             "Layer 3 Trigger": "#15803d",
-            "Layer 4 Invalidate": "#b91c1c",
+            "Layer 4 Exit": "#b91c1c",
         }
         return color_map.get(label, "#6b7280")
 
@@ -975,6 +1014,7 @@ class InteractivePlotter:
                 f"supertrend_{period}_{mult}"
                 for period, mult in self._extract_supertrend_specs(strategy_content)
             ],
+            *self._extract_anchored_vwap_names(strategy_content),
         }
         strategy_panel_groups: list[dict] = []
         panel_buckets: dict[str, list[dict]] = {
@@ -1067,7 +1107,7 @@ class InteractivePlotter:
             is_context_lane = "context" in label_lower
             is_setup_lane = "setup" in label_lower
             is_trigger_lane = "trigger" in label_lower
-            is_risk_lane = "risk" in label_lower or "invalidate" in label_lower
+            is_risk_lane = "risk" in label_lower or "exit" in label_lower
 
             if is_context_lane and len(lane_mask_np) == len(df):
                 context_lane_mask = context_lane_mask | lane_mask_np
@@ -1267,6 +1307,27 @@ class InteractivePlotter:
                 col=1,
             )
 
+        avwap_names = self._extract_anchored_vwap_names(strategy_content)
+        avwap_colors = ["#0f766e", "#b45309", "#be123c", "#0369a1"]
+        for idx, avwap_name in enumerate(avwap_names):
+            avwap_col = self._find_column_case_insensitive(df, avwap_name)
+            if not avwap_col:
+                continue
+            fig.add_trace(
+                go.Scatter(
+                    x=df["Date"],
+                    y=df[avwap_col],
+                    name=self._pretty_indicator_label(avwap_col),
+                    line=dict(
+                        color=avwap_colors[idx % len(avwap_colors)],
+                        width=1.4,
+                        dash="dot",
+                    ),
+                ),
+                row=1,
+                col=1,
+            )
+
         # Add other TA curves that the strategy directly references, grouped into
         # dedicated indicator panels so they remain readable.
         strategy_curve_palette = [
@@ -1346,27 +1407,27 @@ class InteractivePlotter:
             )
         )
         if not strategy_content or has_supertrend_reference:
-            lower_col = next(
-                (c for c in df.columns if str(c).lower() == "st_lower"),
+            st_lower_col: str | None = next(
+                (str(c) for c in df.columns if str(c).lower() == "st_lower"),
                 None,
             )
-            upper_col = next(
-                (c for c in df.columns if str(c).lower() == "st_upper"),
+            st_upper_col: str | None = next(
+                (str(c) for c in df.columns if str(c).lower() == "st_upper"),
                 None,
             )
-            st_col = next(
-                (c for c in df.columns if str(c).lower() in {"supertrend", "st"}),
+            st_col: str | None = next(
+                (str(c) for c in df.columns if str(c).lower() in {"supertrend", "st"}),
                 None,
             )
 
             st_active = None
             is_green_regime = None
 
-            if lower_col and upper_col:
-                st_lower = pd.to_numeric(df[lower_col], errors="coerce").to_numpy(
+            if st_lower_col and st_upper_col:
+                st_lower = pd.to_numeric(df[st_lower_col], errors="coerce").to_numpy(
                     dtype=float
                 )
-                st_upper = pd.to_numeric(df[upper_col], errors="coerce").to_numpy(
+                st_upper = pd.to_numeric(df[st_upper_col], errors="coerce").to_numpy(
                     dtype=float
                 )
                 # Green regime: ST_Lower is populated; red regime: ST_Upper is populated.

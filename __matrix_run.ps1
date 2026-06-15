@@ -18,9 +18,9 @@ $tests = @(
 $rows = @()
 $fails = @()
 foreach ($args in $tests) {
-  $cmd = if ([string]::IsNullOrWhiteSpace($args)) { '.\\run_all_tests.ps1' } else { ".\\run_all_tests.ps1 $args" }
+  $cmd = if ([string]::IsNullOrWhiteSpace($args)) { '.\\scripts\\run_all_tests.ps1' } else { ".\\scripts\\run_all_tests.ps1 $args" }
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
-  $out = & pwsh -NoProfile -File .\run_all_tests.ps1 @($args -split ' ') 2>&1 | Out-String
+  $out = & pwsh -NoProfile -File .\scripts\run_all_tests.ps1 @($args -split ' ') 2>&1 | Out-String
   $code = $LASTEXITCODE
   $sw.Stop()
 

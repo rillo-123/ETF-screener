@@ -1,0 +1,35 @@
+# Next steps
+
+- Live-test the global, historically available screening model: agents may inspect current or past indicator state for all real tickers at the current timeline step, but must not see future returns.
+- Check that winner DNA explains when to hold, when to jump while ahead, and what kind of ticker setup to jump toward.
+- Live-test and tune the charged-sphere prototype: charge caps, velocity damping, zoom range, activity-centering, ticker ball sizes, and virus-agent visibility.
+- Watch whether the new anchored camera still shows enough ticker density during active runs; if it remains sparse, add a density-aware viewport target instead of pure activity centering.
+- Improve sphere projection polish: add drag or pan later if auto-centering feels too jumpy, and add a clearer legend for full-globe versus projected-map modes.
+- Split `dashboard.js` into smaller domain files next, with Swarm simulation and rendering as the highest-value candidate for a module or Web Worker.
+- Tune large-population grid performance before raising default density again; the current browser-safe path caps default agents dynamically, trims trails, limits drawn agents, and limits loaded history records.
+- Add a compact Swarm legend for ticker colors, virus-like agents, energy bars, sense radius, and selected-agent highlighting.
+- Add fuller browser-level verification for Swarm canvas interaction if Playwright becomes part of the dashboard test flow; the current Node smoke test covers basic tab switching without a real browser.
+- Consider moving the Swarm simulation to a Web Worker before adding many more agents, trails, pheromone fields, or heavier visuals.
+- Add import and replay from `config/swarm_agent_dna.json` after the autosaved DNA workflow proves useful.
+- Add richer behavior modules next, such as low-RSI entry, EMA cross entry, dividend preference, RSI crossing its own signal line, drawdown avoidance, profit-protection jumps, and global exploration preferences.
+- Decide whether market refresh should stay manual-only or whether we should offer an opt-in auto-refresh prompt when active-universe data is not at the latest available date.
+- Decide whether the strict local-date freshness threshold should later become exchange-calendar aware, especially around weekends and exchange holidays.
+- Add the next shortlist filters and sort controls in the UI: region, asset class, issuer, and freshness are the best follow-ups now that `Buy / Watch / Skip` is in place.
+- Keep the Swedish source files in sync if the underlying Nasdaq Nordic Stockholm feed changes, and decide later whether to widen or curate the current 406-name stock list.
+- Keep market status and refresh source-aware so the active source file drives the ticker count, refresh progress, and shortlist top-up messages.
+- Keep the Sweden refresh path gentle on Yahoo by using sequential refresh plus retry and backoff, since a full 406-name burst can trigger load failures.
+- Blacklist the specific Sweden tickers that Yahoo will not serve so they do not keep showing up as failed loads in screen and backtest runs.
+- Make the visible strategy and saved-list selectors copyable with a one-click clipboard action so the current selection is easier to share.
+- Consider adding saved named lists later if a single custom ticker set is not enough for the workflow.
+- Add the next Swarm layer: explicit pheromone fields, richer hover overlays, and controls for seeding a run from exported top-agent DNA.
+- Improve metadata quality beyond `config/etfs.json` heuristics so product scoring can include TER, fund size, domicile, and distribution policy later.
+- Decide whether the shortlist tab should open charts in-place later or keep using the current screener chart surface as the single drill-down.
+- Extend the same latest-market-date cache pattern to any remaining strategy-browser paths if they still repeat expensive universe scans.
+- Consider whether market refresh should stop hiding the progress area when it is nested under Screen or Backtest, or whether we want a separate nested-progress model.
+- Evaluate GPU acceleration only where it naturally fits: browser rendering, WebGL or WebGPU visualization, or very data-parallel simulation steps.
+- Benchmark whether the process-worker backtest path is fast enough; if not, the next step is a more aggressive indicator or trade-state vectorization pass.
+- Benchmark whether the scripted result cache removes enough repeat latency on the dashboard path, and only then consider deeper vectorization.
+- Exercise `workflow_milestone.ps1` against a real branch state, then decide whether it should grow a dry-run mode or extra commit filters for generated artifacts.
+- Keep the progress UI lightweight and expressive rather than introducing a heavier notification system.
+- Let the global progress bar represent any long-running dashboard operation, not just screener or backtester work.
+- Keep updating the plan docs and `progress.md` on every future implementation turn when state changes meaningfully.
