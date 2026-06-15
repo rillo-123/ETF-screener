@@ -46,13 +46,13 @@ The main PowerShell entry surface is the root `run.ps1` frontend. It routes into
 `.\run.ps1` opens the dashboard by default, `.\run.ps1 -Screener` lands directly on the Screener tab, and `.\run.ps1 -Screener -NoBrowser` keeps the dashboard in the terminal without opening a browser.
 The underlying launcher implementations live under `scripts/`.
 Use `.\update-devtools.ps1` to install or upgrade stable VS Code or VS Code Insiders, refresh the matching CLI extensions, and update `pwsh` when winget can manage it. Add `-ForceUpdate` if you want it to push through updatable packages and prompt for elevation when needed.
-Use `.\workflow_milestone.ps1` for the full test/fix/commit flow, and `.\workflow_update_plan_progress.ps1` when you want to stamp `plan.md` and prepend a fresh progress entry together.
+Use `.\workflow_milestone.ps1` for the full test/fix/commit flow, and `.\workflow_update_plan_progress.ps1` when you want to stamp the root `plan.md`, prepend notes into the companion `plan/` files, and add a fresh progress entry together.
 
 ### Milestone Convention
 
 In this repo, "set the milestone" means:
 
-1. Update `plan.md` and `progress.md`.
+1. Update the root `plan.md`, the detailed `plan/` companion files, and `progress.md`.
 2. Run the full quality gate with `.\run.ps1 -Tests`.
 3. Fix remaining bugs until all checks pass.
 4. Commit and push the finished checkpoint.

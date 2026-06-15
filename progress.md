@@ -1,6 +1,14 @@
 
 # Progress
 
+## 2026-06-15 11:44:27 +02:00
+
+- Added a DSL-first strategy structure profiler and threaded its normalized scores through the backtest API, race payloads, and dashboard comparisons.
+- Sanitized job-progress and backtest event payloads so NaN and infinity cannot break the browser progress surface.
+- Split the root plan into a stable plan.md entrypoint plus companion files under plan/ and updated the workflow helpers to keep that structure current automatically.
+- Verified the checkpoint with .\run.ps1 -Tests; the full pytest and Playwright dashboard suite passed.
+- Next resume point: On main, use the new structure-scoring surface in live strategy comparison and then split dashboard.js into smaller domain modules.
+
 ## 2026-06-03 00:00:00 +02:00
 
 - Stabilized the dashboard backtester for large saved-strategy runs, especially the `all_strategies=true` edge case.

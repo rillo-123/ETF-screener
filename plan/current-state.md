@@ -1,0 +1,103 @@
+# Current state
+
+- Added a DSL-first strategy structure profiler and threaded its normalized scores through the backtest API, race payloads, and dashboard comparisons.
+- Sanitized job-progress and backtest event payloads so NaN and infinity cannot break the browser progress surface.
+- Split the root plan into a stable plan.md entrypoint plus companion files under plan/ and updated the workflow helpers to keep that structure current automatically.
+- Verified the checkpoint with .\run.ps1 -Tests; the full pytest and Playwright dashboard suite passed.
+
+- Stabilized the dashboard backtester for large saved-strategy runs, especially the `all_strategies=true` edge case.
+- Added a bounded backtest worker plan in `src/ETF_screener/dashboard/app_fast.py` so strategy fan-out and per-strategy ticker workers stay capped instead of multiplying into too many concurrent subprocesses.
+- Changed dashboard strategy evaluation in `src/ETF_screener/scripts/churn_strategies.py` to force thread-mode execution, which avoids the Windows `ProcessPoolExecutor` failure path for GUI-triggered DSL backtests.
+- Added a fallback in `src/ETF_screener/backtester.py` so a broken process pool degrades into inline execution for the remaining tickers instead of aborting the whole run.
+- Tightened regression coverage with new backtester, dashboard API, churn-strategy, and Playwright checks for the process-pool failure path and the all-strategies request shape.
+- Cleared the remaining `mypy` failure from the June 2, 2026 test log by fixing the inline fallback return typing in `src/ETF_screener/backtester.py`.
+- Verified with targeted `pytest`, `mypy`, `black --check`, and `ruff` runs; the live failure we traced in the old log was coming from a stale dashboard process still serving pre-patch code.
+- Added a DSL-first strategy structure profiler in `src/ETF_screener/dsl_parser.py` that scores trend context, confirmation depth, trigger precision, exit discipline, risk control, and time discipline.
+- The backtest APIs now return normalized strategy structure metadata, structure-score summaries, and axis catalogs for both single-strategy and matrix results.
+- Job-progress and backtest event payloads are now sanitized into JSON-safe values so NaN and infinity do not leak into the browser.
+- The Backtester UI now surfaces strategy-structure comparison visuals, sortable result tables, and live-row exclude controls.
+- Browser, API, and Playwright coverage now exercises structure profiles, progress sanitization, editor-draft backtests, and the new table-sorting behavior.
+- Added a new early-entry strategy, `supertrend_st_crossdown_ema50_slope_turnup.dsl`, that keeps `ema_200_slope > 0`, requires a recent Supertrend crossdown under `ema_50`, and triggers on `ema_50_slope_cross_up`.
+- Verified the new strategy with parser and backtest smoke tests so the slope-turnup trigger fires on the intended bar.
+- Collapsed the user-facing launcher scripts into a single root `run.ps1` frontend, moved the dashboard launcher implementation into `scripts/run_dashboard.ps1`, and redirected the other root `run_*.ps1` entrypoints into `scripts/`.
+- Switched the dashboard to a local Three.js loader so the Swarm globe no longer depends on the CDN.
+- Added swarm renderer diagnostics to the browser console and confirmed the earlier missing graticule was caused by Three.js not loading.
+- The debug Swarm globe now renders visible sphere-hugging cap geometry instead of floating sprite markers, and the globe/graticule are visible in live testing.
+- The milestone workflow now updates `plan.md` and `progress.md` before staging, committing, and pushing so the resume docs stay in lockstep with the final branch state.
+- The database now has dedicated `etf_metadata` and `etf_shortlist_artifacts` tables for persisted shortlist state.
+- `src/ETF_screener/shortlist_engine.py` now builds a reusable shortlist snapshot from cached parquet first, DB fallback second, and analyzes the universe in parallel threads.
+- The shortlist engine scores each ticker across product, exposure, and technical state, then persists `Buy` / `Watch` / `Skip` artifacts with reason strings and score components.
+- The dashboard now exposes `/api/shortlist` as a cache-first read API that only rebuilds when the market data is newer or `refresh=true` is requested.
+- The dashboard now has a dedicated `Shortlist` tab that consumes the cached shortlist API and routes card clicks into the existing chart drill-down.
+- The database now also has a persisted `swarm_world_artifacts` table so exploratory layout state can be reused instead of recalculated on every tab open.
+- `src/ETF_screener/swarm_world.py` now projects shortlist artifacts into a stable rectangular grid with per-ticker energy, row/column, radius, and coordinates.
+- The dashboard now exposes `/api/swarm-world` and a fourth `Swarm` tab that renders cached real ticker nodes on the charged sphere.
+- The Swarm tab now has a replayable timeline slider with play, stop, and restart controls.
+- The Swarm Play path now loads the world if needed, rebuilds agents after an ended run, and reliably starts the animation loop from one entrypoint.
+- Swarm agents currently start from random alternating real nodes, capped at 5,000 agents, and carry mutable fast/slow EMA, RSI, spawn-limit, mutation-rate, jump-cost, exploration, metabolism, and speed traits.
+- Swarm ticker and agent energy now start from a neutral `10000` baseline, agents gain or lose energy from the current timeline step, spend energy to jump, split when above their mutable spawn limit, and die below zero.
+- Ticker nodes persist with a visible wealth floor; tickers should only disappear if an explicit delisting or inactive-ticker model is added.
+- The Swarm side panel now exposes a selected-agent inspector so the active genome can be read while the simulation runs.
+- Swarm jump decisions now use learned ticker memory, exploration, jump cost, behavior DNA, and global investor-like screening over all real tickers.
+- Swarm now starts with more than a thousand agents and records completed agents so the end of a run can show the ten most profitable genomes.
+- The Swarm world now uses an auto-fit square-ish grid for logical neighborhood coordinates, while rendering only real tickers on the spherical map.
+- The Swarm tab now describes agent knowledge as a global ticker scan; the old local sense knob has been removed from the GUI.
+- The Swarm tab now starts in a lighter browser-safe density mode: agents per alternating node defaults to `20`, with the hard `5000` ceiling still reachable at high slider values.
+- Tickers and agents now use different canvas marks: tickers stay as round nodes, while agents draw as directional wedge markers with small energy bars.
+- The repo-local vulture quality gate now has a whitelist file for deliberate FastAPI and helper entrypoints, and the nested Windows PowerShell test runner was adjusted to avoid Unicode parsing issues.
+- The test quality gate now lives under `scripts/run_all_tests.ps1` and is launched from the root `run.ps1 -Tests` frontend, with `vulture` still included in the default pass.
+- The Plotly ribbon chart now uses a slimmer shared left margin so the main graph sits farther left with less dead space.
+- The repo now has a milestone workflow wrapper, `workflow_milestone.ps1`, that runs the test suite, applies light auto-fixes when needed, and handles commit/push for the current branch.
+- Agent motion now uses direct global jumps between real tickers based on each agent's DNA criteria.
+- Swarm ticker balls are white or neutral, with radius proportional to `log10(simulated wealth)`; color no longer encodes simulated gain or loss or shortlist label.
+- Globe zoom now uses a smaller ticker draw radius than projected map zoom so thousands of white ticker balls remain distinct instead of merging into a few blobs.
+- Initial sphere placement now hashes ticker identity into the Fibonacci sphere seed and runs a short load-time relaxation pass so the first frame starts less clustered.
+- The Swarm canvas now has a first charged-sphere projection prototype: cells get stable non-equatorial sphere positions, real ticker balls repel as wealth-scaled positive charges, and the camera projects the active region onto the rectangular canvas.
+- The Swarm tab now has a `Zoom` knob; full zoom-out shows the charged world as a ball, while zoomed-in views show a rectangular projection with a stable non-polar camera anchor.
+- Agents now render as smaller virus-like particles instead of wedge markers, while ticker balls render larger for better visibility.
+- Market data storage now preserves yfinance dividend actions when available.
+- The dashboard now exposes `/api/swarm-history`, a cache-only total-return history endpoint for Swarm tickers with close and dividend series.
+- Swarm agent energy now uses real-return steps: price change plus dividend contribution minus a small annual inflation hurdle.
+- Swarm agents now carry behavior DNA modules such as `ema_cross_up`, `ema_cross_down`, `rsi_low`, and `rsi_high`, with evolvable fast/slow EMA periods, thresholds, and stay or jump weights.
+- Swarm hotlist DNA now includes human-readable investment rule interpretations so winning agents can be translated into behavior rules.
+- Swarm timeline returns now use cached close-to-close history when available, falling back to neutral returns for missing or short histories.
+- The Swarm top-agent panel now auto-saves the ten best agent DNA records as `config/swarm_agent_dna.json` using `swarm_agent_dna_v2` JSON.
+- The dashboard browser code has been moved out of the Jinja template into static files served from `/static/js/dashboard.js` and `/static/js/browser-log-relay.js`.
+- Dashboard inline handlers are explicitly exposed on `window`, and a Node-based JavaScript smoke test now verifies the Swarm tab switch path.
+- The top header controls are now explicitly treated as Screener-only controls, and strategy selection no longer auto-runs the screener.
+- The top bar now exposes a sticky `Exchange` selector plus a sticky user-defined `List` selector, while the old visible ticker selector has been tucked away for chart drill-down only.
+- The list selector was simplified again: `All Tickers` was removed, leaving `My List` as the default visible choice plus `Edit My List...`.
+- The list editor is now a lightweight modal instead of a blocking browser prompt, so editing a custom ticker list feels faster and less disruptive.
+- The list builder is now checkbox-based, can filter by exchange and search inside the modal, and persists the resulting ticker array as JSON in `config/custom_ticker_list.json`.
+- The custom list is now nameable: the modal includes a list-name field, and the saved JSON stores both `name` and `tickers`.
+- The top bar now has an explicit `Scan Source` button group with `Xetra`, `Sweden`, `My List`, and `All Lists`, so the screener can target one source at a time without a separate exchange or list chooser pair or another dropdown.
+- The list builder now includes a saved-list selector inside the modal, so `My List` works on the currently selected list while `All Lists` can scan the union of all saved lists.
+- The scan-source control is visually emphasized as the main mode switch in the top bar, with stronger panel styling and state-aware color accents.
+- The modal search now matches ticker, company name, issuer, asset class, and region, which makes terse Swedish tickers much easier to work with.
+- The Swedish universe now has a dedicated `config/sweden.json` and `config/sweden.csv`, generated from the official Nasdaq Nordic Stockholm shares feed, so the exchange selector can use a broader Stockholm stock list instead of guessing from suffixes.
+- The dashboard now exposes `/api/ticker-universe` as a cached metadata payload for the modal builder, so the browser can show the richer company labels without recomputing them on every open.
+- Exchange detection for the builder now prefers backend metadata when it is available, which helps the Swedish filter stay accurate for non-obvious tickers.
+- Screen and Backtest now both accept an explicit scan source plus the relevant filter inputs, so the visible top-bar controls can target `Xetra`, `Sweden`, the selected list, or the union of all lists directly.
+- Dashboard startup is now passive so refreshes do not auto-launch a scan or backtest before the user clicks a control.
+- The shortlist tab now supports explicit `All` / `Buy` / `Watch` / `Skip` filtering without refetching or recomputing the snapshot.
+- The dashboard now exposes market freshness status plus a `Refresh Market Data` path that refreshes stale tickers in parallel and rebuilds the shortlist afterward.
+- Market refresh now reuses existing local history and fetches only the missing delta plus an indicator warm-up window instead of re-downloading a full fixed history window for every stale ticker.
+- The chart drill-down now uses the same incremental ticker refresh path, so opening a stale chart tops up that ticker instead of forcing a full-history refill.
+- The chart drill-down now also plots the strategy-referenced TA curves themselves, not just the price overlay subset, so EMA, RSI, MACD, TSI, stochastic, slope, and volume-derived lines can appear in dedicated panels when the DSL uses them.
+- The chart drill-down now keeps the aggregated buy and sell lane on its own subplot row instead of accidentally overwriting the last ribbon row, so trigger and aggregated labels no longer stack on top of each other.
+- Repeated identical screen and backtest requests now have request-level result caches keyed by strategy text, filters, source scope, and latest market date, so consecutive GUI runs can return immediately instead of replaying the whole worker pool.
+- The repo has now been checked with `vulture`; the only remaining findings are mostly intentional FastAPI and utility false positives, plus a handful of legacy helper surfaces.
+- Market freshness now uses a stricter active-universe view: blacklisted or inactive tickers are ignored, missing or stale active tickers make the cache status stale, and a manual dashboard refresh tops up all active tickers with incremental fetches.
+- Chart drill-down now treats anything older than today's local date as stale so opened charts attempt to use the newest available daily bars.
+- The dashboard now caches the expensive screen-universe query and the home-page ticker list by latest market date so repeat reads stop rescanning `etf_data` on every request.
+- The strategy evaluation helpers now reuse the same latest-market-date ticker cache, so the backtest and browser paths avoid repeating the same full ticker scan.
+- `src/ETF_screener/backtester.py` now uses a process-safe scripted worker path plus a lower-overhead simulation loop so parallel backtests spend less time in pandas indexing.
+- `src/ETF_screener/backtester.py` now also caches completed scripted backtest results by ticker, strategy hash, day count, and latest ticker date so repeat runs can skip both strategy evaluation and the simulation loop.
+- The dashboard now exposes `/api/job-progress` and the global progress bar polls the backend so long-running Screen, Backtest, and Market Refresh jobs show actual server state instead of pure UI estimates.
+- The top nav progress area still uses two bars: a context bar for the active task and a global bar for broader dashboard state, but the global bar is now backend-driven.
+- The screen and backtest routes now run their heavy compute work off the event loop so the browser can keep polling progress while the terminal log continues to advance.
+- Screen and Backtest also reattach the poller after a market-data top-up so the progress bar does not disappear between the refresh phase and the main job.
+- The Screener and Backtester now both use the correct progress job names in the frontend, so the poller reads the matching backend state instead of silently ignoring it.
+- The top-bar now has a sticky exchange selector with an `All / Xetra / Sweden` filter, and the ticker selector remembers both the chosen exchange and ticker across rerenders.
+- Regression coverage now exists for shortlist artifact ranking, snapshot reuse, and the shortlist API contract.
+- `plan.md` and `progress.md` are now the repo-tracked resume surface for future work turns.

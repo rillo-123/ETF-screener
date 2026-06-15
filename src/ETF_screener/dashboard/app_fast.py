@@ -29,7 +29,11 @@ from fastapi.templating import Jinja2Templates
 from ETF_screener.database import ETFDatabase
 from ETF_screener.backtester import Backtester
 from ETF_screener.config_loader import get_paths
-from ETF_screener.dsl_parser import parse_strategy_scripts
+from ETF_screener.dsl_parser import (
+    STRATEGY_STRUCTURE_AXIS_CATALOG,
+    parse_strategy_scripts,
+    parse_strategy_structure_profile,
+)
 from ETF_screener.logging_setup import setup_logging, get_log_file
 from ETF_screener.market_data_service import MarketDataRefresher
 from ETF_screener.shortlist_engine import ETFShortlistEngine
@@ -79,6 +83,7 @@ BACKTEST_METRICS = [
     {"key": "trades", "label": "Trades", "kind": "count"},
     {"key": "days_since_entry", "label": "Days Since Entry", "kind": "days"},
 ]
+BACKTEST_STRATEGY_AXIS_CATALOG = [dict(item) for item in STRATEGY_STRUCTURE_AXIS_CATALOG]
 _JOB_PROGRESS_LOCK = Lock()
 _JOB_PROGRESS_STATE: dict[str, object] = {
     "job": None,
@@ -104,6 +109,33 @@ def _safe_float(val, default=None):
         return default if (math.isnan(f) or math.isinf(f)) else f
     except (TypeError, ValueError):
         return default
+
+
+def _json_safe_value(value: object) -> object:
+    """Recursively coerce progress/event payloads into JSON-safe primitives."""
+    if isinstance(value, dict):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe_value(item) for item in value]
+    if isinstance(value, float):
+        return 0.0 if not math.isfinite(value) else value
+    if isinstance(value, (str, int, bool)) or value is None:
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    if hasattr(value, "item"):
+        try:
+            return _json_safe_value(value.item())
+        except Exception:
+            pass
+    try:
+        if pd.isna(value):
+            return 0.0
+    except Exception:
+        pass
+    return str(value)
 
 
 def _load_metadata_file_map(path: Path) -> dict[str, dict[str, object]]:
@@ -138,6 +170,7 @@ def _set_job_progress(
     error: str | None = None,
     payload: object | None = None,
 ) -> None:
+    safe_pct = max(0.0, min(100.0, _finite_number(pct, 0.0)))
     with _JOB_PROGRESS_LOCK:
         _JOB_PROGRESS_STATE.update(
             {
@@ -145,11 +178,11 @@ def _set_job_progress(
                 "phase": phase,
                 "label": label or str(job or "Job").replace("-", " ").title(),
                 "detail": detail or "",
-                "pct": max(0.0, min(100.0, float(pct))),
+                "pct": safe_pct,
                 "active": active,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "error": error,
-                "payload": payload,
+                "payload": _json_safe_value(payload),
             }
         )
 
@@ -262,7 +295,7 @@ def _append_backtest_race_event(
             "seq": seq,
             "type": str(event_type),
             "lane": lane or "",
-            "payload": payload or {},
+            "payload": _json_safe_value(payload or {}),
             "ts": run["updated_at"],
         }
         events = run.get("events")
@@ -431,6 +464,45 @@ def _backtest_row_from_series(row: pd.Series) -> dict[str, object]:
     }
 
 
+def _normalize_structure_profile(
+    profile: object | None,
+) -> dict[str, object]:
+    safe_profile = profile if isinstance(profile, dict) else {}
+    axes = safe_profile.get("structure_axes")
+    safe_axes = axes if isinstance(axes, dict) else {}
+    normalized_axes = {
+        str(item["key"]): round(_finite_number(safe_axes.get(item["key"]), 0.0), 2)
+        for item in BACKTEST_STRATEGY_AXIS_CATALOG
+    }
+    tags = safe_profile.get("structure_tags")
+    safe_tags = (
+        [str(tag) for tag in tags if str(tag).strip()]
+        if isinstance(tags, list)
+        else []
+    )
+    axis_order = safe_profile.get("axis_order")
+    safe_axis_order = (
+        [str(item) for item in axis_order if str(item).strip()]
+        if isinstance(axis_order, list)
+        else [str(item["key"]) for item in BACKTEST_STRATEGY_AXIS_CATALOG]
+    )
+    return {
+        "structure_score": round(
+            _finite_number(safe_profile.get("structure_score"), 0.0), 2
+        ),
+        "structure_axes": normalized_axes,
+        "structure_tags": safe_tags,
+        "axis_order": safe_axis_order,
+    }
+
+
+def _backtest_strategy_profile(
+    strategy_name: str, dsl_content: str | None = None
+) -> dict[str, object]:
+    content = dsl_content if dsl_content is not None else load_strategy_content(strategy_name)
+    return _normalize_structure_profile(parse_strategy_structure_profile(content))
+
+
 def _backtest_ticker_result_from_series(
     row: pd.Series,
     *,
@@ -479,6 +551,7 @@ def _backtest_strategy_summary_from_frame(
     status: str = "done",
     progress_pct: float = 100.0,
     detail: str = "",
+    structure_profile: dict[str, object] | None = None,
 ) -> dict[str, object]:
     count = int(len(df))
     ticker_count = (
@@ -563,6 +636,8 @@ def _backtest_strategy_summary_from_frame(
         if pd.notna(best_idx):
             best_ticker = str(trade_rows.loc[best_idx, "Ticker"])
 
+    normalized_profile = _normalize_structure_profile(structure_profile)
+
     return {
         "strategy": strategy_name,
         "index": int(index),
@@ -589,6 +664,10 @@ def _backtest_strategy_summary_from_frame(
         "profit_factor": round(avg_profit_factor, 2),
         "max_dd_pct": round(avg_max_dd, 2),
         "speed_score": round(avg_quality, 2),
+        "structure_score": normalized_profile["structure_score"],
+        "structure_axes": normalized_profile["structure_axes"],
+        "structure_tags": normalized_profile["structure_tags"],
+        "axis_order": normalized_profile["axis_order"],
     }
 
 
@@ -1673,7 +1752,7 @@ def _save_custom_ticker_list_payload(payload: object) -> dict:
 async def job_progress():
     """Return the latest dashboard job progress snapshot."""
     with _JOB_PROGRESS_LOCK:
-        return dict(_JOB_PROGRESS_STATE)
+        return _json_safe_value(dict(_JOB_PROGRESS_STATE))
 
 
 @app.get("/api/backtest/events")
@@ -1683,7 +1762,9 @@ async def backtest_events(
     limit: int = 200,
 ):
     """Return sequenced race events for a backtest run."""
-    return _get_backtest_race_events(run_id, after_seq=after_seq, limit=limit)
+    return _json_safe_value(
+        _get_backtest_race_events(run_id, after_seq=after_seq, limit=limit)
+    )
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -2793,6 +2874,8 @@ async def backtest_view(
     dsl_text = (dsl_content or "").strip()
     source_type = "editor" if dsl_text else "saved"
     signal_window_days = signal_days if signal_days is not None else since_days
+    profile_strategy_name = strategy_name or "Editor Draft"
+    structure_profile = _backtest_strategy_profile(profile_strategy_name, dsl_text or None)
 
     if not strategy_name and not dsl_text:
         _set_job_progress(
@@ -2812,6 +2895,9 @@ async def backtest_view(
                 "avg_return": 0.0,
                 "avg_sharpe": 0.0,
             },
+            "strategy_profile": structure_profile,
+            "strategy_summaries": [],
+            "strategy_axis_catalog": BACKTEST_STRATEGY_AXIS_CATALOG,
             "rows": [],
             "chart": {"data": [], "layout": {}},
         }
@@ -2890,7 +2976,7 @@ async def backtest_view(
             active=False,
         )
         return {
-            "strategy_name": strategy_name or "Editor Draft",
+            "strategy_name": profile_strategy_name,
             "source_type": source_type,
             "csv_path": str(csv_path),
             "summary": {
@@ -2899,6 +2985,42 @@ async def backtest_view(
                 "avg_return": 0.0,
                 "avg_sharpe": 0.0,
             },
+            "strategy_profile": structure_profile,
+            "strategy_summaries": [
+                _backtest_strategy_summary_from_frame(
+                    profile_strategy_name,
+                    df,
+                    index=1,
+                    status="done",
+                    progress_pct=100.0,
+                    detail="No scored rows",
+                    structure_profile=structure_profile,
+                )
+            ],
+            "strategy_axis_catalog": BACKTEST_STRATEGY_AXIS_CATALOG,
+            "race": _backtest_race_payload(
+                [profile_strategy_name],
+                [
+                    _backtest_strategy_summary_from_frame(
+                        profile_strategy_name,
+                        df,
+                        index=1,
+                        status="done",
+                        progress_pct=100.0,
+                        detail="No scored rows",
+                        structure_profile=structure_profile,
+                    )
+                ],
+                active_strategy=profile_strategy_name,
+                completed=1,
+                total=1,
+                pct=100.0,
+                phase="done",
+                detail="No scored rows",
+                ticker_count=0,
+                work_completed=0,
+                work_total=0,
+            ),
             "rows": [],
             "chart": {"data": [], "layout": {}},
         }
@@ -2960,8 +3082,18 @@ async def backtest_view(
         active=False,
     )
 
+    strategy_summary = _backtest_strategy_summary_from_frame(
+        profile_strategy_name,
+        df,
+        index=1,
+        status="done",
+        progress_pct=100.0,
+        detail=f"{len(df)} rows scored",
+        structure_profile=structure_profile,
+    )
+
     return {
-        "strategy_name": strategy_name or "Editor Draft",
+        "strategy_name": profile_strategy_name,
         "source_type": source_type,
         "csv_path": str(csv_path),
         "summary": {
@@ -2973,6 +3105,22 @@ async def backtest_view(
             "avg_sharpe": round(float(_trade_rows_for_summary(df)["Sharpe"].mean()), 2),
             "trades": _trade_count_for_summary(df),
         },
+        "strategy_profile": structure_profile,
+        "strategy_summaries": [strategy_summary],
+        "strategy_axis_catalog": BACKTEST_STRATEGY_AXIS_CATALOG,
+        "race": _backtest_race_payload(
+            [profile_strategy_name],
+            [strategy_summary],
+            active_strategy=profile_strategy_name,
+            completed=1,
+            total=1,
+            pct=100.0,
+            phase="done",
+            detail=f"{len(df)} rows scored",
+            ticker_count=int(df["Ticker"].nunique()) if not df.empty else 0,
+            work_completed=int(df["Ticker"].nunique()) if not df.empty else 0,
+            work_total=int(df["Ticker"].nunique()) if not df.empty else 0,
+        ),
         "rows": rows,
         "chart": chart,
     }
@@ -3004,6 +3152,7 @@ async def backtest_matrix_view(
             "source_type": "saved_matrix",
             "strategies": [],
             "metrics": BACKTEST_METRICS,
+            "strategy_axis_catalog": BACKTEST_STRATEGY_AXIS_CATALOG,
             "summary": {
                 "count": 0,
                 "strategy_count": 0,
@@ -3051,6 +3200,10 @@ async def backtest_matrix_view(
     )
     strategy_worker_semaphore = asyncio.Semaphore(strategy_concurrency)
     run_id = _new_backtest_race_run(strategy_names)
+    strategy_profiles = {
+        name: _backtest_strategy_profile(name)
+        for name in strategy_names
+    }
     _append_backtest_race_event(
         run_id,
         "run_started",
@@ -3092,6 +3245,16 @@ async def backtest_matrix_view(
             "profit_factor": 0.0,
             "max_dd_pct": 0.0,
             "speed_score": 0.0,
+            "structure_score": round(
+                _finite_number(strategy_profiles[name].get("structure_score"), 0.0), 2
+            ),
+            "structure_axes": dict(
+                strategy_profiles[name].get("structure_axes", {})
+            ),
+            "structure_tags": list(
+                strategy_profiles[name].get("structure_tags", [])
+            ),
+            "axis_order": list(strategy_profiles[name].get("axis_order", [])),
         }
         for idx, name in enumerate(strategy_names, start=1)
     ]
@@ -3497,6 +3660,7 @@ async def backtest_matrix_view(
                     detail=(
                         f"{len(df)} rows scored" if not df.empty else "No scored rows"
                     ),
+                    structure_profile=strategy_profiles.get(strategy_name),
                 )
                 with strategy_state_lock:
                     completed_tickers = int(
@@ -3732,6 +3896,7 @@ async def backtest_matrix_view(
         "csv_path": str(csv_path),
         "strategies": strategy_names,
         "strategy_summaries": strategy_summaries,
+        "strategy_axis_catalog": BACKTEST_STRATEGY_AXIS_CATALOG,
         "race": _backtest_race_payload(
             strategy_names,
             strategy_summaries,

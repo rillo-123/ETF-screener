@@ -4,7 +4,7 @@ workflow_milestone.ps1
 Milestone maintenance workflow for the ETF Screener repo.
 
 What it does:
-  1. Updates plan.md and progress.md.
+  1. Updates the plan docs and progress.md.
   2. Runs the test suite.
   3. Optionally applies light auto-fixes when tests fail.
   4. Reruns the tests after those fixes.
@@ -12,7 +12,7 @@ What it does:
 
 Conversation convention:
   "Set the milestone" means the work should be carried to a clean checkpoint:
-    - update plan.md and progress.md
+    - update the plan docs and progress.md
     - run the full test suite
     - fix remaining bugs until everything passes
     - commit and push the finished checkpoint
@@ -53,7 +53,7 @@ Usage:
   .\workflow_milestone.ps1 -- -Parallel -TimeoutSec 120
 
 Behavior:
-  1. Updates plan.md and progress.md with the current milestone outcome.
+  1. Updates the plan docs and progress.md with the current milestone outcome.
   2. Runs scripts/run_all_tests.ps1.
   3. Applies light auto-fixes with ruff and black if the tests fail.
   4. Reruns the tests after those fixes.

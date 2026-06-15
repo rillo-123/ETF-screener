@@ -104,7 +104,12 @@ let backtestSourceMode = "saved";
     let listBuilderSearch = "";
     let backtestMatrixRows = [];
     let backtestTradeDotRows = [];
+    let backtestExcludedTickers = new Set();
+    let backtestStrategySummaries = [];
+    let backtestStrategyAxisCatalog = [];
     let backtestMetricCatalog = [];
+    let backtestTableSortKey = "quality_score";
+    let backtestTableSortDirection = "desc";
     let backtestScatterRenderTimer = null;
     let backtestRaceState = null;
     let backtestRaceCache = new Map();
@@ -160,6 +165,22 @@ let backtestSourceMode = "saved";
       "#ea580c", "#1d4ed8", "#b91c1c", "#047857", "#a16207",
       "#db2777", "#0284c7", "#65a30d", "#c2410c", "#6d28d9",
       "#0d9488", "#e11d48", "#4338ca", "#15803d", "#b45309",
+    ];
+    const BACKTEST_STRUCTURE_AXIS_DEFAULTS = [
+      { key: "trend_context", label: "Trend Context", max: 10 },
+      { key: "confirmation_depth", label: "Confirmation Depth", max: 10 },
+      { key: "trigger_precision", label: "Trigger Precision", max: 10 },
+      { key: "exit_discipline", label: "Exit Discipline", max: 10 },
+      { key: "risk_control", label: "Risk Control", max: 10 },
+      { key: "time_discipline", label: "Time Discipline", max: 10 },
+    ];
+    const BACKTEST_BEHAVIOR_AXIS_DEFAULTS = [
+      { key: "quality", label: "Quality", max: 10 },
+      { key: "profitability", label: "Return", max: 10 },
+      { key: "risk_adjusted", label: "Sharpe", max: 10 },
+      { key: "consistency", label: "Win Rate", max: 10 },
+      { key: "payoff_efficiency", label: "Profit Factor", max: 10 },
+      { key: "drawdown_control", label: "Drawdown Control", max: 10 },
     ];
     function getDashboardTabs() {
       return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"]
@@ -1172,8 +1193,23 @@ let backtestSourceMode = "saved";
       }
       backtestMatrixRows = [];
       backtestTradeDotRows = [];
+      backtestExcludedTickers = new Set();
+      backtestStrategySummaries = [];
+      backtestStrategyAxisCatalog = backtestDefaultStructureAxisCatalog();
+      updateBacktestBestStructureCard([]);
+      setBacktestStructurePanelVisible(false);
+      setBacktestBehaviorPanelVisible(false);
+      updateBacktestTableHeaderState();
       if (chartDiv && window.Plotly) {
         Plotly.purge(chartDiv);
+      }
+      const structureChartDiv = document.getElementById("backtest-structure-chart");
+      if (structureChartDiv && window.Plotly) {
+        Plotly.purge(structureChartDiv);
+      }
+      const behaviorChartDiv = document.getElementById("backtest-behavior-chart");
+      if (behaviorChartDiv && window.Plotly) {
+        Plotly.purge(behaviorChartDiv);
       }
       if (racePanel && !backtestRaceState) {
         racePanel.classList.add("hidden");
@@ -1199,8 +1235,17 @@ let backtestSourceMode = "saved";
       }
       backtestMatrixRows = [];
       backtestTradeDotRows = [];
+      backtestExcludedTickers = new Set();
+      backtestStrategySummaries = [];
+      backtestStrategyAxisCatalog = backtestDefaultStructureAxisCatalog();
+      updateBacktestBestStructureCard([]);
+      setBacktestStructurePanelVisible(false);
+      setBacktestBehaviorPanelVisible(false);
+      updateBacktestTableHeaderState();
       populateBacktestAxisControls(backtestDefaultMetrics());
       renderBacktestScatter();
+      renderBacktestStructureRadar();
+      renderBacktestBehaviorRadar();
     }
 
     function escapeHtml(value) {
@@ -1339,6 +1384,14 @@ let backtestSourceMode = "saved";
         win_rate_pct: Number(lane?.win_rate_pct || 0),
         profit_factor: Number(lane?.profit_factor || 0),
         max_dd_pct: Number(lane?.max_dd_pct || 0),
+        structure_score: Number(lane?.structure_score || 0),
+        structure_axes: normalizeBacktestStructureAxes(lane?.structure_axes, backtestStrategyAxisCatalog),
+        structure_tags: Array.isArray(lane?.structure_tags)
+          ? lane.structure_tags.map((tag) => String(tag || "")).filter(Boolean)
+          : [],
+        axis_order: Array.isArray(lane?.axis_order) && lane.axis_order.length > 0
+          ? lane.axis_order.map((item) => String(item || "")).filter(Boolean)
+          : normalizeBacktestStructureAxisCatalog(backtestStrategyAxisCatalog).map((axis) => axis.key),
         speed_score: Number(lane?.speed_score ?? lane?.avg_quality_score ?? lane?.quality_score ?? lane?.return_pct ?? 0),
         speed_factor: Number(lane?.speed_factor || 0),
         display_pct: Math.max(0, Math.min(100, Number(lane?.display_pct ?? lane?.progress_pct ?? 0) || 0)),
@@ -1726,6 +1779,7 @@ let backtestSourceMode = "saved";
         const dataWidth = Number(Math.max(0, Math.min(100, hasScoredData ? fuelProgress : 0)).toFixed(2));
         const markerWidth = dataWidth;
         const laneNudge = Math.sin((motionTick / 12.5) + lane.index) * (backtestRacePlaying ? 0.8 : 0.3);
+        const structureScore = Number(lane.structure_score || 0);
         return `
           <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm">
             <div class="mb-1.5 flex items-center justify-between gap-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
@@ -1755,6 +1809,7 @@ let backtestSourceMode = "saved";
               <span class="font-mono">Trades ${tradeCount.toLocaleString()}</span>
               <span class="font-mono ${profitability >= 0 ? "text-emerald-600" : "text-rose-600"}">Profitability ${formatBacktestPercent(profitability)}</span>
               <span>Quality ${quality.toFixed(2)}</span>
+              <span>Structure ${structureScore.toFixed(2)}</span>
               <span class="font-mono">${rawLaneProgress.toFixed(0)}% run</span>
               <span class="font-mono text-slate-400">${hasScoredData ? `${fuelMetric.label} data ${dataWidth.toFixed(0)}%` : "No scored data"}</span>
             </div>
@@ -1869,8 +1924,11 @@ let backtestSourceMode = "saved";
         ...nextState,
         lanes: nextState.lanes.map((lane) => ({ ...lane })),
       });
+      syncBacktestStrategySummariesFromRaceState();
       persistBacktestRaceState();
       renderBacktestRace();
+      renderBacktestStructureRadar();
+      renderBacktestBehaviorRadar();
       return true;
     }
 
@@ -1938,8 +1996,11 @@ let backtestSourceMode = "saved";
         return false;
       }
       backtestRaceState.lanes[laneIndex] = lane;
+      syncBacktestStrategySummariesFromRaceState();
       persistBacktestRaceState();
       renderBacktestRace();
+      renderBacktestStructureRadar();
+      renderBacktestBehaviorRadar();
       return true;
     }
 
@@ -7349,9 +7410,208 @@ let backtestSourceMode = "saved";
       ];
     }
 
+    function backtestDefaultStructureAxisCatalog() {
+      return BACKTEST_STRUCTURE_AXIS_DEFAULTS.map((item) => ({ ...item }));
+    }
+
+    function backtestDefaultBehaviorAxisCatalog() {
+      return BACKTEST_BEHAVIOR_AXIS_DEFAULTS.map((item) => ({ ...item }));
+    }
+
+    function clampBacktestRadarValue(value, max = 10) {
+      return Math.max(0, Math.min(max, Number(value || 0) || 0));
+    }
+
+    function scaleBacktestRadarMetric(value, { min = 0, max = 1, invert = false } = {}) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || max <= min) {
+        return 0;
+      }
+      const normalized = Math.max(0, Math.min(1, (numeric - min) / (max - min)));
+      const scaled = (invert ? 1 - normalized : normalized) * 10;
+      return Number(scaled.toFixed(2));
+    }
+
+    function normalizeBacktestStructureAxisCatalog(catalog) {
+      const rawItems = Array.isArray(catalog) && catalog.length > 0
+        ? catalog
+        : backtestDefaultStructureAxisCatalog();
+      return rawItems.map((item, index) => ({
+        key: String(item?.key || BACKTEST_STRUCTURE_AXIS_DEFAULTS[index]?.key || `axis_${index + 1}`),
+        label: String(item?.label || BACKTEST_STRUCTURE_AXIS_DEFAULTS[index]?.label || `Axis ${index + 1}`),
+        max: Math.max(1, Number(item?.max || BACKTEST_STRUCTURE_AXIS_DEFAULTS[index]?.max || 10) || 10),
+      }));
+    }
+
+    function normalizeBacktestStructureAxes(axes, axisCatalog = backtestStrategyAxisCatalog) {
+      const safeAxes = axes && typeof axes === "object" ? axes : {};
+      const catalog = normalizeBacktestStructureAxisCatalog(axisCatalog);
+      return catalog.reduce((acc, axis) => {
+        acc[axis.key] = clampBacktestRadarValue(safeAxes[axis.key], axis.max);
+        return acc;
+      }, {});
+    }
+
+    function backtestStrategySummaryHasBehaviorData(summary) {
+      if (!summary || typeof summary !== "object") {
+        return false;
+      }
+      return [
+        summary.avg_quality_score,
+        summary.quality_score,
+        summary.return_pct,
+        summary.sharpe,
+        summary.win_rate_pct,
+        summary.profit_factor,
+        summary.max_dd_pct,
+        summary.trades,
+        summary.scored_tickers,
+      ].some((value) => Number(value || 0) !== 0);
+    }
+
+    function deriveBacktestBehaviorProfile(summary) {
+      const quality = Number(summary?.avg_quality_score ?? summary?.quality_score ?? 0) || 0;
+      const returnPct = Number(summary?.return_pct ?? 0) || 0;
+      const sharpe = Number(summary?.sharpe ?? 0) || 0;
+      const winRatePct = Number(summary?.win_rate_pct ?? 0) || 0;
+      const profitFactor = Number(summary?.profit_factor ?? 0) || 0;
+      const maxDdPct = Number(summary?.max_dd_pct ?? 0) || 0;
+      const axisOrder = backtestDefaultBehaviorAxisCatalog().map((axis) => axis.key);
+      const behaviorAxes = {
+        quality: scaleBacktestRadarMetric(quality, { min: 0, max: 20 }),
+        profitability: scaleBacktestRadarMetric(returnPct, { min: -10, max: 20 }),
+        risk_adjusted: scaleBacktestRadarMetric(sharpe, { min: -0.5, max: 2.5 }),
+        consistency: scaleBacktestRadarMetric(winRatePct, { min: 30, max: 70 }),
+        payoff_efficiency: scaleBacktestRadarMetric(profitFactor, { min: 0.8, max: 2.0 }),
+        drawdown_control: scaleBacktestRadarMetric(maxDdPct, { min: 2, max: 20, invert: true }),
+      };
+      const values = axisOrder.map((key) => Number(behaviorAxes[key] || 0));
+      const behaviorScore = values.length
+        ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2))
+        : 0;
+      return {
+        behavior_score: behaviorScore,
+        behavior_axes: axisOrder.reduce((acc, key) => {
+          acc[key] = clampBacktestRadarValue(behaviorAxes[key]);
+          return acc;
+        }, {}),
+        axis_order: axisOrder,
+        raw_metrics: {
+          quality,
+          profitability: returnPct,
+          risk_adjusted: sharpe,
+          consistency: winRatePct,
+          payoff_efficiency: profitFactor,
+          drawdown_control: maxDdPct,
+        },
+      };
+    }
+
+    function normalizeBacktestStrategySummary(summary, index = 0, axisCatalog = backtestStrategyAxisCatalog) {
+      const catalog = normalizeBacktestStructureAxisCatalog(axisCatalog);
+      const normalized = {
+        strategy: String(summary?.strategy || summary?.label || `Strategy ${index + 1}`),
+        quality_score: Number(summary?.quality_score || 0) || 0,
+        avg_quality_score: Number(summary?.avg_quality_score ?? summary?.quality_score ?? 0) || 0,
+        return_pct: Number(summary?.return_pct || 0) || 0,
+        sharpe: Number(summary?.sharpe || 0) || 0,
+        win_rate_pct: Number(summary?.win_rate_pct || 0) || 0,
+        profit_factor: Number(summary?.profit_factor || 0) || 0,
+        max_dd_pct: Number(summary?.max_dd_pct || 0) || 0,
+        trades: Number(summary?.trades || 0) || 0,
+        scored_tickers: Number(summary?.scored_tickers ?? summary?.count ?? 0) || 0,
+        total_tickers: Number(summary?.total_tickers ?? summary?.ticker_count ?? summary?.count ?? 0) || 0,
+        structure_score: Number(summary?.structure_score || 0) || 0,
+        structure_axes: normalizeBacktestStructureAxes(summary?.structure_axes, catalog),
+        structure_tags: Array.isArray(summary?.structure_tags)
+          ? summary.structure_tags.map((tag) => String(tag || "")).filter(Boolean)
+          : [],
+        axis_order: Array.isArray(summary?.axis_order) && summary.axis_order.length > 0
+          ? summary.axis_order.map((item) => String(item || "")).filter(Boolean)
+          : catalog.map((axis) => axis.key),
+      };
+      normalized.behavior_profile = deriveBacktestBehaviorProfile(normalized);
+      normalized.has_behavior_data = backtestStrategySummaryHasBehaviorData(normalized);
+      return normalized;
+    }
+
+    function updateBacktestBestStructureCard(summaries = backtestStrategySummaries) {
+      const node = document.getElementById("bt-best-structure");
+      if (!node) {
+        return;
+      }
+      const best = (Array.isArray(summaries) ? summaries : [])
+        .map((item) => Number(item?.structure_score || 0))
+        .filter(Number.isFinite);
+      node.textContent = (best.length ? Math.max(...best) : 0).toFixed(2);
+    }
+
+    function setBacktestStructurePanelVisible(show) {
+      const panel = document.getElementById("backtest-structure-panel");
+      if (!panel) {
+        return;
+      }
+      panel.classList.toggle("hidden", !show);
+    }
+
+    function setBacktestBehaviorPanelVisible(show) {
+      const panel = document.getElementById("backtest-behavior-panel");
+      if (!panel) {
+        return;
+      }
+      panel.classList.toggle("hidden", !show);
+    }
+
+    function syncBacktestStrategySummariesFromRaceState() {
+      if (!backtestRaceState || !Array.isArray(backtestRaceState.lanes) || backtestRaceState.lanes.length === 0) {
+        return false;
+      }
+      backtestStrategySummaries = backtestRaceState.lanes.map((lane, index) => (
+        normalizeBacktestStrategySummary(lane, index, backtestStrategyAxisCatalog)
+      ));
+      updateBacktestBestStructureCard(backtestStrategySummaries);
+      setBacktestStructurePanelVisible(backtestStrategySummaries.length > 0);
+      return true;
+    }
+
+    function setBacktestStructureData({
+      summaries = [],
+      strategyProfile = null,
+      axisCatalog = null,
+      strategyName = "",
+    } = {}) {
+      backtestStrategyAxisCatalog = normalizeBacktestStructureAxisCatalog(axisCatalog);
+      const sourceSummaries = Array.isArray(summaries) && summaries.length > 0
+        ? summaries
+        : (strategyProfile && typeof strategyProfile === "object"
+          ? [{
+            strategy: String(strategyName || "Editor Draft"),
+            ...strategyProfile,
+          }]
+          : []);
+      backtestStrategySummaries = sourceSummaries.map((item, index) => (
+        normalizeBacktestStrategySummary(item, index, backtestStrategyAxisCatalog)
+      ));
+      if (!backtestStrategySummaries.length) {
+        syncBacktestStrategySummariesFromRaceState();
+      }
+      updateBacktestBestStructureCard(backtestStrategySummaries);
+      setBacktestStructurePanelVisible(backtestStrategySummaries.length > 0);
+      renderBacktestStructureRadar();
+      renderBacktestBehaviorRadar();
+    }
+
     function getBacktestMetricLabel(key) {
       const metric = backtestMetricCatalog.find((item) => item.key === key);
       return metric ? metric.label : key;
+    }
+
+    function formatBacktestBehaviorRawMetric(key, value) {
+      const numeric = Number(value || 0);
+      if (key === "profitability" || key === "consistency" || key === "drawdown_control") {
+        return `${numeric.toFixed(2)}%`;
+      }
+      return numeric.toFixed(2);
     }
 
     function hashBacktestStrategyName(strategy) {
@@ -7432,6 +7692,41 @@ let backtestSourceMode = "saved";
         * (winRatePct / 100)
         * (sharpe + 1)
         / ((1 + trades / 100.0) * (1 + maxDdPct / 10.0));
+    }
+
+    function normalizeBacktestTickerKey(ticker) {
+      return String(ticker || "").trim().toUpperCase();
+    }
+
+    function isBacktestTickerExcluded(ticker) {
+      const key = normalizeBacktestTickerKey(ticker);
+      return key ? backtestExcludedTickers.has(key) : false;
+    }
+
+    function setBacktestTickerExcluded(ticker, excluded, { renderTable = true, renderScatter = true } = {}) {
+      const key = normalizeBacktestTickerKey(ticker);
+      if (!key) {
+        return false;
+      }
+      const isExcluded = Boolean(excluded);
+      const changed = isExcluded
+        ? !backtestExcludedTickers.has(key)
+        : backtestExcludedTickers.has(key);
+      if (!changed) {
+        return false;
+      }
+      if (isExcluded) {
+        backtestExcludedTickers.add(key);
+      } else {
+        backtestExcludedTickers.delete(key);
+      }
+      if (renderTable) {
+        renderBacktestTable(backtestMatrixRows);
+      }
+      if (renderScatter) {
+        scheduleBacktestScatterRender();
+      }
+      return true;
     }
 
     function normalizeBacktestMatrixRow(row) {
@@ -7519,6 +7814,93 @@ let backtestSourceMode = "saved";
       return Math.max(7, Math.min(30, diameter));
     }
 
+    function getBacktestTableSortConfig() {
+      return [
+        { key: "ticker", label: "Ticker", defaultDirection: "asc" },
+        { key: "strategy", label: "Strategy", defaultDirection: "asc" },
+        { key: "quality_score", label: "Quality", defaultDirection: "desc" },
+        { key: "return_pct", label: "Return", defaultDirection: "desc" },
+        { key: "win_rate_pct", label: "Win Rate", defaultDirection: "desc" },
+        { key: "sharpe", label: "Sharpe", defaultDirection: "desc" },
+        { key: "profit_factor", label: "PF", defaultDirection: "desc" },
+        { key: "max_dd_pct", label: "Max DD", defaultDirection: "asc" },
+        { key: "trades", label: "Trades", defaultDirection: "desc" },
+        { key: "days_since_entry", label: "Days Since Entry", defaultDirection: "asc" },
+      ];
+    }
+
+    function getBacktestTableSortDescriptor(key) {
+      return getBacktestTableSortConfig().find((entry) => entry.key === key) || null;
+    }
+
+    function getBacktestTableSortValue(row, key) {
+      if (!row || typeof row !== "object") {
+        return "";
+      }
+      if (key === "ticker" || key === "strategy" || key === "exchange") {
+        return String(row[key] || "").toUpperCase();
+      }
+      return Number(row[key] || 0);
+    }
+
+    function sortBacktestTableRows(rows) {
+      const safeRows = Array.isArray(rows) ? [...rows] : [];
+      const descriptor = getBacktestTableSortDescriptor(backtestTableSortKey) || getBacktestTableSortDescriptor("quality_score");
+      const sortKey = descriptor ? descriptor.key : "quality_score";
+      const direction = backtestTableSortDirection === "asc" ? 1 : -1;
+      return safeRows.sort((left, right) => {
+        const leftValue = getBacktestTableSortValue(left, sortKey);
+        const rightValue = getBacktestTableSortValue(right, sortKey);
+        let primary = 0;
+        if (typeof leftValue === "string" || typeof rightValue === "string") {
+          primary = String(leftValue).localeCompare(String(rightValue));
+        } else {
+          primary = Number(leftValue) - Number(rightValue);
+        }
+        if (primary !== 0) {
+          return primary * direction;
+        }
+        const qualityDelta = Number(right?.quality_score || 0) - Number(left?.quality_score || 0);
+        if (qualityDelta !== 0) {
+          return qualityDelta;
+        }
+        const tickerDelta = String(left?.ticker || "").localeCompare(String(right?.ticker || ""));
+        if (tickerDelta !== 0) {
+          return tickerDelta;
+        }
+        return String(left?.strategy || "").localeCompare(String(right?.strategy || ""));
+      });
+    }
+
+    function updateBacktestTableHeaderState() {
+      getBacktestTableSortConfig().forEach((entry) => {
+        const button = document.getElementById(`backtest-sort-${entry.key}`);
+        if (!button) {
+          return;
+        }
+        const isActive = backtestTableSortKey === entry.key;
+        const suffix = isActive ? (backtestTableSortDirection === "asc" ? " ^" : " v") : "";
+        button.textContent = `${entry.label}${suffix}`;
+        button.className = `inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 ${isActive ? "bg-slate-200 text-slate-900" : ""}`;
+        button.setAttribute("aria-sort", isActive ? (backtestTableSortDirection === "asc" ? "ascending" : "descending") : "none");
+      });
+    }
+
+    function setBacktestTableSort(key) {
+      const descriptor = getBacktestTableSortDescriptor(key);
+      if (!descriptor) {
+        return;
+      }
+      if (backtestTableSortKey === descriptor.key) {
+        backtestTableSortDirection = backtestTableSortDirection === "asc" ? "desc" : "asc";
+      } else {
+        backtestTableSortKey = descriptor.key;
+        backtestTableSortDirection = descriptor.defaultDirection;
+      }
+      updateBacktestTableHeaderState();
+      renderBacktestTable(backtestMatrixRows);
+    }
+
     function mergeBacktestScatterRows(rows, { render = true } = {}) {
       const incomingRows = Array.isArray(rows) ? rows : [rows];
       const byKey = new Map(
@@ -7553,7 +7935,7 @@ let backtestSourceMode = "saved";
         Number(right.trade_gain_pct || 0) - Number(left.trade_gain_pct || 0)
       ));
       updateBacktestSummaryCardsFromRows();
-      renderBacktestTable(backtestMatrixRows.slice(0, 100));
+      renderBacktestTable(backtestMatrixRows);
       if (render) {
         scheduleBacktestScatterRender();
       }
@@ -7608,16 +7990,20 @@ let backtestSourceMode = "saved";
       if (!body) {
         return;
       }
+      updateBacktestTableHeaderState();
       const strategyNames = uniqueBacktestStrategyNames(
         (Array.isArray(rows) ? rows : []).map((row) => row.strategy)
       );
+      const displayedRows = sortBacktestTableRows(rows).slice(0, 100);
       body.innerHTML = "";
-      (Array.isArray(rows) ? rows : []).forEach((row) => {
+      displayedRows.forEach((row) => {
         const tr = document.createElement("tr");
         const strategyColor = getBacktestStrategyColor(row.strategy, strategyNames);
         const tradeCount = Number(row.trades || 0);
         const noTrades = tradeCount <= 0;
-        tr.className = "hover:bg-slate-50 cursor-pointer";
+        const excludedTicker = isBacktestTickerExcluded(row.ticker);
+        tr.className = `hover:bg-slate-50 cursor-pointer ${excludedTicker ? "bg-slate-50/80" : ""}`;
+        tr.style.opacity = excludedTicker ? "0.72" : "1";
         tr.onclick = () => {
           showTab("screener");
           loadChart(row.ticker, row.strategy || "");
@@ -7646,9 +8032,48 @@ let backtestSourceMode = "saved";
             </td>
             <td class="px-4 py-3 font-mono">${Number(row.days_since_entry || 0)}</td>
           `;
+        const excludeCell = document.createElement("td");
+        excludeCell.className = "px-4 py-3";
+        excludeCell.onclick = (event) => {
+          if (event && typeof event.stopPropagation === "function") {
+            event.stopPropagation();
+          }
+        };
+        const excludeLabel = document.createElement("label");
+        excludeLabel.className = "inline-flex cursor-pointer items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500";
+        excludeLabel.onclick = (event) => {
+          if (event && typeof event.stopPropagation === "function") {
+            event.stopPropagation();
+          }
+        };
+        const excludeCheckbox = document.createElement("input");
+        excludeCheckbox.type = "checkbox";
+        excludeCheckbox.className = "h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-rose-600 focus:ring-rose-400";
+        excludeCheckbox.checked = excludedTicker;
+        excludeCheckbox.setAttribute("aria-label", `Exclude ${row.ticker} from scatter plot`);
+        excludeCheckbox.title = "Exclude this ticker from the 2D scatter plot";
+        excludeCheckbox.onclick = (event) => {
+          if (event && typeof event.stopPropagation === "function") {
+            event.stopPropagation();
+          }
+        };
+        excludeCheckbox.onchange = (event) => {
+          if (event && typeof event.stopPropagation === "function") {
+            event.stopPropagation();
+          }
+          setBacktestTickerExcluded(row.ticker, Boolean(event?.target?.checked));
+        };
+        const excludeText = document.createElement("span");
+        excludeText.textContent = "Exclude";
+        excludeLabel.appendChild(excludeCheckbox);
+        excludeLabel.appendChild(excludeText);
+        excludeCell.appendChild(excludeLabel);
+        tr.appendChild(excludeCell);
         body.appendChild(tr);
       });
     }
+
+    window.setBacktestTableSort = setBacktestTableSort;
 
     function populateBacktestAxisControls(metrics) {
       backtestMetricCatalog = Array.isArray(metrics) && metrics.length > 0 ? metrics : backtestDefaultMetrics();
@@ -7686,7 +8111,7 @@ let backtestSourceMode = "saved";
         return;
       }
       const rows = Array.isArray(backtestTradeDotRows) && backtestTradeDotRows.length > 0
-        ? backtestTradeDotRows
+        ? backtestTradeDotRows.filter((row) => !isBacktestTickerExcluded(row.ticker))
         : [];
       if (rows.length === 0) {
         Plotly.purge(chartDiv);
@@ -7765,6 +8190,195 @@ let backtestSourceMode = "saved";
         xaxis: { title: getBacktestMetricLabel(xKey), zeroline: true, automargin: true },
         yaxis: { title: getBacktestMetricLabel(yKey), zeroline: true, automargin: true },
         legend: { orientation: "h", y: -0.24 },
+      }, {
+        responsive: true,
+        displayModeBar: false,
+        displaylogo: false,
+      });
+    }
+
+    function renderBacktestStructureRadar() {
+      const chartDiv = document.getElementById("backtest-structure-chart");
+      if (!chartDiv || !window.Plotly) {
+        return;
+      }
+      const axisCatalog = normalizeBacktestStructureAxisCatalog(backtestStrategyAxisCatalog);
+      const summaries = (Array.isArray(backtestStrategySummaries) ? backtestStrategySummaries : [])
+        .map((summary, index) => normalizeBacktestStrategySummary(summary, index, axisCatalog))
+        .filter((summary) => summary.strategy);
+      if (!summaries.length) {
+        setBacktestStructurePanelVisible(false);
+        Plotly.purge(chartDiv);
+        return;
+      }
+      setBacktestStructurePanelVisible(true);
+
+      const sorted = [...summaries].sort((left, right) => (
+        Number(right.structure_score || 0) - Number(left.structure_score || 0)
+      ));
+      const strategyNames = sorted.map((item) => item.strategy);
+      const axisLabelsByKey = new Map(axisCatalog.map((axis) => [axis.key, axis.label]));
+      const maxAxis = axisCatalog.reduce((max, axis) => Math.max(max, Number(axis.max || 10) || 10), 10);
+      const traces = sorted.map((summary) => {
+        const axisOrder = Array.isArray(summary.axis_order) && summary.axis_order.length > 0
+          ? summary.axis_order.filter((key) => axisLabelsByKey.has(key))
+          : axisCatalog.map((axis) => axis.key);
+        const theta = axisOrder.map((key) => axisLabelsByKey.get(key) || key);
+        const r = axisOrder.map((key) => Number(summary.structure_axes?.[key] || 0));
+        const closedTheta = theta.concat(theta[0] || "");
+        const closedR = r.concat(r[0] ?? 0);
+        const tags = Array.isArray(summary.structure_tags) ? summary.structure_tags : [];
+        return {
+          type: "scatterpolar",
+          mode: "lines+markers",
+          fill: "toself",
+          name: summary.strategy,
+          theta: closedTheta,
+          r: closedR,
+          line: {
+            color: getBacktestStrategyColor(summary.strategy, strategyNames),
+            width: 2.5,
+          },
+          marker: {
+            color: getBacktestStrategyColor(summary.strategy, strategyNames),
+            size: 6,
+          },
+          opacity: 0.55,
+          customdata: closedTheta.map((axisLabel, idx) => [
+            summary.strategy,
+            Number(summary.structure_score || 0).toFixed(2),
+            axisLabel,
+            Number(closedR[idx] || 0).toFixed(2),
+            tags.join(", "),
+          ]),
+          hovertemplate:
+            "<b>%{customdata[0]}</b><br>" +
+            "Structure Score: %{customdata[1]}<br>" +
+            "Axis: %{customdata[2]}<br>" +
+            "Value: %{customdata[3]}<br>" +
+            "Tags: %{customdata[4]}<extra></extra>",
+        };
+      });
+
+      Plotly.newPlot(chartDiv, traces, {
+        paper_bgcolor: "#ffffff",
+        plot_bgcolor: "#ffffff",
+        margin: { l: 40, r: 40, t: 28, b: 28 },
+        legend: { orientation: "h", y: -0.12 },
+        polar: {
+          bgcolor: "#ffffff",
+          radialaxis: {
+            visible: true,
+            range: [0, maxAxis],
+            tickfont: { size: 10 },
+            gridcolor: "#dbe4f0",
+            linecolor: "#cbd5e1",
+          },
+          angularaxis: {
+            tickfont: { size: 11, color: "#475569" },
+            gridcolor: "#e2e8f0",
+            linecolor: "#cbd5e1",
+          },
+        },
+      }, {
+        responsive: true,
+        displayModeBar: false,
+        displaylogo: false,
+      });
+    }
+
+    function renderBacktestBehaviorRadar() {
+      const chartDiv = document.getElementById("backtest-behavior-chart");
+      if (!chartDiv || !window.Plotly) {
+        return;
+      }
+      const axisCatalog = backtestDefaultBehaviorAxisCatalog();
+      const summaries = (Array.isArray(backtestStrategySummaries) ? backtestStrategySummaries : [])
+        .map((summary, index) => normalizeBacktestStrategySummary(summary, index, backtestStrategyAxisCatalog))
+        .filter((summary) => summary.strategy && summary.has_behavior_data);
+      if (!summaries.length) {
+        setBacktestBehaviorPanelVisible(false);
+        Plotly.purge(chartDiv);
+        return;
+      }
+      setBacktestBehaviorPanelVisible(true);
+
+      const sorted = [...summaries]
+        .map((summary) => ({
+          ...summary,
+          behavior_profile: summary.behavior_profile || deriveBacktestBehaviorProfile(summary),
+        }))
+        .sort((left, right) => (
+          Number(right.behavior_profile?.behavior_score || 0) - Number(left.behavior_profile?.behavior_score || 0)
+        ));
+      const strategyNames = sorted.map((item) => item.strategy);
+      const axisLabelsByKey = new Map(axisCatalog.map((axis) => [axis.key, axis.label]));
+      const traces = sorted.map((summary) => {
+        const profile = summary.behavior_profile || deriveBacktestBehaviorProfile(summary);
+        const axisOrder = Array.isArray(profile.axis_order) && profile.axis_order.length > 0
+          ? profile.axis_order.filter((key) => axisLabelsByKey.has(key))
+          : axisCatalog.map((axis) => axis.key);
+        const theta = axisOrder.map((key) => axisLabelsByKey.get(key) || key);
+        const r = axisOrder.map((key) => Number(profile.behavior_axes?.[key] || 0));
+        const closedTheta = theta.concat(theta[0] || "");
+        const closedR = r.concat(r[0] ?? 0);
+        const closedKeys = axisOrder.concat(axisOrder[0] || "");
+        return {
+          type: "scatterpolar",
+          mode: "lines+markers",
+          fill: "toself",
+          name: summary.strategy,
+          theta: closedTheta,
+          r: closedR,
+          line: {
+            color: getBacktestStrategyColor(summary.strategy, strategyNames),
+            width: 2.5,
+          },
+          marker: {
+            color: getBacktestStrategyColor(summary.strategy, strategyNames),
+            size: 6,
+          },
+          opacity: 0.55,
+          customdata: closedTheta.map((axisLabel, idx) => {
+            const axisKey = closedKeys[idx] || axisOrder[0] || "";
+            const rawValue = profile.raw_metrics?.[axisKey] ?? 0;
+            return [
+              summary.strategy,
+              Number(profile.behavior_score || 0).toFixed(2),
+              axisLabel,
+              Number(closedR[idx] || 0).toFixed(2),
+              formatBacktestBehaviorRawMetric(axisKey, rawValue),
+            ];
+          }),
+          hovertemplate:
+            "<b>%{customdata[0]}</b><br>" +
+            "Behavior Score: %{customdata[1]}<br>" +
+            "Axis: %{customdata[2]}<br>" +
+            "Normalized: %{customdata[3]} / 10<br>" +
+            "Raw: %{customdata[4]}<extra></extra>",
+        };
+      });
+
+      Plotly.newPlot(chartDiv, traces, {
+        paper_bgcolor: "#ffffff",
+        plot_bgcolor: "#ffffff",
+        margin: { l: 40, r: 40, t: 28, b: 28 },
+        legend: { orientation: "h", y: -0.12 },
+        polar: {
+          bgcolor: "#ffffff",
+          radialaxis: {
+            visible: true,
+            range: [0, 10],
+            tickfont: { size: 10 },
+            gridcolor: "#dbe4f0",
+            linecolor: "#cbd5e1",
+          },
+          angularaxis: {
+            tickfont: { size: 11, color: "#475569" },
+            gridcolor: "#e2e8f0",
+            linecolor: "#cbd5e1",
+          },
+        },
       }, {
         responsive: true,
         displayModeBar: false,
@@ -7940,6 +8554,12 @@ let backtestSourceMode = "saved";
         document.getElementById("bt-best-quality").textContent = Number(data.summary?.best_quality || 0).toFixed(2);
         document.getElementById("bt-avg-return").textContent = `${Number(data.summary?.avg_return || 0).toFixed(2)}%`;
         document.getElementById("bt-avg-sharpe").textContent = Number(data.summary?.avg_sharpe || 0).toFixed(2);
+        setBacktestStructureData({
+          summaries: data.strategy_summaries,
+          strategyProfile: data.strategy_profile,
+          axisCatalog: data.strategy_axis_catalog,
+          strategyName: data.strategy_name || strategyName || "Editor Draft",
+        });
 
         if (data.race || Array.isArray(data.strategy_summaries)) {
           updateBacktestRaceFromSnapshot({
@@ -7962,8 +8582,21 @@ let backtestSourceMode = "saved";
 
         const rows = Array.isArray(data.rows) ? data.rows : [];
         if (rows.length === 0) {
-          if (backtestMatrixRows.length === 0) {
+          const body = document.getElementById("backtest-table-body");
+          if (body) {
+            body.innerHTML = "";
+          }
+          if (window.Plotly) {
+            const scatterChartDiv = document.getElementById("backtest-chart");
+            if (scatterChartDiv) {
+              Plotly.purge(scatterChartDiv);
+            }
+          }
+          if (backtestMatrixRows.length === 0 && backtestStrategySummaries.length === 0) {
             setBacktestEmptyState(`No scored results were returned for ${data.strategy_name || strategyName || 'Editor Draft'}.`);
+          } else {
+            document.getElementById("backtest-empty").classList.add("hidden");
+            content.classList.remove("hidden");
           }
           setBacktestProgress({
             show: true,
@@ -7983,6 +8616,8 @@ let backtestSourceMode = "saved";
         populateBacktestAxisControls(data.metrics || backtestDefaultMetrics());
         mergeBacktestScatterRows(rows, { render: false });
         renderBacktestScatter();
+        renderBacktestStructureRadar();
+        renderBacktestBehaviorRadar();
 
         document.getElementById("backtest-empty").classList.add("hidden");
         content.classList.remove("hidden");

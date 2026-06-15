@@ -4,18 +4,18 @@ workflow_update_plan_progress.ps1
 Plan/progress maintenance workflow for the ETF Screener repo.
 
 What it does:
-  1. Updates the "Last updated" stamp in plan.md.
+  1. Updates the "Last updated" stamp in root plan.md.
   2. Optionally replaces the current objective.
   3. Prepends a new progress entry at the top of progress.md.
-  4. Optionally prepends new notes into the current state / locked decisions sections.
+  4. Optionally prepends new notes into the detailed companion plan files under plan/.
 
 Usage:
   .\workflow_update_plan_progress.ps1 -Summary "Added a new workflow helper."
   .\workflow_update_plan_progress.ps1 -Objective "Build a better refresh pipeline."
   .\workflow_update_plan_progress.ps1 -Summary "Shipped the helper." -NextResumePoint "Run it after the next turn."
-  .\workflow_update_plan_progress.ps1 -Summary "..." -LockedDecision "Keep plan.md and progress.md tracked at the repo root."
+  .\workflow_update_plan_progress.ps1 -Summary "..." -LockedDecision "Keep a root plan.md entrypoint plus companion plan files tracked in the repo."
 
-The Summary notes are used for both plan.md current-state prepends and the new progress.md entry.
+The Summary notes are used for both plan/current-state.md prepends and the new progress.md entry.
 #>
 
 param(
@@ -38,15 +38,15 @@ Usage:
   .\workflow_update_plan_progress.ps1 -Summary "Added a new workflow helper."
   .\workflow_update_plan_progress.ps1 -Objective "Build a better refresh pipeline."
   .\workflow_update_plan_progress.ps1 -Summary "Shipped the helper." -NextResumePoint "Run it after the next turn."
-  .\workflow_update_plan_progress.ps1 -Summary "..." -LockedDecision "Keep plan.md and progress.md tracked at the repo root."
+  .\workflow_update_plan_progress.ps1 -Summary "..." -LockedDecision "Keep a root plan.md entrypoint plus companion plan files tracked in the repo."
 
 Behavior:
-  1. Updates the "Last updated" stamp in plan.md.
+  1. Updates the "Last updated" stamp in root plan.md.
   2. Optionally replaces the current objective.
   3. Prepends a new progress entry at the top of progress.md.
-  4. Optionally prepends notes into the current state / locked decisions sections.
+  4. Optionally prepends notes into the detailed companion plan files under plan/.
 
-The Summary notes are used for both plan.md current-state prepends and the new progress.md entry.
+The Summary notes are used for both plan/current-state.md prepends and the new progress.md entry.
 "@
     exit 0
 }
@@ -62,6 +62,9 @@ Push-Location $root
 
 $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
 $planPath = Join-Path $root 'plan.md'
+$planDir = Join-Path $root 'plan'
+$currentStatePath = Join-Path $planDir 'current-state.md'
+$lockedDecisionsPath = Join-Path $planDir 'locked-decisions.md'
 $progressPath = Join-Path $root 'progress.md'
 
 $logDir = Join-Path $root 'logs'
@@ -136,21 +139,6 @@ function Find-SectionBounds {
     }
 }
 
-function Get-SectionContent {
-    param(
-        [string[]]$Lines,
-        [Parameter(Mandatory = $true)][string]$Heading
-    )
-
-    $bounds = Find-SectionBounds -Lines $Lines -Heading $Heading
-    $contentStart = $bounds.Start + 1
-    if ($contentStart -gt $bounds.End) {
-        return @()
-    }
-
-    return @($Lines[$contentStart..$bounds.End])
-}
-
 function Replace-SectionContent {
     param(
         [string[]]$Lines,
@@ -175,14 +163,27 @@ function Replace-SectionContent {
     return @($before + $NewContent + $after)
 }
 
-function Prepend-SectionContent {
+function Prepend-MarkdownListContent {
     param(
-        [string[]]$Lines,
-        [Parameter(Mandatory = $true)][string]$Heading,
+        [Parameter(Mandatory = $true)][string]$Path,
         [string[]]$NewNotes
     )
 
-    $existing = Get-SectionContent -Lines $Lines -Heading $Heading
+    $cleanNotes = Normalize-Notes -Text $NewNotes
+    if ($cleanNotes.Count -eq 0) {
+        return
+    }
+
+    $lines = @(Get-Content -LiteralPath $Path)
+    if ($lines.Count -eq 0 -or $lines[0] -notmatch '^# ') {
+        throw "Expected a top-level markdown heading in $Path."
+    }
+
+    $existing = @()
+    if ($lines.Count -gt 1) {
+        $existing = @($lines[1..($lines.Count - 1)])
+    }
+
     while ($existing.Count -gt 0 -and [string]::IsNullOrWhiteSpace($existing[0])) {
         if ($existing.Count -le 1) {
             $existing = @()
@@ -191,21 +192,23 @@ function Prepend-SectionContent {
         }
     }
 
-    $replacement = @('')
-    foreach ($clean in (Normalize-Notes -Text $NewNotes)) {
-        $replacement += "- $clean"
+    $updated = @($lines[0], '')
+    foreach ($clean in $cleanNotes) {
+        $updated += "- $clean"
+    }
+    $updated += ''
+
+    if ($existing.Count -gt 0) {
+        $updated += $existing
     }
 
-    $replacement += $existing
-    return Replace-SectionContent -Lines $Lines -Heading $Heading -NewContent $replacement
+    Set-Content -LiteralPath $Path -Value $updated -Encoding utf8
 }
 
 function Update-PlanDocument {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [string]$NewObjective,
-        [string[]]$StateNotes,
-        [string[]]$LockedDecisionNotes
+        [string]$NewObjective
     )
 
     $lines = @(Get-Content -LiteralPath $Path)
@@ -222,16 +225,6 @@ function Update-PlanDocument {
         $objectiveLines += @($NewObjective -split "`r?`n")
         $objectiveLines += ''
         $lines = Replace-SectionContent -Lines $lines -Heading '## Current objective' -NewContent $objectiveLines
-    }
-
-    $cleanStateNotes = Normalize-Notes -Text $StateNotes
-    if ($cleanStateNotes.Count -gt 0) {
-        $lines = Prepend-SectionContent -Lines $lines -Heading '## Current state' -NewNotes $cleanStateNotes
-    }
-
-    $cleanLockedDecisionNotes = Normalize-Notes -Text $LockedDecisionNotes
-    if ($cleanLockedDecisionNotes.Count -gt 0) {
-        $lines = Prepend-SectionContent -Lines $lines -Heading '## Locked decisions' -NewNotes $cleanLockedDecisionNotes
     }
 
     Set-Content -LiteralPath $Path -Value $lines -Encoding utf8
@@ -297,6 +290,14 @@ try {
         throw "plan.md not found at $planPath"
     }
 
+    if (-not (Test-Path $currentStatePath)) {
+        throw "current-state plan file not found at $currentStatePath"
+    }
+
+    if (-not (Test-Path $lockedDecisionsPath)) {
+        throw "locked-decisions plan file not found at $lockedDecisionsPath"
+    }
+
     if (-not (Test-Path $progressPath)) {
         throw "progress.md not found at $progressPath"
     }
@@ -332,8 +333,10 @@ try {
         }
     }
 
-    Write-Info "Updating plan.md and progress.md..."
-    Update-PlanDocument -Path $planPath -NewObjective $Objective -StateNotes $stateNotes -LockedDecisionNotes $cleanLockedDecision
+    Write-Info "Updating plan.md, companion plan files, and progress.md..."
+    Update-PlanDocument -Path $planPath -NewObjective $Objective
+    Prepend-MarkdownListContent -Path $currentStatePath -NewNotes $stateNotes
+    Prepend-MarkdownListContent -Path $lockedDecisionsPath -NewNotes $cleanLockedDecision
     Update-ProgressDocument -Path $progressPath -EntryNotes $progressNotes -ResumePoint $NextResumePoint
 
     Write-Info "Plan and progress were updated successfully."

@@ -800,6 +800,41 @@ def test_backtest_matrix_emits_cached_lane_event(monkeypatch):
     assert cached_ticker["lane"]["scored_tickers"] == 1
 
 
+def test_job_progress_endpoint_sanitizes_non_finite_payloads():
+    app_fast._clear_job_progress()
+    app_fast._set_job_progress(
+        "backtest",
+        "running",
+        pct=float("nan"),
+        label="Backtest Matrix",
+        detail="Streaming live progress",
+        payload={
+            "backtest_race": {
+                "pct": float("nan"),
+                "lanes": [
+                    {
+                        "strategy": "alpha",
+                        "avg_quality_score": float("nan"),
+                        "structure_axes": {"trend_context": float("inf")},
+                    }
+                ],
+            }
+        },
+    )
+
+    response = client.get("/api/job-progress")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["pct"] == 0.0
+    assert data["payload"]["backtest_race"]["pct"] == 0.0
+    lane = data["payload"]["backtest_race"]["lanes"][0]
+    assert lane["avg_quality_score"] == 0.0
+    assert lane["structure_axes"]["trend_context"] == 0.0
+
+    app_fast._clear_job_progress()
+
+
 def test_custom_ticker_list_api_roundtrip(monkeypatch, tmp_path):
     config_path = tmp_path / "custom_ticker_list.json"
     monkeypatch.setattr(
@@ -1319,6 +1354,11 @@ def test_backtest_endpoint_returns_ranked_metrics(monkeypatch, tmp_path):
     assert data["summary"]["count"] == 1
     assert data["summary"]["avg_sharpe"] == 1.4
     assert data["csv_path"]
+    assert data["strategy_axis_catalog"][0]["key"] == "trend_context"
+    assert data["strategy_profile"]["structure_score"] > 0
+    assert data["strategy_summaries"][0]["structure_score"] > 0
+    assert "structure_axes" in data["strategy_summaries"][0]
+    assert data["race"]["lanes"][0]["structure_score"] > 0
     exported = pd.read_csv(data["csv_path"])
     assert exported["Trades"].tolist() == [7]
     assert "df" not in exported.columns
@@ -1398,6 +1438,10 @@ def test_backtest_matrix_endpoint_runs_selected_strategies_in_universe(
     assert data["summary"]["strategy_count"] == 2
     assert data["summary"]["count"] == 2
     assert data["metrics"][0]["key"] == "quality_score"
+    assert data["strategy_axis_catalog"][0]["key"] == "trend_context"
+    assert all("structure_score" in lane for lane in data["strategy_summaries"])
+    assert all("structure_axes" in lane for lane in data["strategy_summaries"])
+    assert all("structure_tags" in lane for lane in data["strategy_summaries"])
     assert data["rows"][0]["strategy"] == "alpha"
     assert data["rows"][0]["exchange"] == "xetra"
     assert data["csv_path"]

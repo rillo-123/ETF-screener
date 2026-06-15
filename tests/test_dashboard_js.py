@@ -2103,6 +2103,219 @@ def test_dashboard_js_backtest_table_keeps_zero_trade_rows_visible():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
+def test_dashboard_js_backtest_table_headers_sort_rows():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for dashboard JavaScript smoke tests")
+
+    dashboard_js = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "ETF_screener"
+        / "dashboard"
+        / "static"
+        / "js"
+        / "dashboard.js"
+    )
+    script = textwrap.dedent(f"""
+        const fs = require("fs");
+
+        class ClassList {{
+          constructor() {{ this.values = new Set(); }}
+          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
+          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
+          contains(name) {{ return this.values.has(name); }}
+          toggle(name, force) {{
+            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
+            if (shouldAdd) this.values.add(name);
+            else this.values.delete(name);
+            return shouldAdd;
+          }}
+        }}
+
+        class Element {{
+          constructor(id = "") {{
+            this.id = id;
+            this.classList = new ClassList();
+            this.children = [];
+            this.dataset = {{}};
+            this.style = {{}};
+            this.options = [];
+            this.value = "";
+            this.textContent = "";
+            this.disabled = false;
+            this.checked = false;
+            this.title = "";
+            this.className = "";
+            this.clientWidth = 900;
+            this.clientHeight = 520;
+            this._innerHTML = "";
+          }}
+          addEventListener() {{}}
+          setAttribute(name, value) {{ this[name] = value; }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          remove() {{}}
+          focus() {{}}
+          get innerHTML() {{ return this._innerHTML; }}
+          set innerHTML(value) {{ this._innerHTML = value; this.children = []; }}
+          getBoundingClientRect() {{
+            return {{ width: this.clientWidth, height: this.clientHeight, left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight }};
+          }}
+          getContext() {{
+            const gradient = {{ addColorStop() {{}} }};
+            const noop = () => {{}};
+            return {{
+              save: noop,
+              restore: noop,
+              scale: noop,
+              translate: noop,
+              rotate: noop,
+              clearRect: noop,
+              fillRect: noop,
+              beginPath: noop,
+              arc: noop,
+              ellipse: noop,
+              closePath: noop,
+              fill: noop,
+              stroke: noop,
+              moveTo: noop,
+              lineTo: noop,
+              createLinearGradient: () => gradient,
+              createRadialGradient: () => gradient,
+              lineCap: "",
+              lineJoin: "",
+              globalAlpha: 1,
+              fillStyle: "",
+              strokeStyle: "",
+              lineWidth: 1,
+            }};
+          }}
+        }}
+
+        const elements = new Map();
+        const getElement = (id) => {{
+          if (!elements.has(id)) elements.set(id, new Element(id));
+          return elements.get(id);
+        }};
+
+        [
+          "backtest-table-body",
+          "backtest-chart",
+          "backtest-selected-count",
+          "bt-strategy",
+          "bt-count",
+          "bt-best-quality",
+          "bt-avg-return",
+          "bt-avg-sharpe",
+          "backtest-sort-ticker",
+          "backtest-sort-strategy",
+          "backtest-sort-quality_score",
+          "backtest-sort-return_pct",
+          "backtest-sort-win_rate_pct",
+          "backtest-sort-sharpe",
+          "backtest-sort-profit_factor",
+          "backtest-sort-max_dd_pct",
+          "backtest-sort-trades",
+          "backtest-sort-days_since_entry",
+          "tab-screener",
+          "tab-shortlist",
+          "tab-swarm",
+          "tab-swarm-lab",
+          "tab-backtest",
+        ].forEach(getElement);
+
+        global.window = global;
+        global.window.addEventListener = () => {{}};
+        global.document = {{
+          addEventListener: () => {{}},
+          getElementById: (id) => getElement(id),
+          querySelectorAll: (selector) => selector === ".tab-btn" ? [] : [],
+          createElement: () => new Element(),
+        }};
+        global.localStorage = {{
+          getItem: () => null,
+          setItem: () => {{}},
+          removeItem: () => {{}},
+        }};
+        global.fetch = async () => ({{
+          ok: true,
+          json: async () => ({{ history: {{}}, count: 0, rows: [] }}),
+        }});
+        global.requestAnimationFrame = () => 1;
+        global.cancelAnimationFrame = () => {{}};
+        global.setTimeout = (fn) => {{ fn(); return 1; }};
+        global.clearTimeout = () => {{}};
+        global.Plotly = {{
+          newPlot: async () => {{}},
+          purge: () => {{}},
+          relayout: () => {{}},
+          downloadImage: () => {{}},
+        }};
+
+        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
+        Function(source)();
+
+        window.mergeBacktestScatterRows([
+          {{
+            ticker: "ZZZ.ST",
+            strategy: "strat_b",
+            quality_score: 4,
+            return_pct: 5,
+            win_rate_pct: 52,
+            profit_factor: 1.1,
+            sharpe: 0.7,
+            max_dd_pct: 7,
+            trades: 2,
+            days_since_entry: 4,
+          }},
+          {{
+            ticker: "AAA.ST",
+            strategy: "strat_a",
+            quality_score: 11,
+            return_pct: 1,
+            win_rate_pct: 48,
+            profit_factor: 0.9,
+            sharpe: 0.2,
+            max_dd_pct: 3,
+            trades: 1,
+            days_since_entry: 1,
+          }},
+        ], {{ render: false }});
+
+        const body = document.getElementById("backtest-table-body");
+        if (!body.children.length) {{
+          throw new Error("Expected sorted backtest rows");
+        }}
+        if (!body.children[0].innerHTML.includes("AAA.ST")) {{
+          throw new Error(`Expected default quality sort to put AAA.ST first, got: ${{body.children[0].innerHTML}}`);
+        }}
+
+        window.setBacktestTableSort("ticker");
+        if (!body.children[0].innerHTML.includes("AAA.ST")) {{
+          throw new Error(`Expected ascending ticker sort to keep AAA.ST first, got: ${{body.children[0].innerHTML}}`);
+        }}
+
+        window.setBacktestTableSort("ticker");
+        if (!body.children[0].innerHTML.includes("ZZZ.ST")) {{
+          throw new Error(`Expected descending ticker sort to put ZZZ.ST first, got: ${{body.children[0].innerHTML}}`);
+        }}
+
+        const tickerHeader = document.getElementById("backtest-sort-ticker");
+        if (!String(tickerHeader.textContent || "").includes("v")) {{
+          throw new Error(`Expected ticker header to show descending indicator, got: ${{tickerHeader.textContent}}`);
+        }}
+        process.exit(0);
+        """)
+
+    result = subprocess.run(
+        [node, "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
 def obsolete_dashboard_js_restores_backtest_race_after_reload():
     node = shutil.which("node")
     if not node:
