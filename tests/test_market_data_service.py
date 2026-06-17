@@ -7,7 +7,10 @@ import pandas as pd
 from ETF_screener.database import ETFDatabase
 from ETF_screener.delisting_tracker import DelistingTracker
 from ETF_screener.indicators import add_indicators
-from ETF_screener.market_data_service import MarketDataRefresher
+from ETF_screener.market_data_service import (
+    MarketDataRefresher,
+    filter_low_vitality_nasdaq_tickers,
+)
 from ETF_screener.storage import ParquetStorage
 
 
@@ -475,3 +478,40 @@ def test_market_data_refresher_preserves_timezone_aware_fresh_rows(tmp_path):
 
     assert refreshed_df["Date"].max().date() == latest_business_day
     assert db.get_latest_date("AAA.DE") == latest_business_day.isoformat()
+
+
+def test_filter_low_vitality_nasdaq_tickers_keeps_only_actionable_symbols(tmp_path):
+    db_path = tmp_path / "etfs.db"
+    db = ETFDatabase(db_path=str(db_path))
+    dates = pd.date_range(end=pd.Timestamp(date.today()), periods=60, freq="B")
+
+    lively = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [14.8] * len(dates),
+            "High": [15.4] * len(dates),
+            "Low": [14.5] * len(dates),
+            "Close": [15.0] * len(dates),
+            "Volume": [400_000] * len(dates),
+        }
+    )
+    weak = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [1.0] * len(dates),
+            "High": [1.1] * len(dates),
+            "Low": [0.9] * len(dates),
+            "Close": [1.0] * len(dates),
+            "Volume": [20_000] * len(dates),
+        }
+    )
+    db.insert_dataframe(lively, "LIVN")
+    db.insert_dataframe(weak, "WEAK")
+
+    filtered = filter_low_vitality_nasdaq_tickers(
+        db_path=str(db_path),
+        latest_market_date=db.get_latest_market_date(),
+        tickers=["LIVN", "WEAK", "AAA.DE"],
+    )
+
+    assert filtered == ["LIVN", "AAA.DE"]

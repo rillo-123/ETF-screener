@@ -210,6 +210,358 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
+def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for dashboard JavaScript smoke tests")
+
+    dashboard_js = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "ETF_screener"
+        / "dashboard"
+        / "static"
+        / "js"
+        / "dashboard.js"
+    )
+    script = textwrap.dedent(f"""
+        const fs = require("fs");
+
+        class ClassList {{
+          constructor() {{ this.values = new Set(); }}
+          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
+          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
+          contains(name) {{ return this.values.has(name); }}
+          toggle(name, force) {{
+            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
+            if (shouldAdd) this.values.add(name);
+            else this.values.delete(name);
+            return shouldAdd;
+          }}
+        }}
+
+        class Element {{
+          constructor(id = "") {{
+            this.id = id;
+            this.classList = new ClassList();
+            this.children = [];
+            this.listeners = {{}};
+            this.dataset = {{}};
+            this.style = {{}};
+            this.options = [];
+            this.value = "";
+            this.textContent = "";
+            this._innerHTML = "";
+            this.disabled = false;
+            this.clientWidth = 900;
+            this.clientHeight = 520;
+          }}
+          addEventListener(name, handler) {{
+            this.listeners[name] = handler;
+          }}
+          setAttribute(name, value) {{ this[name] = value; }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          click() {{
+            if (typeof this.listeners.click === "function") {{
+              this.listeners.click({{ target: this }});
+            }}
+          }}
+          remove() {{}}
+          get innerHTML() {{ return this._innerHTML; }}
+          set innerHTML(value) {{ this._innerHTML = value; this.children = []; }}
+          getBoundingClientRect() {{
+            return {{ width: this.clientWidth, height: this.clientHeight, left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight }};
+          }}
+          getContext() {{
+            const gradient = {{ addColorStop() {{}} }};
+            const noop = () => {{}};
+            return {{
+              save: noop,
+              restore: noop,
+              scale: noop,
+              translate: noop,
+              rotate: noop,
+              clearRect: noop,
+              fillRect: noop,
+              beginPath: noop,
+              arc: noop,
+              ellipse: noop,
+              closePath: noop,
+              fill: noop,
+              stroke: noop,
+              moveTo: noop,
+              lineTo: noop,
+              createLinearGradient: () => gradient,
+              createRadialGradient: () => gradient,
+              lineCap: "",
+              lineJoin: "",
+              globalAlpha: 1,
+              fillStyle: "",
+              strokeStyle: "",
+              lineWidth: 1,
+            }};
+          }}
+        }}
+
+        const elements = new Map();
+        const getElement = (id) => {{
+          if (!elements.has(id)) elements.set(id, new Element(id));
+          return elements.get(id);
+        }};
+
+        ["screener", "shortlist", "query", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+          getElement(`tab-${{tab}}`).classList.add("hidden");
+          getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
+        }});
+
+        [
+          "query-dataset",
+          "ticker-select",
+          "strategy-select",
+          "active-ticker-title",
+          "plotly-chart",
+          "plotly-tools-actions",
+          "query-source-readout",
+          "query-source-note",
+          "query-signal",
+          "query-signal-age-max",
+          "query-min-reliability",
+          "query-refresh-if-needed",
+          "query-ticker",
+          "query-label",
+          "query-days",
+          "query-start-date",
+          "query-end-date",
+          "query-limit",
+          "query-columns",
+          "query-sort-by",
+          "query-status",
+          "query-run-btn",
+          "query-progress-shell",
+          "query-progress-label",
+          "query-progress-message",
+          "query-progress-pct",
+          "query-progress-bar",
+          "query-activity-caption",
+          "query-activity-log",
+          "query-empty",
+          "query-content",
+          "query-results-head",
+          "query-results-body",
+          "query-summary-dataset",
+          "query-summary-rows",
+          "query-summary-returned",
+          "query-summary-range",
+          "query-summary-source",
+          "query-api-call",
+          "query-cli-call",
+          "query-source-group",
+          "query-signal-group",
+          "query-signal-age-group",
+          "query-reliability-group",
+          "query-refresh-group",
+          "query-ticker-group",
+          "query-label-group",
+          "query-days-group",
+          "query-start-group",
+          "query-end-group",
+          "query-sort-group",
+        ].forEach(getElement);
+        getElement("query-dataset").value = "signal_scan";
+        getElement("query-signal").value = "trend_forming";
+        getElement("query-signal-age-max").value = "5";
+        getElement("query-min-reliability").value = "6.0";
+        getElement("query-refresh-if-needed").checked = true;
+        getElement("query-limit").value = "5";
+        getElement("query-columns").value = "ticker,reliability_score";
+
+        global.window = global;
+        global.window.addEventListener = () => {{}};
+        global.document = {{
+          body: new Element("body"),
+          createElement: (tag) => new Element(tag),
+          getElementById: getElement,
+          querySelectorAll: (selector) => selector === ".tab-btn"
+            ? ["screener", "shortlist", "query", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            : [],
+          addEventListener: (event, handler) => {{
+            if (event === "DOMContentLoaded" && typeof handler === "function") {{
+              handler();
+            }}
+          }},
+        }};
+        const storage = new Map();
+        global.localStorage = {{
+          getItem: (key) => storage.has(key) ? storage.get(key) : "",
+          setItem: (key, value) => storage.set(key, String(value)),
+          removeItem: (key) => storage.delete(key),
+        }};
+        global.fetch = async (url) => {{
+          const text = String(url);
+          if (text.includes("/api/query/catalog")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                datasets: [
+                  {{ key: "signal_scan", label: "Signal Scan" }},
+                  {{ key: "price_history", label: "Ticker History" }},
+                  {{ key: "shortlist", label: "Shortlist Snapshot" }},
+                ],
+                tickers: ["AAA.DE", "BBB.ST"],
+                signal_scan: {{
+                  default_columns: ["ticker", "reliability_score"],
+                  signals: [
+                    {{
+                      key: "trend_forming",
+                      label: "Trend Forming",
+                      default_age_max: 5,
+                      default_min_reliability: 6.0,
+                    }},
+                    {{
+                      key: "trend_weakening",
+                      label: "Trend Weakening",
+                      default_age_max: 3,
+                      default_min_reliability: 6.0,
+                    }},
+                  ],
+                }},
+                price_history: {{ default_columns: ["date", "close"], default_days: 90 }},
+                shortlist: {{ labels: ["All", "Buy", "Watch", "Skip"] }},
+              }}),
+            }};
+          }}
+          if (text.includes("/api/query/run")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                dataset: "signal_scan",
+                source: "xetra",
+                row_count: 2,
+                returned_rows: 2,
+                columns: ["ticker", "reliability_score"],
+                rows: [
+                  {{ ticker: "AAA.DE", reliability_score: 7.4 }},
+                  {{ ticker: "BBB.DE", reliability_score: 6.8 }},
+                ],
+                summary: {{
+                  signal: "trend_forming",
+                  signal_label: "Trend Forming",
+                  latest_market_date: "2026-06-15",
+                }},
+                refresh: {{
+                  requested: false,
+                  result: null,
+                }},
+              }}),
+            }};
+          }}
+          if (text.includes("/api/chart/")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                strategy_name: "Strategy Analysis",
+                figure: {{
+                  data: [{{ x: ["2026-06-14", "2026-06-15"], y: [100, 101], type: "scatter", name: "Close" }}],
+                  layout: {{}},
+                }},
+              }}),
+            }};
+          }}
+          if (text.includes("/api/market-status")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                today: "2026-06-15",
+                latest_market_date: "2026-06-15",
+                days_stale: 0,
+                is_stale: false,
+                tracked_tickers: 2,
+                fresh_tickers: 2,
+                missing_tickers: 0,
+                stale_tickers: 0,
+              }}),
+            }};
+          }}
+          if (text.includes("/api/log")) {{
+            return {{ ok: true, json: async () => ({{ ok: true }}) }};
+          }}
+          return {{ ok: true, json: async () => ({{}}) }};
+        }};
+        global.requestAnimationFrame = () => 1;
+        global.cancelAnimationFrame = () => {{}};
+        global.setTimeout = (fn) => {{ fn(); return 1; }};
+        global.clearTimeout = () => {{}};
+        global.Plotly = {{
+          newPlot: async () => {{}},
+          purge: () => {{}},
+          relayout: () => {{}},
+          downloadImage: () => {{}},
+        }};
+
+        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
+        Function(source)();
+
+        (async () => {{
+          await window.dashboardReadyPromise;
+          window.showTab("query");
+          await window.loadQueryResults();
+          const body = document.getElementById("query-results-body");
+          if (body.children.length !== 2) {{
+            throw new Error(`Expected 2 query rows, got ${{body.children.length}}`);
+          }}
+          if (document.getElementById("query-summary-source").textContent !== "Xetra") {{
+            throw new Error(`Expected Xetra source summary, got ${{document.getElementById("query-summary-source").textContent}}`);
+          }}
+          if (document.getElementById("query-source-readout").textContent !== "Xetra") {{
+            throw new Error(`Expected top-bar universe readout to show Xetra, got ${{document.getElementById("query-source-readout").textContent}}`);
+          }}
+          if (!document.getElementById("query-progress-shell").classList.contains("hidden")) {{
+            throw new Error("Expected the query progress gutter to hide after a successful run");
+          }}
+          if (document.getElementById("query-activity-log").children.length < 2) {{
+            throw new Error("Expected the query activity gutter to record staged progress updates");
+          }}
+          if (!String(document.getElementById("query-api-call").textContent || "").includes("dataset=signal_scan")) {{
+            throw new Error("Expected API preview to include the signal scan dataset");
+          }}
+          if (!String(document.getElementById("query-cli-call").textContent || "").includes("--signal trend_forming")) {{
+            throw new Error("Expected CLI preview to include the chosen signal");
+          }}
+          if (document.getElementById("query-summary-range").textContent !== "2026-06-15") {{
+            throw new Error("Expected signal scan summary to show latest market date");
+          }}
+          const tickerButton = document.getElementById("query-results-body").children[0].children[0].children[0];
+          if (!tickerButton || tickerButton.textContent !== "AAA.DE") {{
+            throw new Error("Expected the first query ticker cell to render as a clickable button");
+          }}
+          tickerButton.click();
+          await Promise.resolve();
+          await Promise.resolve();
+          if (document.getElementById("tab-screener").classList.contains("hidden")) {{
+            throw new Error("Expected ticker drill-down to switch back to Screener");
+          }}
+          if (document.getElementById("active-ticker-title").textContent.indexOf("AAA.DE") === -1) {{
+            throw new Error("Expected Screener chart drill-down to load the clicked ticker");
+          }}
+          if (!document.getElementById("tab-query").classList.contains("hidden")) {{
+            throw new Error("Expected Query to hide after drilling into the Screener chart");
+          }}
+          process.exit(0);
+        }})().catch((err) => {{
+          console.error(err);
+          process.exit(1);
+        }});
+        """)
+
+    result = subprocess.run(
+        [node, "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
 def test_dashboard_js_swarm_lab_does_not_call_market_endpoints():
     node = shutil.which("node")
     if not node:

@@ -1,5 +1,24 @@
 # Locked decisions
 
+- -NextResumePoint
+
+- Treat Nasdaq as a curated actionable stock universe, not a raw all-listings dump; low-vitality names should be filtered out centrally from actual scan universes rather than left for the user to sift manually.
+
+- Treat the Query and Screener source buttons as first-class actionable universes. Xetra, Sweden, Nasdaq, custom lists, and all-lists scans should share one backend source model instead of fragmenting into separate ad hoc filters.
+- Keep Nasdaq as a curated common-share universe sourced from the official Nasdaq Trader symbol directory; exclude ETFs, warrants, units, rights, preferreds, and other non-core listings so scans stay practical.
+
+- Treat historical pattern calibration as a second-pass ranking layer on top of explicit named signal rules; use past outcomes to calibrate present setups, not to replace explainable rule-based matching outright.
+
+- Always show the Supertrend overlay on the Screener chart when chart data includes it; strategy overlays should enrich the plot, not hide core trend context.
+
+- Exposed the new turnaround preset in the Query tab and covered it with synthetic tests that accept a fresh repair and reject a bulltrap-style fakeout.
+
+- Clarified the Query preview copy so the table advertises ticker click-through instead of acting like a dead grid.
+
+- Use precise backend signal names like trend_forming and trend_weakening, and prefer explainable named presets over vague open-ended query semantics in the early query API.
+
+- Keep the first query surface constrained to named datasets and bounded previews instead of a generic free-form query endpoint, so the API stays stable, cacheable, and MCP-friendly later.
+
 - Keep a root plan.md entrypoint plus companion files under plan/ tracked in the repo so workflow automation has one stable anchor without forcing the whole plan into a single file.
 
 - Prefer cached artifacts over request-time recomputation whenever the snapshot is fresh.

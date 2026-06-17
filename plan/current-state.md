@@ -1,5 +1,36 @@
 # Current state
 
+- -Summary
+
+- Added a Nasdaq-only vitality gate so source-selected scans now drop recent low-energy names before ranking them, using recent trading continuity, average close, share volume, and dollar-volume thresholds instead of only the raw listing universe.
+- Wired that vitality filter through the Query scan path plus the Screener, Backtester, and Swarm scope resolution paths so Nasdaq behaves more like an actionable universe than a raw directory dump.
+- Verified the vitality pass with `.\run.ps1 -Tests`; the full pytest and Playwright suite passed.
+
+- Added a dedicated Nasdaq stock universe from the official Nasdaq Trader directory as `config/nasdaq.json`, filtered down to common-stock style listings so the GUI can scan a large but still practical U.S. universe instead of every listed instrument.
+- Wired Nasdaq through the shared query and dashboard source model, including the top-bar source buttons, ticker-universe metadata, list-builder exchange filters, and refresh-path exchange routing.
+- Treated large Nasdaq refreshes like Sweden for worker planning so manual top-ups are faster without forcing an always-on refresh model.
+- Verified the Nasdaq expansion with `.\run.ps1 -Tests`; the full pytest and Playwright suite passed.
+
+- Added a historical outcome-calibration layer to Query signal scans so current matches now carry sample size, prior success rate, failure rate, and a calibrated reliability score instead of relying only on raw heuristic rules.
+- Built bounded historical event extraction from prior signal episodes inside each ticker history and used those outcomes to calibrate current trend_forming, trend_weakening, and downtrend_turnaround matches without future leakage into the present signal row.
+- Updated the chart-overlay regression contract so Supertrend remains visible as shared context whenever the chart data includes it, and verified the full repo with .\run.ps1 -Tests.
+
+- Kept the Screener chart's Supertrend overlay visible whenever the chart data includes it, even when the selected strategy only references EMA-based rules.
+- Added a regression check so strategy-specific chart enrichment does not hide Supertrend from the normal drill-down view.
+
+- Added a new Query signal preset, downtrend_turnaround, for actionable repair setups after a sustained prior decline rather than generic fresh uptrends.
+
+- Made Query results more explorable by turning ticker cells into drill-down links that reuse the existing Screener chart view.
+
+- Captured the next query milestone: add a signal_scan dataset on top of the shared query service instead of jumping straight to a free-form query language.
+- Locked in the first two named query signals as trend_forming and trend_weakening, with explainable match output rather than ticker-only results.
+- Kept the Query tab as the main human-facing surface for this work so signal exploration stays separate from Screener and Backtester flow.
+
+- Added a shared ETFQueryService over Parquet history and cached shortlist artifacts, with dataset-aware query schemas for price history and shortlist snapshots.
+- Added a new Query tab in the dashboard so direct data exploration stays separate from Screener and Backtester flow, including preview tables plus equivalent API and CLI call readouts.
+- Added CLI support through etfs query and FastAPI support through /api/query/catalog and /api/query/run so GUI and terminal queries share the same backend service.
+- Verified the query branch with .\run.ps1 -Tests; the full pytest and Playwright suite passed.
+
 - Added a DSL-first strategy structure profiler and threaded its normalized scores through the backtest API, race payloads, and dashboard comparisons.
 - Sanitized job-progress and backtest event payloads so NaN and infinity cannot break the browser progress surface.
 - Split the root plan into a stable plan.md entrypoint plus companion files under plan/ and updated the workflow helpers to keep that structure current automatically.

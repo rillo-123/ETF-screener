@@ -35,7 +35,11 @@ from ETF_screener.dsl_parser import (
     parse_strategy_structure_profile,
 )
 from ETF_screener.logging_setup import setup_logging, get_log_file
-from ETF_screener.market_data_service import MarketDataRefresher
+from ETF_screener.market_data_service import (
+    MarketDataRefresher,
+    filter_low_vitality_nasdaq_tickers,
+)
+from ETF_screener.query_service import ETFQueryService
 from ETF_screener.shortlist_engine import ETFShortlistEngine
 from ETF_screener.swarm_world import SwarmWorldEngine
 from ETF_screener.scripts.churn_strategies import (
@@ -69,6 +73,7 @@ CUSTOM_TICKER_LIST_CONFIG_PATH = Path("config") / "custom_ticker_list.json"
 CUSTOM_TICKER_LIST_DEFAULT_NAME = "My List"
 XETRA_METADATA_PATH = Path("config") / "xetra.json"
 SWEDEN_METADATA_PATH = Path("config") / "sweden.json"
+NASDAQ_METADATA_PATH = Path("config") / "nasdaq.json"
 LEGACY_ETFS_METADATA_PATH = Path("config") / "etfs.json"
 BLACKLIST_PATH = Path("config") / "blacklist.json"
 SCREEN_EXPORTS_DIR = Path("data") / "exports"
@@ -83,7 +88,9 @@ BACKTEST_METRICS = [
     {"key": "trades", "label": "Trades", "kind": "count"},
     {"key": "days_since_entry", "label": "Days Since Entry", "kind": "days"},
 ]
-BACKTEST_STRATEGY_AXIS_CATALOG = [dict(item) for item in STRATEGY_STRUCTURE_AXIS_CATALOG]
+BACKTEST_STRATEGY_AXIS_CATALOG = [
+    dict(item) for item in STRATEGY_STRUCTURE_AXIS_CATALOG
+]
 _JOB_PROGRESS_LOCK = Lock()
 _JOB_PROGRESS_STATE: dict[str, object] = {
     "job": None,
@@ -444,6 +451,8 @@ def _backtest_ticker_exchange_bucket(ticker: object) -> str:
         return "sweden"
     if symbol.endswith((".DE", ".F", ".DU", ".HM", ".SG", ".BE", ".MU")):
         return "xetra"
+    if symbol and "." not in symbol:
+        return "nasdaq"
     return "unknown"
 
 
@@ -476,9 +485,7 @@ def _normalize_structure_profile(
     }
     tags = safe_profile.get("structure_tags")
     safe_tags = (
-        [str(tag) for tag in tags if str(tag).strip()]
-        if isinstance(tags, list)
-        else []
+        [str(tag) for tag in tags if str(tag).strip()] if isinstance(tags, list) else []
     )
     axis_order = safe_profile.get("axis_order")
     safe_axis_order = (
@@ -499,7 +506,9 @@ def _normalize_structure_profile(
 def _backtest_strategy_profile(
     strategy_name: str, dsl_content: str | None = None
 ) -> dict[str, object]:
-    content = dsl_content if dsl_content is not None else load_strategy_content(strategy_name)
+    content = (
+        dsl_content if dsl_content is not None else load_strategy_content(strategy_name)
+    )
     return _normalize_structure_profile(parse_strategy_structure_profile(content))
 
 
@@ -895,15 +904,15 @@ def _cached_dashboard_tickers(
         tickers = pd.read_sql_query(
             "SELECT DISTINCT ticker FROM etf_data ORDER BY ticker", conn
         )["ticker"].tolist()
-        if not tickers:
-            for etf_path in (
-                XETRA_METADATA_PATH,
-                SWEDEN_METADATA_PATH,
-                LEGACY_ETFS_METADATA_PATH,
-            ):
-                tickers = sorted(_load_metadata_file_map(etf_path).keys())
-                if tickers:
-                    break
+        metadata_tickers: set[str] = set()
+        for etf_path in (
+            XETRA_METADATA_PATH,
+            SWEDEN_METADATA_PATH,
+            NASDAQ_METADATA_PATH,
+            LEGACY_ETFS_METADATA_PATH,
+        ):
+            metadata_tickers.update(_load_metadata_file_map(etf_path).keys())
+        tickers = sorted({str(ticker).upper() for ticker in tickers} | metadata_tickers)
         return tuple(
             str(ticker) for ticker in tickers if str(ticker).upper() not in blacklist
         )
@@ -948,6 +957,8 @@ def _cached_dashboard_universe(
         exchange = _backtest_ticker_exchange_bucket(upper_ticker)
         if "sweden" in source_hint:
             exchange = "sweden"
+        elif "nasdaq" in source_hint or "nasdaqlisted.txt" in source_hint:
+            exchange = "nasdaq"
         elif "xetra" in source_hint or "etfs.json" in source_hint:
             exchange = "xetra"
 
@@ -979,11 +990,12 @@ def _cached_dashboard_universe(
 
 @lru_cache(maxsize=1)
 def _cached_etf_metadata_map() -> dict[str, dict[str, object]]:
-    """Load metadata from config/xetra.json, config/sweden.json, and config/etfs.json."""
+    """Load metadata from config/xetra.json, config/sweden.json, config/nasdaq.json, and config/etfs.json."""
     normalized: dict[str, dict[str, object]] = {}
     for etf_path in (
         XETRA_METADATA_PATH,
         SWEDEN_METADATA_PATH,
+        NASDAQ_METADATA_PATH,
         LEGACY_ETFS_METADATA_PATH,
     ):
         normalized.update(_load_metadata_file_map(etf_path))
@@ -1179,6 +1191,8 @@ def _write_top_matches_csv(
 
 def _normalize_market_source(value: object | None) -> str:
     cleaned = str(value or "xetra").strip().lower()
+    if cleaned in {"nasdaq", "us", "usa", "us_stocks", "us-stocks"}:
+        return "nasdaq"
     if cleaned in {"sweden", "stockholm", "stockholms", "se", "ss", "st"}:
         return "sweden"
     if cleaned in {"list", "chosen", "chosen_list", "custom"}:
@@ -1194,6 +1208,8 @@ def _normalize_market_source(value: object | None) -> str:
 
 def _market_source_config(source: object | None) -> tuple[Path, str]:
     normalized = _normalize_market_source(source)
+    if normalized == "nasdaq":
+        return NASDAQ_METADATA_PATH, "active"
     if normalized == "sweden":
         return SWEDEN_METADATA_PATH, "active"
     if normalized == "list":
@@ -1215,12 +1231,19 @@ def _swarm_scope_tickers(
         normalized_scope = _normalize_market_source(scan_scope or exchange or "xetra")
         latest_market_date = _latest_market_date_for(db)
         universe = list(_cached_screen_universe(_db_path_for(db), latest_market_date))
-        return filter_tickers_by_exchange_and_list(
+        tickers = filter_tickers_by_exchange_and_list(
             universe,
             exchange=exchange,
             ticker_list=ticker_list,
             scan_scope=normalized_scope,
         )
+        if normalized_scope == "nasdaq":
+            tickers = filter_low_vitality_nasdaq_tickers(
+                db_path=_db_path_for(db),
+                latest_market_date=latest_market_date,
+                tickers=tickers,
+            )
+        return tickers
     except Exception as exc:
         logger.warning(
             "Swarm scope resolution fell back to scope-only filtering: %s", exc
@@ -1233,10 +1256,25 @@ def _ticker_matches_swarm_scope(ticker: object, scope: str) -> bool:
     if not upper:
         return False
     normalized = _normalize_market_source(scope)
+    metadata = _cached_etf_metadata_map().get(upper, {})
+    exchange_hint = " ".join(
+        str(metadata.get(key) or "")
+        for key in ("exchange", "market", "country", "source")
+    ).lower()
+    if normalized == "nasdaq":
+        if (
+            "nasdaq" in exchange_hint
+            or "usa" in exchange_hint
+            or "united states" in exchange_hint
+        ):
+            return True
+        return "." not in upper
     if normalized == "sweden":
         return upper.endswith(".ST") or upper.endswith(".SE") or upper.endswith(".SS")
     if normalized == "xetra":
-        return upper.endswith(".DE") or upper.endswith(".F") or "." not in upper
+        if "xetra" in exchange_hint or "germany" in exchange_hint:
+            return True
+        return upper.endswith((".DE", ".F", ".DU", ".HM", ".SG", ".BE", ".MU"))
     return True
 
 
@@ -1401,6 +1439,10 @@ def _swarm_debug_history_payload(
 # Database access function (FastAPI style)
 def get_db():
     return ETFDatabase(db_path=get_paths()["data"]["etf_db"])
+
+
+def get_query_service() -> ETFQueryService:
+    return ETFQueryService(db=get_db())
 
 
 def _latest_market_date_for(db) -> str | None:
@@ -1832,6 +1874,90 @@ async def ticker_universe():
     }
 
 
+@app.get("/api/query/catalog")
+async def query_catalog():
+    """Describe the supported structured dashboard and CLI query surfaces."""
+    db = get_db()
+    service = ETFQueryService(db=db)
+    catalog = service.query_catalog()
+    try:
+        catalog["tickers"] = list(
+            _cached_dashboard_tickers(
+                _db_path_for(db),
+                _latest_market_date_for(db),
+            )
+        )
+    except Exception:
+        catalog["tickers"] = []
+    return _json_safe_value(catalog)
+
+
+@app.get("/api/query/run")
+async def query_run(
+    dataset: str,
+    ticker: Optional[str] = None,
+    source: Optional[str] = None,
+    signal: Optional[str] = None,
+    min_reliability: Optional[float] = None,
+    signal_age_max: Optional[int] = None,
+    refresh_if_needed: bool = False,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    days: Optional[int] = None,
+    columns: Optional[str] = None,
+    limit: Optional[int] = None,
+    label: Optional[str] = None,
+    sort_by: Optional[str] = None,
+):
+    """Execute a structured query over Parquet history or cached artifacts."""
+    service = get_query_service()
+    try:
+        refresh_meta: dict[str, object] | None = None
+        if str(dataset or "").strip().lower() == "signal_scan" and refresh_if_needed:
+            metadata_path, collection_mode = _market_source_config(source)
+            refresher = MarketDataRefresher(
+                db_path=str(get_db().db_path),
+                etfs_file=str(metadata_path),
+                collection_mode=collection_mode,
+            )
+            status = refresher.get_status(stale_after_days=0)
+            refresh_meta = {
+                "requested": False,
+                "status_before": _json_safe_value(status),
+                "result": None,
+            }
+            if bool(status.get("is_stale")):
+                refresh_result = _refresh_market_data_for_gui(
+                    source=source,
+                    rebuild_shortlist=False,
+                )
+                refresh_meta["requested"] = True
+                refresh_meta["result"] = _json_safe_value(refresh_result)
+        result = service.run_query(
+            dataset,
+            ticker=ticker,
+            source=source,
+            signal=signal,
+            min_reliability=min_reliability,
+            signal_age_max=signal_age_max,
+            start_date=start_date,
+            end_date=end_date,
+            days=days,
+            columns=columns,
+            limit=limit,
+            label=label,
+            sort_by=sort_by,
+        )
+        if refresh_meta is not None:
+            result["refresh"] = refresh_meta
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("Structured query endpoint failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Query failed") from exc
+    return _json_safe_value(result)
+
+
 @app.get("/api/custom-ticker-list")
 async def get_custom_ticker_list():
     """Return the persisted custom ticker list for the list builder."""
@@ -1959,6 +2085,8 @@ def refresh_market_data(
 
 def _refresh_market_data_for_gui(
     source: Optional[str] = None,
+    *,
+    rebuild_shortlist: bool = True,
 ) -> dict[str, object] | None:
     """Top up market data for GUI-driven actions when a user asks for it."""
     metadata_path, collection_mode = _market_source_config(source)
@@ -1979,7 +2107,7 @@ def _refresh_market_data_for_gui(
             "stale_after_days": 0,
             "force": False,
             "max_workers": 8,
-            "rebuild_shortlist": True,
+            "rebuild_shortlist": rebuild_shortlist,
         }
         if (
             "progress_callback"
@@ -2136,7 +2264,7 @@ async def swarm_world(
             )
         elif normalized_scope in {"list", "all_lists"}:
             df = df.iloc[0:0]
-        elif normalized_scope in {"xetra", "sweden"}:
+        elif normalized_scope in {"xetra", "sweden", "nasdaq"}:
             df = df[
                 df["ticker"].map(
                     lambda ticker: _ticker_matches_swarm_scope(ticker, normalized_scope)
@@ -2299,7 +2427,7 @@ async def swarm_history(
         tickers = [ticker for ticker in tickers if ticker in selected]
     elif normalized_scope in {"list", "all_lists"}:
         tickers = []
-    elif normalized_scope in {"xetra", "sweden"}:
+    elif normalized_scope in {"xetra", "sweden", "nasdaq"}:
         tickers = [
             ticker
             for ticker in tickers
@@ -2558,6 +2686,12 @@ async def screen(
             ticker_list=ticker_list,
             scan_scope=scan_scope,
         )
+        if _normalize_market_source(scan_scope or exchange or "xetra") == "nasdaq":
+            tickers = filter_low_vitality_nasdaq_tickers(
+                db_path=db_path,
+                latest_market_date=latest_market_date,
+                tickers=tickers,
+            )
         logger.info("Ticker universe built: %d tickers to screen", len(tickers))
         if not tickers:
             _set_job_progress(
@@ -2875,7 +3009,9 @@ async def backtest_view(
     source_type = "editor" if dsl_text else "saved"
     signal_window_days = signal_days if signal_days is not None else since_days
     profile_strategy_name = strategy_name or "Editor Draft"
-    structure_profile = _backtest_strategy_profile(profile_strategy_name, dsl_text or None)
+    structure_profile = _backtest_strategy_profile(
+        profile_strategy_name, dsl_text or None
+    )
 
     if not strategy_name and not dsl_text:
         _set_job_progress(
@@ -3186,6 +3322,12 @@ async def backtest_matrix_view(
         ticker_list=ticker_list,
         scan_scope=scan_scope,
     )
+    if _normalize_market_source(scan_scope or exchange or "xetra") == "nasdaq":
+        ticker_universe = filter_low_vitality_nasdaq_tickers(
+            db_path=_db_path_for(db),
+            latest_market_date=latest_market_date,
+            tickers=ticker_universe,
+        )
     estimated_ticker_count = len(ticker_universe)
     total_work_items = total_strategies * estimated_ticker_count
     strategy_concurrency, ticker_workers = _backtest_matrix_worker_plan(
@@ -3201,8 +3343,7 @@ async def backtest_matrix_view(
     strategy_worker_semaphore = asyncio.Semaphore(strategy_concurrency)
     run_id = _new_backtest_race_run(strategy_names)
     strategy_profiles = {
-        name: _backtest_strategy_profile(name)
-        for name in strategy_names
+        name: _backtest_strategy_profile(name) for name in strategy_names
     }
     _append_backtest_race_event(
         run_id,
@@ -3248,12 +3389,8 @@ async def backtest_matrix_view(
             "structure_score": round(
                 _finite_number(strategy_profiles[name].get("structure_score"), 0.0), 2
             ),
-            "structure_axes": dict(
-                strategy_profiles[name].get("structure_axes", {})
-            ),
-            "structure_tags": list(
-                strategy_profiles[name].get("structure_tags", [])
-            ),
+            "structure_axes": dict(strategy_profiles[name].get("structure_axes", {})),
+            "structure_tags": list(strategy_profiles[name].get("structure_tags", [])),
             "axis_order": list(strategy_profiles[name].get("axis_order", [])),
         }
         for idx, name in enumerate(strategy_names, start=1)

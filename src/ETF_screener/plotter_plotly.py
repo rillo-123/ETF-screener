@@ -431,9 +431,7 @@ class InteractivePlotter:
 
         return sorted(specs)
 
-    def _extract_anchored_vwap_names(
-        self, strategy_content: str | None
-    ) -> list[str]:
+    def _extract_anchored_vwap_names(self, strategy_content: str | None) -> list[str]:
         """Extract anchored VWAP tokens referenced in DSL content."""
         if not strategy_content:
             return []
@@ -1394,109 +1392,93 @@ class InteractivePlotter:
                     col=1,
                 )
 
-        # Supertrend Price Overlay — single color-changing line, only when referenced by DSL.
-        supertrend_specs = self._extract_supertrend_specs(strategy_content)
-        has_supertrend_reference = bool(
-            supertrend_specs
-            or (
-                strategy_content
-                and re.search(
-                    r"\bst(?:_|_is_|$)|\bsupertrend\b",
-                    strategy_content.lower(),
-                )
-            )
+        # Supertrend Price Overlay — always surface it when the chart data includes it.
+        st_lower_col: str | None = next(
+            (str(c) for c in df.columns if str(c).lower() == "st_lower"),
+            None,
         )
-        if not strategy_content or has_supertrend_reference:
-            st_lower_col: str | None = next(
-                (str(c) for c in df.columns if str(c).lower() == "st_lower"),
-                None,
+        st_upper_col: str | None = next(
+            (str(c) for c in df.columns if str(c).lower() == "st_upper"),
+            None,
+        )
+        st_col: str | None = next(
+            (str(c) for c in df.columns if str(c).lower() in {"supertrend", "st"}),
+            None,
+        )
+
+        st_active = None
+        is_green_regime = None
+
+        if st_lower_col and st_upper_col:
+            st_lower = pd.to_numeric(df[st_lower_col], errors="coerce").to_numpy(
+                dtype=float
             )
-            st_upper_col: str | None = next(
-                (str(c) for c in df.columns if str(c).lower() == "st_upper"),
-                None,
+            st_upper = pd.to_numeric(df[st_upper_col], errors="coerce").to_numpy(
+                dtype=float
             )
-            st_col: str | None = next(
-                (str(c) for c in df.columns if str(c).lower() in {"supertrend", "st"}),
-                None,
+            # Green regime: ST_Lower is populated; red regime: ST_Upper is populated.
+            is_green_regime = ~np.isnan(st_lower)
+            st_active = np.where(is_green_regime, st_lower, st_upper)
+        elif st_col and "Close" in df.columns:
+            st_active = pd.to_numeric(df[st_col], errors="coerce").to_numpy(dtype=float)
+            close_values = pd.to_numeric(df["Close"], errors="coerce").to_numpy(
+                dtype=float
             )
+            valid = ~np.isnan(st_active) & ~np.isnan(close_values)
+            is_green_regime = valid & (close_values > st_active)
+        elif st_col and "close" in df.columns:
+            st_active = pd.to_numeric(df[st_col], errors="coerce").to_numpy(dtype=float)
+            close_values = pd.to_numeric(df["close"], errors="coerce").to_numpy(
+                dtype=float
+            )
+            valid = ~np.isnan(st_active) & ~np.isnan(close_values)
+            is_green_regime = valid & (close_values > st_active)
 
-            st_active = None
-            is_green_regime = None
+        if st_active is not None and is_green_regime is not None:
+            valid_mask = ~np.isnan(st_active)
 
-            if st_lower_col and st_upper_col:
-                st_lower = pd.to_numeric(df[st_lower_col], errors="coerce").to_numpy(
-                    dtype=float
-                )
-                st_upper = pd.to_numeric(df[st_upper_col], errors="coerce").to_numpy(
-                    dtype=float
-                )
-                # Green regime: ST_Lower is populated; red regime: ST_Upper is populated.
-                is_green_regime = ~np.isnan(st_lower)
-                st_active = np.where(is_green_regime, st_lower, st_upper)
-            elif st_col and "Close" in df.columns:
-                st_active = pd.to_numeric(df[st_col], errors="coerce").to_numpy(
-                    dtype=float
-                )
-                close_values = pd.to_numeric(df["Close"], errors="coerce").to_numpy(
-                    dtype=float
-                )
-                valid = ~np.isnan(st_active) & ~np.isnan(close_values)
-                is_green_regime = valid & (close_values > st_active)
-            elif st_col and "close" in df.columns:
-                st_active = pd.to_numeric(df[st_col], errors="coerce").to_numpy(
-                    dtype=float
-                )
-                close_values = pd.to_numeric(df["close"], errors="coerce").to_numpy(
-                    dtype=float
-                )
-                valid = ~np.isnan(st_active) & ~np.isnan(close_values)
-                is_green_regime = valid & (close_values > st_active)
+            # Split into contiguous same-color runs and draw one trace per run.
+            # Adjacent runs share their boundary index so the line appears continuous.
+            run_starts: list[int] = []
+            run_ends: list[int] = []
+            i = 0
+            while i < len(st_active):
+                if not valid_mask[i]:
+                    i += 1
+                    continue
+                green = bool(is_green_regime[i])
+                j = i + 1
+                while (
+                    j < len(st_active)
+                    and valid_mask[j]
+                    and bool(is_green_regime[j]) == green
+                ):
+                    j += 1
+                run_starts.append(i)
+                run_ends.append(j)
+                i = j
 
-            if st_active is not None and is_green_regime is not None:
-                valid_mask = ~np.isnan(st_active)
-
-                # Split into contiguous same-color runs and draw one trace per run.
-                # Adjacent runs share their boundary index so the line appears continuous.
-                run_starts: list[int] = []
-                run_ends: list[int] = []
-                i = 0
-                while i < len(st_active):
-                    if not valid_mask[i]:
-                        i += 1
-                        continue
-                    green = bool(is_green_regime[i])
-                    j = i + 1
-                    while (
-                        j < len(st_active)
-                        and valid_mask[j]
-                        and bool(is_green_regime[j]) == green
-                    ):
-                        j += 1
-                    run_starts.append(i)
-                    run_ends.append(j)
-                    i = j
-
-                first_st_trace = True
-                for run_start, run_end in zip(run_starts, run_ends):
-                    green = bool(is_green_regime[run_start])
-                    color = "#16a34a" if green else "#dc2626"
-                    # Include one bridge point (start of next run) for visual continuity.
-                    slice_end = int(min(run_end + 1, len(df)))
-                    fig.add_trace(
-                        go.Scatter(
-                            x=df["Date"].iloc[run_start:slice_end],
-                            y=st_active[run_start:slice_end],
-                            name="Supertrend",
-                            legendgroup="supertrend",
-                            showlegend=first_st_trace,
-                            mode="lines",
-                            line=dict(color=color, width=1.7),
-                            connectgaps=False,
-                        ),
-                        row=1,
-                        col=1,
-                    )
-                    first_st_trace = False
+            first_st_trace = True
+            for run_start, run_end in zip(run_starts, run_ends):
+                green = bool(is_green_regime[run_start])
+                color = "#16a34a" if green else "#dc2626"
+                # Include one bridge point (start of next run) for visual continuity.
+                slice_end = int(min(run_end + 1, len(df)))
+                fig.add_trace(
+                    go.Scatter(
+                        x=df["Date"].iloc[run_start:slice_end],
+                        y=st_active[run_start:slice_end],
+                        name="Supertrend",
+                        legendgroup="supertrend",
+                        showlegend=first_st_trace,
+                        mode="lines",
+                        line=dict(color=color, width=1.7),
+                        connectgaps=False,
+                    ),
+                    row=1,
+                    col=1,
+                )
+                first_st_trace = False
 
         # 2. Volume Chart
         colors = [

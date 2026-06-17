@@ -1,6 +1,72 @@
 
 # Progress
 
+## 2026-06-17 20:30:25 +02:00
+
+- -Summary
+- Next resume point: Review the latest commit and pick up the next implementation task.
+
+## 2026-06-16 22:03:49 +02:00
+
+- Re-ran the blacklist procedure against the latest Xetra refresh log instead of guessing: reviewed `logs/debug_2026-06-16_21-43-17.log`, extracted the repeated Yahoo-missing symbols, and compared them against `config/blacklist.json`.
+- Confirmed the earlier Sweden-only offenders were already blacklisted, then added the newly confirmed Xetra misses `FSG.DE`, `NGXL.DE`, and `SPPW.DE` to `config/blacklist.json` with the standard `No data found during refresh` reason.
+- Kept the blacklist update scoped to the primary universe tickers only, so the temporary fallback probe `NGXL.F` is not treated as a first-class blacklisted symbol.
+- Verified the updated blacklist parses cleanly and now contains all three newly confirmed Xetra misses.
+- Current status: those three names should stop reappearing in dashboard refresh, screening, and backtest scope resolution wherever blacklist filtering is already applied.
+- Next resume point: if later refresh logs still show repeat Yahoo misses, follow the same procedure again: inspect the newest log, add only the confirmed primary-universe tickers, and prefer remapping only when the symbol is actually tradable under a different Yahoo code.
+
+## 2026-06-15 20:33:03 +02:00
+
+- Added a Nasdaq-only vitality filter so source-selected universes now drop low-actionability names before ranking, using recent price continuity plus average close, average volume, and average dollar-volume thresholds.
+- Wired the vitality gate through Query signal scans, Screener scope resolution, Backtester universe selection, and Swarm scope resolution so Nasdaq behaves consistently across the main workflows.
+- Verified the change with `.\run.ps1 -Tests`; the full pytest and Playwright suite passed.
+- Next resume point: live-test a few real Nasdaq runs and tune the vitality thresholds only if the filter is obviously too strict or still lets through weak names.
+
+## 2026-06-15 19:31:50 +02:00
+
+- Added a dedicated Nasdaq source end to end: generated `config/nasdaq.json` from the official Nasdaq Trader symbol directory, filtered it to a practical common-share universe, and threaded it through the dashboard, query service, refresh logic, and CLI source handling.
+- Added a Nasdaq source button to the top bar and aligned the Query, Screener, list-builder, and ticker-universe flows so Nasdaq behaves like the existing Xetra and Sweden universes instead of a one-off backend flag.
+- Verified the expanded source model with `.\run.ps1 -Tests`; the full pytest and Playwright suite passed.
+- Next resume point: live-test a few real Nasdaq query runs in the GUI, then decide whether the universe curation needs extra liquidity or instrument-type filters.
+
+## 2026-06-15 19:07:23 +02:00
+
+- Added a historical outcome-calibration layer to Query signal scans so current matches now carry sample size, prior success rate, failure rate, and a calibrated reliability score instead of relying only on raw heuristic rules.
+- Built bounded historical event extraction from prior signal episodes inside each ticker history and used those outcomes to calibrate current trend_forming, trend_weakening, and downtrend_turnaround matches without future leakage into the present signal row.
+- Updated the chart-overlay regression contract so Supertrend remains visible as shared context whenever the chart data includes it, and verified the full repo with .\run.ps1 -Tests.
+- Next resume point: Spot-check a few live Query results to see whether the calibrated scores feel sensible, then decide whether to persist precomputed signal-event snapshots for larger universes like Xetra.
+
+## 2026-06-15 16:50:58 +02:00
+
+- Kept the Screener chart's Supertrend overlay visible whenever the chart data includes it, even when the selected strategy only references EMA-based rules.
+- Added a regression check so strategy-specific chart enrichment does not hide Supertrend from the normal drill-down view.
+- Next resume point: Restart the dashboard, spot-check a few live drill-down charts, and then decide whether downtrend_turnaround needs stricter or looser bull-trap filtering in practice.
+
+## 2026-06-15 16:34:04 +02:00
+
+- Added a new Query signal preset, downtrend_turnaround, for actionable repair setups after a sustained prior decline rather than generic fresh uptrends.
+- Next resume point: If turnaround scans prove useful in practice, the next refinement is a real backend progress feed or precomputed signal snapshots for large universes like Xetra.
+
+## 2026-06-15 15:55:26 +02:00
+
+- Made Query results more explorable by turning ticker cells into drill-down links that reuse the existing Screener chart view.
+- Next resume point: If large universes like Xetra still feel heavy, the next meaningful step is real backend query progress or precomputed signal snapshots.
+
+## 2026-06-15 12:42:02 +02:00
+
+- Captured the next query milestone: add a signal_scan dataset on top of the shared query service instead of jumping straight to a free-form query language.
+- Locked in the first two named query signals as trend_forming and trend_weakening, with explainable match output rather than ticker-only results.
+- Kept the Query tab as the main human-facing surface for this work so signal exploration stays separate from Screener and Backtester flow.
+- Next resume point: On feature/query-tab-api, implement the signal_scan dataset with trend_forming and trend_weakening presets, then expose them in the Query tab.
+
+## 2026-06-15 12:21:35 +02:00
+
+- Added a shared ETFQueryService over Parquet history and cached shortlist artifacts, with dataset-aware query schemas for price history and shortlist snapshots.
+- Added a new Query tab in the dashboard so direct data exploration stays separate from Screener and Backtester flow, including preview tables plus equivalent API and CLI call readouts.
+- Added CLI support through etfs query and FastAPI support through /api/query/catalog and /api/query/run so GUI and terminal queries share the same backend service.
+- Verified the query branch with .\run.ps1 -Tests; the full pytest and Playwright suite passed.
+- Next resume point: Expand the Query surface with more datasets like swarm world and ETF metadata, then consider saved query presets and a thin MCP adapter on top of the same service.
+
 ## 2026-06-15 11:44:27 +02:00
 
 - Added a DSL-first strategy structure profiler and threaded its normalized scores through the backtest API, race payloads, and dashboard comparisons.

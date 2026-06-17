@@ -2345,6 +2345,10 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "FSG.DE": {
+    "reason": "No data found during refresh",
+    "status": "invalid"
+  },
   "FSPU.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
@@ -3559,6 +3563,10 @@
   "NGXA.DE": {
     "status": "invalid"
   },
+  "NGXL.DE": {
+    "reason": "No data found during refresh",
+    "status": "invalid"
+  },
   "NKT.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
@@ -4194,6 +4202,10 @@
   },
   "SPPC.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "SPPW.DE": {
+    "reason": "No data found during refresh",
     "status": "invalid"
   },
   "SPPQ.DE": {

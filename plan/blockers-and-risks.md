@@ -1,5 +1,9 @@
 # Blockers and risks
 
+- The new Nasdaq universe is intentionally curated from the official listing directory, but U.S. common-share classification is still heuristic and may need tuning as edge-case securities show up in results.
+- The first Nasdaq vitality filter is intentionally simple and recent-data based; if it feels too loose or too harsh, the next tuning step is threshold work rather than more UI.
+- Full-universe Nasdaq refresh can be meaningfully heavier than Sweden, so manual refresh and cached query behavior remain important for keeping the GUI responsive.
+
 - Current product and exposure scoring is intentionally heuristic because the repo does not yet store richer ETF metadata like TER or AUM.
 - The shortlist tab now has label filtering, but it still lacks richer ETF product facts and broader filter and sort controls.
 - The Swarm tab currently uses a lightweight browser simulation without a worker or persisted run ledger, so it is exploratory rather than analytically mature.

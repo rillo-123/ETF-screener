@@ -174,6 +174,13 @@
       box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.15);
     }
 
+    .scan-source-btn.is-active[data-scope="nasdaq"] {
+      border-color: rgba(251, 191, 36, 0.78);
+      background: linear-gradient(180deg, rgba(120, 53, 15, 0.96), rgba(180, 83, 9, 0.92));
+      color: #fffbeb;
+      box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.15);
+    }
+
     .scan-source-btn.is-active[data-scope="list"] {
       border-color: rgba(168, 85, 247, 0.8);
       background: linear-gradient(180deg, rgba(76, 29, 149, 0.98), rgba(91, 33, 182, 0.94));
@@ -260,6 +267,7 @@
           <div id="scan-scope-label">Scan Source</div>
           <div class="scan-source-toggle" id="scan-source-toggle" role="group" aria-label="Scan source">
             <button type="button" id="scan-source-xetra" class="scan-source-btn" data-scope="xetra" onclick="setScanSource('xetra')">Xetra</button>
+            <button type="button" id="scan-source-nasdaq" class="scan-source-btn" data-scope="nasdaq" onclick="setScanSource('nasdaq')">Nasdaq</button>
             <button type="button" id="scan-source-sweden" class="scan-source-btn" data-scope="sweden" onclick="setScanSource('sweden')">Sweden</button>
             <button type="button" id="scan-source-list" class="scan-source-btn" data-scope="list" onclick="setScanSource('list')">My List</button>
             <button type="button" id="scan-source-all-lists" class="scan-source-btn" data-scope="all_lists" onclick="setScanSource('all_lists')">All Lists</button>
@@ -337,6 +345,8 @@
       onclick="showTab('screener')">Screener</button>
     <button id="tab-btn-shortlist" class="tab-btn bg-sky-700 text-white font-bold py-2.5 px-5 rounded-lg border border-sky-400/40 shadow-sm"
       onclick="showTab('shortlist')">Shortlist</button>
+    <button id="tab-btn-query" class="tab-btn bg-amber-700 text-white font-bold py-2.5 px-5 rounded-lg border border-amber-400/40 shadow-sm"
+      onclick="showTab('query')">Query</button>
     <button id="tab-btn-swarm" class="tab-btn bg-violet-700 text-white font-bold py-2.5 px-5 rounded-lg border border-violet-400/40 shadow-sm"
       onclick="showTab('swarm')">Swarm</button>
     <button id="tab-btn-swarm-lab" class="tab-btn bg-cyan-700 text-white font-bold py-2.5 px-5 rounded-lg border border-cyan-400/40 shadow-sm"
@@ -530,6 +540,205 @@
     </div>
   </div>
 
+  <div id="tab-query" class="hidden">
+    <div class="p-6 space-y-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">Query</h2>
+          <p class="text-sm text-slate-500">Use this tab for direct data exploration without mixing it into Screener or Backtester flow.</p>
+        </div>
+        <div class="flex flex-col items-end gap-2">
+          <div id="query-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Ready to scan the chosen universe.</div>
+          <button id="query-run-btn" onclick="loadQueryResults()"
+            class="bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-amber-500/60 transition-all">
+            Run Query
+          </button>
+        </div>
+      </div>
+
+      <div id="query-progress-shell" class="hidden rounded-2xl border border-amber-200 bg-white shadow">
+        <div class="border-b border-amber-100 bg-amber-50/70 px-4 py-3">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <div id="query-progress-label" class="text-[11px] font-bold uppercase tracking-wide text-amber-700">Query Progress</div>
+              <div id="query-progress-message" class="mt-1 text-sm font-semibold text-slate-800">Waiting for the next query run.</div>
+            </div>
+            <div id="query-progress-pct" class="text-xs font-bold uppercase tracking-wide text-amber-700">0%</div>
+          </div>
+          <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+            <div id="query-progress-bar" class="h-full rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-emerald-400 transition-all duration-500"
+              style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="bg-slate-950 px-4 py-3">
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400">Activity Gutter</div>
+            <div id="query-activity-caption" class="text-[11px] text-slate-500">Latest query steps appear here.</div>
+          </div>
+          <div id="query-activity-log" class="mt-3 space-y-2"></div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 xl:grid-cols-6 gap-4 rounded-2xl border border-amber-100 bg-white p-4 shadow">
+        <div>
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Dataset</label>
+          <select id="query-dataset" onchange="updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+            <option value="signal_scan">Actionable Signal Scan</option>
+            <option value="price_history">Ticker History (Advanced)</option>
+            <option value="shortlist">Shortlist Snapshot (Advanced)</option>
+          </select>
+        </div>
+        <div id="query-source-group">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Universe</label>
+          <div id="query-source-readout"
+            class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800">
+            Xetra
+          </div>
+          <div id="query-source-note" class="mt-2 text-[11px] text-slate-500">
+            Uses the ticker universe selected in the top bar.
+          </div>
+        </div>
+        <div id="query-signal-group">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Signal</label>
+          <select id="query-signal" onchange="updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+            <option value="trend_forming">Trend Forming</option>
+            <option value="downtrend_turnaround">Downtrend Turnaround</option>
+            <option value="trend_weakening">Trend Weakening</option>
+          </select>
+        </div>
+        <div id="query-signal-age-group">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Signal Age Max</label>
+          <input id="query-signal-age-max" type="number" min="0" step="1" value="5" oninput="this.dataset.userEdited='true'; updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+        </div>
+        <div id="query-reliability-group">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Min Reliability</label>
+          <input id="query-min-reliability" type="number" min="0" max="10" step="0.1" value="6.0" oninput="this.dataset.userEdited='true'; updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+        </div>
+        <div id="query-refresh-group" class="xl:col-span-2">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Data Freshness</label>
+          <label class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <input id="query-refresh-if-needed" type="checkbox" checked onchange="updateQueryControls()">
+            <span>Refresh only when needed for the chosen universe</span>
+          </label>
+        </div>
+        <div id="query-ticker-group">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Ticker</label>
+          <select id="query-ticker" onchange="updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+            <option value="">Select ticker...</option>
+            {% for ticker in tickers %}
+            <option value="{{ ticker }}">{{ ticker }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="query-label-group" class="hidden">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Label</label>
+          <select id="query-label" onchange="updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+            <option value="All">All</option>
+            <option value="Buy">Buy</option>
+            <option value="Watch">Watch</option>
+            <option value="Skip">Skip</option>
+          </select>
+        </div>
+        <div id="query-days-group">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Days</label>
+          <input id="query-days" type="number" min="1" step="1" value="90" oninput="updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+        </div>
+        <div id="query-start-group">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Start Date</label>
+          <input id="query-start-date" type="date" onchange="updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+        </div>
+        <div id="query-end-group">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">End Date</label>
+          <input id="query-end-date" type="date" onchange="updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Limit</label>
+          <input id="query-limit" type="number" min="1" step="1" value="120" oninput="updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+        </div>
+        <div class="xl:col-span-3">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Columns</label>
+          <input id="query-columns" type="text" placeholder="date,close,volume or *" oninput="updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+        </div>
+        <div id="query-sort-group" class="hidden">
+          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Sort By</label>
+          <select id="query-sort-by" onchange="updateQueryControls()"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+            <option value="final_score">final_score</option>
+            <option value="technical_score">technical_score</option>
+            <option value="product_score">product_score</option>
+            <option value="exposure_score">exposure_score</option>
+            <option value="volume">volume</option>
+            <option value="recent_entry_days">recent_entry_days</option>
+            <option value="ticker">ticker</option>
+            <option value="label">label</option>
+            <option value="as_of_date">as_of_date</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-amber-500">
+          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Mode</div>
+          <div id="query-summary-dataset" class="mt-2 text-lg font-bold text-slate-800">Signal Scan</div>
+        </div>
+        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-slate-500">
+          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Matched</div>
+          <div id="query-summary-rows" class="mt-2 text-lg font-bold text-slate-800">0</div>
+        </div>
+        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-indigo-500">
+          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Previewed</div>
+          <div id="query-summary-returned" class="mt-2 text-lg font-bold text-slate-800">0</div>
+        </div>
+        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-emerald-500">
+          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Latest Market Date</div>
+          <div id="query-summary-range" class="mt-2 text-sm font-bold text-slate-800">-</div>
+        </div>
+        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-sky-500">
+          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Universe</div>
+          <div id="query-summary-source" class="mt-2 text-sm font-bold text-slate-800">-</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div class="rounded-xl border border-slate-200 bg-slate-950 px-4 py-3 shadow">
+          <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400">Equivalent API Call</div>
+          <pre id="query-api-call" class="mt-2 whitespace-pre-wrap break-all text-xs text-emerald-200">/api/query/run?dataset=signal_scan&amp;source=xetra&amp;signal=trend_forming&amp;signal_age_max=5&amp;min_reliability=6.0&amp;refresh_if_needed=true&amp;limit=120</pre>
+        </div>
+        <div class="rounded-xl border border-slate-200 bg-slate-950 px-4 py-3 shadow">
+          <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400">Equivalent CLI Call</div>
+          <pre id="query-cli-call" class="mt-2 whitespace-pre-wrap break-all text-xs text-amber-200">etfs query --dataset signal_scan --source xetra --signal trend_forming --signal-age-max 5 --min-reliability 6.0 --limit 120</pre>
+        </div>
+      </div>
+
+      <div id="query-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+        Run an actionable signal scan to get current tickers from the selected universe.
+      </div>
+
+      <div id="query-content" class="hidden rounded-2xl border border-slate-200 bg-white shadow overflow-hidden">
+        <div class="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Query preview. Results are bounded so the tab stays responsive even on large universes. Click any ticker to open the full chart in Screener, then come back here to continue exploring.
+        </div>
+        <div class="overflow-auto max-h-[60vh]">
+          <table class="min-w-full text-sm">
+            <thead id="query-results-head" class="bg-slate-900 text-slate-100 sticky top-0"></thead>
+            <tbody id="query-results-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="tab-swarm" class="hidden">
     <div class="p-6 space-y-6">
       <div class="flex items-start justify-between gap-4">
@@ -551,6 +760,7 @@
           </div>
           <div class="scan-source-toggle" id="swarm-scan-source-toggle" role="group" aria-label="Swarm scan source">
             <button type="button" id="swarm-scan-source-xetra" class="scan-source-btn" data-scope="xetra" onclick="setScanSource('xetra')">Xetra</button>
+            <button type="button" id="swarm-scan-source-nasdaq" class="scan-source-btn" data-scope="nasdaq" onclick="setScanSource('nasdaq')">Nasdaq</button>
             <button type="button" id="swarm-scan-source-sweden" class="scan-source-btn" data-scope="sweden" onclick="setScanSource('sweden')">Sweden</button>
             <button type="button" id="swarm-scan-source-list" class="scan-source-btn" data-scope="list" onclick="setScanSource('list')">My List</button>
             <button type="button" id="swarm-scan-source-all-lists" class="scan-source-btn" data-scope="all_lists" onclick="setScanSource('all_lists')">All Lists</button>
@@ -1075,6 +1285,8 @@
           style="border-radius:999px;border:1px solid rgba(148,163,184,0.35);background:#e2e8f0;color:#0f172a;font-weight:700;padding:0.45rem 0.85rem">All</button>
         <button type="button" data-list-exchange="xetra" onclick="setListBuilderExchange('xetra')"
           style="border-radius:999px;border:1px solid rgba(148,163,184,0.35);background:#1e293b;color:#e2e8f0;font-weight:700;padding:0.45rem 0.85rem">Xetra</button>
+        <button type="button" data-list-exchange="nasdaq" onclick="setListBuilderExchange('nasdaq')"
+          style="border-radius:999px;border:1px solid rgba(148,163,184,0.35);background:#1e293b;color:#e2e8f0;font-weight:700;padding:0.45rem 0.85rem">Nasdaq</button>
         <button type="button" data-list-exchange="sweden" onclick="setListBuilderExchange('sweden')"
           style="border-radius:999px;border:1px solid rgba(148,163,184,0.35);background:#1e293b;color:#e2e8f0;font-weight:700;padding:0.45rem 0.85rem">Sweden</button>
         <div style="flex-basis:100%;height:0"></div>

@@ -41,6 +41,7 @@ from ETF_screener.indicators import (
 
 from ETF_screener.hotlist import generate_hotlist
 from ETF_screener.plotter_plotly import InteractivePlotter
+from ETF_screener.query_service import ETFQueryService, render_query_result
 from ETF_screener.screener import ETFScreener
 from ETF_screener.dsl_parser import parse_strategy_scripts
 
@@ -147,6 +148,53 @@ def evaluate_condition(value: float, operator: str, threshold: float) -> bool:
     if pd.isna(value):
 
         return False
+
+
+def run_query_cli(
+    *,
+    dataset: str,
+    ticker: str | None = None,
+    source: str | None = None,
+    signal: str | None = None,
+    min_reliability: float | None = None,
+    signal_age_max: int | None = None,
+    label: str | None = None,
+    days: int | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    columns: str | None = None,
+    limit: int | None = None,
+    sort_by: str | None = None,
+    output_format: str = "table",
+    output_path: str | None = None,
+) -> None:
+    """Run a structured data query against the shared query service."""
+    service = ETFQueryService()
+    result = service.run_query(
+        dataset,
+        ticker=ticker,
+        source=source,
+        signal=signal,
+        min_reliability=min_reliability,
+        signal_age_max=signal_age_max,
+        label=label,
+        days=days,
+        start_date=start_date,
+        end_date=end_date,
+        columns=columns,
+        limit=limit,
+        sort_by=sort_by,
+    )
+    rendered = render_query_result(result, output_format=output_format)
+
+    if output_path:
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text(rendered, encoding="utf-8")
+        print(f"Wrote query output to {output_file}")
+        return
+
+    print(rendered)
 
     value = float(value)
 
@@ -1982,6 +2030,91 @@ def main() -> None:
         help="Supertrend multiplier (default: 3.0)",
     )
 
+    query_parser = subparsers.add_parser(
+        "query",
+        help="Run structured queries over Parquet history and cached artifacts",
+        description="Explore stored ETF data through a stable query service shared by the CLI and dashboard.",
+    )
+    query_parser.add_argument(
+        "--dataset",
+        choices=["signal_scan", "price_history", "shortlist"],
+        default="signal_scan",
+        help="Named dataset to query (default: signal_scan)",
+    )
+    query_parser.add_argument(
+        "--source",
+        choices=["xetra", "nasdaq", "sweden", "list", "all_lists"],
+        default="xetra",
+        help="Universe source for signal_scan queries (default: xetra)",
+    )
+    query_parser.add_argument(
+        "--signal",
+        choices=["trend_forming", "downtrend_turnaround", "trend_weakening"],
+        default="trend_forming",
+        help="Named signal preset for signal_scan (default: trend_forming)",
+    )
+    query_parser.add_argument(
+        "--min-reliability",
+        type=float,
+        default=6.0,
+        help="Minimum reliability score for signal_scan matches (default: 6.0)",
+    )
+    query_parser.add_argument(
+        "--signal-age-max",
+        type=int,
+        default=5,
+        help="Maximum bars since the signal trigger for signal_scan matches (default: 5)",
+    )
+    query_parser.add_argument(
+        "--ticker",
+        help="Ticker symbol for price_history queries (e.g. EXS1.DE)",
+    )
+    query_parser.add_argument(
+        "--label",
+        choices=["All", "Buy", "Watch", "Skip"],
+        default="All",
+        help="Shortlist label filter (default: All)",
+    )
+    query_parser.add_argument(
+        "--days",
+        type=int,
+        default=90,
+        help="Trailing trading rows for price_history when no explicit date range is provided (default: 90)",
+    )
+    query_parser.add_argument(
+        "--start-date",
+        help="Inclusive start date for price_history queries (YYYY-MM-DD)",
+    )
+    query_parser.add_argument(
+        "--end-date",
+        help="Inclusive end date for price_history queries (YYYY-MM-DD)",
+    )
+    query_parser.add_argument(
+        "--columns",
+        help="Comma-separated column list, or * for all columns",
+    )
+    query_parser.add_argument(
+        "--limit",
+        type=int,
+        default=120,
+        help="Maximum preview rows to return (default: 120)",
+    )
+    query_parser.add_argument(
+        "--sort-by",
+        default="final_score",
+        help="Sort key for shortlist queries (default: final_score)",
+    )
+    query_parser.add_argument(
+        "--output-format",
+        choices=["table", "json", "csv"],
+        default="table",
+        help="Render format for CLI output (default: table)",
+    )
+    query_parser.add_argument(
+        "--output-path",
+        help="Optional file path to write the rendered result",
+    )
+
     args = parser.parse_args()
 
     if args.command == "fetch":
@@ -2122,6 +2255,26 @@ def main() -> None:
             st_period=args.st_period,
             st_multiplier=args.st_multiplier,
             timeframe=args.timeframe,
+        )
+
+    elif args.command == "query":
+
+        run_query_cli(
+            dataset=args.dataset,
+            ticker=args.ticker,
+            source=args.source,
+            signal=args.signal,
+            min_reliability=args.min_reliability,
+            signal_age_max=args.signal_age_max,
+            label=args.label,
+            days=args.days,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            columns=args.columns,
+            limit=args.limit,
+            sort_by=args.sort_by,
+            output_format=args.output_format,
+            output_path=args.output_path,
         )
 
     else:

@@ -62,7 +62,10 @@ _INDICATOR_FAMILY_PATTERNS = (
     ("rsi", re.compile(r"\brsi(?:_ema)?_\d+(?:_\d+)?\b", re.IGNORECASE)),
     ("macd", re.compile(r"\bmacd(?:_signal)?\b", re.IGNORECASE)),
     ("supertrend", re.compile(r"\b(?:st|supertrend)_\d+_\d+\b", re.IGNORECASE)),
-    ("avwap", re.compile(r"\b(?:avwap|anchored_vwap)_(?:low|high)_\d+\b", re.IGNORECASE)),
+    (
+        "avwap",
+        re.compile(r"\b(?:avwap|anchored_vwap)_(?:low|high)_\d+\b", re.IGNORECASE),
+    ),
     ("volume", re.compile(r"\b(?:volume|vol_ema_\d+)\b", re.IGNORECASE)),
     ("adx", re.compile(r"\badx\b", re.IGNORECASE)),
 )
@@ -434,7 +437,11 @@ def parse_strategy_structure_profile(content: str | None) -> dict[str, object]:
         + (2.5 if max_days is not None else 0.0)
         + (1.5 if volume_qualified else 0.0)
         + (2.0 if context_has_long_trend_guard else 0.0)
-        + (2.0 if explicit_exit_count >= 2 else 1.0 if explicit_exit_count == 1 else 0.0)
+        + (
+            2.0
+            if explicit_exit_count >= 2
+            else 1.0 if explicit_exit_count == 1 else 0.0
+        )
         + (1.0 if slope_count > 0 else 0.0)
     )
     if max_days is None:

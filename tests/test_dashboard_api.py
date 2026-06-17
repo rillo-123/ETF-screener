@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from ETF_screener.dashboard import app_fast
 from ETF_screener.dashboard.app_fast import app
 from ETF_screener.indicators import add_indicators
+from ETF_screener.storage import ParquetStorage
 
 client = TestClient(app)
 
@@ -52,11 +53,13 @@ def test_tab_bar_visible():
     assert 'id="stratfinder-btn"' not in html
     assert 'id="scan-source-toggle"' in html
     assert 'id="scan-source-xetra"' in html
+    assert 'id="scan-source-nasdaq"' in html
     assert 'id="scan-source-sweden"' in html
     assert 'id="scan-source-list"' in html
     assert 'id="scan-source-all-lists"' in html
     assert 'id="swarm-scan-source-toggle"' in html
     assert 'id="swarm-scan-source-xetra"' in html
+    assert 'id="swarm-scan-source-nasdaq"' in html
     assert 'id="swarm-scan-source-sweden"' in html
     assert 'id="swarm-scan-source-list"' in html
     assert 'id="swarm-scan-source-all-lists"' in html
@@ -73,6 +76,7 @@ def test_tab_bar_visible():
     assert 'id="stratfinder-result-count"' not in html
     assert 'id="export-stratfinder-btn"' not in html
     assert ">Shortlist<" in html
+    assert ">Query<" in html
     assert ">Swarm<" in html
     assert ">Swarm Lab<" in html
     assert ">Backtester<" in html
@@ -83,6 +87,11 @@ def test_tab_bar_visible():
     assert 'id="backtest-race-fuel"' not in html
     assert "Signal Window" in html
     assert 'id="shortlist-grid"' in html
+    assert 'id="tab-btn-query"' in html
+    assert 'id="tab-query"' in html
+    assert 'id="query-dataset"' in html
+    assert 'id="query-run-btn"' in html
+    assert 'id="query-results-body"' in html
     assert 'id="swarm-canvas"' in html
     assert 'id="tab-btn-swarm-lab"' in html
     assert 'id="tab-swarm-lab"' in html
@@ -119,6 +128,8 @@ def test_tab_bar_visible():
     assert "SWARM_DNA_SCHEMA_VERSION" in dashboard_source
     assert "SWARM_DNA_CONFIG_PATH" in dashboard_source
     assert "config/swarm_agent_dna.json" in dashboard_source
+    assert "/api/query/catalog" in dashboard_source
+    assert "/api/query/run?" in dashboard_source
     assert "behaviorModules" in dashboard_source
     assert "ema_cross_up" in dashboard_source
     assert "emaFastPeriod" in dashboard_source
@@ -173,6 +184,129 @@ def test_tab_bar_visible():
     assert 'id="list-modal-search"' in html
     assert 'id="list-modal-list-select"' in html
     assert 'id="list-modal-name"' in html
+
+
+def test_query_catalog_endpoint(monkeypatch):
+    class _FakeDb:
+        db_path = "fake.db"
+
+        def get_latest_market_date(self):
+            return None
+
+    monkeypatch.setattr(app_fast, "get_db", lambda: _FakeDb())
+    monkeypatch.setattr(
+        app_fast,
+        "_cached_dashboard_tickers",
+        lambda *_args: ("AAA.DE", "BBB.ST"),
+    )
+
+    response = client.get("/api/query/catalog")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["datasets"][0]["key"] == "signal_scan"
+    assert data["signal_scan"]["signals"][0]["key"] == "trend_forming"
+    assert data["shortlist"]["labels"] == ["All", "Buy", "Watch", "Skip"]
+    assert data["tickers"] == ["AAA.DE", "BBB.ST"]
+
+
+def test_query_run_endpoint_reads_price_history_from_service(monkeypatch, tmp_path):
+    storage = ParquetStorage(data_dir=str(tmp_path / "parquet"))
+    db = app_fast.ETFDatabase(db_path=str(tmp_path / "etfs.db"))
+    frame = pd.DataFrame(
+        {
+            "Date": pd.date_range("2026-01-01", periods=4, freq="D"),
+            "Open": [10.0, 11.0, 12.0, 13.0],
+            "High": [10.5, 11.5, 12.5, 13.5],
+            "Low": [9.5, 10.5, 11.5, 12.5],
+            "Close": [10.2, 11.2, 12.2, 13.2],
+            "Volume": [1000, 1100, 1200, 1300],
+            "Dividends": [0.0, 0.0, 0.0, 0.0],
+            "EMA_50": [9.9, 10.9, 11.9, 12.9],
+            "Supertrend": [9.8, 10.8, 11.8, 12.8],
+            "Signal": [0, 0, 1, 0],
+        }
+    )
+    storage.save_etf_data(frame, "AAA.DE")
+    service = app_fast.ETFQueryService(db=db, storage=storage)
+    monkeypatch.setattr(app_fast, "get_query_service", lambda: service)
+
+    response = client.get(
+        "/api/query/run?dataset=price_history&ticker=AAA.DE&days=2&columns=date,close"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["dataset"] == "price_history"
+    assert data["source"] == "parquet"
+    assert data["row_count"] == 2
+    assert data["columns"] == ["date", "close"]
+    assert [row["close"] for row in data["rows"]] == [12.2, 13.2]
+
+
+def test_query_run_endpoint_executes_signal_scan_and_refreshes_if_needed(monkeypatch):
+    class _FakeService:
+        def run_query(self, dataset, **kwargs):
+            assert dataset == "signal_scan"
+            assert kwargs["source"] == "sweden"
+            assert kwargs["signal"] == "trend_weakening"
+            assert kwargs["min_reliability"] == 6.5
+            assert kwargs["signal_age_max"] == 2
+            return {
+                "dataset": "signal_scan",
+                "source": "sweden",
+                "row_count": 1,
+                "returned_rows": 1,
+                "columns": ["ticker", "reliability_score"],
+                "rows": [{"ticker": "XACT.ST", "reliability_score": 7.3}],
+                "summary": {
+                    "signal": "trend_weakening",
+                    "signal_label": "Trend Weakening",
+                    "latest_market_date": "2026-06-15",
+                },
+            }
+
+    class _FakeDb:
+        db_path = "fake.db"
+
+    class _FakeRefresher:
+        def __init__(self, *args, **kwargs):
+            self.kwargs = kwargs
+
+        def get_status(self, stale_after_days=0):
+            assert stale_after_days == 0
+            return {
+                "latest_market_date": "2026-06-13",
+                "is_stale": True,
+                "stale_tickers": 2,
+            }
+
+    monkeypatch.setattr(app_fast, "get_query_service", lambda: _FakeService())
+    monkeypatch.setattr(app_fast, "get_db", lambda: _FakeDb())
+    monkeypatch.setattr(app_fast, "MarketDataRefresher", _FakeRefresher)
+    monkeypatch.setattr(
+        app_fast,
+        "_refresh_market_data_for_gui",
+        lambda source=None, rebuild_shortlist=True: {
+            "source": source,
+            "rebuild_shortlist": rebuild_shortlist,
+            "refreshed": 2,
+            "failed": 0,
+        },
+    )
+
+    response = client.get(
+        "/api/query/run?dataset=signal_scan&source=sweden&signal=trend_weakening"
+        "&min_reliability=6.5&signal_age_max=2&refresh_if_needed=true"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["dataset"] == "signal_scan"
+    assert data["rows"][0]["ticker"] == "XACT.ST"
+    assert data["refresh"]["requested"] is True
+    assert data["refresh"]["result"]["refreshed"] == 2
+    assert data["refresh"]["result"]["rebuild_shortlist"] is False
 
 
 def test_api_status():
@@ -1128,16 +1262,14 @@ def test_swarm_history_endpoint_returns_cached_close_history(monkeypatch):
         ]
     )
     conn = sqlite3.connect(":memory:", check_same_thread=False)
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE etf_data (
             ticker TEXT,
             date TEXT,
             close REAL,
             dividends REAL
         )
-        """
-    )
+        """)
     conn.executemany(
         "INSERT INTO etf_data (ticker, date, close, dividends) VALUES (?, ?, ?, ?)",
         [
@@ -1851,6 +1983,26 @@ def test_get_chart_valid_ticker():
 
     st_present = any("ST " in str(trace.get("name", "")) for trace in fig["data"])
     print(f"\nSupertrend indicator found: {st_present}")
+
+
+def test_get_chart_keeps_supertrend_overlay_with_non_supertrend_strategy():
+    with patch(
+        "ETF_screener.dashboard.app_fast.MarketDataRefresher.refresh_ticker_data",
+        return_value=add_indicators(_make_fake_ohlcv("DTE.DE")),
+    ):
+        response = client.get(
+            "/api/chart/DTE.DE?days=30&dsl_content=TRIGGER:%20close%20%3E%20ema_50"
+        )
+    assert response.status_code == 200
+    data = response.json()
+    fig = json.loads(data["figure"])
+
+    supertrend_traces = [
+        trace for trace in fig["data"] if str(trace.get("name", "")) == "Supertrend"
+    ]
+    assert (
+        supertrend_traces
+    ), "Expected Supertrend overlay to remain visible on the chart"
 
 
 def test_on_demand_fetch_persists():

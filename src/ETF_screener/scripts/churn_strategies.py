@@ -6,6 +6,7 @@ from ETF_screener.config_loader import get_paths
 from ETF_screener.backtester import (
     Backtester,
 )
+from ETF_screener.market_data_service import filter_low_vitality_nasdaq_tickers
 import pandas as pd
 import os
 import argparse
@@ -703,6 +704,8 @@ def filter_tickers_by_exchange_and_list(
     exchange_key = str(exchange or "all").strip().lower()
     if exchange_key in {"", "all"}:
         exchange_key = "all"
+    elif exchange_key in {"nasdaq", "us", "usa"}:
+        exchange_key = "nasdaq"
     elif exchange_key in {"xetra", "de", "germany"}:
         exchange_key = "xetra"
     elif exchange_key in {"sweden", "swe", "stockholm", "se", "ss", "st"}:
@@ -713,6 +716,9 @@ def filter_tickers_by_exchange_and_list(
         scope_key = "list"
     elif scope_key in {"all_lists", "alllists", "all list", "all lists"}:
         scope_key = "all_lists"
+    elif scope_key in {"nasdaq", "us", "usa"}:
+        scope_key = "nasdaq"
+        exchange_key = "nasdaq"
     elif scope_key in {"xetra", "de", "germany"}:
         scope_key = "xetra"
         exchange_key = "xetra"
@@ -740,8 +746,10 @@ def filter_tickers_by_exchange_and_list(
             return True
         if exchange_key == "all":
             return True
+        if exchange_key == "nasdaq":
+            return "." not in upper
         if exchange_key == "xetra":
-            return upper.endswith(".DE") or upper.endswith(".F") or "." not in upper
+            return upper.endswith((".DE", ".F", ".DU", ".HM", ".SG", ".BE", ".MU"))
         if exchange_key == "sweden":
             return (
                 upper.endswith(".ST") or upper.endswith(".SE") or upper.endswith(".SS")
@@ -788,6 +796,13 @@ def evaluate_strategies(
         ticker_list=ticker_list,
         scan_scope=scan_scope,
     )
+    scope_key = str(scan_scope or exchange or "").strip().lower()
+    if scope_key in {"nasdaq", "us", "usa", "us_stocks", "us-stocks"}:
+        tickers = filter_low_vitality_nasdaq_tickers(
+            db_path=str(backtester.db_path),
+            latest_market_date=latest_market_date,
+            tickers=tickers,
+        )
     strategies = _load_strategy_specs(
         backtester,
         strategy_path=strategy_path,

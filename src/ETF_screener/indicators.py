@@ -246,7 +246,9 @@ def calculate_anchored_vwap(
             anchor_offset = int(np.nanargmax(anchor_window))
         anchor_idx = start + anchor_offset
 
-        pv_total = pv_cumsum[idx] - (pv_cumsum[anchor_idx - 1] if anchor_idx > 0 else 0.0)
+        pv_total = pv_cumsum[idx] - (
+            pv_cumsum[anchor_idx - 1] if anchor_idx > 0 else 0.0
+        )
         vol_total = vol_cumsum[idx] - (
             vol_cumsum[anchor_idx - 1] if anchor_idx > 0 else 0.0
         )

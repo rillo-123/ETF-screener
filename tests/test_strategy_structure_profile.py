@@ -15,15 +15,11 @@ def test_structure_profile_scores_ema_breakout_fanout_as_trend_heavy():
     assert axes["confirmation_depth"] >= 7
     assert axes["exit_discipline"] >= 6
     assert "trend_gated" in profile["structure_tags"]
-    assert profile["structure_score"] == round(
-        sum(axes.values()) / len(axes), 2
-    )
+    assert profile["structure_score"] == round(sum(axes.values()) / len(axes), 2)
 
 
 def test_structure_profile_scores_anchored_vwap_reclaim_as_precise_and_time_bounded():
-    profile = parse_strategy_structure_profile(
-        _strategy_text("anchored_vwap_reclaim")
-    )
+    profile = parse_strategy_structure_profile(_strategy_text("anchored_vwap_reclaim"))
 
     axes = profile["structure_axes"]
     assert axes["trigger_precision"] >= 7

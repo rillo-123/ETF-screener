@@ -108,8 +108,7 @@ def test_backtest_scatter_updates_from_streamed_events_with_strategy_colors(page
         """,
         wait_until="domcontentloaded",
     )
-    page.evaluate(
-        """
+    page.evaluate("""
         () => {
           window.__plots = [];
           window.Plotly = {
@@ -133,11 +132,9 @@ def test_backtest_scatter_updates_from_streamed_events_with_strategy_colors(page
             return node;
           };
         }
-        """
-    )
+        """)
     page.add_script_tag(path=str(dashboard_js))
-    page.evaluate(
-        """
+    page.evaluate("""
         async () => {
           await window.dashboardReadyPromise;
           window.prepareBacktestLiveResults("Running...");
@@ -165,8 +162,7 @@ def test_backtest_scatter_updates_from_streamed_events_with_strategy_colors(page
           });
           await new Promise((resolve) => setTimeout(resolve, 250));
         }
-        """
-    )
+        """)
 
     assert "hidden" not in (
         page.locator("#backtest-content").get_attribute("class") or ""
@@ -221,8 +217,7 @@ def test_backtest_scatter_excludes_checked_ticker_from_plot_only(page):
         """,
         wait_until="domcontentloaded",
     )
-    page.evaluate(
-        """
+    page.evaluate("""
         () => {
           window.__plots = [];
           window.Plotly = {
@@ -246,11 +241,9 @@ def test_backtest_scatter_excludes_checked_ticker_from_plot_only(page):
             return node;
           };
         }
-        """
-    )
+        """)
     page.add_script_tag(path=str(dashboard_js))
-    page.evaluate(
-        """
+    page.evaluate("""
         async () => {
           await window.dashboardReadyPromise;
           window.prepareBacktestLiveResults("Running...");
@@ -280,17 +273,12 @@ def test_backtest_scatter_excludes_checked_ticker_from_plot_only(page):
           ]);
           await new Promise((resolve) => setTimeout(resolve, 250));
         }
-        """
-    )
+        """)
 
     assert page.locator("#backtest-table-body tr").count() == 2
     assert page.locator("#backtest-table-body input[type='checkbox']").count() == 2
-    assert (
-        page.locator("#backtest-table-body tr").first.locator("td").count() == 11
-    )
-    assert (
-        page.locator("#backtest-table-body tr").nth(1).locator("td").count() == 11
-    )
+    assert page.locator("#backtest-table-body tr").first.locator("td").count() == 11
+    assert page.locator("#backtest-table-body tr").nth(1).locator("td").count() == 11
     assert (
         page.locator("#backtest-table-body tr")
         .first.locator("td")
@@ -299,7 +287,8 @@ def test_backtest_scatter_excludes_checked_ticker_from_plot_only(page):
     )
     assert (
         page.locator("#backtest-table-body tr")
-        .nth(1).locator("td")
+        .nth(1)
+        .locator("td")
         .last.locator("input[type='checkbox']")
         .is_visible()
     )
@@ -319,7 +308,9 @@ def test_backtest_scatter_excludes_checked_ticker_from_plot_only(page):
     )
     assert [trace["name"] for trace in traces] == ["Beta"]
     assert page.locator("#backtest-table-body tr").count() == 2
-    assert page.locator("#backtest-table-body input[type='checkbox']").first.is_checked()
+    assert page.locator(
+        "#backtest-table-body input[type='checkbox']"
+    ).first.is_checked()
 
     page.locator("#backtest-table-body input[type='checkbox']").first.uncheck()
     page.wait_for_timeout(250)
@@ -328,9 +319,9 @@ def test_backtest_scatter_excludes_checked_ticker_from_plot_only(page):
         "() => [...window.__plots].reverse().find((plot) => plot.data.some((trace) => trace.type === 'scatter'))?.data || []"
     )
     assert [trace["name"] for trace in traces] == ["Alpha", "Beta"]
-    assert (
-        not page.locator("#backtest-table-body input[type='checkbox']").first.is_checked()
-    )
+    assert not page.locator(
+        "#backtest-table-body input[type='checkbox']"
+    ).first.is_checked()
 
 
 def test_backtest_structure_radar_renders_selected_saved_strategies(page):
@@ -377,8 +368,7 @@ def test_backtest_structure_radar_renders_selected_saved_strategies(page):
         """,
         wait_until="domcontentloaded",
     )
-    page.evaluate(
-        """
+    page.evaluate("""
         () => {
           window.__plots = [];
           window.Plotly = {
@@ -582,18 +572,15 @@ def test_backtest_structure_radar_renders_selected_saved_strategies(page):
             return { ok: true, json: async () => ({}) };
           };
         }
-        """
-    )
+        """)
     page.add_script_tag(path=str(dashboard_js))
-    page.evaluate(
-        """
+    page.evaluate("""
         async () => {
           await window.dashboardReadyPromise;
           await window.setScanSource("xetra");
           await window.loadBacktestMetrics();
         }
-        """
-    )
+        """)
 
     radar_traces = page.evaluate(
         "() => [...window.__plots].reverse().find((plot) => plot.nodeId === 'backtest-structure-chart')?.data || []"
@@ -660,8 +647,7 @@ EXIT: close < ema_20</textarea>
         """,
         wait_until="domcontentloaded",
     )
-    page.evaluate(
-        """
+    page.evaluate("""
         () => {
           window.__plots = [];
           window.Plotly = {
@@ -828,19 +814,16 @@ EXIT: close < ema_20</textarea>
             return { ok: true, json: async () => ({}) };
           };
         }
-        """
-    )
+        """)
     page.add_script_tag(path=str(dashboard_js))
-    page.evaluate(
-        """
+    page.evaluate("""
         async () => {
           await window.dashboardReadyPromise;
           await window.setScanSource("xetra");
           await window.setBacktestSourceMode("editor");
           await window.loadBacktestMetrics();
         }
-        """
-    )
+        """)
 
     radar_traces = page.evaluate(
         "() => [...window.__plots].reverse().find((plot) => plot.nodeId === 'backtest-structure-chart')?.data || []"
@@ -875,8 +858,7 @@ def test_backtest_exclude_checkbox_renders_in_live_dashboard_shell(page):
         page.wait_for_function(
             "() => typeof window.prepareBacktestLiveResults === 'function' && !!window.dashboardReadyPromise"
         )
-        page.evaluate(
-            """
+        page.evaluate("""
             async () => {
               await window.dashboardReadyPromise;
               window.showTab("backtest");
@@ -907,11 +889,12 @@ def test_backtest_exclude_checkbox_renders_in_live_dashboard_shell(page):
               ]);
               await new Promise((resolve) => setTimeout(resolve, 250));
             }
-            """
-        )
+            """)
 
         exclude_header = page.locator("th", has_text="Exclude")
-        first_row_last_cell = page.locator("#backtest-table-body tr").first.locator("td").last
+        first_row_last_cell = (
+            page.locator("#backtest-table-body tr").first.locator("td").last
+        )
 
         assert exclude_header.is_visible()
         assert page.locator("#backtest-table-body tr").count() == 2
@@ -961,8 +944,7 @@ def test_backtest_all_strategies_requests_all_strategies_flag(page):
         """,
         wait_until="domcontentloaded",
     )
-    page.evaluate(
-        """
+    page.evaluate("""
         () => {
           window.__fetchUrls = [];
           window.Plotly = {
@@ -1044,18 +1026,15 @@ def test_backtest_all_strategies_requests_all_strategies_flag(page):
             return { ok: true, json: async () => ({}) };
           };
         }
-        """
-    )
+        """)
     page.add_script_tag(path=str(dashboard_js))
-    page.evaluate(
-        """
+    page.evaluate("""
         async () => {
           await window.dashboardReadyPromise;
           await window.setScanSource("xetra");
           await window.loadBacktestMetrics();
         }
-        """
-    )
+        """)
 
     request_url = page.evaluate(
         "() => window.__fetchUrls.find((url) => url.includes('/api/backtest/matrix'))"

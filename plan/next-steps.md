@@ -1,5 +1,8 @@
 # Next steps
 
+- Live-test the new Nasdaq source in the dashboard and decide whether the current common-stock filters and vitality thresholds should stay as-is or be tightened further around ADRs, operating companies, and liquidity.
+- Decide whether Nasdaq refresh should keep using on-demand top-ups only or whether we want an explicit larger-universe maintenance command outside the GUI.
+
 - Live-test the global, historically available screening model: agents may inspect current or past indicator state for all real tickers at the current timeline step, but must not see future returns.
 - Check that winner DNA explains when to hold, when to jump while ahead, and what kind of ticker setup to jump toward.
 - Live-test and tune the charged-sphere prototype: charge caps, velocity damping, zoom range, activity-centering, ticker ball sizes, and virus-agent visibility.
@@ -16,9 +19,10 @@
 - Decide whether the strict local-date freshness threshold should later become exchange-calendar aware, especially around weekends and exchange holidays.
 - Add the next shortlist filters and sort controls in the UI: region, asset class, issuer, and freshness are the best follow-ups now that `Buy / Watch / Skip` is in place.
 - Keep the Swedish source files in sync if the underlying Nasdaq Nordic Stockholm feed changes, and decide later whether to widen or curate the current 406-name stock list.
+- Keep the Nasdaq source file in sync with the underlying Nasdaq Trader feed, and prefer regenerating `config/nasdaq.json` from the helper script instead of hand-editing the universe.
 - Keep market status and refresh source-aware so the active source file drives the ticker count, refresh progress, and shortlist top-up messages.
 - Keep the Sweden refresh path gentle on Yahoo by using sequential refresh plus retry and backoff, since a full 406-name burst can trigger load failures.
-- Blacklist the specific Sweden tickers that Yahoo will not serve so they do not keep showing up as failed loads in screen and backtest runs.
+- Keep inspecting the newest refresh logs for any primary-universe tickers Yahoo still will not serve, and blacklist or remap only the confirmed offenders so they stop reappearing in screen and backtest runs.
 - Make the visible strategy and saved-list selectors copyable with a one-click clipboard action so the current selection is easier to share.
 - Consider adding saved named lists later if a single custom ticker set is not enough for the workflow.
 - Add the next Swarm layer: explicit pheromone fields, richer hover overlays, and controls for seeding a run from exported top-agent DNA.

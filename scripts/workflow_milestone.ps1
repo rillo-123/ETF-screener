@@ -126,8 +126,18 @@ function Invoke-TestSuite {
         Write-Info ("Forwarded test args: " + ($RunnerArgs -join ' '))
     }
 
-    & $runner @RunnerArgs
-    return $LASTEXITCODE
+    $powershellExe = (Get-Process -Id $PID).Path
+    if ([string]::IsNullOrWhiteSpace($powershellExe)) {
+        $powershellExe = 'powershell.exe'
+    }
+
+    $testOutput = & $powershellExe -NoProfile -ExecutionPolicy Bypass -File $runner @RunnerArgs 2>&1
+    $testExitCode = $LASTEXITCODE
+    if ($null -ne $testOutput) {
+        $testOutput | Out-Host
+    }
+
+    return $testExitCode
 }
 
 function Invoke-AutoFix {
@@ -135,8 +145,13 @@ function Invoke-AutoFix {
 
     if (Test-PythonModule -ModuleName 'ruff') {
         Write-Info "Trying ruff auto-fixes..."
-        & $python -m ruff check --fix src/ tests/
-        if ($LASTEXITCODE -eq 0) {
+        $ruffOutput = & $python -m ruff check --fix src/ tests/ 2>&1
+        $ruffExitCode = $LASTEXITCODE
+        if ($null -ne $ruffOutput) {
+            $ruffOutput | Out-Host
+        }
+
+        if ($ruffExitCode -eq 0) {
             $appliedFixes.Add('ruff --fix') | Out-Null
         } else {
             Write-Warn "ruff auto-fix reported issues."
@@ -147,8 +162,13 @@ function Invoke-AutoFix {
 
     if (Test-PythonModule -ModuleName 'black') {
         Write-Info "Running black formatter..."
-        & $python -m black src/ tests/
-        if ($LASTEXITCODE -eq 0) {
+        $blackOutput = & $python -m black src/ tests/ 2>&1
+        $blackExitCode = $LASTEXITCODE
+        if ($null -ne $blackOutput) {
+            $blackOutput | Out-Host
+        }
+
+        if ($blackExitCode -eq 0) {
             $appliedFixes.Add('black') | Out-Null
         } else {
             Write-Warn "black reported formatting issues."
@@ -166,7 +186,7 @@ function Invoke-PlanProgressUpdate {
         [string]$NextResumePoint = ""
     )
 
-    $helper = Join-Path $root 'workflow_update_plan_progress.ps1'
+    $helper = Join-Path $root 'scripts\workflow_update_plan_progress.ps1'
     if (-not (Test-Path $helper)) {
         throw "Plan/progress workflow not found at $helper"
     }

@@ -1,7 +1,12 @@
-let backtestSourceMode = "saved";
+    let backtestSourceMode = "saved";
     let shortlistLoaded = false;
     let shortlistRows = [];
     let shortlistFilter = "All";
+    let queryCatalog = null;
+    let queryRows = [];
+    let queryColumns = [];
+    let queryLoaded = false;
+    let queryProgressTimers = [];
     let swarmLoaded = false;
     let swarmWorld = null;
     let swarmNodes = [];
@@ -183,14 +188,14 @@ let backtestSourceMode = "saved";
       { key: "drawdown_control", label: "Drawdown Control", max: 10 },
     ];
     function getDashboardTabs() {
-      return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"]
+      return ["screener", "shortlist", "query", "swarm", "swarm-lab", "backtest"]
         .map((name) => document.getElementById(`tab-${name}`))
         .filter(Boolean);
     }
 
     function normalizeDashboardTab(value) {
       const cleaned = String(value || "screener").trim().toLowerCase();
-      return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].includes(cleaned) ? cleaned : "screener";
+      return ["screener", "shortlist", "query", "swarm", "swarm-lab", "backtest"].includes(cleaned) ? cleaned : "screener";
     }
 
     function readStickyValue(key, fallback = "") {
@@ -216,6 +221,583 @@ let backtestSourceMode = "saved";
         localStorage.setItem(key, String(value ?? ""));
       } catch (err) {
         // Ignore storage failures in restricted environments.
+      }
+    }
+
+    function getQueryDataset() {
+      const node = document.getElementById("query-dataset");
+      return String(node?.value || "signal_scan").trim().toLowerCase();
+    }
+
+    function getQueryDatasetConfig(dataset = getQueryDataset()) {
+      if (!queryCatalog || typeof queryCatalog !== "object") {
+        return {};
+      }
+      const config = queryCatalog?.[dataset];
+      return config && typeof config === "object" ? config : {};
+    }
+
+    function populateQueryTickerOptions(tickers = []) {
+      const select = document.getElementById("query-ticker");
+      if (!select) {
+        return;
+      }
+      const currentValue = String(select.value || "").trim().toUpperCase();
+      const options = Array.from(new Set((Array.isArray(tickers) ? tickers : [])
+        .map((item) => String(item || "").trim().toUpperCase())
+        .filter(Boolean)));
+      select.innerHTML = '<option value="">Select ticker...</option>';
+      options.forEach((ticker) => {
+        const option = document.createElement("option");
+        option.value = ticker;
+        option.textContent = ticker;
+        select.appendChild(option);
+      });
+      if (currentValue && options.includes(currentValue)) {
+        select.value = currentValue;
+      } else if (!currentValue && options.length) {
+        select.value = options[0];
+      }
+    }
+
+    function getQuerySignalConfig(signal = getQueryInputValue("query-signal", "trend_forming")) {
+      const signalEntries = Array.isArray(queryCatalog?.signal_scan?.signals)
+        ? queryCatalog.signal_scan.signals
+        : [];
+      return signalEntries.find((entry) => String(entry?.key || "") === String(signal || "")) || null;
+    }
+
+    async function loadQueryCatalog(force = false) {
+      if (queryLoaded && !force) {
+        return queryCatalog;
+      }
+      const resp = await fetch("/api/query/catalog", { cache: "no-store" });
+      if (!resp.ok) {
+        throw new Error("Could not load query catalog");
+      }
+      queryCatalog = await resp.json();
+      populateQueryTickerOptions(queryCatalog?.tickers || []);
+      queryLoaded = true;
+      updateQueryControls();
+      return queryCatalog;
+    }
+
+    function getQueryInputValue(id, fallback = "") {
+      const node = document.getElementById(id);
+      return node ? String(node.value || "").trim() : fallback;
+    }
+
+    function setQueryStatus(message, tone = "slate") {
+      const node = document.getElementById("query-status");
+      if (!node) {
+        return;
+      }
+      node.textContent = String(message || "");
+      node.className = `text-xs font-bold uppercase tracking-wide text-${tone}-500`;
+    }
+
+    function formatQueryCell(value) {
+      if (value === null || value === undefined || value === "") {
+        return "—";
+      }
+      if (typeof value === "object") {
+        try {
+          return JSON.stringify(value);
+        } catch (err) {
+          return String(value);
+        }
+      }
+      return String(value);
+    }
+
+    function clearQueryProgressTimers() {
+      queryProgressTimers.forEach((handle) => {
+        try {
+          clearTimeout(handle);
+        } catch (err) {
+          // Ignore timer cleanup issues in constrained environments.
+        }
+      });
+      queryProgressTimers = [];
+    }
+
+    function hideQueryProgressPanel() {
+      const shell = document.getElementById("query-progress-shell");
+      if (shell) {
+        shell.classList.add("hidden");
+      }
+    }
+
+    function appendQueryActivity(message, tone = "slate") {
+      const log = document.getElementById("query-activity-log");
+      if (!log) {
+        return;
+      }
+      const entry = document.createElement("div");
+      entry.className = `rounded-lg border border-${tone}-500/20 bg-slate-900/70 px-3 py-2 text-xs text-slate-200`;
+      entry.textContent = String(message || "");
+      log.appendChild(entry);
+      const children = Array.from(log.children || []);
+      while (children.length > 6) {
+        const oldest = children.shift();
+        if (oldest && typeof oldest.remove === "function") {
+          oldest.remove();
+        }
+      }
+      const caption = document.getElementById("query-activity-caption");
+      if (caption) {
+        caption.textContent = `${Array.from(log.children || []).length} recent update${(log.children || []).length === 1 ? "" : "s"}`;
+      }
+    }
+
+    function setQueryProgress(value, message, tone = "amber", options = {}) {
+      const shell = document.getElementById("query-progress-shell");
+      const label = document.getElementById("query-progress-label");
+      const messageNode = document.getElementById("query-progress-message");
+      const pctNode = document.getElementById("query-progress-pct");
+      const bar = document.getElementById("query-progress-bar");
+      const safeValue = Math.max(0, Math.min(100, Number(value || 0)));
+      const indeterminate = Boolean(options?.indeterminate);
+      if (shell) {
+        shell.classList.remove("hidden");
+      }
+      if (label) {
+        label.className = `text-[11px] font-bold uppercase tracking-wide text-${tone}-700`;
+      }
+      if (messageNode) {
+        messageNode.textContent = String(message || "");
+      }
+      if (pctNode) {
+        pctNode.textContent = indeterminate ? "Working..." : `${Math.round(safeValue)}%`;
+        pctNode.className = `text-xs font-bold uppercase tracking-wide text-${tone}-700`;
+      }
+      if (bar) {
+        bar.style.width = `${safeValue}%`;
+        bar.classList.toggle("animate-pulse", indeterminate);
+      }
+    }
+
+    function resetQueryProgressPanel() {
+      clearQueryProgressTimers();
+      const log = document.getElementById("query-activity-log");
+      if (log) {
+        log.innerHTML = "";
+      }
+      const caption = document.getElementById("query-activity-caption");
+      if (caption) {
+        caption.textContent = "Latest query steps appear here.";
+      }
+      setQueryProgress(0, "Waiting for the next query run.", "amber");
+    }
+
+    function startQueryProgress(details) {
+      clearQueryProgressTimers();
+      const signalRun = details?.dataset === "signal_scan";
+      const stages = signalRun
+        ? [
+            { pct: 8, message: "Preparing the actionable signal scan.", activity: "Loaded the current query settings and selected universe." },
+            { pct: 22, message: "Checking data freshness for the chosen universe.", activity: "Verifying whether the stored market backbone needs a refresh." },
+            { pct: 48, message: "Scanning stored price history across the selected universe.", activity: "Running the signal rules against the cached price backbone." },
+            { pct: 76, message: "Ranking the strongest actionable matches.", activity: "Sorting candidates by reliability and signal age." },
+            { pct: 82, message: "Still scanning the larger universe. Xetra or Nasdaq can take a while.", activity: "The backend is still working through the remaining ticker histories.", indeterminate: true },
+          ]
+        : [
+            { pct: 10, message: "Preparing the structured query.", activity: "Collected the requested filters and preview columns." },
+            { pct: 38, message: "Reading the requested dataset.", activity: "Pulling the matching rows from the stored backbone." },
+            { pct: 72, message: "Formatting the preview rows.", activity: "Shaping the response so the preview stays responsive." },
+            { pct: 80, message: "Still working on the response.", activity: "Waiting for the backend query to finish and return the preview.", indeterminate: true },
+          ];
+      const delays = signalRun ? [0, 200, 700, 1400, 2600] : [0, 200, 700, 1800];
+      stages.forEach((stage, index) => {
+        const handle = setTimeout(() => {
+          setQueryProgress(stage.pct, stage.message, "amber", { indeterminate: Boolean(stage.indeterminate) });
+          appendQueryActivity(stage.activity, "amber");
+        }, delays[index] || 0);
+        queryProgressTimers.push(handle);
+      });
+    }
+
+    function finishQueryProgress(message, success = true) {
+      clearQueryProgressTimers();
+      const tone = success ? "emerald" : "rose";
+      setQueryProgress(100, message, tone);
+      appendQueryActivity(message, tone);
+      if (success) {
+        const handle = setTimeout(() => {
+          hideQueryProgressPanel();
+        }, 1200);
+        queryProgressTimers.push(handle);
+      }
+    }
+
+    function getQuerySignalScanSource() {
+      return normalizeScanScope(tickerScanScope || "xetra");
+    }
+
+    async function openQueryTickerChart(ticker) {
+      const symbol = String(ticker || "").trim().toUpperCase();
+      if (!symbol) {
+        return;
+      }
+      showTab("screener");
+      await loadChart(symbol);
+    }
+
+    function buildQueryRequestDetails() {
+      const dataset = getQueryDataset();
+      const params = new URLSearchParams();
+      params.set("dataset", dataset);
+      const cliParts = ["etfs", "query", "--dataset", dataset];
+      if (dataset === "signal_scan") {
+        const source = getQuerySignalScanSource();
+        const signal = getQueryInputValue("query-signal", "trend_forming");
+        const signalAgeMax = getQueryInputValue("query-signal-age-max", "5");
+        const minReliability = getQueryInputValue("query-min-reliability", "6.0");
+        const refreshIfNeededNode = document.getElementById("query-refresh-if-needed");
+        const refreshIfNeeded = Boolean(refreshIfNeededNode?.checked);
+        params.set("source", source);
+        params.set("signal", signal);
+        params.set("signal_age_max", signalAgeMax);
+        params.set("min_reliability", minReliability);
+        params.set("refresh_if_needed", refreshIfNeeded ? "true" : "false");
+        cliParts.push(
+          "--source", source,
+          "--signal", signal,
+          "--signal-age-max", signalAgeMax,
+          "--min-reliability", minReliability,
+        );
+      } else if (dataset === "price_history") {
+        const ticker = getQueryInputValue("query-ticker").toUpperCase();
+        const days = getQueryInputValue("query-days", "90");
+        const startDate = getQueryInputValue("query-start-date");
+        const endDate = getQueryInputValue("query-end-date");
+        if (ticker) {
+          params.set("ticker", ticker);
+          cliParts.push("--ticker", ticker);
+        }
+        if (days) {
+          params.set("days", days);
+          cliParts.push("--days", days);
+        }
+        if (startDate) {
+          params.set("start_date", startDate);
+          cliParts.push("--start-date", startDate);
+        }
+        if (endDate) {
+          params.set("end_date", endDate);
+          cliParts.push("--end-date", endDate);
+        }
+      } else if (dataset === "shortlist") {
+        const label = getQueryInputValue("query-label", "All");
+        const sortBy = getQueryInputValue("query-sort-by", "final_score");
+        params.set("label", label);
+        params.set("sort_by", sortBy);
+        cliParts.push("--label", label, "--sort-by", sortBy);
+      }
+      const limit = getQueryInputValue("query-limit", "120");
+      const columns = getQueryInputValue("query-columns");
+      if (limit) {
+        params.set("limit", limit);
+        cliParts.push("--limit", limit);
+      }
+      if (columns) {
+        params.set("columns", columns);
+        cliParts.push("--columns", columns);
+      }
+      return {
+        dataset,
+        params,
+        apiPath: `/api/query/run?${params.toString()}`,
+        cliCall: cliParts.join(" "),
+      };
+    }
+
+    function updateQueryCallPreviews() {
+      const details = buildQueryRequestDetails();
+      const apiNode = document.getElementById("query-api-call");
+      const cliNode = document.getElementById("query-cli-call");
+      if (apiNode) {
+        apiNode.textContent = details.apiPath;
+      }
+      if (cliNode) {
+        cliNode.textContent = details.cliCall;
+      }
+    }
+
+    function updateQueryControls() {
+      const dataset = getQueryDataset();
+      const isSignalScan = dataset === "signal_scan";
+      const isPriceHistory = dataset === "price_history";
+      const sourceGroup = document.getElementById("query-source-group");
+      const sourceReadout = document.getElementById("query-source-readout");
+      const sourceNote = document.getElementById("query-source-note");
+      const signalGroup = document.getElementById("query-signal-group");
+      const signalAgeGroup = document.getElementById("query-signal-age-group");
+      const reliabilityGroup = document.getElementById("query-reliability-group");
+      const refreshGroup = document.getElementById("query-refresh-group");
+      const tickerGroup = document.getElementById("query-ticker-group");
+      const labelGroup = document.getElementById("query-label-group");
+      const daysGroup = document.getElementById("query-days-group");
+      const startGroup = document.getElementById("query-start-group");
+      const endGroup = document.getElementById("query-end-group");
+      const sortGroup = document.getElementById("query-sort-group");
+      if (sourceGroup) sourceGroup.classList.toggle("hidden", !isSignalScan);
+      if (signalGroup) signalGroup.classList.toggle("hidden", !isSignalScan);
+      if (signalAgeGroup) signalAgeGroup.classList.toggle("hidden", !isSignalScan);
+      if (reliabilityGroup) reliabilityGroup.classList.toggle("hidden", !isSignalScan);
+      if (refreshGroup) refreshGroup.classList.toggle("hidden", !isSignalScan);
+      if (tickerGroup) tickerGroup.classList.toggle("hidden", !isPriceHistory);
+      if (daysGroup) daysGroup.classList.toggle("hidden", !isPriceHistory);
+      if (startGroup) startGroup.classList.toggle("hidden", !isPriceHistory);
+      if (endGroup) endGroup.classList.toggle("hidden", !isPriceHistory);
+      if (labelGroup) labelGroup.classList.toggle("hidden", isSignalScan || isPriceHistory);
+      if (sortGroup) sortGroup.classList.toggle("hidden", isSignalScan || isPriceHistory);
+      const datasetCard = document.getElementById("query-summary-dataset");
+      const signalSource = getQuerySignalScanSource();
+      const sourceMap = {
+        xetra: "Xetra",
+        nasdaq: "Nasdaq",
+        sweden: "Sweden",
+        list: "My List",
+        all_lists: "All Lists",
+        debug: "Debug",
+      };
+      if (datasetCard) {
+        datasetCard.textContent = dataset === "signal_scan"
+          ? "Signal Scan"
+          : dataset === "shortlist"
+          ? "Shortlist Snapshot"
+          : "Ticker History";
+      }
+      if (sourceReadout) {
+        sourceReadout.textContent = sourceMap[signalSource] || "Xetra";
+      }
+      if (sourceNote) {
+        sourceNote.textContent = signalSource === "debug"
+          ? "Debug scope is synthetic only. Choose Xetra, Nasdaq, Sweden, My List, or All Lists in the top bar."
+          : "Uses the ticker universe selected in the top bar.";
+        sourceNote.className = signalSource === "debug"
+          ? "mt-2 text-[11px] text-rose-600"
+          : "mt-2 text-[11px] text-slate-500";
+      }
+      if (isSignalScan) {
+        const signalConfig = getQuerySignalConfig();
+        const ageNode = document.getElementById("query-signal-age-max");
+        const reliabilityNode = document.getElementById("query-min-reliability");
+        if (signalConfig && ageNode && !String(ageNode.dataset.userEdited || "").trim()) {
+          ageNode.value = String(signalConfig.default_age_max || 5);
+        }
+        if (signalConfig && reliabilityNode && !String(reliabilityNode.dataset.userEdited || "").trim()) {
+          reliabilityNode.value = String(signalConfig.default_min_reliability || 6.0);
+        }
+      }
+      updateQueryCallPreviews();
+    }
+
+    function renderQueryResults(result) {
+      queryRows = Array.isArray(result?.rows) ? result.rows.slice() : [];
+      queryColumns = Array.isArray(result?.columns) ? result.columns.slice() : [];
+      const empty = document.getElementById("query-empty");
+      const content = document.getElementById("query-content");
+      const head = document.getElementById("query-results-head");
+      const body = document.getElementById("query-results-body");
+      const rowsNode = document.getElementById("query-summary-rows");
+      const returnedNode = document.getElementById("query-summary-returned");
+      const rangeNode = document.getElementById("query-summary-range");
+      const sourceNode = document.getElementById("query-summary-source");
+
+      if (rowsNode) {
+        rowsNode.textContent = String(result?.row_count || 0);
+      }
+      if (returnedNode) {
+        returnedNode.textContent = String(result?.returned_rows || 0);
+      }
+      if (sourceNode) {
+        if (result?.dataset === "signal_scan") {
+          const sourceMap = {
+            xetra: "Xetra",
+            nasdaq: "Nasdaq",
+            sweden: "Sweden",
+            list: "My List",
+            all_lists: "All Lists",
+          };
+          sourceNode.textContent = sourceMap[String(result?.source || "").trim().toLowerCase()] || String(result?.source || "-");
+        } else {
+          sourceNode.textContent = String(result?.source || "-");
+        }
+      }
+      if (rangeNode) {
+        if (result?.dataset === "signal_scan") {
+          rangeNode.textContent = String(result?.summary?.latest_market_date || "—");
+        } else if (result?.dataset === "price_history") {
+          const earliest = result?.summary?.earliest_date || "—";
+          const latest = result?.summary?.latest_date || "—";
+          rangeNode.textContent = `${earliest} → ${latest}`;
+        } else {
+          rangeNode.textContent = String(result?.summary?.as_of_date || "—");
+        }
+      }
+
+      if (head) {
+        head.innerHTML = "";
+        if (queryColumns.length) {
+          const tr = document.createElement("tr");
+          queryColumns.forEach((column) => {
+            const th = document.createElement("th");
+            th.className = "px-3 py-2 text-left text-xs font-bold uppercase tracking-wide";
+            th.textContent = String(column);
+            tr.appendChild(th);
+          });
+          head.appendChild(tr);
+        }
+      }
+
+      if (body) {
+        body.innerHTML = "";
+        queryRows.forEach((row) => {
+          const tr = document.createElement("tr");
+          queryColumns.forEach((column) => {
+            const td = document.createElement("td");
+            td.className = "px-3 py-2 align-top text-slate-700";
+            const rawValue = row?.[column];
+            if (String(column || "").trim().toLowerCase() === "ticker" && String(rawValue || "").trim()) {
+              const button = document.createElement("button");
+              button.type = "button";
+              button.className = "font-bold text-indigo-700 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-500";
+              button.textContent = formatQueryCell(rawValue);
+              button.title = `Open ${String(rawValue || "").trim().toUpperCase()} in Screener`;
+              button.addEventListener("click", () => {
+                openQueryTickerChart(rawValue).catch((err) => {
+                  console.warn("Could not open query ticker chart", err);
+                });
+              });
+              td.appendChild(button);
+            } else {
+              td.textContent = formatQueryCell(rawValue);
+            }
+            tr.appendChild(td);
+          });
+          body.appendChild(tr);
+        });
+      }
+
+      if (empty) {
+        empty.classList.toggle("hidden", queryRows.length > 0);
+        if (!queryRows.length) {
+          empty.textContent = result?.dataset === "signal_scan"
+            ? "No actionable tickers matched the current signal and universe."
+            : "The query returned no rows for the current filters.";
+        }
+      }
+      if (content) {
+        content.classList.toggle("hidden", queryRows.length === 0);
+      }
+    }
+
+    async function loadQueryResults() {
+      try {
+        await loadQueryCatalog();
+      } catch (err) {
+        setQueryStatus(`Catalog error: ${err.message || err}`, "rose");
+        finishQueryProgress(`Catalog load failed: ${err.message || err}`, false);
+        throw err;
+      }
+      const details = buildQueryRequestDetails();
+      if (details.dataset === "price_history" && !details.params.get("ticker")) {
+        setQueryStatus("Choose a ticker before running Ticker History.", "amber");
+        renderQueryResults({
+          dataset: details.dataset,
+          row_count: 0,
+          returned_rows: 0,
+          source: "-",
+          summary: {},
+          columns: [],
+          rows: [],
+        });
+        finishQueryProgress("Ticker History needs a ticker before the query can run.", false);
+        return;
+      }
+      if (details.dataset === "signal_scan") {
+        const source = String(details.params.get("source") || "xetra");
+        if (source === "debug") {
+          setQueryStatus("Choose Xetra, Nasdaq, Sweden, My List, or All Lists in the top bar before running Signal Scan.", "amber");
+          renderQueryResults({
+            dataset: details.dataset,
+            row_count: 0,
+            returned_rows: 0,
+            source,
+            summary: { latest_market_date: null },
+            columns: [],
+            rows: [],
+          });
+          finishQueryProgress("Signal Scan stopped because Debug is a synthetic-only universe.", false);
+          return;
+        }
+        if ((source === "list" || source === "all_lists") && getScopeTickers(source).length === 0) {
+          setQueryStatus("Choose a universe with tickers before running Signal Scan.", "amber");
+          renderQueryResults({
+            dataset: details.dataset,
+            row_count: 0,
+            returned_rows: 0,
+            source,
+            summary: { latest_market_date: null },
+            columns: [],
+            rows: [],
+          });
+          finishQueryProgress("Signal Scan stopped because the selected list universe is empty.", false);
+          return;
+        }
+      }
+
+      const runBtn = document.getElementById("query-run-btn");
+      if (runBtn) {
+        runBtn.disabled = true;
+        runBtn.textContent = "Running...";
+      }
+      startQueryProgress(details);
+      setQueryStatus(details.dataset === "signal_scan" ? "Scanning actionable signals..." : "Running structured query...", "amber");
+      updateQueryCallPreviews();
+      try {
+        const resp = await fetch(details.apiPath, { cache: "no-store" });
+        appendQueryActivity("The query backend responded. Rendering the preview now.", "amber");
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data?.detail || "Query failed");
+        }
+        renderQueryResults(data);
+        if (details.dataset === "signal_scan") {
+          const refreshRequested = Boolean(data?.refresh?.requested);
+          const refreshed = Number(data?.refresh?.result?.refreshed || 0);
+          const refreshText = refreshRequested
+            ? ` Refreshed ${refreshed} stale tickers first.`
+            : " Market data was already fresh enough.";
+          const successMessage = `Found ${data.row_count || 0} actionable tickers.${refreshText}`;
+          setQueryStatus(successMessage, "emerald");
+          finishQueryProgress(successMessage, true);
+        } else {
+          const successMessage = `Returned ${data.returned_rows || 0} preview rows from ${data.row_count || 0} matching rows.`;
+          setQueryStatus(successMessage, "emerald");
+          finishQueryProgress(successMessage, true);
+        }
+      } catch (err) {
+        renderQueryResults({
+          dataset: details.dataset,
+          row_count: 0,
+          returned_rows: 0,
+          source: "-",
+          summary: {},
+          columns: [],
+          rows: [],
+        });
+        const errorMessage = `Query error: ${err.message || err}`;
+        setQueryStatus(errorMessage, "rose");
+        finishQueryProgress(errorMessage, false);
+        throw err;
+      } finally {
+        if (runBtn) {
+          runBtn.disabled = false;
+          runBtn.textContent = "Run Query";
+        }
       }
     }
 
@@ -246,6 +828,9 @@ let backtestSourceMode = "saved";
 
     function normalizeExchangeFilter(value) {
       const cleaned = String(value || "all").trim().toLowerCase();
+      if (["nasdaq", "us", "usa"].includes(cleaned)) {
+        return "nasdaq";
+      }
       if (["xetra", "germany", "de"].includes(cleaned)) {
         return "xetra";
       }
@@ -257,6 +842,9 @@ let backtestSourceMode = "saved";
 
     function normalizeScanScope(value) {
       const cleaned = String(value || "xetra").trim().toLowerCase();
+      if (["nasdaq", "us", "usa", "us_stocks", "us-stocks"].includes(cleaned)) {
+        return "nasdaq";
+      }
       if (["list", "chosen", "chosen_list", "custom"].includes(cleaned)) {
         return "list";
       }
@@ -281,7 +869,10 @@ let backtestSourceMode = "saved";
       if (/\.(ST|SE|SS)$/.test(upperTicker) || upperLabel.includes("STOCKHOLM") || upperLabel.includes("SWED") || upperTicker.includes("SWE")) {
         return "sweden";
       }
-      if (/\.(DE|F)$/.test(upperTicker) || !upperTicker.includes(".")) {
+      if (upperLabel.includes("NASDAQ") || upperLabel.includes("UNITED STATES") || upperLabel.includes("USA")) {
+        return "nasdaq";
+      }
+      if (/\.(DE|F|DU|HM|SG|BE|MU)$/.test(upperTicker)) {
         return "xetra";
       }
       return "all";
@@ -355,7 +946,7 @@ let backtestSourceMode = "saved";
 
     function getFilteredTickerUniverse() {
       const scope = normalizeScanScope(tickerScanScope);
-      if (scope === "xetra" || scope === "sweden") {
+      if (scope === "xetra" || scope === "sweden" || scope === "nasdaq") {
         return tickerSelectUniverse.filter((item) => item.exchange === scope);
       }
       if (scope === "debug") {
@@ -391,6 +982,10 @@ let backtestSourceMode = "saved";
         placeholder.textContent = visible.length > 0
           ? "Select Swedish ticker..."
           : "No Swedish exchange tickers loaded yet";
+      } else if (normalizedScope === "nasdaq") {
+        placeholder.textContent = visible.length > 0
+          ? "Select Nasdaq ticker..."
+          : "No Nasdaq tickers loaded yet";
       } else if (normalizedScope === "xetra") {
         placeholder.textContent = "Select Xetra ticker...";
       } else if (normalizedScope === "debug") {
@@ -423,7 +1018,7 @@ let backtestSourceMode = "saved";
       } else {
         ticker.value = "";
       }
-      ticker.disabled = (normalizedScope === "sweden" && visible.length === 0) || (normalizedScope === "all_lists" && visible.length === 0);
+      ticker.disabled = ((normalizedScope === "sweden" || normalizedScope === "nasdaq") && visible.length === 0) || (normalizedScope === "all_lists" && visible.length === 0);
       tickerSelectLastValue = ticker.value || "";
       writeStickyValue(LAST_TICKER_SELECT_KEY, tickerSelectLastValue);
     }
@@ -720,6 +1315,7 @@ let backtestSourceMode = "saved";
       });
       renderTickerSelectOptions({ preserveSelection: true });
       updateSwarmDebugChrome();
+      updateQueryControls();
     }
 
     function getSwarmDebugNodes() {
@@ -3475,7 +4071,7 @@ let backtestSourceMode = "saved";
       if (scope === "debug") {
         params.set("debug_assets", String(getSwarmDebugAssetCount()));
       }
-      if (scope === "xetra" || scope === "sweden") {
+      if (scope === "xetra" || scope === "sweden" || scope === "nasdaq") {
         params.set("exchange", scope);
       }
       if (scope === "list" || scope === "all_lists") {
@@ -6189,6 +6785,8 @@ let backtestSourceMode = "saved";
 
       if (tab === "shortlist") {
         context.textContent = "Shortlist: browse ideas, then open the chart";
+      } else if (tab === "query") {
+        context.textContent = "Query: direct data exploration over the stored backbone";
       } else if (tab === "swarm") {
         context.textContent = "Swarm: production asset explorer";
       } else if (tab === "swarm-lab") {
@@ -7053,6 +7651,11 @@ let backtestSourceMode = "saved";
       }
       if (tab === 'backtest') {
         updateBacktestRunButtonState();
+      } else if (tab === 'query') {
+        loadQueryCatalog().catch((err) => {
+          console.warn("Query catalog failed to load", err);
+          setQueryStatus("Could not load query catalog.", "rose");
+        });
       } else if (tab === 'shortlist') {
         ensureGuiMarketBackbone().catch((err) => {
           console.warn("Auto-refresh check failed", err);
@@ -7112,6 +7715,8 @@ let backtestSourceMode = "saved";
         marketStatus.className = "text-xs font-bold uppercase tracking-wide text-indigo-600";
         const sourceLabel = source === "sweden"
           ? "Sweden"
+          : source === "nasdaq"
+          ? "Nasdaq"
           : source === "list"
           ? "saved list"
           : source === "all_lists"
@@ -7674,6 +8279,9 @@ let backtestSourceMode = "saved";
       }
       if (symbol.endsWith(".DE") || symbol.endsWith(".F") || symbol.endsWith(".DU") || symbol.endsWith(".HM") || symbol.endsWith(".SG") || symbol.endsWith(".BE") || symbol.endsWith(".MU")) {
         return "xetra";
+      }
+      if (symbol && !symbol.includes(".")) {
+        return "nasdaq";
       }
       return "unknown";
     }
@@ -10052,6 +10660,7 @@ let backtestSourceMode = "saved";
       bindBacktestStrategyChooserControls();
       bindBacktestRaceControls();
       renderBacktestRace();
+      updateQueryControls();
       updateBacktestStrategyCount();
       syncBacktestStrategyCheckboxChrome();
       updateScanActionButtonsState();
@@ -10074,6 +10683,8 @@ let backtestSourceMode = "saved";
       openListEditorModal,
       handleBacktestStrategyChooserChange,
       loadBacktestMetrics,
+      openQueryTickerChart,
+      loadQueryResults,
       loadShortlist,
       loadSwarmWorld,
       loadSwarmLab,
@@ -10108,6 +10719,7 @@ let backtestSourceMode = "saved";
       setSwarmLabSpeed,
       setSwarmLabZoom,
       setRange,
+      updateQueryControls,
       startJobProgressPolling,
       stopJobProgressPolling,
       dashboardReadyPromise,

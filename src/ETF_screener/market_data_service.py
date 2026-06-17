@@ -8,6 +8,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
@@ -21,6 +22,86 @@ from ETF_screener.storage import ParquetStorage
 from ETF_screener.yfinance_fetcher import YFinanceFetcher
 
 logger = logging.getLogger(__name__)
+
+NASDAQ_VITALITY_MIN_RECENT_AVG_VOLUME = 150_000
+NASDAQ_VITALITY_MIN_RECENT_AVG_DOLLAR_VOLUME = 1_500_000.0
+NASDAQ_VITALITY_MIN_RECENT_AVG_CLOSE = 3.0
+
+
+@lru_cache(maxsize=8)
+def _cached_nasdaq_vitality_tickers(
+    db_path: str, latest_market_date: str | None
+) -> tuple[str, ...]:
+    """Return Nasdaq-style symbols with enough recent trading vitality."""
+    del latest_market_date
+    db = ETFDatabase(db_path=db_path)
+    conn = db._get_connection()
+    query = """
+        WITH ranked AS (
+            SELECT
+                ticker,
+                date,
+                close,
+                volume,
+                ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
+            FROM etf_data
+            WHERE ticker NOT LIKE '%.%'
+        ),
+        agg AS (
+            SELECT
+                ticker,
+                MAX(date) AS last_date,
+                COUNT(*) AS total_rows,
+                SUM(CASE WHEN volume > 0 THEN 1 ELSE 0 END) AS nonzero_volume_rows,
+                SUM(CASE WHEN rn <= 30 THEN 1 ELSE 0 END) AS recent_rows,
+                SUM(CASE WHEN rn <= 30 AND volume = 0 THEN 1 ELSE 0 END) AS recent_zero_volume_rows,
+                AVG(CASE WHEN rn <= 20 THEN volume END) AS recent_avg_volume,
+                AVG(CASE WHEN rn <= 20 THEN close END) AS recent_avg_close,
+                AVG(CASE WHEN rn <= 20 THEN close * volume END) AS recent_avg_dollar_volume
+            FROM ranked
+            GROUP BY ticker
+        )
+        SELECT ticker
+        FROM agg
+        WHERE total_rows >= 50
+          AND nonzero_volume_rows >= 20
+          AND recent_rows >= 10
+          AND recent_zero_volume_rows < 2
+          AND recent_avg_volume >= ?
+          AND recent_avg_close >= ?
+          AND recent_avg_dollar_volume >= ?
+          AND last_date >= date('now', '-45 day')
+        ORDER BY ticker
+    """
+    frame = pd.read_sql_query(
+        query,
+        conn,
+        params=[
+            NASDAQ_VITALITY_MIN_RECENT_AVG_VOLUME,
+            NASDAQ_VITALITY_MIN_RECENT_AVG_CLOSE,
+            NASDAQ_VITALITY_MIN_RECENT_AVG_DOLLAR_VOLUME,
+        ],
+    )
+    return tuple(str(ticker).upper() for ticker in frame.get("ticker", []).tolist())
+
+
+def filter_low_vitality_nasdaq_tickers(
+    db_path: str | None,
+    latest_market_date: str | None,
+    tickers: list[str] | tuple[str, ...],
+) -> list[str]:
+    """Filter Nasdaq-style symbols down to more actionable names."""
+    if not db_path:
+        return [str(ticker).upper() for ticker in tickers]
+    eligible = set(_cached_nasdaq_vitality_tickers(str(db_path), latest_market_date))
+    filtered: list[str] = []
+    for ticker in tickers:
+        upper = str(ticker or "").upper()
+        if not upper:
+            continue
+        if "." in upper or upper in eligible:
+            filtered.append(upper)
+    return filtered
 
 
 class MarketDataRefresher:
@@ -414,9 +495,9 @@ class MarketDataRefresher:
 
         worker_count = min(max(1, int(max_workers)), max(2, os.cpu_count() or 4, 8))
         sequential_refresh = False
-        if source_name == "sweden.json":
-            # Sweden tickers are numerous enough that the default worker pool
-            # is a better tradeoff than the old single-worker throttle.
+        if source_name in {"sweden.json", "nasdaq.json"}:
+            # Large exchange universes benefit from the normal parallel worker
+            # pool instead of the old small-universe throttles.
             worker_count = max(worker_count, min(8, len(to_refresh)))
         elif source_name == "custom_ticker_list.json" and len(to_refresh) <= 100:
             worker_count = min(worker_count, 2)
