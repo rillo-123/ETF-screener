@@ -155,64 +155,6 @@ class ETFDatabase:
             )
             """)
 
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS swarm_world_artifacts (
-                ticker TEXT PRIMARY KEY,
-                as_of_date TEXT NOT NULL,
-                name TEXT,
-                issuer TEXT,
-                asset_class TEXT,
-                region TEXT,
-                label TEXT,
-                close REAL,
-                volume INTEGER,
-                recent_entry_days INTEGER,
-                product_score REAL,
-                exposure_score REAL,
-                technical_score REAL,
-                final_score REAL,
-                energy REAL,
-                value REAL,
-                mass REAL,
-                momentum_score REAL,
-                freshness_score REAL,
-                grid_row INTEGER,
-                grid_col INTEGER,
-                x REAL,
-                y REAL,
-                z REAL,
-                radius REAL,
-                sphere_radius REAL,
-                sphere_x REAL,
-                sphere_y REAL,
-                sphere_z REAL,
-                latitude REAL,
-                longitude REAL,
-                color TEXT,
-                components_json TEXT,
-                world_version TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """)
-        self._ensure_columns(
-            cursor,
-            "swarm_world_artifacts",
-            {
-                "close": "REAL",
-                "value": "REAL",
-                "mass": "REAL",
-                "grid_row": "INTEGER",
-                "grid_col": "INTEGER",
-                "z": "REAL",
-                "sphere_radius": "REAL",
-                "sphere_x": "REAL",
-                "sphere_y": "REAL",
-                "sphere_z": "REAL",
-                "latitude": "REAL",
-                "longitude": "REAL",
-            },
-        )
-
         # Create indices for efficient querying
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_ticker ON etf_data(ticker)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_date ON etf_data(date)")
@@ -232,16 +174,6 @@ class ETFDatabase:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_shortlist_asof ON etf_shortlist_artifacts(as_of_date)"
         )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_swarm_label ON swarm_world_artifacts(label)"
-        )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_swarm_energy ON swarm_world_artifacts(energy DESC)"
-        )
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_swarm_asof ON swarm_world_artifacts(as_of_date)"
-        )
-
         conn.commit()
         conn.close()
 
@@ -502,22 +434,6 @@ class ETFDatabase:
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT MAX(updated_at) FROM etf_shortlist_artifacts")
-        result = cursor.fetchone()
-        return result[0] if result and result[0] else None
-
-    def get_latest_swarm_world_date(self) -> Optional[str]:
-        """Get the latest artifact date stored for swarm world snapshots."""
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT MAX(as_of_date) FROM swarm_world_artifacts")
-        result = cursor.fetchone()
-        return result[0] if result and result[0] else None
-
-    def get_latest_swarm_world_updated_at(self) -> Optional[str]:
-        """Get the last write timestamp for swarm world artifacts."""
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT MAX(updated_at) FROM swarm_world_artifacts")
         result = cursor.fetchone()
         return result[0] if result and result[0] else None
 
@@ -782,102 +698,6 @@ class ETFDatabase:
         )
         conn.commit()
 
-    def upsert_swarm_world_artifacts(self, rows: list[dict]) -> None:
-        """Insert or update swarm world snapshot rows."""
-        if not rows:
-            return
-
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        cursor.executemany(
-            """
-            INSERT INTO swarm_world_artifacts (
-                ticker, as_of_date, name, issuer, asset_class, region, label,
-                close, volume, recent_entry_days, product_score, exposure_score,
-                technical_score, final_score, energy, value, mass, momentum_score,
-                freshness_score, grid_row, grid_col, x, y, z, radius, sphere_radius,
-                sphere_x, sphere_y, sphere_z, latitude, longitude, color,
-                components_json, world_version
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(ticker) DO UPDATE SET
-                as_of_date = excluded.as_of_date,
-                name = excluded.name,
-                issuer = excluded.issuer,
-                asset_class = excluded.asset_class,
-                region = excluded.region,
-                label = excluded.label,
-                close = excluded.close,
-                volume = excluded.volume,
-                recent_entry_days = excluded.recent_entry_days,
-                product_score = excluded.product_score,
-                exposure_score = excluded.exposure_score,
-                technical_score = excluded.technical_score,
-                final_score = excluded.final_score,
-                energy = excluded.energy,
-                value = excluded.value,
-                mass = excluded.mass,
-                momentum_score = excluded.momentum_score,
-                freshness_score = excluded.freshness_score,
-                grid_row = excluded.grid_row,
-                grid_col = excluded.grid_col,
-                x = excluded.x,
-                y = excluded.y,
-                z = excluded.z,
-                radius = excluded.radius,
-                sphere_radius = excluded.sphere_radius,
-                sphere_x = excluded.sphere_x,
-                sphere_y = excluded.sphere_y,
-                sphere_z = excluded.sphere_z,
-                latitude = excluded.latitude,
-                longitude = excluded.longitude,
-                color = excluded.color,
-                components_json = excluded.components_json,
-                world_version = excluded.world_version,
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            [
-                (
-                    row["ticker"],
-                    row["as_of_date"],
-                    row.get("name"),
-                    row.get("issuer"),
-                    row.get("asset_class"),
-                    row.get("region"),
-                    row.get("label"),
-                    row.get("close"),
-                    row.get("volume"),
-                    row.get("recent_entry_days"),
-                    row.get("product_score"),
-                    row.get("exposure_score"),
-                    row.get("technical_score"),
-                    row.get("final_score"),
-                    row.get("energy"),
-                    row.get("value"),
-                    row.get("mass"),
-                    row.get("momentum_score"),
-                    row.get("freshness_score"),
-                    row.get("row"),
-                    row.get("col"),
-                    row.get("x"),
-                    row.get("y"),
-                    row.get("z"),
-                    row.get("radius"),
-                    row.get("sphere_radius"),
-                    row.get("sphere_x"),
-                    row.get("sphere_y"),
-                    row.get("sphere_z"),
-                    row.get("latitude"),
-                    row.get("longitude"),
-                    row.get("color"),
-                    row.get("components_json"),
-                    row.get("world_version"),
-                )
-                for row in rows
-            ],
-        )
-        conn.commit()
-
     def get_shortlist(
         self, limit: Optional[int] = 50, label: Optional[str] = None
     ) -> pd.DataFrame:
@@ -891,27 +711,6 @@ class ETFDatabase:
             "WHEN 'Buy' THEN 0 "
             "WHEN 'Watch' THEN 1 "
             "ELSE 2 END, final_score DESC, ticker ASC"
-        )
-        params: list[object] = [label, label]
-
-        if limit is not None:
-            query += f" LIMIT {max(1, int(limit))}"
-
-        return pd.read_sql_query(query, conn, params=params)
-
-    def get_swarm_world(
-        self, limit: Optional[int] = None, label: Optional[str] = None
-    ) -> pd.DataFrame:
-        """Return the persisted swarm world snapshot sorted by ecosystem energy."""
-        conn = self._get_connection()
-
-        query = (
-            "SELECT * FROM swarm_world_artifacts "
-            "WHERE (? IS NULL OR label = ?) "
-            "ORDER BY CASE label "
-            "WHEN 'Buy' THEN 0 "
-            "WHEN 'Watch' THEN 1 "
-            "ELSE 2 END, energy DESC, final_score DESC, ticker ASC"
         )
         params: list[object] = [label, label]
 

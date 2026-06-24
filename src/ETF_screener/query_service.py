@@ -79,6 +79,12 @@ SIGNAL_PRESETS = {
         "default_min_reliability": 6.0,
         "description": "Recent bullish transition with enough confirmation to be actionable now.",
     },
+    "elusive_dip": {
+        "label": "Elusive Dip",
+        "default_age_max": 8,
+        "default_min_reliability": 6.4,
+        "description": "A constructive pullback inside a steady uptrend, with enough headroom below recent resistance.",
+    },
     "trend_weakening": {
         "label": "Trend Weakening",
         "default_age_max": 3,
@@ -663,6 +669,8 @@ class ETFQueryService:
     ) -> dict[str, Any] | None:
         if signal == "trend_forming":
             return self._evaluate_trend_forming(ticker, frame, source, signal_age_max)
+        if signal == "elusive_dip":
+            return self._evaluate_elusive_dip(ticker, frame, source, signal_age_max)
         if signal == "trend_weakening":
             return self._evaluate_trend_weakening(ticker, frame, source, signal_age_max)
         if signal == "downtrend_turnaround":
@@ -858,6 +866,13 @@ class ETFQueryService:
 
         if signal in {"trend_forming", "downtrend_turnaround"}:
             base_indices = sorted(set(cross_up_ema + cross_up_supertrend))
+        elif signal == "elusive_dip":
+            high = pd.to_numeric(frame.get("high", frame.get("close")), errors="coerce")
+            breakout_reference = high.shift(1).rolling(window=20, min_periods=10).max()
+            new_high_mask = (high >= breakout_reference).fillna(False) & breakout_reference.notna()
+            base_indices = [
+                idx for idx, value in enumerate(new_high_mask.tolist()) if value
+            ]
         else:
             base_indices = sorted(set(cross_down_ema + cross_down_supertrend))
 
@@ -866,7 +881,8 @@ class ETFQueryService:
         for base_idx in base_indices:
             if base_idx < 25 or base_idx > max_idx:
                 continue
-            for offset in range(max(1, signal_age_max) + 1):
+            start_offset = 1 if signal == "elusive_dip" else 0
+            for offset in range(start_offset, max(1, signal_age_max) + 1):
                 candidate_idx = base_idx + offset
                 if candidate_idx > max_idx:
                     break
@@ -906,7 +922,7 @@ class ETFQueryService:
         if len(next_10) < 10:
             return None
 
-        if signal in {"trend_forming", "downtrend_turnaround"}:
+        if signal in {"trend_forming", "downtrend_turnaround", "elusive_dip"}:
             next_lows = pd.to_numeric(
                 next_10.get("low", next_10.get("close")), errors="coerce"
             )
@@ -1002,6 +1018,30 @@ class ETFQueryService:
                     volume_bucket,
                     extension_bucket,
                     slope_bucket,
+                ]
+            )
+
+        if signal == "elusive_dip":
+            pullback_pct = _safe_float(row.get("pullback_from_peak_pct")) or 0.0
+            headroom_pct = _safe_float(row.get("headroom_to_resistance_pct")) or 0.0
+            support_distance = _safe_float(row.get("distance_to_ema_pct")) or 0.0
+            pullback_bucket = (
+                "ideal_pullback"
+                if 3.0 <= pullback_pct <= 6.5
+                else "shallow_pullback" if pullback_pct < 3.0 else "deep_pullback"
+            )
+            headroom_bucket = "roomy" if headroom_pct >= 6.0 else "tight"
+            support_bucket = (
+                "near_support" if support_distance <= 2.5 else "loose_support"
+            )
+            return "|".join(
+                [
+                    signal,
+                    age_bucket,
+                    ema200_bucket,
+                    pullback_bucket,
+                    headroom_bucket,
+                    support_bucket,
                 ]
             )
 
@@ -1182,7 +1222,7 @@ class ETFQueryService:
             elif failure_rate >= 0.35:
                 adjustment -= 0.7
         if median_return_20d is not None:
-            if signal in {"trend_forming", "downtrend_turnaround"}:
+            if signal in {"trend_forming", "downtrend_turnaround", "elusive_dip"}:
                 if median_return_20d >= 6.0:
                     adjustment += 0.3
                 elif median_return_20d <= 0.0:
@@ -1226,6 +1266,146 @@ class ETFQueryService:
             )
         )
         return enriched
+
+    def _evaluate_elusive_dip(
+        self,
+        ticker: str,
+        frame: pd.DataFrame,
+        source: str,
+        signal_age_max: int,
+    ) -> dict[str, Any] | None:
+        metrics = self._signal_metrics(frame)
+        current = metrics["current"]
+        signal_age = metrics["recent_peak_age"]
+        matched_rules: list[str] = []
+        warning_flags: list[str] = []
+        score = 0.0
+
+        if signal_age is None or signal_age < 1:
+            warning_flags.append("no_recent_pullback_peak")
+            return None
+        if signal_age > signal_age_max:
+            return None
+        if current["close"] <= current["ema_50"]:
+            warning_flags.append("below_ema50")
+            return None
+        matched_rules.append("close_above_ema50")
+        score += 1.5
+
+        if current["ema_200_ready"]:
+            if current["close"] <= current["ema_200"]:
+                warning_flags.append("below_ema200")
+                return None
+            matched_rules.append("close_above_ema200")
+            score += 1.0
+
+        if metrics["ema_50_slope_pct"] > 0.18:
+            matched_rules.append("ema50_rising")
+            score += 2.0
+        elif metrics["ema_50_slope_pct"] > 0.08:
+            matched_rules.append("ema50_gently_rising")
+            score += 1.0
+        else:
+            warning_flags.append("ema50_not_rising")
+            return None
+
+        if metrics["above_ema50_days_20"] >= 16:
+            matched_rules.append("steady_uptrend")
+            score += 1.5
+        elif metrics["above_ema50_days_20"] >= 13:
+            matched_rules.append("mostly_above_ema50")
+            score += 0.75
+        else:
+            warning_flags.append("trend_not_steady_enough")
+            return None
+
+        if current["supertrend_ready"]:
+            if current["close"] <= current["supertrend"]:
+                warning_flags.append("below_supertrend")
+                return None
+            matched_rules.append("supertrend_supporting")
+            score += 1.0
+
+        pullback_pct = metrics["pullback_from_peak_pct"]
+        if 2.0 <= pullback_pct <= 8.5:
+            matched_rules.append("constructive_pullback")
+            score += 2.0
+        elif 1.0 <= pullback_pct < 2.0:
+            warning_flags.append("pullback_still_shallow")
+            return None
+        elif pullback_pct > 10.0:
+            warning_flags.append("pullback_too_deep")
+            return None
+        else:
+            return None
+
+        if metrics["distance_to_ema_pct"] <= 2.5:
+            matched_rules.append("near_ema50_support")
+            score += 1.25
+        elif metrics["distance_to_ema_pct"] <= 4.0:
+            matched_rules.append("support_band_intact")
+            score += 0.5
+        else:
+            warning_flags.append("too_far_from_ema50_support")
+            return None
+
+        if metrics["headroom_to_resistance_pct"] >= 6.0:
+            matched_rules.append("ample_headroom")
+            score += 1.75
+        elif metrics["headroom_to_resistance_pct"] >= 4.0:
+            matched_rules.append("enough_headroom")
+            score += 1.0
+        else:
+            warning_flags.append("too_close_to_resistance")
+            return None
+
+        if metrics["higher_low_bias"]:
+            matched_rules.append("higher_low_bias")
+            score += 0.5
+        if metrics["volume_confirmed"]:
+            matched_rules.append("volume_confirmed")
+            score += 0.5
+        if metrics["drawdown_120_pct"] <= -12.0:
+            warning_flags.append("drawdown_too_deep_for_steady_trend")
+            return None
+        if metrics["downside_followthrough"]:
+            warning_flags.append("dip_still_fading")
+            score -= 0.75
+
+        reliability_score = round(max(0.0, min(score, 10.0)), 2)
+        if reliability_score < 6.0:
+            return None
+        return {
+            "ticker": ticker,
+            "reliability_score": reliability_score,
+            "signal_age_days": int(signal_age),
+            "signal_state": "dip",
+            "last_date": _json_safe_cell(frame["date"].iloc[-1]),
+            "close": round(float(current["close"]), 4),
+            "ema_50": round(float(current["ema_50"]), 4),
+            "ema_200": (
+                round(float(current["ema_200"]), 4)
+                if current["ema_200_ready"]
+                else None
+            ),
+            "supertrend": (
+                round(float(current["supertrend"]), 4)
+                if current["supertrend_ready"]
+                else None
+            ),
+            "volume": _safe_int(current["volume"]),
+            "pullback_from_peak_pct": round(pullback_pct, 2),
+            "headroom_to_resistance_pct": round(
+                metrics["headroom_to_resistance_pct"], 2
+            ),
+            "distance_to_ema_pct": round(metrics["distance_to_ema_pct"], 2),
+            "ema_50_slope_pct": round(metrics["ema_50_slope_pct"], 3),
+            "recent_peak_age": int(metrics["recent_peak_age"] or 0),
+            "above_ema50_days_20": int(metrics["above_ema50_days_20"]),
+            "matched_rules": matched_rules,
+            "warning_flags": warning_flags,
+            "data_source": source,
+        }
 
     def _evaluate_trend_weakening(
         self,
@@ -1528,6 +1708,9 @@ class ETFQueryService:
             if not working["volume"].tail(20).dropna().empty
             else 0.0
         )
+        high_series = pd.to_numeric(
+            working.get("high", working.get("close")), errors="coerce"
+        ).fillna(working["close"])
         recent_low = (
             float(working["close"].tail(5).min()) if len(working) >= 5 else close_now
         )
@@ -1561,6 +1744,33 @@ class ETFQueryService:
             if trailing_peak_120
             else 0.0
         )
+        trailing_high_20 = high_series.tail(20)
+        recent_peak_high = (
+            float(trailing_high_20.max()) if not trailing_high_20.empty else close_now
+        )
+        recent_peak_idx = (
+            int(trailing_high_20.idxmax()) if not trailing_high_20.dropna().empty else current_idx
+        )
+        recent_peak_age = current_idx - recent_peak_idx
+        trailing_high_60 = high_series.tail(60)
+        resistance_high_60 = (
+            float(trailing_high_60.max()) if not trailing_high_60.empty else close_now
+        )
+        pullback_from_peak_pct = (
+            ((recent_peak_high - close_now) / recent_peak_high * 100.0)
+            if recent_peak_high
+            else 0.0
+        )
+        headroom_to_resistance_pct = (
+            ((resistance_high_60 - close_now) / close_now * 100.0)
+            if close_now
+            else 0.0
+        )
+        above_ema50_days_20 = (
+            int((working.tail(20)["close"] > working.tail(20)["ema_50"]).fillna(False).sum())
+            if not working.tail(20).empty
+            else 0
+        )
         reclaim_hold_days = self._trailing_true_run_length(above_ema)
         supertrend_hold_days = self._trailing_true_run_length(above_supertrend)
         prior_downtrend_confirmed = bool(
@@ -1588,6 +1798,10 @@ class ETFQueryService:
             "below_ema50_days_60": below_ema50_days_60,
             "below_ema200_days_120": below_ema200_days_120,
             "drawdown_120_pct": drawdown_120_pct,
+            "pullback_from_peak_pct": pullback_from_peak_pct,
+            "headroom_to_resistance_pct": headroom_to_resistance_pct,
+            "recent_peak_age": recent_peak_age,
+            "above_ema50_days_20": above_ema50_days_20,
             "reclaim_hold_days": reclaim_hold_days,
             "supertrend_hold_days": supertrend_hold_days,
             "prior_downtrend_confirmed": prior_downtrend_confirmed,

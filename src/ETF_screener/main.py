@@ -2049,7 +2049,12 @@ def main() -> None:
     )
     query_parser.add_argument(
         "--signal",
-        choices=["trend_forming", "downtrend_turnaround", "trend_weakening"],
+        choices=[
+            "trend_forming",
+            "elusive_dip",
+            "downtrend_turnaround",
+            "trend_weakening",
+        ],
         default="trend_forming",
         help="Named signal preset for signal_scan (default: trend_forming)",
     )

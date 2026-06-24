@@ -163,6 +163,108 @@ def test_query_signal_scan_returns_recent_trend_forming_match(tmp_path, monkeypa
     assert "recent_ema50_reclaim" in result["rows"][0]["matched_rules"]
 
 
+def test_query_signal_scan_returns_elusive_dip_with_headroom_below_resistance(
+    tmp_path, monkeypatch
+):
+    service = _make_service(tmp_path)
+    dates = pd.date_range("2026-01-01", periods=80, freq="D")
+
+    dip_close = [100.0 + (idx * 0.18) for idx in range(70)] + [
+        108.0,
+        109.0,
+        110.0,
+        111.0,
+        112.0,
+        113.0,
+        120.0,
+        118.0,
+        116.0,
+        114.0,
+    ]
+    near_resistance_close = [100.0 + (idx * 0.18) for idx in range(70)] + [
+        108.0,
+        109.0,
+        110.0,
+        111.0,
+        112.0,
+        113.0,
+        120.0,
+        119.2,
+        118.9,
+        118.6,
+    ]
+    ema_50 = [98.0 + (idx * 0.18) for idx in range(70)] + [
+        109.0,
+        109.4,
+        109.8,
+        110.2,
+        110.6,
+        111.0,
+        111.3,
+        111.6,
+        111.8,
+        112.0,
+    ]
+    ema_200 = [95.0 + (idx * 0.07) for idx in range(80)]
+    supertrend = [96.0 + (idx * 0.15) for idx in range(70)] + [
+        107.2,
+        107.7,
+        108.2,
+        108.7,
+        109.1,
+        109.6,
+        110.0,
+        110.4,
+        110.8,
+        111.2,
+    ]
+    base_volume = [1200] * 70 + [1300, 1325, 1350, 1375, 1400, 1450, 1800, 1750, 1700, 1680]
+
+    def make_frame(close_values):
+        return pd.DataFrame(
+            {
+                "Date": dates,
+                "Open": [value - 0.4 for value in close_values],
+                "High": [value + 0.6 for value in close_values],
+                "Low": [value - 0.8 for value in close_values],
+                "Close": close_values,
+                "Volume": base_volume,
+                "Dividends": [0.0] * 80,
+                "EMA_50": ema_50,
+                "EMA_200": ema_200,
+                "Supertrend": supertrend,
+                "Signal": [0] * 80,
+            }
+        )
+
+    service.storage.save_etf_data(make_frame(dip_close), "DIP.DE")
+    service.storage.save_etf_data(make_frame(near_resistance_close), "CEIL.DE")
+    monkeypatch.setattr(
+        service, "_load_universe_tickers", lambda _source: ["DIP.DE", "CEIL.DE"]
+    )
+
+    result = service.query_signal_scan(
+        source="xetra",
+        signal="elusive_dip",
+        signal_age_max=8,
+        min_reliability=6.4,
+        columns=(
+            "ticker,signal_state,pullback_from_peak_pct,headroom_to_resistance_pct,"
+            "above_ema50_days_20,matched_rules"
+        ),
+    )
+
+    assert result["dataset"] == "signal_scan"
+    assert result["summary"]["matched_tickers"] == 1
+    assert result["rows"][0]["ticker"] == "DIP.DE"
+    assert result["rows"][0]["signal_state"] == "dip"
+    assert result["rows"][0]["pullback_from_peak_pct"] >= 4.0
+    assert result["rows"][0]["headroom_to_resistance_pct"] >= 4.0
+    assert result["rows"][0]["above_ema50_days_20"] >= 16
+    assert "constructive_pullback" in result["rows"][0]["matched_rules"]
+    assert "steady_uptrend" in result["rows"][0]["matched_rules"]
+
+
 def test_query_signal_scan_returns_downtrend_turnaround_and_rejects_bulltrap(
     tmp_path, monkeypatch
 ):

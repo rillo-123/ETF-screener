@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 
-def test_dashboard_js_exposes_and_switches_swarm_tab():
+def test_dashboard_js_exposes_core_tabs_and_helpers():
     node = shutil.which("node")
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
@@ -95,7 +95,7 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "query", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -107,7 +107,7 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "query", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: (event, handler) => {{
             if (event === "DOMContentLoaded" && typeof handler === "function") {{
@@ -123,14 +123,10 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
         }};
         global.fetch = async (url) => ({{
           ok: true,
-          json: async () => String(url).includes("swarm-world")
-            ? {{ world: {{ layout: "sphere", radius: 1, diameter: 2, surface_area: 12.566, asset_count: 0 }}, nodes: [], count: 0 }}
-            : String(url).includes("ticker-universe")
-              ? {{ count: 0, items: [] }}
-              : String(url).includes("custom-ticker-list")
-                ? {{ count: 0, tickers: [] }}
-            : String(url).includes("swarm-history")
-              ? {{ histories: [], count: 0 }}
+          json: async () => String(url).includes("ticker-universe")
+            ? {{ count: 0, items: [] }}
+            : String(url).includes("custom-ticker-list")
+              ? {{ count: 0, tickers: [] }}
               : {{}},
         }});
         global.requestAnimationFrame = () => 1;
@@ -154,46 +150,33 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
           if (!document.getElementById("tab-btn-screener").classList.contains("active")) {{
             throw new Error("Screener tab button was not active on startup");
           }}
-
           if (typeof window.showTab !== "function") {{
             throw new Error("showTab is not exposed on window");
           }}
           if (typeof window.exportTopMatches !== "function") {{
             throw new Error("exportTopMatches is not exposed on window");
           }}
-          if (typeof window.stepSwarmDays !== "function") {{
-            throw new Error("stepSwarmDays is not exposed on window");
-          }}
-          if (typeof window.loadSwarmLab !== "function") {{
-            throw new Error("loadSwarmLab is not exposed on window");
-          }}
-          if (typeof window.toggleSwarmLabPlayback !== "function") {{
-            throw new Error("toggleSwarmLabPlayback is not exposed on window");
-          }}
-          localStorage.setItem("etf-discovery:last-dashboard-tab", "screener");
           if (typeof window.resetDashboardTabPreference !== "function") {{
             throw new Error("resetDashboardTabPreference is not exposed on window");
           }}
+          localStorage.setItem("etf-discovery:last-dashboard-tab", "screener");
           window.resetDashboardTabPreference();
-          if (localStorage.getItem("etf-discovery:last-dashboard-tab") !== "screener") {{
+          if (localStorage.getItem("etf-discovery:last-dashboard-tab") != "screener") {{
             throw new Error("Reset did not restore the dashboard tab to Screener");
           }}
-          if (!document.getElementById("tab-btn-screener").classList.contains("active")) {{
-            throw new Error("Reset did not return to Screener");
+          window.showTab("query");
+          if (document.getElementById("tab-query").classList.contains("hidden")) {{
+            throw new Error("Query tab stayed hidden after showTab('query')");
           }}
-          window.showTab("swarm");
-          if (document.getElementById("tab-swarm").classList.contains("hidden")) {{
-            throw new Error("Swarm tab stayed hidden after showTab('swarm')");
+          if (!document.getElementById("tab-btn-query").classList.contains("active")) {{
+            throw new Error("Query tab button did not become active");
           }}
-          if (!document.getElementById("tab-btn-swarm").classList.contains("active")) {{
-            throw new Error("Swarm tab button did not become active");
+          window.showTab("backtest");
+          if (document.getElementById("tab-backtest").classList.contains("hidden")) {{
+            throw new Error("Backtest tab stayed hidden after showTab('backtest')");
           }}
-          window.showTab("swarm-lab");
-          if (document.getElementById("tab-swarm-lab").classList.contains("hidden")) {{
-            throw new Error("Swarm Lab tab stayed hidden after showTab('swarm-lab')");
-          }}
-          if (!document.getElementById("tab-btn-swarm-lab").classList.contains("active")) {{
-            throw new Error("Swarm Lab tab button did not become active");
+          if (!document.getElementById("tab-btn-backtest").classList.contains("active")) {{
+            throw new Error("Backtest tab button did not become active");
           }}
         }})().catch((err) => {{
           console.error(err);
@@ -208,7 +191,6 @@ def test_dashboard_js_exposes_and_switches_swarm_tab():
         text=True,
     )
     assert result.returncode == 0, result.stderr or result.stdout
-
 
 def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
     node = shutil.which("node")
@@ -309,7 +291,7 @@ def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "query", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "query", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -382,7 +364,7 @@ def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "query", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "query", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: (event, handler) => {{
             if (event === "DOMContentLoaded" && typeof handler === "function") {{
@@ -562,206 +544,6 @@ def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
-def test_dashboard_js_swarm_lab_does_not_call_market_endpoints():
-    node = shutil.which("node")
-    if not node:
-        pytest.skip("Node is required for dashboard JavaScript smoke tests")
-
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
-    script = textwrap.dedent(f"""
-        const fs = require("fs");
-
-        class ClassList {{
-          constructor() {{ this.values = new Set(); }}
-          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
-          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
-          contains(name) {{ return this.values.has(name); }}
-          toggle(name, force) {{
-            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
-            if (shouldAdd) this.values.add(name);
-            else this.values.delete(name);
-            return shouldAdd;
-          }}
-        }}
-
-        class Element {{
-          constructor(id = "") {{
-            this.id = id;
-            this.classList = new ClassList();
-            this.children = [];
-            this.dataset = {{}};
-            this.style = {{}};
-            this.options = [];
-            this.value = "";
-            this.textContent = "";
-            this.innerHTML = "";
-            this.disabled = false;
-            this.hidden = false;
-            this.clientWidth = 900;
-            this.clientHeight = 520;
-          }}
-          addEventListener() {{}}
-          setAttribute(name, value) {{ this[name] = value; }}
-          appendChild(child) {{
-            this.children.push(child);
-            if (Array.isArray(this.options)) {{
-              this.options.push(child);
-            }}
-            return child;
-          }}
-          remove() {{}}
-          focus() {{}}
-          getBoundingClientRect() {{
-            return {{ width: this.clientWidth, height: this.clientHeight, left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight }};
-          }}
-          getContext() {{
-            const gradient = {{ addColorStop() {{}} }};
-            const noop = () => {{}};
-            return {{
-              save: noop,
-              restore: noop,
-              scale: noop,
-              translate: noop,
-              rotate: noop,
-              clearRect: noop,
-              fillRect: noop,
-              beginPath: noop,
-              arc: noop,
-              ellipse: noop,
-              closePath: noop,
-              fill: noop,
-              stroke: noop,
-              moveTo: noop,
-              lineTo: noop,
-              createLinearGradient: () => gradient,
-              createRadialGradient: () => gradient,
-              lineCap: "",
-              lineJoin: "",
-              globalAlpha: 1,
-              fillStyle: "",
-              strokeStyle: "",
-              lineWidth: 1,
-            }};
-          }}
-        }}
-
-        const calls = [];
-        const elements = new Map();
-        const getElement = (id) => {{
-          if (!elements.has(id)) elements.set(id, new Element(id));
-          return elements.get(id);
-        }};
-
-        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
-          getElement(`tab-${{tab}}`).classList.add("hidden");
-          getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
-        }});
-
-        [
-          "swarm-lab-status",
-          "swarm-lab-empty",
-          "swarm-lab-refresh-btn",
-          "swarm-lab-play-btn",
-          "swarm-lab-stop-btn",
-          "swarm-lab-population-slider",
-          "swarm-lab-population-label",
-          "swarm-lab-node-count-slider",
-          "swarm-lab-node-count-label",
-          "swarm-lab-mutation-slider",
-          "swarm-lab-mutation-label",
-          "swarm-lab-repulsion-slider",
-          "swarm-lab-repulsion-label",
-          "swarm-lab-speed-slider",
-          "swarm-lab-speed-label",
-          "swarm-lab-zoom-slider",
-          "swarm-lab-zoom-label",
-          "swarm-lab-stats",
-          "swarm-lab-world-caption",
-          "swarm-lab-hover",
-          "swarm-lab-selected",
-          "swarm-lab-canvas",
-        ].forEach(getElement);
-
-        global.window = global;
-        global.window.addEventListener = () => {{}};
-        global.document = {{
-          body: new Element("body"),
-          createElement: (tag) => new Element(tag),
-          getElementById: getElement,
-          querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
-            : [],
-          addEventListener: (event, handler) => {{
-            if (event === "DOMContentLoaded" && typeof handler === "function") {{
-              handler();
-            }}
-          }},
-        }};
-        const storage = new Map();
-        global.localStorage = {{
-          getItem: (key) => storage.has(key) ? storage.get(key) : "",
-          setItem: (key, value) => {{ storage.set(key, String(value)); }},
-          removeItem: (key) => {{ storage.delete(key); }},
-        }};
-        global.fetch = async (url) => {{
-          calls.push(String(url));
-          return {{ ok: true, json: async () => ({{}}) }};
-        }};
-        global.requestAnimationFrame = () => 1;
-        global.cancelAnimationFrame = () => {{}};
-        global.setTimeout = () => 1;
-        global.setInterval = () => 1;
-        global.clearInterval = () => {{}};
-        global.alert = () => {{}};
-        global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
-
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
-
-        (async () => {{
-          if (window.dashboardReadyPromise) {{
-            await window.dashboardReadyPromise;
-          }}
-          calls.length = 0;
-          window.showTab("swarm-lab");
-          await window.loadSwarmLab(true);
-
-          const forbidden = ["/api/swarm-world", "/api/swarm-history", "/api/market-status", "/api/market-data/refresh"];
-          forbidden.forEach((fragment) => {{
-            if (calls.some((call) => call.includes(fragment))) {{
-              throw new Error(`Swarm Lab should not call market endpoint: ${{fragment}}`);
-            }}
-          }});
-
-          if (document.getElementById("tab-swarm-lab").classList.contains("hidden")) {{
-            throw new Error("Swarm Lab tab stayed hidden");
-          }}
-          if (!document.getElementById("tab-btn-swarm-lab").classList.contains("active")) {{
-            throw new Error("Swarm Lab tab button did not become active");
-          }}
-        }})().catch((err) => {{
-          console.error(err);
-          process.exit(1);
-        }});
-        """)
-
-    result = subprocess.run(
-        [node, "-e", script],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stderr or result.stdout
-
-
 def obsolete_dashboard_js_renders_backtest_race_lanes():
     node = shutil.which("node")
     if not node:
@@ -851,7 +633,7 @@ def obsolete_dashboard_js_renders_backtest_race_lanes():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -863,7 +645,7 @@ def obsolete_dashboard_js_renders_backtest_race_lanes():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: (event, handler) => {{
             if (event === "DOMContentLoaded" && typeof handler === "function") {{
@@ -1081,7 +863,7 @@ def obsolete_dashboard_js_restart_backtest_race_resets_to_start():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -1094,7 +876,7 @@ def obsolete_dashboard_js_restart_backtest_race_resets_to_start():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: (event, handler) => {{
             if (event === "DOMContentLoaded" && typeof handler === "function") {{
@@ -1220,7 +1002,7 @@ def obsolete_dashboard_js_race_lanes_follow_selected_strategies():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -1252,7 +1034,7 @@ def obsolete_dashboard_js_race_lanes_follow_selected_strategies():
           getElementById: getElement,
           querySelectorAll: (selector) => {{
             if (selector === ".tab-btn") {{
-              return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
+              return ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
             }}
             if (selector === ".backtest-strategy-checkbox") {{
               return checkboxes;
@@ -1393,7 +1175,7 @@ def test_dashboard_js_restores_last_strategy_without_checking_backtest_lane():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -1423,7 +1205,7 @@ def test_dashboard_js_restores_last_strategy_without_checking_backtest_lane():
           getElementById: getElement,
           querySelectorAll: (selector) => {{
             if (selector === ".tab-btn") {{
-              return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
+              return ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
             }}
             if (selector === ".backtest-strategy-checkbox") {{
               return checkboxes;
@@ -1544,7 +1326,7 @@ def test_dashboard_js_terminal_inactive_backtest_progress_stops_polling():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -1576,7 +1358,7 @@ def test_dashboard_js_terminal_inactive_backtest_progress_stops_polling():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: (event, handler) => {{
             if (event === "DOMContentLoaded" && typeof handler === "function") {{
@@ -1738,7 +1520,7 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -1756,12 +1538,12 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
           getElementById: getElement,
           querySelectorAll: (selector) => {{
             if (selector === ".tab-btn") {{
-              return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
+              return ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
             }}
             if (selector === ".backtest-strategy-checkbox") {{
               return [strategyCheckbox];
             }}
-            if (selector === "#scan-source-toggle .scan-source-btn, #swarm-scan-source-toggle .scan-source-btn") {{
+            if (selector === "#scan-source-toggle .scan-source-btn") {{
               return [];
             }}
             return [];
@@ -1919,7 +1701,7 @@ def test_dashboard_js_keeps_screener_run_disabled_until_universe_is_explicitly_c
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -1933,12 +1715,12 @@ def test_dashboard_js_keeps_screener_run_disabled_until_universe_is_explicitly_c
           getElementById: getElement,
           querySelectorAll: (selector) => {{
             if (selector === ".tab-btn") {{
-              return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
+              return ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
             }}
             if (selector === ".backtest-strategy-checkbox") {{
               return [];
             }}
-            if (selector === "#scan-source-toggle .scan-source-btn, #swarm-scan-source-toggle .scan-source-btn") {{
+            if (selector === "#scan-source-toggle .scan-source-btn") {{
               return [];
             }}
             return [];
@@ -2107,13 +1889,9 @@ def test_dashboard_js_backtest_row_click_loads_chart_for_row_strategy():
           "plotly-tools-actions",
           "tab-screener",
           "tab-shortlist",
-          "tab-swarm",
-          "tab-swarm-lab",
           "tab-backtest",
           "tab-btn-screener",
           "tab-btn-shortlist",
-          "tab-btn-swarm",
-          "tab-btn-swarm-lab",
           "tab-btn-backtest",
           "backtest-selected-count",
           "bt-strategy",
@@ -2142,12 +1920,12 @@ def test_dashboard_js_backtest_row_click_loads_chart_for_row_strategy():
           getElementById: getElement,
           querySelectorAll: (selector) => {{
             if (selector === ".tab-btn") {{
-              return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
+              return ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
             }}
             if (selector === ".backtest-strategy-checkbox") {{
               return [];
             }}
-            if (selector === "#scan-source-toggle .scan-source-btn, #swarm-scan-source-toggle .scan-source-btn") {{
+            if (selector === "#scan-source-toggle .scan-source-btn") {{
               return [];
             }}
             if (selector === ".plotly-tool-btn[data-mode]") {{
@@ -2347,13 +2125,9 @@ def test_dashboard_js_backtest_table_keeps_zero_trade_rows_visible():
           "bt-avg-sharpe",
           "tab-screener",
           "tab-shortlist",
-          "tab-swarm",
-          "tab-swarm-lab",
           "tab-backtest",
           "tab-btn-screener",
           "tab-btn-shortlist",
-          "tab-btn-swarm",
-          "tab-btn-swarm-lab",
           "tab-btn-backtest",
         ].forEach(getElement);
         getElement("tab-btn-screener").classList.add("tab-btn");
@@ -2367,12 +2141,12 @@ def test_dashboard_js_backtest_table_keeps_zero_trade_rows_visible():
           getElementById: getElement,
           querySelectorAll: (selector) => {{
             if (selector === ".tab-btn") {{
-              return ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
+              return ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`));
             }}
             if (selector === ".backtest-strategy-checkbox") {{
               return [];
             }}
-            if (selector === "#scan-source-toggle .scan-source-btn, #swarm-scan-source-toggle .scan-source-btn") {{
+            if (selector === "#scan-source-toggle .scan-source-btn") {{
               return [];
             }}
             return [];
@@ -2571,8 +2345,6 @@ def test_dashboard_js_backtest_table_headers_sort_rows():
           "backtest-sort-days_since_entry",
           "tab-screener",
           "tab-shortlist",
-          "tab-swarm",
-          "tab-swarm-lab",
           "tab-backtest",
         ].forEach(getElement);
 
@@ -2757,7 +2529,7 @@ def obsolete_dashboard_js_restores_backtest_race_after_reload():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -2770,7 +2542,7 @@ def obsolete_dashboard_js_restores_backtest_race_after_reload():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: (event, handler) => {{
             if (event === "DOMContentLoaded" && typeof handler === "function") {{
@@ -2958,11 +2730,9 @@ def test_dashboard_js_run_screen_does_not_auto_refresh_market_data():
           "shortlist-content",
           "tab-screener",
           "tab-shortlist",
-          "tab-swarm",
           "tab-backtest",
           "tab-btn-screener",
           "tab-btn-shortlist",
-          "tab-btn-swarm",
           "tab-btn-backtest",
         ].forEach(getElement);
 
@@ -2973,7 +2743,7 @@ def test_dashboard_js_run_screen_does_not_auto_refresh_market_data():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: (event, handler) => {{
             if (event === "DOMContentLoaded" && typeof handler === "function") {{
@@ -3074,6 +2844,507 @@ def test_dashboard_js_run_screen_does_not_auto_refresh_market_data():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
+def test_dashboard_js_run_screen_includes_disqualifier_params():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for dashboard JavaScript smoke tests")
+
+    dashboard_js = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "ETF_screener"
+        / "dashboard"
+        / "static"
+        / "js"
+        / "dashboard.js"
+    )
+    script = textwrap.dedent(f"""
+        const fs = require("fs");
+
+        class ClassList {{
+          constructor() {{ this.values = new Set(); }}
+          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
+          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
+          contains(name) {{ return this.values.has(name); }}
+          toggle(name, force) {{
+            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
+            if (shouldAdd) this.values.add(name);
+            else this.values.delete(name);
+            return shouldAdd;
+          }}
+        }}
+
+        class Element {{
+          constructor(id = "") {{
+            this.id = id;
+            this.classList = new ClassList();
+            this.children = [];
+            this.dataset = {{}};
+            this.style = {{}};
+            this.options = [];
+            this.value = "";
+            this.checked = false;
+            this.textContent = "";
+            this.innerHTML = "";
+            this.disabled = false;
+            this.hidden = false;
+            this.clientWidth = 900;
+            this.clientHeight = 520;
+          }}
+          addEventListener() {{}}
+          setAttribute(name, value) {{ this[name] = value; }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          remove() {{}}
+          focus() {{}}
+          getBoundingClientRect() {{
+            return {{ width: this.clientWidth, height: this.clientHeight, left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight }};
+          }}
+          getContext() {{
+            const gradient = {{ addColorStop() {{}} }};
+            const noop = () => {{}};
+            return {{
+              save: noop,
+              restore: noop,
+              scale: noop,
+              translate: noop,
+              rotate: noop,
+              clearRect: noop,
+              fillRect: noop,
+              beginPath: noop,
+              arc: noop,
+              ellipse: noop,
+              closePath: noop,
+              fill: noop,
+              stroke: noop,
+              moveTo: noop,
+              lineTo: noop,
+              createLinearGradient: () => gradient,
+              createRadialGradient: () => gradient,
+              lineCap: "",
+              lineJoin: "",
+              globalAlpha: 1,
+              fillStyle: "",
+              strokeStyle: "",
+              lineWidth: 1,
+            }};
+          }}
+        }}
+
+        const elements = new Map();
+        const getElement = (id) => {{
+          if (!elements.has(id)) elements.set(id, new Element(id));
+          return elements.get(id);
+        }};
+
+        [
+          "ticker-list",
+          "loading-spinner",
+          "scan-btn",
+          "run-btn",
+          "strategy-select",
+          "error-section",
+          "error-list",
+          "match-count",
+          "shortlist-market-status",
+          "shortlist-status",
+          "market-refresh-btn",
+          "shortlist-refresh-btn",
+          "shortlist-as-of",
+          "shortlist-buy-count",
+          "shortlist-watch-count",
+          "shortlist-skip-count",
+          "shortlist-empty",
+          "shortlist-content",
+          "tab-screener",
+          "tab-shortlist",
+          "tab-backtest",
+          "tab-btn-screener",
+          "tab-btn-shortlist",
+          "tab-btn-backtest",
+          "disqualify-overbought",
+          "disqualify-weak-liquidity",
+          "disqualify-unprofitable",
+        ].forEach(getElement);
+
+        global.window = global;
+        global.window.addEventListener = () => {{}};
+        global.document = {{
+          body: new Element("body"),
+          createElement: (tag) => new Element(tag),
+          getElementById: getElement,
+          querySelectorAll: (selector) => selector === ".tab-btn"
+            ? ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            : [],
+          addEventListener: (event, handler) => {{
+            if (event === "DOMContentLoaded" && typeof handler === "function") {{
+              handler();
+            }}
+          }},
+        }};
+        const storage = new Map();
+        global.localStorage = {{
+          getItem: (key) => storage.has(key) ? storage.get(key) : "",
+          setItem: (key, value) => {{ storage.set(key, String(value)); }},
+          removeItem: (key) => {{ storage.delete(key); }},
+        }};
+        const calls = [];
+        global.fetch = async (url) => {{
+          calls.push(String(url));
+          if (String(url).includes("/api/market-status")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                today: "2026-04-29",
+                latest_market_date: "2026-04-15",
+                days_stale: 14,
+                is_stale: true,
+                tracked_tickers: 2,
+                fresh_tickers: 0,
+                missing_tickers: 0,
+                stale_tickers: 2,
+              }}),
+            }};
+          }}
+          if (String(url).includes("/api/screen")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                matches: [],
+                errors: [],
+                total_errors: 0,
+                total_candidates: 0,
+              }}),
+            }};
+          }}
+          if (String(url).includes("/api/shortlist")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                as_of_date: "2026-04-29",
+                rows: [],
+                labels: {{ Buy: 0, Watch: 0, Skip: 0 }},
+              }}),
+            }};
+          }}
+          return {{
+            ok: true,
+            json: async () => ({{}}),
+          }};
+        }};
+        global.requestAnimationFrame = () => 1;
+        global.cancelAnimationFrame = () => {{}};
+        global.setTimeout = () => 1;
+        global.setInterval = () => 1;
+        global.clearInterval = () => {{}};
+        global.alert = () => {{}};
+        global.showToast = () => {{}};
+        global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
+
+        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
+        Function(source)();
+
+        (async () => {{
+          if (window.dashboardReadyPromise) {{
+            await window.dashboardReadyPromise;
+          }}
+          await window.setScanSource("sweden");
+          window.setScreenDisqualifier("exclude_overbought", true);
+          window.setScreenDisqualifier("exclude_unprofitable", true);
+          calls.length = 0;
+          await window.runScreen();
+
+          const screenCall = calls.find((call) => call.includes("/api/screen"));
+          if (!screenCall) {{
+            throw new Error("Expected the screener to call /api/screen");
+          }}
+          if (!screenCall.includes("exclude_overbought=true")) {{
+            throw new Error(`Missing overbought disqualifier in ${{screenCall}}`);
+          }}
+          if (!screenCall.includes("exclude_unprofitable=true")) {{
+            throw new Error(`Missing unprofitable disqualifier in ${{screenCall}}`);
+          }}
+          if (screenCall.includes("exclude_weak_liquidity=true")) {{
+            throw new Error(`Unexpected weak-liquidity disqualifier in ${{screenCall}}`);
+          }}
+          if (!getElement("disqualify-overbought").checked) {{
+            throw new Error("Overbought checkbox should stay synced");
+          }}
+          if (!getElement("disqualify-unprofitable").checked) {{
+            throw new Error("Unprofitable checkbox should stay synced");
+          }}
+          const persisted = storage.get("etf-discovery:last-screen-disqualifiers") || "";
+          if (!persisted.includes("exclude_overbought")) {{
+            throw new Error("Disqualifiers should be persisted to localStorage");
+          }}
+        }})().catch((err) => {{
+          console.error(err);
+          process.exit(1);
+        }});
+        """)
+
+    result = subprocess.run(
+        [node, "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_dashboard_js_run_screen_auto_exports_to_google_drive():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for dashboard JavaScript smoke tests")
+
+    dashboard_js = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "ETF_screener"
+        / "dashboard"
+        / "static"
+        / "js"
+        / "dashboard.js"
+    )
+    script = textwrap.dedent(f"""
+        const fs = require("fs");
+
+        class ClassList {{
+          constructor() {{ this.values = new Set(); }}
+          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
+          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
+          contains(name) {{ return this.values.has(name); }}
+          toggle(name, force) {{
+            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
+            if (shouldAdd) this.values.add(name);
+            else this.values.delete(name);
+            return shouldAdd;
+          }}
+        }}
+
+        class Element {{
+          constructor(id = "") {{
+            this.id = id;
+            this.classList = new ClassList();
+            this.children = [];
+            this.dataset = {{}};
+            this.style = {{}};
+            this.options = [];
+            this.value = "";
+            this.checked = false;
+            this.textContent = "";
+            this.innerHTML = "";
+            this.disabled = false;
+            this.hidden = false;
+            this.clientWidth = 900;
+            this.clientHeight = 520;
+          }}
+          addEventListener() {{}}
+          setAttribute(name, value) {{ this[name] = value; }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          remove() {{}}
+          focus() {{}}
+          getContext() {{
+            const gradient = {{ addColorStop() {{}} }};
+            const noop = () => {{}};
+            return {{
+              save: noop,
+              restore: noop,
+              scale: noop,
+              translate: noop,
+              rotate: noop,
+              clearRect: noop,
+              fillRect: noop,
+              beginPath: noop,
+              arc: noop,
+              ellipse: noop,
+              closePath: noop,
+              fill: noop,
+              stroke: noop,
+              moveTo: noop,
+              lineTo: noop,
+              createLinearGradient: () => gradient,
+              createRadialGradient: () => gradient,
+              lineCap: "",
+              lineJoin: "",
+              globalAlpha: 1,
+              fillStyle: "",
+              strokeStyle: "",
+              lineWidth: 1,
+            }};
+          }}
+        }}
+
+        const elements = new Map();
+        const getElement = (id) => {{
+          if (!elements.has(id)) elements.set(id, new Element(id));
+          return elements.get(id);
+        }};
+
+        [
+          "ticker-list",
+          "loading-spinner",
+          "scan-btn",
+          "run-btn",
+          "strategy-select",
+          "error-section",
+          "error-list",
+          "match-count",
+          "shortlist-market-status",
+          "shortlist-status",
+          "market-refresh-btn",
+          "shortlist-refresh-btn",
+          "shortlist-as-of",
+          "shortlist-buy-count",
+          "shortlist-watch-count",
+          "shortlist-skip-count",
+          "shortlist-empty",
+          "shortlist-content",
+          "tab-screener",
+          "tab-shortlist",
+          "tab-backtest",
+          "tab-btn-screener",
+          "tab-btn-shortlist",
+          "tab-btn-backtest",
+          "auto-export-google-drive",
+        ].forEach(getElement);
+
+        global.window = global;
+        global.window.addEventListener = () => {{}};
+        global.document = {{
+          body: new Element("body"),
+          createElement: (tag) => new Element(tag),
+          getElementById: getElement,
+          querySelectorAll: (selector) => selector === ".tab-btn"
+            ? ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            : [],
+          addEventListener: (event, handler) => {{
+            if (event === "DOMContentLoaded" && typeof handler === "function") {{
+              handler();
+            }}
+          }},
+        }};
+        const storage = new Map();
+        global.localStorage = {{
+          getItem: (key) => storage.has(key) ? storage.get(key) : "",
+          setItem: (key, value) => {{ storage.set(key, String(value)); }},
+          removeItem: (key) => {{ storage.delete(key); }},
+        }};
+        const calls = [];
+        global.fetch = async (url, options = {{}}) => {{
+          calls.push({{ url: String(url), body: String(options.body || "") }});
+          if (String(url).includes("/api/market-status")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                today: "2026-04-29",
+                latest_market_date: "2026-04-15",
+                days_stale: 14,
+                is_stale: true,
+                tracked_tickers: 2,
+                fresh_tickers: 0,
+                missing_tickers: 0,
+                stale_tickers: 2,
+              }}),
+            }};
+          }}
+          if (String(url).includes("/api/screen/export/google")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                status: "success",
+                title: "screen-sweden-demo-base-260617T1435",
+                spreadsheet_url: "https://docs.google.com/spreadsheets/d/demo",
+              }}),
+            }};
+          }}
+          if (String(url).includes("/api/screen")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                matches: [
+                  {{
+                    ticker: "AAA.ST",
+                    status: "Entry Signal",
+                    close: 12.3,
+                    volume: 123456,
+                    return_pct: 4.5,
+                    change_pct: 1.2,
+                    ema_50_slope: 0.33,
+                    days_since_entry: 0,
+                    score: 0.88,
+                  }},
+                ],
+                errors: [],
+                total_errors: 0,
+                total_candidates: 1,
+              }}),
+            }};
+          }}
+          if (String(url).includes("/api/shortlist")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                as_of_date: "2026-04-29",
+                rows: [],
+                labels: {{ Buy: 0, Watch: 0, Skip: 0 }},
+              }}),
+            }};
+          }}
+          return {{
+            ok: true,
+            json: async () => ({{}}),
+          }};
+        }};
+        global.requestAnimationFrame = () => 1;
+        global.cancelAnimationFrame = () => {{}};
+        global.setTimeout = () => 1;
+        global.setInterval = () => 1;
+        global.clearInterval = () => {{}};
+        global.alert = () => {{}};
+        global.showToast = () => {{}};
+        global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
+
+        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
+        Function(source)();
+
+        (async () => {{
+          if (window.dashboardReadyPromise) {{
+            await window.dashboardReadyPromise;
+          }}
+          await window.setScanSource("sweden");
+          window.setScreenAutoExportEnabled(true);
+          calls.length = 0;
+          await window.runScreen();
+
+          const exportCall = calls.find((call) => call.url.includes("/api/screen/export/google"));
+          if (!exportCall) {{
+            throw new Error("Expected auto-export to call /api/screen/export/google");
+          }}
+          const payload = JSON.parse(exportCall.body || "{{}}");
+          if (payload.scan_scope !== "sweden") {{
+            throw new Error(`Expected sweden scan scope in export payload, got ${{payload.scan_scope}}`);
+          }}
+          if (!Array.isArray(payload.matches) || payload.matches.length !== 1) {{
+            throw new Error("Expected export payload to include screen matches");
+          }}
+          if (!getElement("auto-export-google-drive").checked) {{
+            throw new Error("Auto-export checkbox should stay synced");
+          }}
+        }})().catch((err) => {{
+          console.error(err);
+          process.exit(1);
+        }});
+        """)
+
+    result = subprocess.run(
+        [node, "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
 def test_dashboard_js_modify_strategy_bumps_existing_version():
     node = shutil.which("node")
     if not node:
@@ -3147,11 +3418,9 @@ def test_dashboard_js_modify_strategy_bumps_existing_version():
           "shortlist-market-status",
           "tab-screener",
           "tab-shortlist",
-          "tab-swarm",
           "tab-backtest",
           "tab-btn-screener",
           "tab-btn-shortlist",
-          "tab-btn-swarm",
           "tab-btn-backtest",
         ].forEach(getElement);
 
@@ -3167,7 +3436,7 @@ def test_dashboard_js_modify_strategy_bumps_existing_version():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "swarm-lab", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: () => {{}},
         }};
@@ -3307,7 +3576,7 @@ def test_dashboard_js_persists_chart_range():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "swarm", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -3328,7 +3597,7 @@ def test_dashboard_js_persists_chart_range():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: () => {{}},
         }};
@@ -3457,11 +3726,9 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
           "strategy-select",
           "tab-screener",
           "tab-shortlist",
-          "tab-swarm",
           "tab-backtest",
           "tab-btn-screener",
           "tab-btn-shortlist",
-          "tab-btn-swarm",
           "tab-btn-backtest",
         ].forEach(getElement);
 
@@ -3472,7 +3739,7 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "swarm", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: () => {{}},
         }};
@@ -3560,18 +3827,6 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
                 count: 0,
                 tickers: [],
               }}),
-            }};
-          }}
-          if (String(url).includes("swarm-world")) {{
-            return {{
-              ok: true,
-              json: async () => ({{ world: {{ layout: "sphere", radius: 1, diameter: 2, surface_area: 12.566, asset_count: 0 }}, nodes: [], count: 0 }}),
-            }};
-          }}
-          if (String(url).includes("swarm-history")) {{
-            return {{
-              ok: true,
-              json: async () => ({{ histories: [], count: 0 }}),
             }};
           }}
           return {{

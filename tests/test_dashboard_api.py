@@ -1,7 +1,8 @@
-import json
+﻿import json
 import sqlite3
 import threading
 import time
+from datetime import datetime
 from io import StringIO
 from unittest.mock import patch
 
@@ -11,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from ETF_screener.dashboard import app_fast
 from ETF_screener.dashboard.app_fast import app
+from ETF_screener.google_drive_exports import build_screen_google_sheet_title
 from ETF_screener.indicators import add_indicators
 from ETF_screener.storage import ParquetStorage
 
@@ -57,12 +59,10 @@ def test_tab_bar_visible():
     assert 'id="scan-source-sweden"' in html
     assert 'id="scan-source-list"' in html
     assert 'id="scan-source-all-lists"' in html
-    assert 'id="swarm-scan-source-toggle"' in html
-    assert 'id="swarm-scan-source-xetra"' in html
-    assert 'id="swarm-scan-source-nasdaq"' in html
-    assert 'id="swarm-scan-source-sweden"' in html
-    assert 'id="swarm-scan-source-list"' in html
-    assert 'id="swarm-scan-source-all-lists"' in html
+    assert 'id="disqualify-overbought"' in html
+    assert 'id="disqualify-weak-liquidity"' in html
+    assert 'id="disqualify-unprofitable"' in html
+    assert 'id="auto-export-google-drive"' in html
     assert 'id="list-edit-btn"' in html
     assert ">Screener<" in html
     assert "StratFinder" not in html
@@ -77,9 +77,9 @@ def test_tab_bar_visible():
     assert 'id="export-stratfinder-btn"' not in html
     assert ">Shortlist<" in html
     assert ">Query<" in html
-    assert ">Swarm<" in html
-    assert ">Swarm Lab<" in html
     assert ">Backtester<" in html
+    assert ">Swarm<" not in html
+    assert ">Swarm Lab<" not in html
     assert ">Churner<" not in html
     assert ">Discovery<" not in html
     assert 'id="backtest-chart"' in html
@@ -92,91 +92,34 @@ def test_tab_bar_visible():
     assert 'id="query-dataset"' in html
     assert 'id="query-run-btn"' in html
     assert 'id="query-results-body"' in html
-    assert 'id="swarm-canvas"' in html
-    assert 'id="tab-btn-swarm-lab"' in html
-    assert 'id="tab-swarm-lab"' in html
-    assert 'id="swarm-lab-canvas"' in html
-    assert 'id="swarm-lab-population-slider"' in html
-    assert 'id="swarm-lab-node-count-slider"' in html
-    assert 'id="swarm-lab-attraction-slider"' in html
-    assert 'id="swarm-lab-speed-slider"' in html
-    assert 'id="swarm-lab-zoom-slider"' in html
-    assert 'id="swarm-step-1-btn"' not in html
-    assert 'id="swarm-step-10-btn"' not in html
-    assert 'id="swarm-timeline-slider"' not in html
-    assert 'id="swarm-jump-cost-slider"' not in html
-    assert "Global asset scan" not in html
-    assert 'id="swarm-agents-per-node-slider"' not in html
-    assert 'id="swarm-zoom-slider"' not in html
-    assert 'id="swarm-world-visibility"' not in html
-    assert 'id="swarm-stop-btn"' not in html
-    assert 'id="swarm-agent-selected"' not in html
-    assert 'id="swarm-top-agents"' not in html
+    assert 'value="elusive_dip"' in html
+    assert "Elusive Dip" in html
+    assert 'id="tab-btn-swarm"' not in html
+    assert 'id="tab-btn-swarm-lab"' not in html
+    assert 'id="tab-swarm"' not in html
+    assert 'id="tab-swarm-lab"' not in html
+    assert 'id="swarm-canvas"' not in html
+    assert 'id="swarm-lab-canvas"' not in html
     assert 'id="shortlist-filter-buy"' in html
-    assert 'id="swarm-filter-buy"' in html
     assert 'id="shortlist-filter-watch"' in html
     assert 'id="shortlist-filter-skip"' in html
     assert 'id="market-refresh-btn"' in html
     assert 'id="export-matches-btn"' in html
-    assert 'id="swarm-debug-controls"' not in html
-    assert "/api/swarm-history" in dashboard_source
+    assert "/api/swarm-history" not in dashboard_source
     assert "/api/market-status?stale_after_days=0" in dashboard_source
     assert "force=true&stale_after_days=0" in dashboard_source
-    assert "/static/js/dashboard-loader.js" in html
+    assert "/static/js/dashboard-loader.js" not in html
     assert "/static/js/browser-log-relay.js" in html
     assert "supertrend_continuation" in html
-    assert "SWARM_DNA_SCHEMA_VERSION" in dashboard_source
-    assert "SWARM_DNA_CONFIG_PATH" in dashboard_source
-    assert "config/swarm_agent_dna.json" in dashboard_source
+    assert "SWARM_DNA_SCHEMA_VERSION" not in dashboard_source
+    assert "SWARM_DNA_CONFIG_PATH" not in dashboard_source
+    assert "config/swarm_agent_dna.json" not in dashboard_source
     assert "/api/query/catalog" in dashboard_source
     assert "/api/query/run?" in dashboard_source
-    assert "behaviorModules" in dashboard_source
-    assert "ema_cross_up" in dashboard_source
-    assert "emaFastPeriod" in dashboard_source
-    assert "emaSlowPeriod" in dashboard_source
-    assert "fast_period" in dashboard_source
-    assert "slow_period" in dashboard_source
-    assert "autoSaveSwarmTopAgentDna" in dashboard_source
-    assert "/api/swarm-dna/save" in dashboard_source
-    assert "interpretSwarmDnaRules" in dashboard_source
-    assert "Investment rule interpretation" in dashboard_source
-    assert "SWARM_ANNUAL_INFLATION_RATE" in dashboard_source
-    assert "Swarm Lab: tune the abstract model" in dashboard_source
-    assert "loadSwarmLab" in dashboard_source
-    assert "toggleSwarmLabPlayback" in dashboard_source
-    assert "tab-btn-swarm-lab" in dashboard_source
-    assert "tab-swarm-lab" in dashboard_source
-    assert "Export DNA" not in dashboard_source
-    assert "spawnLimit" in dashboard_source
-    assert "jumpCostSensitivity" in dashboard_source
-    assert "swarmJumpCostMultiplier" in dashboard_source
-    assert "getSwarmGlobalCandidateNodes" in dashboard_source
-    assert "stableSwarmSphereVector" in dashboard_source
-    assert "normalizeSwarmDebugSphereNodes" in dashboard_source
-    assert "getSwarmDebugCapRadius" in dashboard_source
-    assert "SWARM_SPHERE_REPULSION_SAMPLE" in dashboard_source
-    assert "setSwarmZoom" in dashboard_source
-    assert "DUMMY-R" not in dashboard_source
-    assert "asset sphere" in dashboard_source
-    assert "updateFixedSwarmNodeWorth" in dashboard_source
-    assert "fixed ticker map" not in dashboard_source
-    assert "childHeadStart" in dashboard_source
-    assert "getSwarmAgentRadius" in dashboard_source
-    assert "getSwarmTickerDrawRadius" in dashboard_source
-    assert "SWARM_MAX_AGENTS = 5000" in dashboard_source
-    assert "swarmCompletedAgents" in dashboard_source
-    assert "stepSwarmDays" in dashboard_source
-    assert "dashboard-loader.js" in dashboard_source
-    assert "asset sphere" in dashboard_source
-    assert "debug sphere" in dashboard_source
-    assert "getSwarmScopeQueryParams" in dashboard_source
-    assert "setSwarmDebugAssetCount" in dashboard_source
-    assert "debug_assets" in dashboard_source
-    assert "exportTopMatches" in dashboard_source
-    assert "getSwarmAgentHeading" in dashboard_source
-    assert "startSwarmPlayback" in dashboard_source
-    assert "ensureSwarmAnimationLoop" in dashboard_source
-    assert "swarmLoadingPromise" in dashboard_source
+    assert "loadSwarmLab" not in dashboard_source
+    assert "/api/swarm-dna/save" not in dashboard_source
+    assert "dashboard-loader.js" not in dashboard_source
+    assert "swarmLoadingPromise" not in dashboard_source
     assert "Saved Strategy" in html
     assert "Editor Draft" in html
     assert 'id="list-modal"' in html
@@ -184,7 +127,6 @@ def test_tab_bar_visible():
     assert 'id="list-modal-search"' in html
     assert 'id="list-modal-list-select"' in html
     assert 'id="list-modal-name"' in html
-
 
 def test_query_catalog_endpoint(monkeypatch):
     class _FakeDb:
@@ -206,6 +148,9 @@ def test_query_catalog_endpoint(monkeypatch):
     data = response.json()
     assert data["datasets"][0]["key"] == "signal_scan"
     assert data["signal_scan"]["signals"][0]["key"] == "trend_forming"
+    assert any(
+        item["key"] == "elusive_dip" for item in data["signal_scan"]["signals"]
+    )
     assert data["shortlist"]["labels"] == ["All", "Buy", "Watch", "Skip"]
     assert data["tickers"] == ["AAA.DE", "BBB.ST"]
 
@@ -500,6 +445,66 @@ def test_screen_export_endpoint_writes_csv(monkeypatch, tmp_path):
     assert exported["rank"].tolist() == [1, 2]
 
 
+def test_build_screen_google_sheet_title_reflects_settings():
+    title = build_screen_google_sheet_title(
+        strategy_name="Elusive Dip",
+        scan_scope="sweden",
+        ticker_list="XACT.ST,AZA.ST",
+        disqualifiers={
+            "exclude_overbought": True,
+            "exclude_weak_liquidity": False,
+            "exclude_unprofitable": True,
+        },
+        exported_at=datetime(2026, 6, 17, 14, 35),
+    )
+
+    assert title == "screen-sweden-elusive-dip-xob-xnp-260617T1435"
+
+
+def test_screen_export_google_endpoint_returns_sheet_metadata(monkeypatch):
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._export_top_matches_to_google_drive",
+        lambda matches, **kwargs: {
+            "spreadsheet_id": "sheet-123",
+            "spreadsheet_url": "https://docs.google.com/spreadsheets/d/sheet-123",
+            "folder_id": "folder-456",
+            "folder_name": "Auto Exports",
+            "title": "screen-sweden-demo-base-260617T1435",
+            "match_count": len(matches),
+        },
+    )
+
+    response = client.post(
+        "/api/screen/export/google",
+        json={
+            "strategy_name": "demo",
+            "scan_scope": "sweden",
+            "disqualifiers": {"exclude_overbought": True},
+            "matches": [
+                {
+                    "ticker": "AAA.ST",
+                    "status": "Entry Signal",
+                    "close": 12.34,
+                    "volume": 123456,
+                    "return_pct": 4.5,
+                    "change_pct": 1.2,
+                    "ema_50_slope": 0.33,
+                    "days_since_entry": 0,
+                    "score": 0.88,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["provider"] == "google_sheets"
+    assert data["spreadsheet_id"] == "sheet-123"
+    assert data["folder_name"] == "Auto Exports"
+    assert data["match_count"] == 1
+
+
 def test_screen_endpoint_reuses_cached_result(monkeypatch, tmp_path):
     calls = {"run_parallel_backtest": 0}
 
@@ -582,6 +587,145 @@ def test_screen_endpoint_reuses_cached_result(monkeypatch, tmp_path):
     assert second.status_code == 200
     assert calls["run_parallel_backtest"] == 1
     assert first.json() == second.json()
+
+
+def test_screen_request_signature_changes_with_disqualifiers():
+    base_kwargs = {
+        "strategy_name": "demo",
+        "strategy_text": "TRIGGER: close > ema_20",
+        "latest_market_date": "2026-04-01",
+        "scan_scope": "sweden",
+        "exchange": None,
+        "ticker_list": None,
+        "tickers": ["AAA.ST"],
+        "fallback_mode": False,
+    }
+
+    base_signature = app_fast._screen_request_signature(
+        **base_kwargs,
+        disqualifiers=app_fast._normalize_screen_disqualifiers(),
+    )
+    overbought_signature = app_fast._screen_request_signature(
+        **base_kwargs,
+        disqualifiers=app_fast._normalize_screen_disqualifiers(
+            exclude_overbought=True
+        ),
+    )
+
+    assert base_signature != overbought_signature
+
+
+def test_screen_endpoint_disqualifies_matches_when_filters_enabled(
+    monkeypatch, tmp_path
+):
+    class FakeDb:
+        db_path = "fake-db"
+
+        def get_latest_market_date(self):
+            return "2026-04-01"
+
+        def _get_connection(self):
+            raise AssertionError("fallback DB connection should not be used here")
+
+    def make_result_df(
+        *,
+        close: float,
+        volume: float,
+        rsi: float,
+        zero_volume_rows: int = 0,
+    ) -> pd.DataFrame:
+        volumes = [volume] * 20
+        for idx in range(min(max(int(zero_volume_rows), 0), len(volumes))):
+            volumes[idx] = 0.0
+        closes = [close] * 20
+        return pd.DataFrame(
+            {
+                "close": closes,
+                "close_d1": closes,
+                "ema_20": [close - 1.0] * 20,
+                "ema_20_d1": [close - 1.0] * 20,
+                "ema_50_slope": [0.25] * 20,
+                "volume": volumes,
+                "rsi": [rsi] * 20,
+                "signal": [0] * 19 + [1],
+                "exit_condition": [False] * 20,
+            }
+        )
+
+    class FakeBacktester:
+        def __init__(self, *args, **kwargs):
+            self.db_path = "fake-db"
+            self._db = FakeDb()
+            self.scripted_strategy = lambda *args, **kwargs: None
+
+        @property
+        def db(self):
+            return self._db
+
+        def run_parallel_backtest(self, tickers, *args, **kwargs):
+            result_map = {
+                "OVER.ST": make_result_df(close=100.0, volume=150_000.0, rsi=75.0),
+                "THIN.ST": make_result_df(
+                    close=10.0,
+                    volume=1_000.0,
+                    rsi=55.0,
+                    zero_volume_rows=2,
+                ),
+                "LOSS.ST": make_result_df(close=50.0, volume=120_000.0, rsi=58.0),
+                "KEEP.ST": make_result_df(close=80.0, volume=200_000.0, rsi=54.0),
+            }
+            return [
+                {"ticker": ticker, "df": result_map[ticker], "total_return_pct": 3.5}
+                for ticker in tickers
+            ]
+
+    def fake_cache_dir():
+        cache_dir = tmp_path / "screen_requests_disqualifiers"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+
+    def fake_profitability_snapshot(ticker):
+        return {
+            "ticker": ticker,
+            "quote_type": "EQUITY",
+            "is_fund": False,
+            "is_profitable": ticker != "LOSS.ST",
+        }
+
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", lambda: FakeDb())
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._cached_screen_universe",
+        lambda db_path, latest_market_date: ("OVER.ST", "THIN.ST", "LOSS.ST", "KEEP.ST"),
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.filter_tickers_by_exchange_and_list",
+        lambda tickers, exchange=None, ticker_list=None, scan_scope=None: list(tickers),
+    )
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.Backtester", FakeBacktester)
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast._screen_cache_dir", fake_cache_dir)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._ticker_profitability_snapshot",
+        fake_profitability_snapshot,
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._rank_matches",
+        lambda matches: matches,
+    )
+
+    response = client.get(
+        "/api/screen",
+        params={
+            "dsl_content": "TRIGGER: close > ema_20",
+            "exclude_overbought": "true",
+            "exclude_weak_liquidity": "true",
+            "exclude_unprofitable": "true",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [match["ticker"] for match in data["matches"]] == ["KEEP.ST"]
+    assert data["total_candidates"] == 4
 
 
 def test_backtest_endpoint_honors_scan_scope_list(monkeypatch):
@@ -1126,326 +1270,6 @@ def test_market_refresh_endpoint(monkeypatch):
     assert captured["rebuild_shortlist"] is True
     assert str(captured["etfs_file"]).endswith("sweden.json")
     assert captured["collection_mode"] == "active"
-
-
-def test_swarm_world_endpoint(monkeypatch):
-    fake_df = pd.DataFrame(
-        [
-            {
-                "ticker": "EUNL.DE",
-                "name": "iShares Core MSCI World UCITS ETF",
-                "issuer": "iShares",
-                "asset_class": "Equity",
-                "region": "Global",
-                "label": "Buy",
-                "volume": 750000,
-                "recent_entry_days": 2,
-                "product_score": 84.0,
-                "exposure_score": 80.0,
-                "technical_score": 72.0,
-                "final_score": 78.4,
-                "energy": 82.5,
-                "momentum_score": 77.1,
-                "freshness_score": 85.0,
-                "grid_row": 2,
-                "grid_col": 4,
-                "x": 1220.4,
-                "y": 210.0,
-                "z": 88.0,
-                "radius": 9.5,
-                "value": 239.84,
-                "mass": 5.61,
-                "sphere_radius": 244.0,
-                "sphere_x": 88.0,
-                "sphere_y": 130.0,
-                "sphere_z": 194.0,
-                "latitude": 0.42,
-                "longitude": 1.12,
-                "color": "#10b981",
-                "world_version": "swarm_v6_sphere_tetra",
-                "components_json": '{"style": "Core Broad Market"}',
-                "as_of_date": "2026-04-23",
-                "updated_at": "2026-04-23 22:10:00",
-            },
-            {
-                "ticker": "XACT.ST",
-                "name": "Swedish World ETF",
-                "issuer": "Xact",
-                "asset_class": "Equity",
-                "region": "Sweden",
-                "label": "Watch",
-                "volume": 510000,
-                "recent_entry_days": 4,
-                "product_score": 71.0,
-                "exposure_score": 69.0,
-                "technical_score": 64.0,
-                "final_score": 67.4,
-                "energy": 77.1,
-                "momentum_score": 68.2,
-                "freshness_score": 82.0,
-                "grid_row": 3,
-                "grid_col": 1,
-                "x": 980.0,
-                "y": 360.0,
-                "z": -14.0,
-                "radius": 8.4,
-                "value": 175.22,
-                "mass": 5.02,
-                "sphere_radius": 244.0,
-                "sphere_x": -72.0,
-                "sphere_y": 186.0,
-                "sphere_z": -140.0,
-                "latitude": 0.84,
-                "longitude": -0.64,
-                "color": "#38bdf8",
-                "world_version": "swarm_v6_sphere_tetra",
-                "components_json": '{"style": "Nordic Equity"}',
-                "as_of_date": "2026-04-23",
-                "updated_at": "2026-04-23 22:10:00",
-            },
-        ]
-    )
-
-    class FakeSwarmEngine:
-        def __init__(self, db_path=None):
-            self.db_path = db_path
-            self.WORLD_WIDTH = 1600.0
-            self.WORLD_HEIGHT = 920.0
-            self.ARTIFACT_VERSION = "swarm_v6_sphere_tetra"
-
-        def get_world(self, limit=None, label=None, refresh=False):
-            return fake_df
-
-    monkeypatch.setattr(
-        "ETF_screener.dashboard.app_fast.SwarmWorldEngine",
-        FakeSwarmEngine,
-    )
-    monkeypatch.setattr(
-        "ETF_screener.dashboard.app_fast._swarm_scope_tickers",
-        lambda db, scan_scope=None, exchange=None, ticker_list=None: (
-            ["EUNL.DE"]
-            if (scan_scope or exchange or "xetra") in {"xetra", None, "exchange"}
-            else ["XACT.ST"]
-        ),
-    )
-
-    response = client.get("/api/swarm-world")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["count"] == 1
-    assert data["world"]["layout"] == "sphere"
-    assert data["world"]["radius"] > 0
-    assert data["world"]["asset_count"] == 1
-    assert data["nodes"][0]["ticker"] == "EUNL.DE"
-    assert data["nodes"][0]["energy"] == 82.5
-    assert data["nodes"][0]["value"] == 239.84
-    assert data["nodes"][0]["mass"] == 5.61
-    assert data["nodes"][0]["sphere_radius"] == 244.0
-    assert data["nodes"][0]["sphere_x"] == 88.0
-    assert data["nodes"][0]["sphere_y"] == 130.0
-    assert data["nodes"][0]["sphere_z"] == 194.0
-    assert data["nodes"][0]["is_dummy"] is False
-    assert data["nodes"][0]["world_version"] == "swarm_v6_sphere_tetra"
-
-    sweden_response = client.get("/api/swarm-world?scan_scope=sweden")
-    assert sweden_response.status_code == 200
-    sweden_data = sweden_response.json()
-    assert sweden_data["count"] == 1
-    assert sweden_data["nodes"][0]["ticker"] == "XACT.ST"
-
-
-def test_swarm_history_endpoint_returns_cached_close_history(monkeypatch):
-    fake_df = pd.DataFrame(
-        [
-            {"ticker": "AAA.DE"},
-            {"ticker": "BBB.DE"},
-        ]
-    )
-    conn = sqlite3.connect(":memory:", check_same_thread=False)
-    conn.execute("""
-        CREATE TABLE etf_data (
-            ticker TEXT,
-            date TEXT,
-            close REAL,
-            dividends REAL
-        )
-        """)
-    conn.executemany(
-        "INSERT INTO etf_data (ticker, date, close, dividends) VALUES (?, ?, ?, ?)",
-        [
-            ("AAA.DE", "2026-04-20", 10.0, 0.0),
-            ("AAA.DE", "2026-04-21", 10.5, 0.0),
-            ("AAA.DE", "2026-04-22", 11.0, 0.25),
-            ("BBB.DE", "2026-04-21", 20.0, 0.0),
-            ("BBB.DE", "2026-04-22", 19.5, 0.0),
-        ],
-    )
-    conn.commit()
-
-    class FakeDB:
-        db_path = ":memory:"
-
-        def _get_connection(self):
-            return conn
-
-    class FakeSwarmEngine:
-        def __init__(self, db_path=None):
-            self.db_path = db_path
-
-        def get_world(self, limit=None, label=None, refresh=False):
-            return fake_df.head(limit)
-
-    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", lambda: FakeDB())
-    monkeypatch.setattr(
-        "ETF_screener.dashboard.app_fast.SwarmWorldEngine",
-        FakeSwarmEngine,
-    )
-    monkeypatch.setattr(
-        "ETF_screener.dashboard.app_fast._swarm_scope_tickers",
-        lambda db, scan_scope=None, exchange=None, ticker_list=None: [
-            "AAA.DE",
-            "BBB.DE",
-        ],
-    )
-
-    response = client.get("/api/swarm-history?days=2&limit=2")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["days"] == 2
-    assert data["requested_tickers"] == 2
-    assert data["count"] == 2
-    assert data["as_of_date"] == "2026-04-22"
-    assert "dates" not in data["history"]["AAA.DE"]
-    assert data["history"]["AAA.DE"]["closes"] == [10.5, 11.0]
-    assert data["history"]["AAA.DE"]["dividends"] == [0.0, 0.25]
-    assert data["history"]["BBB.DE"]["closes"] == [20.0, 19.5]
-    assert data["history"]["BBB.DE"]["dividends"] == [0.0, 0.0]
-
-
-def test_swarm_debug_scope_generates_dummy_assets(monkeypatch, tmp_path):
-    class FakeDB:
-        db_path = str(tmp_path / "debug.db")
-
-    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", lambda: FakeDB())
-
-    world_response = client.get("/api/swarm-world?scan_scope=debug&debug_assets=5")
-    assert world_response.status_code == 200
-    world = world_response.json()
-    assert world["world"]["layout"] == "sphere"
-    assert world["world"]["asset_count"] == 5
-    assert world["count"] == 5
-    assert len(world["nodes"]) == 5
-    assert all(str(node["ticker"]).startswith("DUMMY-") for node in world["nodes"])
-    assert all(node["is_dummy"] is True for node in world["nodes"])
-    radii = [float(node["radius"]) for node in world["nodes"]]
-    assert min(radii) >= 1.7
-    assert max(radii) <= 3.7
-    assert max(radii) - min(radii) >= 0.25
-
-    history_response = client.get(
-        "/api/swarm-history?scan_scope=debug&debug_assets=5&days=4"
-    )
-    assert history_response.status_code == 200
-    history = history_response.json()
-    assert history["requested_tickers"] == 5
-    assert history["count"] == 5
-    assert history["days"] == 4
-    assert len(history["history"]) == 5
-    assert all(str(ticker).startswith("DUMMY-") for ticker in history["history"])
-    for payload in history["history"].values():
-        closes = payload["closes"]
-        dividends = payload["dividends"]
-        assert "dates" not in payload
-        assert len(closes) == 4
-        assert len(dividends) == 4
-        assert len(set(round(close, 6) for close in closes)) == 1
-        assert all(dividend == 0.0 for dividend in dividends)
-
-
-def test_swarm_dna_save_endpoint_writes_config(monkeypatch, tmp_path):
-    target_path = tmp_path / "config" / "swarm_agent_dna.json"
-    monkeypatch.setattr(
-        "ETF_screener.dashboard.app_fast.SWARM_DNA_CONFIG_PATH",
-        target_path,
-    )
-
-    payload = {
-        "schema_version": "swarm_agent_dna_v2",
-        "created_at": "2026-04-26T12:00:00.000Z",
-        "world_version": "swarm_v6_sphere_tetra",
-        "as_of_date": "2026-04-24",
-        "simulation": {
-            "steps": 250,
-            "max_steps": 250,
-            "filter": "All",
-            "visible_node_count": 12,
-            "starting_energy": 10000,
-            "jump_cost_multiplier": 2,
-            "history_days": 420,
-            "history_ticker_count": 12,
-        },
-        "top_agents": [
-            {
-                "rank": 1,
-                "id": "AAA.DE-1-test",
-                "generation": 3,
-                "energy": 12500,
-                "profit": 2500,
-                "age": 42,
-                "target_ticker": "AAA.DE",
-                "learned_ticker_count": 4,
-                "dna": {
-                    "schema_version": "swarm_agent_dna_v2",
-                    "ema_fast_period": 30,
-                    "ema_slow_period": 50,
-                    "rsi_period": 14,
-                    "rsi_low": 35,
-                    "rsi_high": 70,
-                    "behavior_modules": [
-                        {
-                            "type": "ema_cross_up",
-                            "fast_period": 30,
-                            "slow_period": 50,
-                            "stay_weight": 0.2,
-                            "jump_weight": 1.1,
-                        },
-                        {
-                            "type": "ema_cross_down",
-                            "fast_period": 30,
-                            "slow_period": 50,
-                            "stay_weight": -0.8,
-                            "jump_weight": 0.4,
-                        },
-                    ],
-                    "mutation_rate": 0.04,
-                    "spawn_limit": 15000,
-                    "jump_cost_sensitivity": 1.2,
-                    "exploration_bias": 0.3,
-                    "metabolism": 1.0,
-                    "speed": 1.0,
-                },
-                "rules": [
-                    "Hold winners while EMA 30 stays constructive against EMA 50; jump only when a global ticker setup clears friction.",
-                    "Treat dividends as part of total return and judge each step against the 2.5% annual inflation hurdle.",
-                ],
-            }
-        ],
-    }
-
-    response = client.post("/api/swarm-dna/save", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["agent_count"] == 1
-    assert data["path"].replace("\\", "/").endswith("config/swarm_agent_dna.json")
-
-    saved = json.loads(target_path.read_text(encoding="utf-8"))
-    assert saved["schema_version"] == "swarm_agent_dna_v2"
-    assert saved["saved_by"] == "dashboard_swarm_auto_save"
-    assert saved["saved_at"]
-    assert "dividends as part of total return" in saved["top_agents"][0]["rules"][1]
-    assert saved["top_agents"][0]["dna"]["ema_fast_period"] == 30
-    assert saved["top_agents"][0]["dna"]["behavior_modules"][0]["slow_period"] == 50
 
 
 def test_backtest_endpoint_returns_ranked_metrics(monkeypatch, tmp_path):
@@ -2204,3 +2028,4 @@ def test_shortlist_endpoint_returns_cached_rows(monkeypatch):
         "Trusted issuer: iShares",
         "Price above EMA 50",
     ]
+

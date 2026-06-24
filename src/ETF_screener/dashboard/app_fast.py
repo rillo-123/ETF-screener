@@ -17,6 +17,7 @@ from functools import lru_cache
 from datetime import date, datetime, timezone
 from io import StringIO
 import pandas as pd
+import yfinance as yf
 from typing import Any, Optional
 from pathlib import Path
 from threading import Lock
@@ -34,6 +35,11 @@ from ETF_screener.dsl_parser import (
     parse_strategy_scripts,
     parse_strategy_structure_profile,
 )
+from ETF_screener.google_drive_exports import (
+    GoogleDriveExportError,
+    GoogleSheetsDriveExporter,
+    build_screen_google_sheet_title,
+)
 from ETF_screener.logging_setup import setup_logging, get_log_file
 from ETF_screener.market_data_service import (
     MarketDataRefresher,
@@ -41,7 +47,6 @@ from ETF_screener.market_data_service import (
 )
 from ETF_screener.query_service import ETFQueryService
 from ETF_screener.shortlist_engine import ETFShortlistEngine
-from ETF_screener.swarm_world import SwarmWorldEngine
 from ETF_screener.scripts.churn_strategies import (
     evaluate_strategies,
     find_recent_entry_days,
@@ -66,8 +71,6 @@ app = FastAPI(title="ETF Discovery Lab API")
 # uvicorn log records are captured in the timestamped debug file.
 logger = setup_logging()
 
-SWARM_DNA_SCHEMA_VERSION = "swarm_agent_dna_v2"
-SWARM_DNA_CONFIG_PATH = Path("config") / "swarm_agent_dna.json"
 CUSTOM_TICKER_LIST_SCHEMA_VERSION = "custom_ticker_lists_v3"
 CUSTOM_TICKER_LIST_CONFIG_PATH = Path("config") / "custom_ticker_list.json"
 CUSTOM_TICKER_LIST_DEFAULT_NAME = "My List"
@@ -107,6 +110,10 @@ _BACKTEST_EVENT_LOCK = Lock()
 _BACKTEST_EVENT_RUNS: dict[str, dict[str, object]] = {}
 _BACKTEST_EVENT_MAX_RUNS = 8
 _BACKTEST_EVENT_MAX_EVENTS = 2000
+SCREEN_OVERBOUGHT_RSI_THRESHOLD = 70.0
+SCREEN_MIN_RECENT_AVG_VOLUME = 50_000.0
+SCREEN_MIN_RECENT_AVG_DOLLAR_VOLUME = 500_000.0
+SCREEN_MAX_RECENT_ZERO_VOLUME_ROWS = 1
 
 
 def _safe_float(val, default=None):
@@ -143,6 +150,138 @@ def _json_safe_value(value: object) -> object:
     except Exception:
         pass
     return str(value)
+
+
+def _normalize_screen_disqualifiers(
+    *,
+    exclude_overbought: object = False,
+    exclude_weak_liquidity: object = False,
+    exclude_unprofitable: object = False,
+) -> dict[str, bool]:
+    """Return a stable set of screen-time veto flags."""
+    return {
+        "exclude_overbought": bool(exclude_overbought),
+        "exclude_weak_liquidity": bool(exclude_weak_liquidity),
+        "exclude_unprofitable": bool(exclude_unprofitable),
+    }
+
+
+def _recent_liquidity_snapshot(df: pd.DataFrame, bars: int = 20) -> dict[str, float]:
+    """Summarize recent trading activity for viability-style disqualifiers."""
+    if df is None or df.empty:
+        return {
+            "recent_avg_volume": 0.0,
+            "recent_avg_dollar_volume": 0.0,
+            "recent_zero_volume_rows": 0.0,
+        }
+
+    tail = df.tail(max(1, int(bars))).copy()
+    volume_source = tail["volume"] if "volume" in tail.columns else tail.get("Volume")
+    close_source = tail["close"] if "close" in tail.columns else tail.get("Close")
+    volumes = pd.to_numeric(volume_source, errors="coerce").fillna(0.0)
+    closes = pd.to_numeric(close_source, errors="coerce").fillna(0.0)
+    return {
+        "recent_avg_volume": float(volumes.mean()) if len(volumes) else 0.0,
+        "recent_avg_dollar_volume": float((volumes * closes).mean())
+        if len(volumes)
+        else 0.0,
+        "recent_zero_volume_rows": float((volumes <= 0).sum()),
+    }
+
+
+def _match_is_weak_liquidity(df: pd.DataFrame) -> bool:
+    """Treat thinly traded symbols as non-viable when requested."""
+    snapshot = _recent_liquidity_snapshot(df)
+    return (
+        snapshot["recent_avg_volume"] < SCREEN_MIN_RECENT_AVG_VOLUME
+        or snapshot["recent_avg_dollar_volume"] < SCREEN_MIN_RECENT_AVG_DOLLAR_VOLUME
+        or snapshot["recent_zero_volume_rows"] > SCREEN_MAX_RECENT_ZERO_VOLUME_ROWS
+    )
+
+
+def _extract_ticker_net_income(info: dict[str, object]) -> float | None:
+    """Read the quickest profitability fields Yahoo exposes, if available."""
+    for key in ("netIncomeToCommon", "netIncomeToCommonShares", "ebitda"):
+        value = _safe_float(info.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+@lru_cache(maxsize=512)
+def _ticker_profitability_snapshot(ticker: str) -> dict[str, object]:
+    """Best-effort profitability metadata for operating companies only."""
+    upper_ticker = str(ticker or "").strip().upper()
+    if not upper_ticker:
+        return {
+            "ticker": "",
+            "quote_type": "",
+            "is_fund": False,
+            "is_profitable": None,
+        }
+
+    try:
+        info = dict(yf.Ticker(upper_ticker).info or {})
+    except Exception as exc:
+        logger.debug(
+            "Could not load profitability metadata for %s: %s",
+            upper_ticker,
+            exc,
+        )
+        return {
+            "ticker": upper_ticker,
+            "quote_type": "",
+            "is_fund": False,
+            "is_profitable": None,
+        }
+
+    quote_type = str(
+        info.get("quoteType") or info.get("quote_type") or info.get("type") or ""
+    ).upper()
+    is_fund = quote_type in {"ETF", "MUTUALFUND", "FUND", "INDEX", "MONEYMARKET"} or bool(
+        info.get("fundFamily") or info.get("category")
+    )
+    profit_margins = _safe_float(info.get("profitMargins"))
+    net_income = _extract_ticker_net_income(info)
+    is_profitable: bool | None = None
+
+    if not is_fund:
+        if net_income is not None:
+            is_profitable = net_income > 0
+        elif profit_margins is not None:
+            is_profitable = profit_margins > 0
+
+    return {
+        "ticker": upper_ticker,
+        "quote_type": quote_type,
+        "is_fund": is_fund,
+        "is_profitable": is_profitable,
+    }
+
+
+def _match_is_disqualified(
+    match: dict[str, object],
+    df: pd.DataFrame,
+    disqualifiers: dict[str, bool],
+) -> bool:
+    """Apply optional hard vetoes after a candidate match is found."""
+    if disqualifiers.get("exclude_overbought"):
+        rsi_value = _safe_float(match.get("rsi"))
+        if rsi_value is not None and rsi_value > SCREEN_OVERBOUGHT_RSI_THRESHOLD:
+            return True
+
+    if disqualifiers.get("exclude_weak_liquidity") and _match_is_weak_liquidity(df):
+        return True
+
+    if disqualifiers.get("exclude_unprofitable"):
+        profit_snapshot = _ticker_profitability_snapshot(str(match.get("ticker", "")))
+        if (
+            not bool(profit_snapshot.get("is_fund"))
+            and profit_snapshot.get("is_profitable") is False
+        ):
+            return True
+
+    return False
 
 
 def _load_metadata_file_map(path: Path) -> dict[str, dict[str, object]]:
@@ -1163,6 +1302,63 @@ def _build_top_matches_export_frame(
     return pd.DataFrame(rows)
 
 
+def _export_top_matches_to_google_drive(
+    matches: list[dict[str, object]],
+    *,
+    strategy_name: str = "",
+    scan_scope: str = "",
+    exchange: str = "",
+    ticker_list: str = "",
+    disqualifiers: dict[str, bool] | None = None,
+) -> dict[str, object]:
+    """Create a native Google Sheet in the configured auto-export folder."""
+    frame = _build_top_matches_export_frame(
+        matches,
+        strategy_name=strategy_name,
+        scan_scope=scan_scope,
+        exchange=exchange,
+        ticker_list=ticker_list,
+    )
+    normalized_disqualifiers = _normalize_screen_disqualifiers(
+        **(disqualifiers or {})
+    )
+    exported_at = datetime.now()
+    title = build_screen_google_sheet_title(
+        strategy_name=strategy_name,
+        scan_scope=scan_scope,
+        exchange=exchange,
+        ticker_list=ticker_list,
+        disqualifiers=normalized_disqualifiers,
+        exported_at=exported_at,
+    )
+    metadata_rows = [
+        ["setting", "value"],
+        ["strategy_name", str(strategy_name or "Top Matches")],
+        ["scan_scope", str(scan_scope or "")],
+        ["exchange", str(exchange or "")],
+        ["ticker_list", str(ticker_list or "")],
+        ["match_count", int(len(matches))],
+        ["exclude_overbought", bool(normalized_disqualifiers["exclude_overbought"])],
+        [
+            "exclude_weak_liquidity",
+            bool(normalized_disqualifiers["exclude_weak_liquidity"]),
+        ],
+        [
+            "exclude_unprofitable",
+            bool(normalized_disqualifiers["exclude_unprofitable"]),
+        ],
+        ["exported_at", exported_at.strftime("%Y-%m-%dT%H:%M:%S")],
+    ]
+    exporter = GoogleSheetsDriveExporter.from_env()
+    result = exporter.export_frame(
+        frame,
+        title=title,
+        metadata_rows=metadata_rows,
+    )
+    result["match_count"] = len(matches)
+    return result
+
+
 def _write_top_matches_csv(
     matches: list[dict[str, object]],
     *,
@@ -1199,8 +1395,6 @@ def _normalize_market_source(value: object | None) -> str:
         return "list"
     if cleaned in {"all_lists", "alllists", "all list", "all lists"}:
         return "all_lists"
-    if cleaned in {"debug", "demo", "dummy", "synthetic"}:
-        return "debug"
     if cleaned in {"xetra", "germany", "de", "exchange", "all"}:
         return "xetra"
     return "xetra"
@@ -1217,223 +1411,6 @@ def _market_source_config(source: object | None) -> tuple[Path, str]:
     if normalized == "all_lists":
         return CUSTOM_TICKER_LIST_CONFIG_PATH, "all"
     return XETRA_METADATA_PATH, "active"
-
-
-def _swarm_scope_tickers(
-    db,
-    *,
-    scan_scope: Optional[str] = None,
-    exchange: Optional[str] = None,
-    ticker_list: Optional[str] = None,
-) -> list[str]:
-    """Resolve the current Swarm selector into a concrete ticker list."""
-    try:
-        normalized_scope = _normalize_market_source(scan_scope or exchange or "xetra")
-        latest_market_date = _latest_market_date_for(db)
-        universe = list(_cached_screen_universe(_db_path_for(db), latest_market_date))
-        tickers = filter_tickers_by_exchange_and_list(
-            universe,
-            exchange=exchange,
-            ticker_list=ticker_list,
-            scan_scope=normalized_scope,
-        )
-        if normalized_scope == "nasdaq":
-            tickers = filter_low_vitality_nasdaq_tickers(
-                db_path=_db_path_for(db),
-                latest_market_date=latest_market_date,
-                tickers=tickers,
-            )
-        return tickers
-    except Exception as exc:
-        logger.warning(
-            "Swarm scope resolution fell back to scope-only filtering: %s", exc
-        )
-        return []
-
-
-def _ticker_matches_swarm_scope(ticker: object, scope: str) -> bool:
-    upper = str(ticker or "").upper()
-    if not upper:
-        return False
-    normalized = _normalize_market_source(scope)
-    metadata = _cached_etf_metadata_map().get(upper, {})
-    exchange_hint = " ".join(
-        str(metadata.get(key) or "")
-        for key in ("exchange", "market", "country", "source")
-    ).lower()
-    if normalized == "nasdaq":
-        if (
-            "nasdaq" in exchange_hint
-            or "usa" in exchange_hint
-            or "united states" in exchange_hint
-        ):
-            return True
-        return "." not in upper
-    if normalized == "sweden":
-        return upper.endswith(".ST") or upper.endswith(".SE") or upper.endswith(".SS")
-    if normalized == "xetra":
-        if "xetra" in exchange_hint or "germany" in exchange_hint:
-            return True
-        return upper.endswith((".DE", ".F", ".DU", ".HM", ".SG", ".BE", ".MU"))
-    return True
-
-
-def _swarm_is_debug_scope(
-    scan_scope: object | None = None, exchange: object | None = None
-) -> bool:
-    return _normalize_market_source(scan_scope or exchange or "xetra") == "debug"
-
-
-def _swarm_debug_asset_count(value: object | None, default: int = 24) -> int:
-    try:
-        cleaned = int(str(value).strip())
-    except (TypeError, ValueError, AttributeError):
-        cleaned = default
-    return max(1, min(cleaned, 400))
-
-
-def _swarm_debug_seed(*parts: object) -> int:
-    payload = "|".join(str(part or "") for part in parts)
-    return int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16], 16)
-
-
-def _swarm_debug_close_for_radius(target_radius: float) -> float:
-    safe_radius = max(1.35, min(float(target_radius), 8.5))
-    return 10 ** ((safe_radius - 1.35) / 0.95)
-
-
-def _swarm_debug_shortlist_frame(
-    asset_count: int,
-    *,
-    scan_scope: object | None = None,
-    exchange: object | None = None,
-    ticker_list: object | None = None,
-) -> pd.DataFrame:
-    rng = random.Random(
-        _swarm_debug_seed(asset_count, scan_scope, exchange, ticker_list, "world")
-    )
-    as_of_date = pd.Timestamp.utcnow().normalize().strftime("%Y-%m-%d")
-    labels = ["Buy", "Watch", "Skip"]
-    rows: list[dict[str, object]] = []
-
-    for index in range(asset_count):
-        ticker = f"DUMMY-{index + 1:03d}"
-        target_radius = 1.9 + (rng.random() * 1.45) + ((index % 5) * 0.04)
-        close = round(_swarm_debug_close_for_radius(target_radius), 4)
-        volume = int(rng.uniform(50_000, 8_500_000))
-        recent_entry_days = rng.choice([None, 1, 2, 4, 7, 12, 18])
-        label = rng.choices(labels, weights=[0.36, 0.44, 0.20], k=1)[0]
-        technical_score = round(rng.uniform(14.0, 96.0), 2)
-        product_score = round(rng.uniform(12.0, 95.0), 2)
-        exposure_score = round(rng.uniform(10.0, 92.0), 2)
-        final_score = round(
-            min(
-                99.0,
-                max(
-                    1.0,
-                    (technical_score * 0.42)
-                    + (product_score * 0.31)
-                    + (exposure_score * 0.27),
-                ),
-            ),
-            2,
-        )
-        slope = round(rng.uniform(-5.5, 5.5), 3)
-        components = {
-            "ema_50_slope_pct": slope,
-            "close_above_ema_50": int(rng.random() > 0.42),
-            "close_above_supertrend": int(rng.random() > 0.48),
-            "macd_above_signal": int(rng.random() > 0.5),
-        }
-        rows.append(
-            {
-                "ticker": ticker,
-                "as_of_date": as_of_date,
-                "name": f"Synthetic Asset {index + 1:03d}",
-                "issuer": "Debug Lab",
-                "asset_class": "Synthetic",
-                "region": "Debug",
-                "label": label,
-                "close": close,
-                "volume": volume,
-                "recent_entry_days": recent_entry_days,
-                "product_score": product_score,
-                "exposure_score": exposure_score,
-                "technical_score": technical_score,
-                "final_score": final_score,
-                "components_json": json.dumps(components),
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def _swarm_debug_nodes(
-    engine: SwarmWorldEngine,
-    asset_count: int,
-    *,
-    scan_scope: object | None = None,
-    exchange: object | None = None,
-    ticker_list: object | None = None,
-) -> list[dict[str, object]]:
-    shortlist_df = _swarm_debug_shortlist_frame(
-        asset_count,
-        scan_scope=scan_scope,
-        exchange=exchange,
-        ticker_list=ticker_list,
-    )
-    prepared = engine._prepare_rows(shortlist_df)
-    for row in prepared:
-        row["components_json"] = json.dumps(row.get("components", {}))
-    return prepared
-
-
-def _swarm_debug_history_payload(
-    nodes: list[dict[str, object]],
-    safe_days: int,
-    *,
-    scan_scope: object | None = None,
-    exchange: object | None = None,
-    ticker_list: object | None = None,
-) -> dict[str, object]:
-    date_index = pd.bdate_range(
-        end=pd.Timestamp.utcnow().normalize(),
-        periods=max(1, int(safe_days or 1)),
-    )
-    latest_date = str(date_index[-1].date())
-    history: dict[str, dict[str, list]] = {}
-
-    for row in nodes:
-        ticker = str(row.get("ticker") or "").upper()
-        if not ticker:
-            continue
-        rng = random.Random(
-            _swarm_debug_seed(
-                ticker,
-                safe_days,
-                scan_scope,
-                exchange,
-                ticker_list,
-                "history",
-            )
-        )
-        base_value = max(
-            0.5,
-            float(row.get("value") or row.get("close") or rng.uniform(5.0, 140.0)),
-        )
-        closes = [round(base_value, 6) for _ in range(len(date_index))]
-        dividends = [0.0 for _ in range(len(date_index))]
-        history[ticker] = {
-            "closes": closes,
-            "dividends": dividends,
-        }
-
-    return {
-        "days": safe_days,
-        "requested_tickers": len(nodes),
-        "count": len(history),
-        "as_of_date": latest_date,
-        "history": history,
-    }
 
 
 # Database access function (FastAPI style)
@@ -1494,6 +1471,7 @@ def _screen_request_signature(
     ticker_list: str | None,
     tickers: list[str],
     fallback_mode: bool,
+    disqualifiers: dict[str, bool] | None = None,
 ) -> str:
     universe_blob = "|".join(str(ticker).upper() for ticker in tickers)
     payload = {
@@ -1508,6 +1486,9 @@ def _screen_request_signature(
         ).hexdigest(),
         "universe_sha": hashlib.sha256(universe_blob.encode("utf-8")).hexdigest(),
         "fallback_mode": bool(fallback_mode),
+        "disqualifiers": dict(
+            _normalize_screen_disqualifiers(**(disqualifiers or {}))
+        ),
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -1536,72 +1517,6 @@ def _save_cached_screen_result(cache_key: str, payload: dict) -> None:
                 cache_path.unlink()
         except Exception:
             pass
-
-
-def _validate_swarm_dna_payload(payload: object) -> dict:
-    """Validate the browser-generated Swarm DNA payload before writing config."""
-    if not isinstance(payload, dict):
-        raise HTTPException(
-            status_code=400, detail="Swarm DNA payload must be an object"
-        )
-
-    if payload.get("schema_version") != SWARM_DNA_SCHEMA_VERSION:
-        raise HTTPException(
-            status_code=400,
-            detail=f"schema_version must be {SWARM_DNA_SCHEMA_VERSION}",
-        )
-
-    top_agents = payload.get("top_agents")
-    if not isinstance(top_agents, list) or not top_agents:
-        raise HTTPException(
-            status_code=400, detail="top_agents must be a non-empty list"
-        )
-    if len(top_agents) > 50:
-        raise HTTPException(status_code=400, detail="top_agents is unexpectedly large")
-
-    for idx, agent in enumerate(top_agents):
-        if not isinstance(agent, dict):
-            raise HTTPException(
-                status_code=400, detail=f"top_agents[{idx}] must be an object"
-            )
-        dna = agent.get("dna")
-        if not isinstance(dna, dict):
-            raise HTTPException(
-                status_code=400, detail=f"top_agents[{idx}].dna is required"
-            )
-        if dna.get("schema_version") != SWARM_DNA_SCHEMA_VERSION:
-            raise HTTPException(
-                status_code=400,
-                detail=f"top_agents[{idx}].dna.schema_version must be {SWARM_DNA_SCHEMA_VERSION}",
-            )
-        modules = dna.get("behavior_modules")
-        if not isinstance(modules, list):
-            raise HTTPException(
-                status_code=400,
-                detail=f"top_agents[{idx}].dna.behavior_modules must be a list",
-            )
-
-        for module_idx, module in enumerate(modules):
-            if not isinstance(module, dict):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"top_agents[{idx}].dna.behavior_modules[{module_idx}] must be an object",
-                )
-            module_type = str(module.get("type", ""))
-            if module_type in {"ema_cross_up", "ema_cross_down"}:
-                if "fast_period" not in module or "slow_period" not in module:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            f"top_agents[{idx}].dna.behavior_modules[{module_idx}] "
-                            "must include fast_period and slow_period"
-                        ),
-                    )
-
-    validated = json.loads(json.dumps(payload, allow_nan=False))
-    validated["saved_at"] = datetime.now(timezone.utc).isoformat()
-    validated["saved_by"] = "dashboard_swarm_auto_save"
-    return validated
 
 
 def _normalize_custom_ticker_list_value(value: object) -> list[str]:
@@ -2213,335 +2128,6 @@ async def shortlist(
     }
 
 
-@app.get("/api/swarm-world")
-async def swarm_world(
-    limit: Optional[int] = None,
-    label: Optional[str] = None,
-    refresh: bool = False,
-    scan_scope: Optional[str] = None,
-    exchange: Optional[str] = None,
-    ticker_list: Optional[str] = None,
-    debug_assets: Optional[int] = None,
-):
-    """Return the cached swarm world artifact for the exploratory tab."""
-    safe_limit = None if limit is None else max(1, min(int(limit), 5000))
-    safe_label = label.title() if label else None
-    if safe_label not in {None, "Buy", "Watch", "Skip"}:
-        raise HTTPException(status_code=400, detail="label must be Buy, Watch, or Skip")
-
-    engine = SwarmWorldEngine(db_path=str(get_db().db_path))
-    debug_scope = _swarm_is_debug_scope(scan_scope, exchange)
-
-    if debug_scope:
-        debug_count = _swarm_debug_asset_count(debug_assets)
-        debug_nodes = _swarm_debug_nodes(
-            engine,
-            debug_count,
-            scan_scope=scan_scope,
-            exchange=exchange,
-            ticker_list=ticker_list,
-        )
-        df = pd.DataFrame(debug_nodes)
-    else:
-        try:
-            df = engine.get_world(limit=safe_limit, label=safe_label, refresh=refresh)
-        except Exception as e:
-            logger.error("Swarm world endpoint failed: %s", e, exc_info=True)
-            raise HTTPException(status_code=500, detail=str(e))
-
-        db = get_db()
-        selected_tickers = _swarm_scope_tickers(
-            db,
-            scan_scope=scan_scope,
-            exchange=exchange,
-            ticker_list=ticker_list,
-        )
-        normalized_scope = _normalize_market_source(scan_scope or exchange or "xetra")
-        if selected_tickers:
-            selected = {str(ticker).upper() for ticker in selected_tickers}
-            df = df[df["ticker"].astype(str).str.upper().isin(selected)].reset_index(
-                drop=True
-            )
-        elif normalized_scope in {"list", "all_lists"}:
-            df = df.iloc[0:0]
-        elif normalized_scope in {"xetra", "sweden", "nasdaq"}:
-            df = df[
-                df["ticker"].map(
-                    lambda ticker: _ticker_matches_swarm_scope(ticker, normalized_scope)
-                )
-            ].reset_index(drop=True)
-
-    nodes = []
-    for _, row in df.iterrows():
-        components_raw = row.get("components_json", "{}")
-        try:
-            components = json.loads(components_raw) if components_raw else {}
-        except Exception:
-            components = {}
-
-        nodes.append(
-            {
-                "ticker": row["ticker"],
-                "name": row.get("name", row["ticker"]),
-                "issuer": row.get("issuer", ""),
-                "asset_class": row.get("asset_class", ""),
-                "region": row.get("region", ""),
-                "label": row.get("label", "Watch"),
-                "close": round(float(row.get("close", 0.0) or 0.0), 4),
-                "volume": int(row.get("volume", 0) or 0),
-                "recent_entry_days": (
-                    int(row["recent_entry_days"])
-                    if pd.notna(row.get("recent_entry_days"))
-                    else None
-                ),
-                "product_score": round(float(row.get("product_score", 0.0) or 0.0), 2),
-                "exposure_score": round(
-                    float(row.get("exposure_score", 0.0) or 0.0), 2
-                ),
-                "technical_score": round(
-                    float(row.get("technical_score", 0.0) or 0.0), 2
-                ),
-                "final_score": round(float(row.get("final_score", 0.0) or 0.0), 2),
-                "energy": round(float(row.get("energy", 0.0) or 0.0), 2),
-                "value": round(
-                    float(row.get("value", row.get("close", 0.0)) or 0.0), 4
-                ),
-                "mass": round(float(row.get("mass", 0.0) or 0.0), 3),
-                "momentum_score": round(
-                    float(row.get("momentum_score", 0.0) or 0.0), 2
-                ),
-                "freshness_score": round(
-                    float(row.get("freshness_score", 0.0) or 0.0), 2
-                ),
-                "row": int(row.get("grid_row", row.get("row", 0)) or 0),
-                "col": int(row.get("grid_col", row.get("col", 0)) or 0),
-                "x": round(float(row.get("x", 0.0) or 0.0), 2),
-                "y": round(float(row.get("y", 0.0) or 0.0), 2),
-                "z": round(float(row.get("z", 0.0) or 0.0), 2),
-                "vx": round(float(row.get("vx", 0.0) or 0.0), 4),
-                "vy": round(float(row.get("vy", 0.0) or 0.0), 4),
-                "charge": round(float(row.get("charge", 1.0) or 1.0), 4),
-                "radius": round(float(row.get("radius", 0.0) or 0.0), 2),
-                "sphere_radius": round(float(row.get("sphere_radius", 0.0) or 0.0), 3),
-                "sphere_x": round(
-                    float(row.get("sphere_x", row.get("x", 0.0)) or 0.0), 4
-                ),
-                "sphere_y": round(
-                    float(row.get("sphere_y", row.get("y", 0.0)) or 0.0), 4
-                ),
-                "sphere_z": round(
-                    float(row.get("sphere_z", row.get("z", 0.0)) or 0.0), 4
-                ),
-                "latitude": round(float(row.get("latitude", 0.0) or 0.0), 6),
-                "longitude": round(float(row.get("longitude", 0.0) or 0.0), 6),
-                "color": row.get("color", "#64748b"),
-                "components": components,
-                "world_version": row.get("world_version"),
-                "is_dummy": bool(row.get("is_dummy", debug_scope)),
-                "as_of_date": row.get("as_of_date"),
-                "updated_at": row.get("updated_at"),
-            }
-        )
-
-    label_counts = {
-        grade: sum(1 for item in nodes if item["label"] == grade)
-        for grade in ["Buy", "Watch", "Skip"]
-    }
-
-    sphere_radius = (
-        float(nodes[0].get("sphere_radius", getattr(engine, "MIN_WORLD_RADIUS", 120.0)))
-        if nodes
-        else float(getattr(engine, "MIN_WORLD_RADIUS", 120.0))
-    )
-    surface_area = 4.0 * math.pi * (sphere_radius**2)
-
-    return {
-        "world": {
-            "layout": "sphere",
-            "radius": round(sphere_radius, 4),
-            "diameter": round(sphere_radius * 2.0, 4),
-            "surface_area": round(surface_area, 4),
-            "asset_count": len(nodes),
-            "version": getattr(engine, "ARTIFACT_VERSION", "swarm_v1"),
-        },
-        "as_of_date": nodes[0]["as_of_date"] if nodes else None,
-        "updated_at": nodes[0]["updated_at"] if nodes else None,
-        "count": len(nodes),
-        "labels": label_counts,
-        "nodes": nodes,
-    }
-
-
-@app.get("/api/swarm-history")
-async def swarm_history(
-    days: int = 420,
-    limit: Optional[int] = 5000,
-    scan_scope: Optional[str] = None,
-    exchange: Optional[str] = None,
-    ticker_list: Optional[str] = None,
-    debug_assets: Optional[int] = None,
-):
-    """Return compact cached close-price history for current swarm tickers."""
-    safe_days = max(2, min(int(days), 1500))
-    safe_limit = max(1, min(int(limit or 5000), 5000))
-    db = get_db()
-    engine = SwarmWorldEngine(db_path=str(db.db_path))
-    debug_scope = _swarm_is_debug_scope(scan_scope, exchange)
-
-    if debug_scope:
-        debug_count = _swarm_debug_asset_count(debug_assets)
-        debug_nodes = _swarm_debug_nodes(
-            engine,
-            debug_count,
-            scan_scope=scan_scope,
-            exchange=exchange,
-            ticker_list=ticker_list,
-        )
-        return _swarm_debug_history_payload(
-            debug_nodes,
-            safe_days,
-            scan_scope=scan_scope,
-            exchange=exchange,
-            ticker_list=ticker_list,
-        )
-
-    try:
-        world_df = engine.get_world(limit=safe_limit, refresh=False)
-    except Exception as e:
-        logger.error("Swarm history world lookup failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-    selected_tickers = _swarm_scope_tickers(
-        db,
-        scan_scope=scan_scope,
-        exchange=exchange,
-        ticker_list=ticker_list,
-    )
-    normalized_scope = _normalize_market_source(scan_scope or exchange or "xetra")
-    tickers = [
-        str(ticker).upper()
-        for ticker in world_df.get("ticker", pd.Series(dtype=str)).dropna().tolist()
-    ]
-    if selected_tickers:
-        selected = {str(ticker).upper() for ticker in selected_tickers}
-        tickers = [ticker for ticker in tickers if ticker in selected]
-    elif normalized_scope in {"list", "all_lists"}:
-        tickers = []
-    elif normalized_scope in {"xetra", "sweden", "nasdaq"}:
-        tickers = [
-            ticker
-            for ticker in tickers
-            if _ticker_matches_swarm_scope(ticker, normalized_scope)
-        ]
-    if not tickers:
-        return {
-            "days": safe_days,
-            "requested_tickers": 0,
-            "count": 0,
-            "as_of_date": None,
-            "history": {},
-        }
-
-    conn = db._get_connection()
-    etf_data_columns = {
-        str(row[1]) for row in conn.execute("PRAGMA table_info(etf_data)").fetchall()
-    }
-    dividends_expr = (
-        "COALESCE(dividends, 0) AS dividends"
-        if "dividends" in etf_data_columns
-        else "0.0 AS dividends"
-    )
-    chunk_size = 750
-    history: dict[str, dict[str, list]] = {}
-    latest_date: str | None = None
-    for start in range(0, len(tickers), chunk_size):
-        chunk = tickers[start : start + chunk_size]
-        placeholders = ",".join("?" for _ in chunk)
-        query = f"""
-            SELECT ticker, date, close, dividends
-            FROM (
-                SELECT
-                    ticker,
-                    date,
-                    close,
-                    {dividends_expr},
-                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
-                FROM etf_data
-                WHERE ticker IN ({placeholders})
-                  AND close IS NOT NULL
-            )
-            WHERE rn <= ?
-            ORDER BY ticker, date
-        """  # nosec B608 - placeholders are generated, values are parameterized
-        frame = pd.read_sql_query(query, conn, params=[*chunk, safe_days])
-        if frame.empty:
-            continue
-        frame["ticker"] = frame["ticker"].astype(str).str.upper()
-        frame["date"] = frame["date"].astype(str)
-        chunk_latest = str(frame["date"].max())
-        latest_date = (
-            chunk_latest if latest_date is None else max(latest_date, chunk_latest)
-        )
-        for ticker, group in frame.groupby("ticker", sort=False):
-            clean_group = group.dropna(subset=["close"]).sort_values("date")
-            closes = [
-                round(float(value), 6)
-                for value in clean_group["close"].tolist()
-                if pd.notna(value)
-            ]
-            dividends = [
-                round(float(value or 0.0), 6)
-                for value in clean_group.get("dividends", pd.Series(dtype=float))
-                .fillna(0.0)
-                .tolist()
-            ]
-            if closes:
-                history[str(ticker)] = {
-                    "closes": closes,
-                    "dividends": dividends[-len(closes) :],
-                }
-
-    return {
-        "days": safe_days,
-        "requested_tickers": len(tickers),
-        "count": len(history),
-        "as_of_date": latest_date,
-        "history": history,
-    }
-
-
-@app.post("/api/swarm-dna/save")
-async def save_swarm_dna(request: Request):
-    """Persist the latest completed Swarm top-agent DNA into config."""
-    try:
-        raw_payload = await request.json()
-        payload = _validate_swarm_dna_payload(raw_payload)
-    except HTTPException:
-        raise
-    except ValueError:
-        raise HTTPException(status_code=400, detail="invalid json")
-    except Exception as e:
-        logger.error("Swarm DNA validation failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
-
-    try:
-        SWARM_DNA_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        SWARM_DNA_CONFIG_PATH.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-    except Exception as e:
-        logger.error("Swarm DNA save failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-    return {
-        "status": "success",
-        "path": str(SWARM_DNA_CONFIG_PATH).replace("\\", "/"),
-        "agent_count": len(payload.get("top_agents", [])),
-        "saved_at": payload["saved_at"],
-    }
-
-
 @app.post("/api/strategy/save")
 async def save_strategy(request: Request):
     """Save a strategy to the strategies directory."""
@@ -2574,6 +2160,9 @@ async def screen(
     scan_scope: Optional[str] = None,
     exchange: Optional[str] = None,
     ticker_list: Optional[str] = None,
+    exclude_overbought: bool = False,
+    exclude_weak_liquidity: bool = False,
+    exclude_unprofitable: bool = False,
 ):
     """Run a dynamic screen based on selected strategies or provided DSL."""
     logger.info("=== SCREEN ENDPOINT START ===")
@@ -2585,6 +2174,11 @@ async def screen(
     db = get_db()
     latest_market_date = _latest_market_date_for(db)
     db_path = _db_path_for(db)
+    disqualifiers = _normalize_screen_disqualifiers(
+        exclude_overbought=exclude_overbought,
+        exclude_weak_liquidity=exclude_weak_liquidity,
+        exclude_unprofitable=exclude_unprofitable,
+    )
 
     _set_job_progress(
         "screen",
@@ -2623,6 +2217,7 @@ async def screen(
                 ticker_list=ticker_list,
                 tickers=[],
                 fallback_mode=True,
+                disqualifiers=disqualifiers,
             )
             cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
             if not refresh and cache_path.exists():
@@ -2718,6 +2313,7 @@ async def screen(
             ticker_list=ticker_list,
             tickers=tickers,
             fallback_mode=False,
+            disqualifiers=disqualifiers,
         )
         cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
         if not refresh and cache_path.exists():
@@ -2837,25 +2433,34 @@ async def screen(
                         ((close_val / prev_close) - 1) * 100 if prev_close else 0, 0.0
                     )
                     ema_50_slope_val = _safe_float(last_row.get("ema_50_slope"), 0.0)
-
-                    matches.append(
-                        {
-                            "ticker": ticker,
-                            "close": close_val,
-                            "volume": vol_val,
-                            "status": (
-                                "Entry Signal"
-                                if int(recent_days or 0) == 0
-                                else f"Recent Entry ({int(recent_days)}d)"
-                            ),
-                            "return_pct": _safe_float(
-                                res.get("total_return_pct", 0), 0.0
-                            ),
-                            "change_pct": change_pct,
-                            "ema_50_slope": ema_50_slope_val,
-                            "days_since_entry": int(recent_days or 0),
-                        }
+                    rsi_val = _safe_float(
+                        last_row.get("rsi", last_row.get("RSI")), None
                     )
+                    liquidity_snapshot = _recent_liquidity_snapshot(df)
+                    candidate = {
+                        "ticker": ticker,
+                        "close": close_val,
+                        "volume": vol_val,
+                        "status": (
+                            "Entry Signal"
+                            if int(recent_days or 0) == 0
+                            else f"Recent Entry ({int(recent_days)}d)"
+                        ),
+                        "return_pct": _safe_float(res.get("total_return_pct", 0), 0.0),
+                        "change_pct": change_pct,
+                        "ema_50_slope": ema_50_slope_val,
+                        "days_since_entry": int(recent_days or 0),
+                        "rsi": rsi_val,
+                        "recent_avg_volume": round(
+                            float(liquidity_snapshot["recent_avg_volume"]), 2
+                        ),
+                        "recent_avg_dollar_volume": round(
+                            float(liquidity_snapshot["recent_avg_dollar_volume"]), 2
+                        ),
+                    }
+                    if _match_is_disqualified(candidate, df, disqualifiers):
+                        continue
+                    matches.append(candidate)
                     logger.info(
                         "Match found: %s (days_since_entry=%s, max_days=%s)",
                         ticker,
@@ -2989,6 +2594,66 @@ async def export_screen_results(request: Request):
             "X-Export-Path": str(csv_path),
         },
     )
+
+
+@app.post("/api/screen/export/google")
+async def export_screen_results_to_google_drive(request: Request):
+    """Upload the current top matches into Google Drive as a native Sheet."""
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {exc}")
+
+    matches = payload.get("matches")
+    if not isinstance(matches, list) or not matches:
+        raise HTTPException(status_code=400, detail="matches must be a non-empty array")
+
+    normalized_matches: list[dict[str, object]] = []
+    for item in matches:
+        if isinstance(item, dict):
+            normalized_matches.append(item)
+
+    if not normalized_matches:
+        raise HTTPException(status_code=400, detail="matches must contain objects")
+
+    strategy_name = str(
+        payload.get("strategy_name") or payload.get("strategy") or "Top Matches"
+    ).strip()
+    scan_scope = str(payload.get("scan_scope") or "").strip()
+    exchange = str(payload.get("exchange") or "").strip()
+    ticker_list = str(payload.get("ticker_list") or "").strip()
+    disqualifiers = _normalize_screen_disqualifiers(
+        **(
+            payload.get("disqualifiers")
+            if isinstance(payload.get("disqualifiers"), dict)
+            else {}
+        )
+    )
+
+    try:
+        result = _export_top_matches_to_google_drive(
+            normalized_matches,
+            strategy_name=strategy_name,
+            scan_scope=scan_scope,
+            exchange=exchange,
+            ticker_list=ticker_list,
+            disqualifiers=disqualifiers,
+        )
+    except GoogleDriveExportError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("Google Drive export failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    logger.info(
+        "Top matches exported to Google Drive sheet %s",
+        result.get("spreadsheet_id"),
+    )
+    return {
+        "status": "success",
+        "provider": "google_sheets",
+        **_json_safe_value(result),
+    }
 
 
 @app.get("/api/backtest")
