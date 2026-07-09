@@ -6,6 +6,7 @@ __version__ = "0.1.0"
 
 from typing import Any
 
+from ETF_screener.asset_filter_service import AssetFilterService, get_filtered_assets
 from ETF_screener.data_fetcher import FinnhubFetcher
 from ETF_screener.database import ETFDatabase
 from ETF_screener.etf_discovery import ETFDiscovery
@@ -38,12 +39,14 @@ __all__ = [
     "FinnhubFetcher",
     "YFinanceFetcher",
     "ETFDatabase",
+    "AssetFilterService",
     "ETFDiscovery",
     "XETRETFExtractor",
     "add_indicators",
     "calculate_anchored_vwap",
     "calculate_ema",
     "calculate_supertrend",
+    "get_filtered_assets",
     "InteractivePlotter",
     "ETFScreener",
     "Screener",

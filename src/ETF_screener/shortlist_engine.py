@@ -34,12 +34,20 @@ class ETFShortlistEngine:
         self,
         db_path: str | None = None,
         metadata_path: str | None = None,
+        metadata_map_override: Optional[dict[str, dict[str, Any]]] = None,
         storage: Optional[ParquetStorage] = None,
     ):
         self.db = ETFDatabase(db_path=db_path)
         self.storage = storage or ParquetStorage()
         self.metadata_path = Path(metadata_path or "config/xetra.json")
-        self.metadata_map = self._load_metadata_map()
+        self.metadata_map = (
+            {
+                str(ticker).upper(): dict(info or {})
+                for ticker, info in (metadata_map_override or {}).items()
+            }
+            if metadata_map_override is not None
+            else self._load_metadata_map()
+        )
 
     def _load_metadata_map(self) -> dict[str, dict[str, Any]]:
         if not self.metadata_path.exists():
@@ -525,10 +533,26 @@ class ETFShortlistEngine:
             },
         }
 
+    @staticmethod
+    def _sorted_shortlist_frame(df: pd.DataFrame) -> pd.DataFrame:
+        """Sort shortlist rows using the same presentation order as the DB query."""
+        if df is None or df.empty:
+            return pd.DataFrame()
+
+        ordered = df.copy()
+        label_rank = {"Buy": 0, "Watch": 1, "Skip": 2}
+        ordered["_label_rank"] = ordered["label"].map(label_rank).fillna(3)
+        ordered = ordered.sort_values(
+            by=["_label_rank", "final_score", "ticker"],
+            ascending=[True, False, True],
+        )
+        return ordered.drop(columns=["_label_rank"]).reset_index(drop=True)
+
     def build_shortlist(
         self,
         tickers: Optional[list[str]] = None,
         max_workers: Optional[int] = None,
+        persist: bool = True,
     ) -> pd.DataFrame:
         universe = tickers or self.db.get_tickers()
         if not universe:
@@ -550,9 +574,11 @@ class ETFShortlistEngine:
                 metadata_rows.append(result["metadata"])
                 artifact_rows.append(result["artifact"])
 
-        self.db.upsert_etf_metadata(metadata_rows)
-        self.db.upsert_shortlist_artifacts(artifact_rows)
-        return self.db.get_shortlist(limit=None)
+        if persist:
+            self.db.upsert_etf_metadata(metadata_rows)
+            self.db.upsert_shortlist_artifacts(artifact_rows)
+
+        return self._sorted_shortlist_frame(pd.DataFrame(artifact_rows))
 
     def get_shortlist(
         self,
@@ -560,11 +586,28 @@ class ETFShortlistEngine:
         label: str | None = None,
         refresh: bool = False,
         max_workers: Optional[int] = None,
+        tickers: Optional[list[str]] = None,
+        persist: bool | None = None,
     ) -> pd.DataFrame:
+        if tickers is not None:
+            scoped_df = self.build_shortlist(
+                tickers=tickers,
+                max_workers=max_workers,
+                persist=bool(False if persist is None else persist),
+            )
+            if label:
+                scoped_df = scoped_df[scoped_df["label"] == label].copy()
+            if limit is not None:
+                scoped_df = scoped_df.head(max(1, int(limit))).copy()
+            return scoped_df.reset_index(drop=True)
+
         market_date = self.db.get_latest_market_date()
         shortlist_date = self.db.get_latest_shortlist_date()
 
         if refresh or not shortlist_date or shortlist_date != market_date:
-            self.build_shortlist(max_workers=max_workers)
+            self.build_shortlist(
+                max_workers=max_workers,
+                persist=True if persist is None else bool(persist),
+            )
 
         return self.db.get_shortlist(limit=limit, label=label)

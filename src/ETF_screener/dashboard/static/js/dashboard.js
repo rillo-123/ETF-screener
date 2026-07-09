@@ -1,7 +1,11 @@
 ﻿    let backtestSourceMode = "saved";
     let shortlistLoaded = false;
+    let shortlistSourceSignature = "";
     let shortlistRows = [];
     let shortlistFilter = "All";
+    let playbookLoaded = false;
+    let playbookSourceSignature = "";
+    let playbookRows = [];
     let queryCatalog = null;
     let queryRows = [];
     let queryColumns = [];
@@ -20,8 +24,10 @@
     let customTickerList = [];
     let customTickerListDraft = [];
     let customTickerListDraftSourceName = "My List";
+    let scanSourceListPreviewOpen = true;
     let listBuilderExchange = "all";
     let listBuilderSearch = "";
+    let listBuilderSelectedOnly = false;
     let backtestMatrixRows = [];
     let backtestTradeDotRows = [];
     let backtestExcludedTickers = new Set();
@@ -61,8 +67,25 @@
     const LAST_CUSTOM_LIST_KEY = "etf-discovery:last-custom-list";
     const LAST_CUSTOM_LIST_NAME_KEY = "etf-discovery:last-custom-list-name";
     const LAST_DASHBOARD_TAB_KEY = "etf-discovery:last-dashboard-tab";
+    const LAST_SCREEN_PRESET_KEY = "etf-discovery:last-screen-preset";
+    const LAST_PLAYBOOK_RISK_PCT_KEY = "etf-discovery:last-playbook-risk-pct";
     const LAST_BACKTEST_RACE_KEY = "etf-discovery:last-backtest-race";
     const LAST_BACKTEST_RACE_FUEL_KEY = "etf-discovery:last-backtest-race-fuel";
+    const SCREEN_DEFAULT_FILTERS = {
+      lookback_days: 180,
+      volume_range: { min: 0, max: 20000000 },
+      macd_event_enabled: true,
+      rsi_event_enabled: true,
+      stoch_event_enabled: true,
+      rsi_cross_value: 50,
+      rsi_cross_mode: "cross_up",
+      stoch_cross_value: 20,
+      stoch_cross_mode: "cross_up",
+      macd_cross_mode: "low_cross_buy",
+      macd_event_age: 45,
+      rsi_event_age: 90,
+      stoch_event_age: 15,
+    };
     const BACKTEST_RACE_FUEL_METRICS = [
       { key: "return_pct", label: "Profitability", kind: "percent" },
       { key: "avg_quality_score", label: "Quality", kind: "score" },
@@ -94,15 +117,17 @@
       { key: "payoff_efficiency", label: "Profit Factor", max: 10 },
       { key: "drawdown_control", label: "Drawdown Control", max: 10 },
     ];
+    const DASHBOARD_TABS = ["screener", "query", "playbook", "shortlist", "backtest"];
+
     function getDashboardTabs() {
-      return ["screener", "shortlist", "query", "backtest"]
+      return DASHBOARD_TABS
         .map((name) => document.getElementById(`tab-${name}`))
         .filter(Boolean);
     }
 
     function normalizeDashboardTab(value) {
       const cleaned = String(value || "screener").trim().toLowerCase();
-      return ["screener", "shortlist", "query", "backtest"].includes(cleaned) ? cleaned : "screener";
+      return DASHBOARD_TABS.includes(cleaned) ? cleaned : "screener";
     }
 
     function readStickyValue(key, fallback = "") {
@@ -129,6 +154,17 @@
       } catch (err) {
         // Ignore storage failures in restricted environments.
       }
+    }
+
+    function getPlaybookRiskPct() {
+      const node = document.getElementById("playbook-risk-pct");
+      const raw = node
+        ? Number(node.value)
+        : Number(readStickyValue(LAST_PLAYBOOK_RISK_PCT_KEY, "5"));
+      if (!Number.isFinite(raw)) {
+        return 5;
+      }
+      return Math.max(0.5, Math.min(25, raw));
     }
 
     function getQueryDataset() {
@@ -465,8 +501,7 @@
         xetra: "Xetra",
         nasdaq: "Nasdaq",
         sweden: "Sweden",
-        list: "My List",
-        all_lists: "All Lists",
+        list: "List",
       };
       if (datasetCard) {
         datasetCard.textContent = dataset === "signal_scan"
@@ -520,8 +555,7 @@
             xetra: "Xetra",
             nasdaq: "Nasdaq",
             sweden: "Sweden",
-            list: "My List",
-            all_lists: "All Lists",
+            list: "List",
           };
           sourceNode.textContent = sourceMap[String(result?.source || "").trim().toLowerCase()] || String(result?.source || "-");
         } else {
@@ -621,7 +655,7 @@
       }
       if (details.dataset === "signal_scan") {
         const source = String(details.params.get("source") || "xetra");
-        if ((source === "list" || source === "all_lists") && getScopeTickers(source).length === 0) {
+        if (source === "list" && getScopeTickers(source).length === 0) {
           setQueryStatus("Choose a universe with tickers before running Signal Scan.", "amber");
           renderQueryResults({
             dataset: details.dataset,
@@ -737,7 +771,7 @@
         return "list";
       }
       if (["all_lists", "alllists", "all list", "all lists"].includes(cleaned)) {
-        return "all_lists";
+        return "list";
       }
       if (["sweden", "stockholm", "stockholms", "se", "ss", "st"].includes(cleaned)) {
         return "sweden";
@@ -818,14 +852,6 @@
       if (normalized === "list") {
         return sortTickersByUniverse(customTickerList);
       }
-      if (normalized === "all_lists") {
-        const sourceLists = Array.isArray(customTickerLists) && customTickerLists.length > 0
-          ? customTickerLists
-          : [{ name: customTickerListActiveName || customTickerListName, tickers: customTickerList }];
-        return sortTickersByUniverse(
-          sourceLists.flatMap((entry) => Array.isArray(entry.tickers) ? entry.tickers : [])
-        );
-      }
       return [];
     }
 
@@ -870,13 +896,10 @@
           : "No Nasdaq tickers loaded yet";
       } else if (normalizedScope === "xetra") {
         placeholder.textContent = "Select Xetra ticker...";
-      } else if (normalizedScope === "all_lists") {
-        placeholder.textContent = visible.length > 0
-          ? "Select ticker from all lists..."
-          : "No saved list tickers loaded yet";
       } else if (normalizedScope === "list") {
+        const activeListName = normalizeListName(customTickerListActiveName || customTickerListName);
         placeholder.textContent = visible.length > 0
-          ? "Select ticker from My List..."
+          ? `Select ticker from ${activeListName}...`
           : "No saved list tickers loaded yet";
       } else {
         placeholder.textContent = "Select Ticker...";
@@ -898,7 +921,8 @@
       } else {
         ticker.value = "";
       }
-      ticker.disabled = ((normalizedScope === "sweden" || normalizedScope === "nasdaq") && visible.length === 0) || (normalizedScope === "all_lists" && visible.length === 0);
+      ticker.disabled = ((normalizedScope === "sweden" || normalizedScope === "nasdaq") && visible.length === 0)
+        || (normalizedScope === "list" && visible.length === 0);
       tickerSelectLastValue = ticker.value || "";
       writeStickyValue(LAST_TICKER_SELECT_KEY, tickerSelectLastValue);
     }
@@ -1016,6 +1040,36 @@
         .map((part) => String(part || "").trim().toUpperCase())
         .filter(Boolean)
         .join(" ");
+    }
+
+    function escapeSearchRegex(text) {
+      return String(text || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function matchesListBuilderSearchText(searchText, query) {
+      const normalizedText = String(searchText || "").toUpperCase();
+      const tokens = String(query || "")
+        .trim()
+        .toUpperCase()
+        .split(/\s+/)
+        .filter(Boolean);
+      if (tokens.length === 0) {
+        return true;
+      }
+      return tokens.every((token) => {
+        if (!/[*?]/.test(token)) {
+          return normalizedText.includes(token);
+        }
+        try {
+          const pattern = escapeSearchRegex(token)
+            .replace(/\\\*/g, ".*")
+            .replace(/\\\?/g, ".");
+          return new RegExp(pattern, "i").test(normalizedText);
+        } catch (err) {
+          const simplified = token.replace(/[*?]/g, "");
+          return !simplified || normalizedText.includes(simplified);
+        }
+      });
     }
 
     async function loadTickerUniverseFromServer() {
@@ -1172,7 +1226,59 @@
     function getListSelectNodes() {
       return {
         list: document.getElementById("list-select"),
+        summary: null,
       };
+    }
+
+    function renderScanSourceListPreview() {
+      const panel = document.getElementById("scan-source-list-preview");
+      const title = document.getElementById("scan-source-list-preview-title");
+      const body = document.getElementById("scan-source-list-preview-body");
+      const toggleBtn = document.getElementById("list-preview-btn");
+      const listMode = normalizeScanScope(tickerScanScope) === "list";
+      const activeName = normalizeListName(customTickerListActiveName || customTickerListName);
+      const tickers = Array.isArray(customTickerList) ? customTickerList.slice() : [];
+
+      if (toggleBtn) {
+        toggleBtn.disabled = !listMode;
+        toggleBtn.style.opacity = listMode ? "1" : "0.6";
+        toggleBtn.textContent = scanSourceListPreviewOpen ? "Hide Tickers" : "Show Tickers";
+      }
+      if (!panel || !title || !body) {
+        return;
+      }
+
+      const shouldShow = listMode && scanSourceListPreviewOpen;
+      panel.hidden = !shouldShow;
+      title.textContent = `${activeName} · ${tickers.length} ticker${tickers.length === 1 ? "" : "s"}`;
+      body.innerHTML = "";
+
+      if (!shouldShow) {
+        return;
+      }
+
+      if (tickers.length === 0) {
+        const emptyNode = document.createElement("div");
+        emptyNode.className = "scan-source-list-empty";
+        emptyNode.textContent = "This list has no tickers yet.";
+        body.appendChild(emptyNode);
+        return;
+      }
+
+      tickers.forEach((ticker) => {
+        const chip = document.createElement("div");
+        chip.className = "scan-source-list-chip";
+        chip.textContent = ticker;
+        body.appendChild(chip);
+      });
+    }
+
+    function toggleScanSourceListPreview() {
+      if (normalizeScanScope(tickerScanScope) !== "list") {
+        return;
+      }
+      scanSourceListPreviewOpen = !scanSourceListPreviewOpen;
+      renderScanSourceListPreview();
     }
 
     function getScanSourceButtons() {
@@ -1181,9 +1287,58 @@
       ));
     }
 
+    function describeActiveScanScope(scope = tickerScanScope) {
+      const normalized = normalizeScanScope(scope);
+      if (normalized === "list") {
+        const activeName = normalizeListName(customTickerListActiveName || customTickerListName);
+        const count = Array.isArray(customTickerList) ? customTickerList.length : 0;
+        return `${activeName} saved list (${count} ticker${count === 1 ? "" : "s"})`;
+      }
+      if (normalized === "sweden") {
+        return "Sweden universe";
+      }
+      if (normalized === "nasdaq") {
+        return "Nasdaq universe";
+      }
+      return "Xetra universe";
+    }
+
+    function getActiveSourceLabel(scope = tickerScanScope, options = {}) {
+      const normalized = normalizeScanScope(scope);
+      const includeCount = options.includeCount === true;
+      if (normalized === "list") {
+        const activeName = normalizeListName(customTickerListActiveName || customTickerListName);
+        const count = Array.isArray(customTickerList) ? customTickerList.length : 0;
+        return includeCount
+          ? `${activeName} (${count} ticker${count === 1 ? "" : "s"})`
+          : activeName;
+      }
+      if (normalized === "sweden") {
+        return "Sweden";
+      }
+      if (normalized === "nasdaq") {
+        return "Nasdaq";
+      }
+      return "Xetra";
+    }
+
+    function syncShortlistRefreshControls() {
+      const shortlistRefreshBtn = document.getElementById("shortlist-refresh-btn");
+      const activeSourceLabel = getActiveSourceLabel(tickerScanScope);
+      if (shortlistRefreshBtn && shortlistRefreshBtn.disabled !== true) {
+        shortlistRefreshBtn.textContent = `Refresh ${activeSourceLabel} Shortlist`;
+        shortlistRefreshBtn.title = normalizeScanScope(tickerScanScope) === "list"
+          ? `Fetch fresh market data for ${activeSourceLabel}, then rebuild the shortlist`
+          : `Fetch fresh market data for the ${activeSourceLabel} universe, then rebuild the shortlist`;
+      }
+    }
+
     function updateScanScopeChrome() {
       const scopeButtons = getScanSourceButtons();
       const normalized = normalizeScanScope(tickerScanScope);
+      const listSelect = document.getElementById("list-select");
+      const listPicker = document.getElementById("scan-source-list-picker");
+      const listUniverseBadge = document.getElementById("list-select-universe-badge");
       tickerScanScope = normalized;
       scopeButtons.forEach((button) => {
         if (!button) {
@@ -1193,6 +1348,27 @@
         button.classList.toggle("is-active", active);
         button.setAttribute("aria-pressed", active ? "true" : "false");
       });
+      const listMode = normalized === "list";
+      if (listPicker) {
+        listPicker.classList.toggle("is-scan-active", listMode);
+      }
+      if (listSelect) {
+        listSelect.classList.toggle("is-scan-active", listMode);
+        listSelect.disabled = !listMode;
+      }
+      if (listUniverseBadge) {
+        const activeListName = normalizeListName(customTickerListActiveName || customTickerListName);
+        if (listMode) {
+          listUniverseBadge.textContent = `List universe: ${activeListName}`;
+          listUniverseBadge.style.display = "inline-flex";
+          listUniverseBadge.classList.add("is-active");
+        } else {
+          listUniverseBadge.style.display = "none";
+          listUniverseBadge.classList.remove("is-active");
+        }
+      }
+      renderScanSourceListPreview();
+      syncShortlistRefreshControls();
       renderTickerSelectOptions({ preserveSelection: true });
       updateQueryControls();
     }
@@ -1200,6 +1376,10 @@
     async function applyScanScopeSelection(mode) {
       const normalized = normalizeScanScope(mode);
       tickerScanScope = normalized;
+      shortlistLoaded = false;
+      shortlistSourceSignature = "";
+      playbookLoaded = false;
+      playbookSourceSignature = "";
       tickerUniverseExplicitlyChosen = true;
       writeStickyValue(LAST_SCAN_SCOPE_KEY, normalized);
       updateScanScopeChrome();
@@ -1208,7 +1388,7 @@
       loadMarketStatus(normalized).catch((err) => {
         console.warn("Could not refresh market status after scope change", err);
       });
-      if ((normalized === "list" || normalized === "all_lists") && getScopeTickers(normalized).length === 0) {
+      if (normalized === "list" && getScopeTickers(normalized).length === 0) {
         await openListEditorModal();
       }
       updateBacktestRunButtonState();
@@ -1221,6 +1401,33 @@
     function updateListSelectChrome() {
       const activeName = normalizeListName(customTickerListActiveName || customTickerListName);
       const customCount = customTickerList.length;
+      const entries = Array.isArray(customTickerLists) && customTickerLists.length > 0
+        ? customTickerLists
+        : [{ name: activeName, tickers: customTickerList }];
+      const { list, summary } = getListSelectNodes();
+      if (list) {
+        list.innerHTML = "";
+        entries.forEach((entry) => {
+          const option = document.createElement("option");
+          const name = normalizeListName(entry.name);
+          const count = Array.isArray(entry.tickers) ? entry.tickers.length : 0;
+          option.value = name;
+          option.textContent = `${name} (${count})`;
+          list.appendChild(option);
+        });
+        list.value = activeName;
+        list.disabled = entries.length === 0;
+      }
+      const listSelect = document.getElementById("list-select");
+      if (listSelect) {
+        listSelect.title = `${activeName} (${customCount} tickers)`;
+      }
+      const modalTitle = document.getElementById("list-modal-title");
+      if (modalTitle) {
+        modalTitle.textContent = activeName === "__new__"
+          ? "Build Saved Lists"
+          : `Build Saved Lists: ${activeName}`;
+      }
       const editBtn = document.getElementById("list-edit-btn");
       if (editBtn) {
         editBtn.textContent = customCount > 0 ? `Edit ${activeName} (${customCount})` : `Edit ${activeName}...`;
@@ -1228,10 +1435,59 @@
           ? `Edit the saved list ${activeName} (${customCount} tickers)`
           : `Build the saved list ${activeName}`;
       }
+      renderScanSourceListPreview();
+      updateScanScopeChrome();
     }
 
     function getListBuilderListSelectNode() {
       return document.getElementById("list-modal-list-select");
+    }
+
+    async function setActiveCustomTickerList(name, options = {}) {
+      const normalized = normalizeListName(name);
+      const selected = getCustomListEntryByName(normalized)
+        || (Array.isArray(customTickerLists) && customTickerLists.length > 0 ? customTickerLists[0] : null)
+        || { name: normalized, tickers: [] };
+      const activeName = normalizeListName(selected.name || normalized);
+      const tickers = sortTickersByUniverse(selected.tickers || []);
+      customTickerListActiveName = activeName;
+      customTickerListName = activeName;
+      customTickerList = tickers;
+      scanSourceListPreviewOpen = true;
+      shortlistLoaded = false;
+      shortlistSourceSignature = "";
+      playbookLoaded = false;
+      playbookSourceSignature = "";
+      writeCustomTickerList(tickers, activeName);
+      updateListSelectChrome();
+      renderTickerSelectOptions({ preserveSelection: options.preserveSelection !== false });
+      updateScanActionButtonsState();
+      updateBacktestRunButtonState();
+      if (options.persist !== false) {
+        try {
+          await persistCustomTickerListsToServer({
+            active_name: activeName,
+            lists: customTickerLists,
+          });
+        } catch (err) {
+          console.warn("Could not persist active saved list selection", err);
+        }
+      }
+      return { name: activeName, tickers };
+    }
+
+    async function activateCustomTickerList(name, options = {}) {
+      const result = await setActiveCustomTickerList(name, options);
+      const normalizedScope = normalizeScanScope(tickerScanScope);
+      if (options.switchScanSource === false) {
+        return result;
+      }
+      if (normalizedScope !== "list") {
+        await applyScanScopeSelection("list");
+      } else {
+        updateScanScopeChrome();
+      }
+      return result;
     }
 
     function updateListBuilderListSelector() {
@@ -1276,6 +1532,7 @@
       customTickerListName = normalizeListName(customTickerListDraftSourceName);
       listBuilderExchange = "all";
       listBuilderSearch = "";
+      listBuilderSelectedOnly = false;
       modal.style.display = "flex";
       updateListBuilderListSelector();
       renderListBuilderModal();
@@ -1323,14 +1580,22 @@
       renderListBuilderModal();
     }
 
+    function toggleListBuilderSelectedOnly() {
+      listBuilderSelectedOnly = !listBuilderSelectedOnly;
+      renderListBuilderModal();
+    }
+
     function getListBuilderVisibleTickers() {
-      const search = String(listBuilderSearch || "").trim().toUpperCase();
+      const search = String(listBuilderSearch || "").trim();
       const exchange = normalizeExchangeFilter(listBuilderExchange);
       return tickerSelectUniverse.filter((item) => {
         if (exchange !== "all" && item.exchange !== exchange) {
           return false;
         }
-        if (search && !getTickerUniverseSearchText(item).includes(search)) {
+        if (search && !matchesListBuilderSearchText(getTickerUniverseSearchText(item), search)) {
+          return false;
+        }
+        if (listBuilderSelectedOnly && !customTickerListDraft.includes(item.ticker)) {
           return false;
         }
         return true;
@@ -1361,8 +1626,15 @@
       const searchInput = document.getElementById("list-modal-search");
       const nameInput = document.getElementById("list-modal-name");
       const listSelect = getListBuilderListSelectNode();
+      const deleteBtn = document.getElementById("list-modal-delete-btn");
+      const modalTitle = document.getElementById("list-modal-title");
+      const selectedOnlyBtn = document.getElementById("list-modal-selected-only-btn");
+      const selectedTitle = document.getElementById("list-modal-selected-title");
+      const selectedList = document.getElementById("list-modal-selected-list");
       const exchangeButtons = document.querySelectorAll("[data-list-exchange]");
       const visible = getListBuilderVisibleTickers();
+      const isNewList = normalizeListName(customTickerListDraftSourceName) === "__new__";
+      const activeDraftName = normalizeListName(customTickerListName);
 
       if (searchInput && searchInput.value !== listBuilderSearch) {
         searchInput.value = listBuilderSearch;
@@ -1373,6 +1645,24 @@
       if (listSelect && listSelect.value !== normalizeListName(customTickerListDraftSourceName || customTickerListName)) {
         updateListBuilderListSelector();
       }
+      if (deleteBtn) {
+        deleteBtn.disabled = isNewList;
+        deleteBtn.style.opacity = isNewList ? "0.45" : "1";
+        deleteBtn.style.cursor = isNewList ? "not-allowed" : "pointer";
+        deleteBtn.title = isNewList
+          ? "Save the new list before deleting it"
+          : `Delete the saved list ${normalizeListName(customTickerListDraftSourceName)}`;
+      }
+      if (modalTitle) {
+        modalTitle.textContent = isNewList
+          ? "Build Saved Lists: New List"
+          : `Build Saved Lists: ${activeDraftName}`;
+      }
+      if (selectedOnlyBtn) {
+        selectedOnlyBtn.style.backgroundColor = listBuilderSelectedOnly ? "#2563eb" : "#0f172a";
+        selectedOnlyBtn.style.color = listBuilderSelectedOnly ? "#ffffff" : "#bfdbfe";
+        selectedOnlyBtn.style.borderColor = listBuilderSelectedOnly ? "rgba(147,197,253,0.85)" : "rgba(96,165,250,0.4)";
+      }
       exchangeButtons.forEach((btn) => {
         const btnExchange = normalizeExchangeFilter(btn.dataset.listExchange);
         const active = btnExchange === normalizeExchangeFilter(listBuilderExchange);
@@ -1382,6 +1672,38 @@
       });
       if (visibleCountLabel) {
         visibleCountLabel.textContent = `${visible.length} visible`;
+      }
+      if (selectedTitle) {
+        selectedTitle.textContent = `${customTickerListDraft.length} Selected Tickers`;
+      }
+      if (selectedList) {
+        selectedList.innerHTML = "";
+        if (customTickerListDraft.length === 0) {
+          const emptyChip = document.createElement("div");
+          emptyChip.textContent = "No stocks in this list yet.";
+          emptyChip.style.fontSize = "0.85rem";
+          emptyChip.style.color = "#94a3b8";
+          selectedList.appendChild(emptyChip);
+        } else {
+          customTickerListDraft.forEach((ticker) => {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.textContent = ticker;
+            chip.title = `Remove ${ticker} from ${activeDraftName}`;
+            chip.style.borderRadius = "999px";
+            chip.style.border = "1px solid rgba(129,140,248,0.3)";
+            chip.style.background = "#1e1b4b";
+            chip.style.color = "#e0e7ff";
+            chip.style.padding = "0.32rem 0.62rem";
+            chip.style.fontSize = "0.78rem";
+            chip.style.fontWeight = "700";
+            chip.addEventListener("click", () => {
+              customTickerListDraft = customTickerListDraft.filter((value) => value !== ticker);
+              renderListBuilderModal();
+            });
+            selectedList.appendChild(chip);
+          });
+        }
       }
       if (!grid) {
         syncListBuilderCount();
@@ -1482,6 +1804,10 @@
       customTickerListName = normalizeListName(saved.name || nextName);
       customTickerListActiveName = customTickerListName;
       customTickerListDraftSourceName = customTickerListName;
+      shortlistLoaded = false;
+      shortlistSourceSignature = "";
+      playbookLoaded = false;
+      playbookSourceSignature = "";
       tickerListMode = "custom";
       writeStickyValue(LAST_LIST_MODE_KEY, tickerListMode);
       updateListSelectChrome();
@@ -1493,6 +1819,51 @@
           : `Saved ${customTickerList.length} tickers locally as ${customTickerListName}, but could not update config JSON`,
         !saved.savedToServer
       );
+    }
+
+    async function deleteListEditorSelection() {
+      const sourceName = normalizeListName(customTickerListDraftSourceName);
+      if (sourceName === "__new__") {
+        return;
+      }
+      const confirmed = typeof window.confirm !== "function"
+        ? true
+        : window.confirm(`Delete the saved list "${sourceName}"?`);
+      if (!confirmed) {
+        return;
+      }
+
+      let nextLists = (Array.isArray(customTickerLists) ? customTickerLists : [])
+        .filter((entry) => normalizeListName(entry.name) !== sourceName)
+        .map((entry) => ({
+          name: normalizeListName(entry.name),
+          tickers: sortTickersByUniverse(entry.tickers || []),
+        }));
+      if (nextLists.length === 0) {
+        nextLists = [{ name: "My List", tickers: [] }];
+      }
+      const preferredActiveName = normalizeListName(customTickerListActiveName);
+      const fallbackEntry = nextLists.find((entry) => normalizeListName(entry.name) === preferredActiveName) || nextLists[0];
+      const saved = await persistCustomTickerListsToServer({
+        active_name: normalizeListName(fallbackEntry.name),
+        lists: nextLists,
+      });
+      customTickerLists = Array.isArray(saved.lists) ? saved.lists : nextLists;
+      customTickerList = sortTickersByUniverse(saved.tickers || fallbackEntry.tickers || []);
+      customTickerListName = normalizeListName(saved.name || fallbackEntry.name);
+      customTickerListActiveName = customTickerListName;
+      customTickerListDraftSourceName = customTickerListName;
+      customTickerListDraft = sortTickersByUniverse(customTickerList);
+      shortlistLoaded = false;
+      shortlistSourceSignature = "";
+      playbookLoaded = false;
+      playbookSourceSignature = "";
+      updateListSelectChrome();
+      renderTickerSelectOptions({ preserveSelection: true });
+      updateScanActionButtonsState();
+      updateBacktestRunButtonState();
+      closeListEditorModal();
+      showToast(`Deleted ${sourceName}. Active list is now ${customTickerListName}.`);
     }
 
     function applyListSelectionMode(mode) {
@@ -1516,7 +1887,7 @@
       const scope = normalizeScanScope(tickerScanScope);
       params.set("scan_scope", scope);
       const scopeTickers = getScopeTickers(scope);
-      if ((scope === "list" || scope === "all_lists") && scopeTickers.length > 0) {
+      if (scope === "list" && scopeTickers.length > 0) {
         params.set("ticker_list", scopeTickers.join(","));
       }
       return params;
@@ -2820,6 +3191,157 @@
       }
     }
 
+    function setPlaybookEmptyState(message) {
+      const emptyState = document.getElementById("playbook-empty");
+      const content = document.getElementById("playbook-content");
+      const body = document.getElementById("playbook-table-body");
+      if (body) {
+        body.innerHTML = "";
+      }
+      if (emptyState) {
+        emptyState.textContent = message;
+        emptyState.classList.remove("hidden");
+      }
+      if (content) {
+        content.classList.add("hidden");
+      }
+    }
+
+    function getPlaybookDecisionClasses(value) {
+      const text = String(value || "");
+      if (text.startsWith("Trade")) {
+        return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+      }
+      if (text.startsWith("Watch")) {
+        return "bg-amber-100 text-amber-700 border border-amber-200";
+      }
+      return "bg-slate-100 text-slate-700 border border-slate-200";
+    }
+
+    function renderPlaybookRows() {
+      const body = document.getElementById("playbook-table-body");
+      const emptyState = document.getElementById("playbook-empty");
+      const content = document.getElementById("playbook-content");
+      if (!body || !emptyState || !content) {
+        return;
+      }
+      if (!Array.isArray(playbookRows) || playbookRows.length === 0) {
+        setPlaybookEmptyState("No playbook candidates matched the current universe.");
+        return;
+      }
+
+      body.innerHTML = "";
+      playbookRows.forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-violet-50/40 transition-colors";
+
+        const reasons = Array.isArray(row.reasons) && row.reasons.length > 0
+          ? row.reasons.join(" • ")
+          : "No extra notes yet.";
+        tr.innerHTML = `
+          <td class="px-4 py-3 align-top">
+            <button type="button" class="font-bold text-violet-700 hover:text-violet-900"
+              onclick="showTab('screener'); loadChart('${String(row.ticker || "").replace(/'/g, "\\'")}')">
+              ${row.ticker || ""}
+            </button>
+            <div class="mt-1 text-xs text-slate-500">${row.name || row.ticker || ""}</div>
+          </td>
+          <td class="px-4 py-3 align-top">
+            <span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${getPlaybookDecisionClasses(row.decision)}">${row.decision || ""}</span>
+            <div class="mt-1 text-xs text-slate-500">Rules ${Array.isArray(row.reasons) ? row.reasons.length : 0}/6 • ${row.label || ""}</div>
+          </td>
+          <td class="px-4 py-3 align-top font-mono text-slate-800">${Number(row.entry || 0).toFixed(2)}</td>
+          <td class="px-4 py-3 align-top font-mono text-slate-800">
+            ${Number(row.stop || 0).toFixed(2)}
+            <div class="mt-1 text-xs text-slate-500">${row.support_basis ? `${row.support_basis} ${Number(row.support_level || 0).toFixed(2)}` : "No nearby support"}</div>
+          </td>
+          <td class="px-4 py-3 align-top">
+            <div class="font-semibold text-slate-800">${Number(row.max_loss_pct || 0).toFixed(2)}%</div>
+            <div class="mt-1 text-xs text-slate-500">${row.technical_risk_pct !== null && row.technical_risk_pct !== undefined ? `Technical ${Number(row.technical_risk_pct).toFixed(2)}%` : "Technical n/a"}</div>
+          </td>
+          <td class="px-4 py-3 align-top">
+            <div class="font-semibold text-slate-800">${row.stop_basis === "technical" ? "Technical" : "Risk Cap"}</div>
+            <div class="mt-1 text-xs text-slate-500">${row.recent_entry_days === null || row.recent_entry_days === undefined ? "No fresh signal age" : `${row.recent_entry_days}d since signal`}</div>
+          </td>
+          <td class="px-4 py-3 align-top">
+            <div class="text-slate-700">${row.note || ""}</div>
+            <div class="mt-1 text-xs text-slate-500">${reasons}</div>
+          </td>
+        `;
+        body.appendChild(tr);
+      });
+
+      emptyState.classList.add("hidden");
+      content.classList.remove("hidden");
+    }
+
+    async function loadPlaybook(forceRefresh = false) {
+      const status = document.getElementById("playbook-status");
+      const asOfEl = document.getElementById("playbook-as-of");
+      const tradeEl = document.getElementById("playbook-trade-count");
+      const watchEl = document.getElementById("playbook-watch-count");
+      const riskCappedEl = document.getElementById("playbook-risk-capped-count");
+      const runBtn = document.getElementById("playbook-run-btn");
+      const riskInput = document.getElementById("playbook-risk-pct");
+      if (!status || !asOfEl || !tradeEl || !watchEl || !riskCappedEl || !runBtn || !riskInput) {
+        return;
+      }
+
+      const riskPct = getPlaybookRiskPct();
+      riskInput.value = String(riskPct);
+      writeStickyValue(LAST_PLAYBOOK_RISK_PCT_KEY, riskPct);
+
+      const universeParams = getUniverseFilterParams();
+      const currentSignature = `${universeParams.toString()}&risk_pct=${riskPct}`;
+      const currentScope = universeParams.get("scan_scope") || "xetra";
+      if (playbookLoaded && !forceRefresh && playbookSourceSignature === currentSignature) {
+        return;
+      }
+
+      setPlaybookEmptyState(forceRefresh ? "Refreshing playbook candidates..." : "Loading playbook candidates...");
+      runBtn.disabled = true;
+      runBtn.textContent = forceRefresh ? "Refreshing..." : "Loading...";
+      status.textContent = forceRefresh
+        ? `Rebuilding playbook for ${describeActiveScanScope(currentScope)}...`
+        : `Loading playbook for ${describeActiveScanScope(currentScope)}...`;
+
+      try {
+        universeParams.set("limit", "12");
+        universeParams.set("risk_pct", String(riskPct));
+        if (forceRefresh) {
+          universeParams.set("refresh", "true");
+        }
+        const resp = await fetch(`/api/playbook?${universeParams.toString()}`);
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || "Playbook request failed");
+        }
+
+        playbookRows = Array.isArray(data.rows) ? data.rows : [];
+        asOfEl.textContent = data.as_of_date || "-";
+        tradeEl.textContent = String((data.summary && data.summary.trade_count) || 0);
+        watchEl.textContent = String((data.summary && data.summary.watch_count) || 0);
+        riskCappedEl.textContent = String((data.summary && data.summary.risk_capped_count) || 0);
+        playbookSourceSignature = currentSignature;
+        playbookLoaded = true;
+
+        if (playbookRows.length === 0) {
+          setPlaybookEmptyState("No playbook candidates matched the current universe.");
+          status.textContent = "Playbook returned no candidates";
+          return;
+        }
+
+        renderPlaybookRows();
+        status.textContent = `Snapshot date: ${data.as_of_date || "unknown"} • ${describeActiveScanScope(currentScope)} • risk cap ${Number(data.risk_pct || riskPct).toFixed(1)}%`;
+      } catch (err) {
+        setPlaybookEmptyState(`Playbook error: ${err.message || err}`);
+        status.textContent = "Playbook load failed";
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = "Run Playbook";
+      }
+    }
+
     function setShortlistEmptyState(message) {
       const emptyState = document.getElementById("shortlist-empty");
       const content = document.getElementById("shortlist-content");
@@ -2980,7 +3502,555 @@
     function setShortlistFilter(label) {
       shortlistFilter = label;
       renderShortlistRows();
-    }
+    }
+
+    function cloneScreenFilters(filters = SCREEN_DEFAULT_FILTERS) {
+      try {
+        return JSON.parse(JSON.stringify(filters || SCREEN_DEFAULT_FILTERS));
+      } catch (err) {
+        return JSON.parse(JSON.stringify(SCREEN_DEFAULT_FILTERS));
+      }
+    }
+
+    function clampNumber(value, minimum, maximum, fallback) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        return fallback;
+      }
+      return Math.max(minimum, Math.min(maximum, numeric));
+    }
+
+    function coerceFilterBoolean(value, fallback = true) {
+      if (typeof value === "boolean") {
+        return value;
+      }
+      if (value === null || value === undefined) {
+        return fallback;
+      }
+      const normalized = String(value).trim().toLowerCase();
+      if (["1", "true", "yes", "on"].includes(normalized)) {
+        return true;
+      }
+      if (["0", "false", "no", "off"].includes(normalized)) {
+        return false;
+      }
+      return fallback;
+    }
+
+    function normalizeScreenFiltersClient(raw = {}) {
+      const lookbackDays = Math.round(clampNumber(raw.lookback_days, 30, 365, SCREEN_DEFAULT_FILTERS.lookback_days));
+      const volumeMin = clampNumber(raw?.volume_range?.min, 0, 100000000, SCREEN_DEFAULT_FILTERS.volume_range.min);
+      const volumeMax = clampNumber(raw?.volume_range?.max, 0, 100000000, SCREEN_DEFAULT_FILTERS.volume_range.max);
+      const normalized = {
+        lookback_days: lookbackDays,
+        volume_range: {
+          min: Math.min(volumeMin, volumeMax),
+          max: Math.max(volumeMin, volumeMax),
+        },
+        macd_event_enabled: coerceFilterBoolean(raw.macd_event_enabled, SCREEN_DEFAULT_FILTERS.macd_event_enabled),
+        rsi_event_enabled: coerceFilterBoolean(raw.rsi_event_enabled, SCREEN_DEFAULT_FILTERS.rsi_event_enabled),
+        stoch_event_enabled: coerceFilterBoolean(raw.stoch_event_enabled, SCREEN_DEFAULT_FILTERS.stoch_event_enabled),
+        rsi_cross_value: clampNumber(raw.rsi_cross_value, 0, 100, SCREEN_DEFAULT_FILTERS.rsi_cross_value),
+        rsi_cross_mode: ["cross_up", "cross_down"].includes(String(raw.rsi_cross_mode || "").trim())
+          ? String(raw.rsi_cross_mode).trim()
+          : SCREEN_DEFAULT_FILTERS.rsi_cross_mode,
+        stoch_cross_value: clampNumber(raw.stoch_cross_value, 0, 100, SCREEN_DEFAULT_FILTERS.stoch_cross_value),
+        stoch_cross_mode: ["cross_up", "cross_down"].includes(String(raw.stoch_cross_mode || "").trim())
+          ? String(raw.stoch_cross_mode).trim()
+          : SCREEN_DEFAULT_FILTERS.stoch_cross_mode,
+        macd_cross_mode: ["low_cross_buy", "high_cross_sell", "bullish_cross", "bearish_cross"].includes(String(raw.macd_cross_mode || "").trim())
+          ? String(raw.macd_cross_mode).trim()
+          : SCREEN_DEFAULT_FILTERS.macd_cross_mode,
+        macd_event_age: Math.round(clampNumber(
+          raw.macd_event_age,
+          0,
+          lookbackDays,
+          raw?.macd_cross_window ? (Number(raw.macd_cross_window.min || 0) + Number(raw.macd_cross_window.max || lookbackDays)) / 2 : SCREEN_DEFAULT_FILTERS.macd_event_age,
+        )),
+        rsi_event_age: Math.round(clampNumber(
+          raw.rsi_event_age,
+          0,
+          lookbackDays,
+          raw?.rsi_cross_window ? (Number(raw.rsi_cross_window.min || 0) + Number(raw.rsi_cross_window.max || lookbackDays)) / 2 : SCREEN_DEFAULT_FILTERS.rsi_event_age,
+        )),
+        stoch_event_age: Math.round(clampNumber(
+          raw.stoch_event_age,
+          0,
+          lookbackDays,
+          raw?.stoch_cross_window ? (Number(raw.stoch_cross_window.min || 0) + Number(raw.stoch_cross_window.max || lookbackDays)) / 2 : SCREEN_DEFAULT_FILTERS.stoch_event_age,
+        )),
+      };
+      return normalized;
+    }
+
+    function formatCompactVolume(value) {
+      const numeric = Number(value || 0);
+      if (!Number.isFinite(numeric)) {
+        return "0";
+      }
+      if (numeric >= 1000000) {
+        return `${(numeric / 1000000).toFixed(1)}M`;
+      }
+      if (numeric >= 1000) {
+        return `${(numeric / 1000).toFixed(0)}K`;
+      }
+      return String(Math.round(numeric));
+    }
+
+    function eventAgeToSliderValue(age, lookbackDays) {
+      const safeLookback = Math.max(1, Number(lookbackDays || SCREEN_DEFAULT_FILTERS.lookback_days));
+      const safeAge = clampNumber(age, 0, safeLookback, 0);
+      return safeLookback - safeAge;
+    }
+
+    function sliderValueToEventAge(value, lookbackDays) {
+      const safeLookback = Math.max(1, Number(lookbackDays || SCREEN_DEFAULT_FILTERS.lookback_days));
+      const safeValue = clampNumber(value, 0, safeLookback, safeLookback);
+      return Math.round(safeLookback - safeValue);
+    }
+
+    function setEventSliderValue(id, age, lookbackDays) {
+      const node = document.getElementById(id);
+      if (!node) {
+        return;
+      }
+      node.max = String(lookbackDays);
+      node.value = String(eventAgeToSliderValue(age, lookbackDays));
+    }
+
+    function getEventSliderAge(id, lookbackDays, fallbackAge) {
+      const node = document.getElementById(id);
+      if (!node) {
+        return fallbackAge;
+      }
+      node.max = String(lookbackDays);
+      return sliderValueToEventAge(node.value, lookbackDays);
+    }
+
+    function formatEventAge(age) {
+      const numeric = Math.max(0, Math.round(Number(age || 0)));
+      return numeric === 0 ? "Today" : `${numeric}d ago`;
+    }
+
+    function formatTimelinePosition(age, lookbackDays) {
+      const numeric = Math.max(0, Math.round(Number(age || 0)));
+      const lookback = Math.max(1, Math.round(Number(lookbackDays || SCREEN_DEFAULT_FILTERS.lookback_days)));
+      const positionPct = Math.round(((lookback - numeric) / lookback) * 100);
+      return numeric === 0
+        ? `Today only · ${positionPct}% toward today`
+        : `Within last ${numeric}d · ${positionPct}% toward today`;
+    }
+
+    function getMacdModeShortLabel(mode) {
+      const labels = {
+        low_cross_buy: "Low Buy",
+        high_cross_sell: "High Sell",
+        bullish_cross: "Bullish",
+        bearish_cross: "Bearish",
+      };
+      return labels[String(mode || "")] || labels.low_cross_buy;
+    }
+
+    function getRsiModeShortLabel(mode) {
+      const labels = {
+        cross_up: "Cross Up",
+        cross_down: "Cross Down",
+      };
+      return labels[String(mode || "")] || labels.cross_up;
+    }
+
+    function getRsiModeLongLabel(mode) {
+      const labels = {
+        cross_up: "Cross Up",
+        cross_down: "Cross Down",
+      };
+      return labels[String(mode || "")] || labels.cross_up;
+    }
+
+    function getStochModeShortLabel(mode) {
+      const labels = {
+        cross_up: "Cross Up",
+        cross_down: "Cross Down",
+      };
+      return labels[String(mode || "")] || labels.cross_up;
+    }
+
+    function getStochModeLongLabel(mode) {
+      const labels = {
+        cross_up: "Cross Up",
+        cross_down: "Cross Down",
+      };
+      return labels[String(mode || "")] || labels.cross_up;
+    }
+
+    function getMacdModeLongLabel(mode) {
+      const labels = {
+        low_cross_buy: "Low Cross / Buy",
+        high_cross_sell: "High Cross / Sell",
+        bullish_cross: "Any Bullish Cross",
+        bearish_cross: "Any Bearish Cross",
+      };
+      return labels[String(mode || "")] || labels.low_cross_buy;
+    }
+
+    function getRangePairValues(minId, maxId, fallbackRange) {
+      const minNode = document.getElementById(minId);
+      const maxNode = document.getElementById(maxId);
+      return {
+        min: clampNumber(minNode?.value, fallbackRange.min, fallbackRange.max, fallbackRange.min),
+        max: clampNumber(maxNode?.value, fallbackRange.min, fallbackRange.max, fallbackRange.max),
+      };
+    }
+
+    function getScreenEventReadiness(filters = screenFilters) {
+      return [
+        filters.rsi_event_enabled
+          ? { label: `RSI ${getRsiModeShortLabel(filters.rsi_cross_mode)}`, age: Number(filters.rsi_event_age || 0) }
+          : null,
+        filters.macd_event_enabled
+          ? { label: `MACD ${getMacdModeShortLabel(filters.macd_cross_mode)}`, age: Number(filters.macd_event_age || 0) }
+          : null,
+        filters.stoch_event_enabled
+          ? { label: `StochRSI ${getStochModeShortLabel(filters.stoch_cross_mode)}`, age: Number(filters.stoch_event_age || 0) }
+          : null,
+      ].filter(Boolean).sort((left, right) => right.age - left.age);
+    }
+
+    function updateTimelineStepPositions(filters = screenFilters) {
+      const badges = getScreenEventReadiness(filters);
+      const node = document.getElementById("screen-sequence-badges");
+      if (!node) {
+        return;
+      }
+      if (badges.length === 0) {
+        node.innerHTML = '<span class="rounded-full bg-white/85 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Volume only</span>';
+        return;
+      }
+      node.innerHTML = badges
+        .map((item) => `<span class="rounded-full bg-white/85 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-rose-700">${escapeHtml(item.label)} ${escapeHtml(formatEventAge(item.age))}</span>`)
+        .join("");
+    }
+
+    function updateTimelineTrackBounds(lookbackDays) {
+      ["screen-rsi-cross-age", "screen-macd-cross-age", "screen-stoch-cross-age"].forEach((id) => {
+        const node = document.getElementById(id);
+        if (node) {
+          node.max = String(lookbackDays);
+        }
+      });
+      const leftLabel = `${Math.round(lookbackDays)}d ago`;
+      ["screen-rsi-axis-left", "screen-macd-axis-left", "screen-stoch-axis-left"].forEach((id) => {
+        const node = document.getElementById(id);
+        if (node) {
+          node.textContent = leftLabel;
+        }
+      });
+    }
+
+    function updateScreenSequenceSummary(filters = screenFilters) {
+      const node = document.getElementById("screen-sequence-summary");
+      if (!node) {
+        return;
+      }
+      const phases = getScreenEventReadiness(filters);
+      node.textContent = phases.length > 0
+        ? `${phases.map((phase) => phase.label).join(" -> ")} by event point`
+        : "Volume-only screen with no event requirements";
+    }
+
+    function syncScreenEventToggleChrome(filters = screenFilters) {
+      [
+        { key: "rsi_event_enabled", checkboxId: "screen-rsi-event-enabled", stepId: "screen-rsi-event-step" },
+        { key: "macd_event_enabled", checkboxId: "screen-macd-event-enabled", stepId: "screen-macd-event-step" },
+        { key: "stoch_event_enabled", checkboxId: "screen-stoch-event-enabled", stepId: "screen-stoch-event-step" },
+      ].forEach(({ key, checkboxId, stepId }) => {
+        const enabled = Boolean(filters[key]);
+        const checkbox = document.getElementById(checkboxId);
+        const step = document.getElementById(stepId);
+        if (checkbox) {
+          checkbox.checked = enabled;
+        }
+        if (step) {
+          step.style.opacity = enabled ? "1" : "0.5";
+          step.style.filter = enabled ? "none" : "grayscale(0.2)";
+        }
+      });
+    }
+
+    function syncScreenFilterStateFromDom() {
+      const nextFilters = normalizeScreenFiltersClient({
+        lookback_days: screenFilters.lookback_days,
+        volume_range: getRangePairValues(
+          "screen-volume-min",
+          "screen-volume-max",
+          { min: 0, max: SCREEN_DEFAULT_FILTERS.volume_range.max }
+        ),
+        macd_event_enabled: document.getElementById("screen-macd-event-enabled")?.checked,
+        rsi_event_enabled: document.getElementById("screen-rsi-event-enabled")?.checked,
+        stoch_event_enabled: document.getElementById("screen-stoch-event-enabled")?.checked,
+        rsi_cross_value: document.getElementById("screen-rsi-cross-value")?.value,
+        rsi_cross_mode: document.getElementById("screen-rsi-cross-mode")?.value,
+        stoch_cross_value: document.getElementById("screen-stoch-cross-value")?.value,
+        stoch_cross_mode: document.getElementById("screen-stoch-cross-mode")?.value,
+        macd_cross_mode: document.getElementById("screen-macd-cross-mode")?.value,
+        macd_event_age: getEventSliderAge("screen-macd-cross-age", screenFilters.lookback_days, screenFilters.macd_event_age),
+        rsi_event_age: getEventSliderAge("screen-rsi-cross-age", screenFilters.lookback_days, screenFilters.rsi_event_age),
+        stoch_event_age: getEventSliderAge("screen-stoch-cross-age", screenFilters.lookback_days, screenFilters.stoch_event_age),
+      });
+      screenFilters = nextFilters;
+      applyScreenFilters(nextFilters, { syncPreset: false });
+      return nextFilters;
+    }
+
+    function applyScreenFilters(filters, { syncPreset = false } = {}) {
+      screenFilters = normalizeScreenFiltersClient(filters);
+      const volumeMinNode = document.getElementById("screen-volume-min");
+      const volumeMaxNode = document.getElementById("screen-volume-max");
+      if (volumeMinNode) volumeMinNode.value = String(screenFilters.volume_range.min);
+      if (volumeMaxNode) volumeMaxNode.value = String(screenFilters.volume_range.max);
+      updateTimelineTrackBounds(screenFilters.lookback_days);
+      setEventSliderValue("screen-macd-cross-age", screenFilters.macd_event_age, screenFilters.lookback_days);
+      setEventSliderValue("screen-rsi-cross-age", screenFilters.rsi_event_age, screenFilters.lookback_days);
+      setEventSliderValue("screen-stoch-cross-age", screenFilters.stoch_event_age, screenFilters.lookback_days);
+      syncScreenEventToggleChrome(screenFilters);
+      const rsiCrossNode = document.getElementById("screen-rsi-cross-value");
+      if (rsiCrossNode) {
+        rsiCrossNode.value = String(screenFilters.rsi_cross_value);
+      }
+      const rsiModeNode = document.getElementById("screen-rsi-cross-mode");
+      if (rsiModeNode) {
+        rsiModeNode.value = String(screenFilters.rsi_cross_mode || SCREEN_DEFAULT_FILTERS.rsi_cross_mode);
+      }
+      const stochCrossNode = document.getElementById("screen-stoch-cross-value");
+      if (stochCrossNode) {
+        stochCrossNode.value = String(screenFilters.stoch_cross_value);
+      }
+      const stochModeNode = document.getElementById("screen-stoch-cross-mode");
+      if (stochModeNode) {
+        stochModeNode.value = String(screenFilters.stoch_cross_mode || SCREEN_DEFAULT_FILTERS.stoch_cross_mode);
+      }
+      const macdModeNode = document.getElementById("screen-macd-cross-mode");
+      if (macdModeNode) {
+        macdModeNode.value = String(screenFilters.macd_cross_mode || SCREEN_DEFAULT_FILTERS.macd_cross_mode);
+      }
+      const volumeReadout = document.getElementById("screen-volume-readout");
+      if (volumeReadout) {
+        volumeReadout.textContent = `${formatCompactVolume(screenFilters.volume_range.min)} - ${formatCompactVolume(screenFilters.volume_range.max)}`;
+      }
+      const rsiCrossReadout = document.getElementById("screen-rsi-cross-value-readout");
+      if (rsiCrossReadout) {
+        rsiCrossReadout.textContent = `${Math.round(screenFilters.rsi_cross_value)}`;
+      }
+      const rsiModeReadout = document.getElementById("screen-rsi-mode-readout");
+      if (rsiModeReadout) {
+        rsiModeReadout.textContent = getRsiModeLongLabel(screenFilters.rsi_cross_mode);
+      }
+      const stochCrossReadout = document.getElementById("screen-stoch-cross-value-readout");
+      if (stochCrossReadout) {
+        stochCrossReadout.textContent = `${Math.round(screenFilters.stoch_cross_value)}`;
+      }
+      const stochModeReadout = document.getElementById("screen-stoch-mode-readout");
+      if (stochModeReadout) {
+        stochModeReadout.textContent = getStochModeLongLabel(screenFilters.stoch_cross_mode);
+      }
+      const macdReadout = document.getElementById("screen-macd-cross-readout");
+      if (macdReadout) {
+        macdReadout.textContent = formatTimelinePosition(screenFilters.macd_event_age, screenFilters.lookback_days);
+      }
+      const macdModeReadout = document.getElementById("screen-macd-mode-readout");
+      if (macdModeReadout) {
+        macdModeReadout.textContent = getMacdModeLongLabel(screenFilters.macd_cross_mode);
+      }
+      const rsiEventReadout = document.getElementById("screen-rsi-cross-readout");
+      if (rsiEventReadout) {
+        rsiEventReadout.textContent = formatTimelinePosition(screenFilters.rsi_event_age, screenFilters.lookback_days);
+      }
+      const stochReadout = document.getElementById("screen-stoch-cross-readout");
+      if (stochReadout) {
+        stochReadout.textContent = formatTimelinePosition(screenFilters.stoch_event_age, screenFilters.lookback_days);
+      }
+      updateTimelineStepPositions(screenFilters);
+      updateScreenSequenceSummary(screenFilters);
+      if (syncPreset) {
+        populateScreenPresetSelect();
+      }
+    }
+
+    function getScreenFiltersForRequest() {
+      return syncScreenFilterStateFromDom();
+    }
+
+    function buildScreenFilterParams() {
+      const filters = getScreenFiltersForRequest();
+      const params = new URLSearchParams();
+      params.set("lookback_days", String(filters.lookback_days));
+      params.set("volume_min", String(filters.volume_range.min));
+      params.set("volume_max", String(filters.volume_range.max));
+      params.set("macd_event_enabled", filters.macd_event_enabled ? "true" : "false");
+      params.set("rsi_event_enabled", filters.rsi_event_enabled ? "true" : "false");
+      params.set("stoch_event_enabled", filters.stoch_event_enabled ? "true" : "false");
+      params.set("rsi_cross_value", String(filters.rsi_cross_value));
+      params.set("rsi_cross_mode", String(filters.rsi_cross_mode || SCREEN_DEFAULT_FILTERS.rsi_cross_mode));
+      params.set("stoch_cross_value", String(filters.stoch_cross_value));
+      params.set("stoch_cross_mode", String(filters.stoch_cross_mode || SCREEN_DEFAULT_FILTERS.stoch_cross_mode));
+      params.set("macd_cross_mode", String(filters.macd_cross_mode || SCREEN_DEFAULT_FILTERS.macd_cross_mode));
+      params.set("macd_event_age", String(filters.macd_event_age));
+      params.set("rsi_event_age", String(filters.rsi_event_age));
+      params.set("stoch_event_age", String(filters.stoch_event_age));
+      const presetSelect = document.getElementById("screen-preset-select");
+      if (presetSelect && presetSelect.value) {
+        params.set("preset_name", presetSelect.value);
+      }
+      return params;
+    }
+
+    function populateScreenPresetSelect() {
+      const select = document.getElementById("screen-preset-select");
+      if (!select) {
+        return;
+      }
+      const requestedValue = String(readStickyValue(LAST_SCREEN_PRESET_KEY, screenPresetCatalog.active_name || "")).trim();
+      select.innerHTML = '<option value="">Custom</option>';
+      (Array.isArray(screenPresetCatalog.presets) ? screenPresetCatalog.presets : []).forEach((preset) => {
+        if (!preset || !preset.name) {
+          return;
+        }
+        const option = document.createElement("option");
+        option.value = String(preset.name);
+        option.textContent = String(preset.name);
+        select.appendChild(option);
+      });
+      const hasRequested = requestedValue
+        && Array.from(select.options || []).some((option) => option.value === requestedValue);
+      select.value = hasRequested ? requestedValue : "";
+    }
+
+    async function loadScreenPresets() {
+      const resp = await fetch("/api/screen/presets", { cache: "no-store" });
+      if (!resp.ok) {
+        throw new Error("Could not load screener presets");
+      }
+      const payload = await resp.json();
+      screenPresetCatalog = {
+        active_name: String(payload?.active_name || ""),
+        default_filters: normalizeScreenFiltersClient(payload?.default_filters || SCREEN_DEFAULT_FILTERS),
+        presets: Array.isArray(payload?.presets) ? payload.presets.map((preset) => ({
+          name: String(preset?.name || "").trim(),
+          filters: normalizeScreenFiltersClient(preset?.filters || SCREEN_DEFAULT_FILTERS),
+        })).filter((preset) => preset.name) : [],
+      };
+      populateScreenPresetSelect();
+      const presetName = String(readStickyValue(LAST_SCREEN_PRESET_KEY, screenPresetCatalog.active_name || "")).trim();
+      const preset = screenPresetCatalog.presets.find((entry) => entry.name === presetName)
+        || screenPresetCatalog.presets.find((entry) => entry.name === screenPresetCatalog.active_name);
+      if (preset) {
+        applyScreenFilters(preset.filters);
+        const nameNode = document.getElementById("screen-preset-name");
+        if (nameNode) {
+          nameNode.value = preset.name;
+        }
+        writeStickyValue(LAST_SCREEN_PRESET_KEY, preset.name);
+        const select = document.getElementById("screen-preset-select");
+        if (select) {
+          select.value = preset.name;
+        }
+      } else {
+        applyScreenFilters(screenPresetCatalog.default_filters || SCREEN_DEFAULT_FILTERS);
+      }
+      return screenPresetCatalog;
+    }
+
+    async function applyScreenPreset(name) {
+      const presetName = String(name || "").trim();
+      if (!presetName) {
+        writeStickyValue(LAST_SCREEN_PRESET_KEY, "");
+        return;
+      }
+      const preset = screenPresetCatalog.presets.find((entry) => entry.name === presetName);
+      if (!preset) {
+        writeStickyValue(LAST_SCREEN_PRESET_KEY, "");
+        return;
+      }
+      writeStickyValue(LAST_SCREEN_PRESET_KEY, preset.name);
+      applyScreenFilters(preset.filters);
+      const nameNode = document.getElementById("screen-preset-name");
+      if (nameNode) {
+        nameNode.value = preset.name;
+      }
+    }
+
+    async function saveScreenPreset() {
+      const nameNode = document.getElementById("screen-preset-name");
+      const presetName = String(nameNode?.value || "").trim();
+      if (!presetName) {
+        showToast("Enter a preset name first.", true);
+        return;
+      }
+      const nextPreset = {
+        name: presetName,
+        filters: getScreenFiltersForRequest(),
+      };
+      const nextPresets = Array.isArray(screenPresetCatalog.presets)
+        ? screenPresetCatalog.presets.filter((preset) => preset && preset.name !== presetName)
+        : [];
+      nextPresets.push(nextPreset);
+      const resp = await fetch("/api/screen/presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          active_name: presetName,
+          presets: nextPresets,
+        }),
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(payload.detail || "Could not save preset");
+      }
+      screenPresetCatalog = {
+        active_name: String(payload?.active_name || presetName),
+        default_filters: normalizeScreenFiltersClient(payload?.default_filters || SCREEN_DEFAULT_FILTERS),
+        presets: Array.isArray(payload?.presets) ? payload.presets.map((preset) => ({
+          name: String(preset?.name || "").trim(),
+          filters: normalizeScreenFiltersClient(preset?.filters || SCREEN_DEFAULT_FILTERS),
+        })).filter((preset) => preset.name) : [],
+      };
+      writeStickyValue(LAST_SCREEN_PRESET_KEY, presetName);
+      populateScreenPresetSelect();
+      const select = document.getElementById("screen-preset-select");
+      if (select) {
+        select.value = presetName;
+      }
+      showToast(`Saved preset: ${presetName}`);
+    }
+
+    function bindScreenControlInputs() {
+      [
+        "screen-volume-min",
+        "screen-volume-max",
+        "screen-rsi-cross-value",
+        "screen-rsi-event-enabled",
+        "screen-rsi-cross-mode",
+        "screen-stoch-cross-value",
+        "screen-stoch-event-enabled",
+        "screen-stoch-cross-mode",
+        "screen-macd-event-enabled",
+        "screen-macd-cross-mode",
+        "screen-macd-cross-age",
+        "screen-rsi-cross-age",
+        "screen-stoch-cross-age",
+      ].forEach((id) => {
+        const node = document.getElementById(id);
+        if (!node || node.dataset.bound === "1") {
+          return;
+        }
+        node.dataset.bound = "1";
+        node.addEventListener("input", () => {
+          syncScreenFilterStateFromDom();
+        });
+      });
+      applyScreenFilters(screenFilters);
+    }
+
     function updateTabChrome(tab) {
       const screenerControls = document.getElementById("nav-screener-controls");
       const context = document.getElementById("nav-tab-context");
@@ -2990,14 +4060,16 @@
       if (!context) {
         return;
       }
-      if (tab === "shortlist") {
+      if (tab === "playbook") {
+        context.textContent = "Playbook: tonight's trade list with stops sized to your risk";
+      } else if (tab === "shortlist") {
         context.textContent = "Shortlist: browse ideas, then open the chart";
       } else if (tab === "query") {
         context.textContent = "Query: direct data exploration over the stored backbone";
       } else if (tab === "backtest") {
         context.textContent = "Backtester: choose what to evaluate below";
       } else {
-        context.textContent = "Screener controls: pick a strategy, then click Run Screener";
+        context.textContent = "Screener: place the event markers, then click Run Screener";
       }
     }
     async function loadMarketStatus(source = tickerScanScope) {
@@ -3008,7 +4080,17 @@
 
       try {
         const normalizedSource = normalizeScanScope(source);
-        const resp = await fetch(`/api/market-status?stale_after_days=0&source=${encodeURIComponent(normalizedSource)}`);
+        const statusParams = new URLSearchParams();
+        statusParams.set("stale_after_days", "0");
+        statusParams.set("source", normalizedSource);
+        if (normalizedSource === "list") {
+          const universeParams = getUniverseFilterParams();
+          const tickerList = universeParams.get("ticker_list");
+          if (tickerList) {
+            statusParams.set("ticker_list", tickerList);
+          }
+        }
+        const resp = await fetch(`/api/market-status?${statusParams.toString()}`);
         const data = await resp.json();
         if (!resp.ok) {
           throw new Error(data.detail || "Market status request failed");
@@ -3016,10 +4098,10 @@
 
         if (data.is_stale) {
           marketStatus.className = "text-xs font-bold uppercase tracking-wide text-amber-600";
-          marketStatus.textContent = `Market data needs top-up Â· latest ${data.latest_market_date || "unknown"} Â· stale ${Number(data.stale_tickers || 0)} Â· missing ${Number(data.missing_tickers || 0)}`;
+          marketStatus.textContent = `${getActiveSourceLabel(normalizedSource)}: market data needs top-up · latest ${data.latest_market_date || "unknown"} · stale ${Number(data.stale_tickers || 0)} · missing ${Number(data.missing_tickers || 0)}`;
         } else {
           marketStatus.className = "text-xs font-bold uppercase tracking-wide text-emerald-600";
-          marketStatus.textContent = `Market data fresh through ${data.latest_market_date || "unknown"} Â· ${Number(data.fresh_tickers || data.tracked_tickers || 0)} active tickers`;
+          marketStatus.textContent = `${getActiveSourceLabel(normalizedSource)}: market data fresh through ${data.latest_market_date || "unknown"} · ${Number(data.fresh_tickers || data.tracked_tickers || 0)} active tickers`;
         }
         return data;
       } catch (err) {
@@ -3030,7 +4112,7 @@
     }
 
     async function ensureGuiMarketBackbone(options = {}) {
-      const allowRefresh = options.allowRefresh !== false;
+      const allowRefresh = options.allowRefresh === true;
       const status = await loadMarketStatus(tickerScanScope);
       let refreshed = false;
       if (allowRefresh && status && status.is_stale && !marketDataAutoRefreshAttempted) {
@@ -3042,7 +4124,7 @@
     }
 
     async function ensureFreshMarketData() {
-      return ensureGuiMarketBackbone();
+      return ensureGuiMarketBackbone({ allowRefresh: true });
     }
 
     function showTab(tab) {
@@ -3069,14 +4151,18 @@
       updateTabChrome(tab);
       if (tab === 'backtest') {
         updateBacktestRunButtonState();
+      } else if (tab === 'playbook') {
+        loadPlaybook().catch((err) => {
+          console.warn("Playbook failed to load", err);
+        });
       } else if (tab === 'query') {
         loadQueryCatalog().catch((err) => {
           console.warn("Query catalog failed to load", err);
           setQueryStatus("Could not load query catalog.", "rose");
         });
       } else if (tab === 'shortlist') {
-        ensureGuiMarketBackbone().catch((err) => {
-          console.warn("Auto-refresh check failed", err);
+        ensureGuiMarketBackbone({ allowRefresh: false }).catch((err) => {
+          console.warn("Market status check failed", err);
         });
         loadShortlist();
       }
@@ -3113,36 +4199,34 @@
 
     async function refreshMarketData() {
       const source = normalizeScanScope(tickerScanScope);
-      const marketRefreshBtn = document.getElementById("market-refresh-btn");
       const shortlistRefreshBtn = document.getElementById("shortlist-refresh-btn");
       const marketStatus = document.getElementById("shortlist-market-status");
       const shortlistStatus = document.getElementById("shortlist-status");
+      const activeSourceLabel = getActiveSourceLabel(source);
 
-      if (marketRefreshBtn) {
-        marketRefreshBtn.disabled = true;
-        marketRefreshBtn.textContent = "Refreshing Data...";
-      }
       if (shortlistRefreshBtn) {
         shortlistRefreshBtn.disabled = true;
+        shortlistRefreshBtn.textContent = `Refreshing ${activeSourceLabel}...`;
       }
       if (marketStatus) {
         marketStatus.className = "text-xs font-bold uppercase tracking-wide text-indigo-600";
-        const sourceLabel = source === "sweden"
-          ? "Sweden"
-          : source === "nasdaq"
-          ? "Nasdaq"
-          : source === "list"
-          ? "saved list"
-          : source === "all_lists"
-          ? "all saved lists"
-          : "Xetra";
-        marketStatus.textContent = `Topping up ${sourceLabel} market data and rebuilding shortlist...`;
+        marketStatus.textContent = `Refreshing ${activeSourceLabel} market data and rebuilding shortlist...`;
       }
       if (shortlistStatus) {
-        shortlistStatus.textContent = "Waiting for fresh market data...";
+        shortlistStatus.textContent = `Waiting for fresh ${activeSourceLabel} market data...`;
       }
 
       try {
+        if (source === "list") {
+          try {
+            await persistCustomTickerListsToServer({
+              active_name: normalizeListName(customTickerListActiveName || customTickerListName),
+              lists: customTickerLists,
+            });
+          } catch (persistErr) {
+            console.warn("Could not persist active saved list before refresh", persistErr);
+          }
+        }
         setNavScanProgress({
           show: true,
           contextLabel: "Market",
@@ -3151,7 +4235,20 @@
           contextWorking: false,
         });
         startJobProgressPolling("market-refresh", "Global");
-        const resp = await fetch(`/api/market-data/refresh?depth=400&max_workers=8&force=true&stale_after_days=0&source=${encodeURIComponent(source)}`, {
+        const refreshParams = new URLSearchParams();
+        refreshParams.set("depth", "400");
+        refreshParams.set("max_workers", "8");
+        refreshParams.set("force", "true");
+        refreshParams.set("stale_after_days", "0");
+        refreshParams.set("source", source);
+        if (source === "list") {
+          const universeParams = getUniverseFilterParams();
+          const tickerList = universeParams.get("ticker_list");
+          if (tickerList) {
+            refreshParams.set("ticker_list", tickerList);
+          }
+        }
+        const resp = await fetch(`/api/market-data/refresh?${refreshParams.toString()}`, {
           method: "POST",
         });
         const data = await resp.json();
@@ -3167,8 +4264,14 @@
           contextWorking: true,
         });
         shortlistLoaded = false;
+        shortlistSourceSignature = "";
+        playbookLoaded = false;
+        playbookSourceSignature = "";
         await loadMarketStatus();
         await loadShortlist(true);
+        if (!document.getElementById("tab-playbook")?.classList.contains("hidden")) {
+          await loadPlaybook(true);
+        }
         setNavScanProgress({
           show: true,
           contextLabel: "Market",
@@ -3203,12 +4306,9 @@
           globalPct: 0,
           globalWorking: false,
         });
-        if (marketRefreshBtn) {
-          marketRefreshBtn.disabled = false;
-          marketRefreshBtn.textContent = "Refresh Market Data";
-        }
         if (shortlistRefreshBtn) {
           shortlistRefreshBtn.disabled = false;
+          syncShortlistRefreshControls();
         }
       }
     }
@@ -3220,23 +4320,32 @@
       const buyEl = document.getElementById("shortlist-buy-count");
       const watchEl = document.getElementById("shortlist-watch-count");
       const skipEl = document.getElementById("shortlist-skip-count");
+      const universeParams = getUniverseFilterParams();
+      const currentSignature = universeParams.toString();
+      const currentScope = universeParams.get("scan_scope") || "xetra";
 
-      if (shortlistLoaded && !forceRefresh) {
+      if (shortlistLoaded && !forceRefresh && shortlistSourceSignature === currentSignature) {
         return;
       }
 
       setShortlistEmptyState(forceRefresh ? "Refreshing shortlist snapshot..." : "Loading shortlist snapshot...");
       if (refreshBtn) {
         refreshBtn.disabled = true;
-        refreshBtn.textContent = forceRefresh ? "Refreshing..." : "Loading...";
+        refreshBtn.textContent = forceRefresh ? `Refreshing ${getActiveSourceLabel(currentScope)}...` : "Loading...";
       }
       if (status) {
-        status.textContent = forceRefresh ? "Rebuilding shortlist artifacts..." : "Loading cached shortlist snapshot...";
+        status.textContent = forceRefresh
+          ? `Rebuilding shortlist for ${describeActiveScanScope(currentScope)}...`
+          : `Loading shortlist for ${describeActiveScanScope(currentScope)}...`;
       }
 
       try {
-        await ensureGuiMarketBackbone();
-        const url = `/api/shortlist?limit=60${forceRefresh ? "&refresh=true" : ""}`;
+        await ensureGuiMarketBackbone({ allowRefresh: false });
+        universeParams.set("limit", "60");
+        if (forceRefresh) {
+          universeParams.set("refresh", "true");
+        }
+        const url = `/api/shortlist?${universeParams.toString()}`;
         const resp = await fetch(url);
         const data = await resp.json();
         if (!resp.ok) {
@@ -3252,14 +4361,17 @@
 
         if (rows.length === 0) {
           setShortlistEmptyState("No shortlist artifacts were available yet.");
+          shortlistSourceSignature = currentSignature;
           shortlistLoaded = true;
           return;
         }
 
         renderShortlistRows();
         if (status) {
-          status.textContent = `Snapshot date: ${data.as_of_date || "unknown"}`;
+          const sourceCount = Number(data.source_count || 0);
+          status.textContent = `Snapshot date: ${data.as_of_date || "unknown"} • ${describeActiveScanScope(currentScope)}${sourceCount > 0 ? ` • ${sourceCount} source tickers` : ""}`;
         }
+        shortlistSourceSignature = currentSignature;
         shortlistLoaded = true;
       } catch (err) {
         setShortlistEmptyState(`Shortlist error: ${err.message || err}`);
@@ -3269,7 +4381,7 @@
       } finally {
         if (refreshBtn) {
           refreshBtn.disabled = false;
-          refreshBtn.textContent = "Refresh Shortlist";
+          syncShortlistRefreshControls();
         }
       }
     }
@@ -3348,7 +4460,7 @@
 
       const universeParams = getUniverseFilterParams();
       const scope = universeParams.get("scan_scope");
-      if ((scope === "list" || scope === "all_lists") && !universeParams.get("ticker_list")) {
+      if (scope === "list" && !universeParams.get("ticker_list")) {
         return { ready: false, reason: "Choose tickers for the selected list universe" };
       }
 
@@ -4433,7 +5545,7 @@
       }
       const universeParams = getUniverseFilterParams();
       const chosenScope = universeParams.get("scan_scope");
-      if ((chosenScope === "list" || chosenScope === "all_lists") && !universeParams.get("ticker_list")) {
+      if (chosenScope === "list" && !universeParams.get("ticker_list")) {
         await openListEditorModal();
         setBacktestEmptyState("Choose some tickers for the saved list before running Backtester.");
         return;
@@ -4755,7 +5867,12 @@
       customTickerListActiveName = normalizeListName(loadedList.active_name || loadedList.name || readCustomTickerListName());
       customTickerList = Array.isArray(loadedList.tickers) ? loadedList.tickers : [];
       customTickerListName = customTickerListActiveName;
+      tickerUniverseExplicitlyChosen = true;
       updateListSelectChrome();
+      syncScreenerRunButtonState(false);
+      updateScanActionButtonsState();
+      updateBacktestRunButtonState();
+      updateRangeChrome();
       const tickerSelect = document.getElementById("ticker-select");
       if (tickerSelect) {
         tickerSelectLastValue = readStickyValue(LAST_TICKER_SELECT_KEY, tickerSelect.value || "");
@@ -4776,11 +5893,18 @@
     let lastScreenMatches = [];
     let lastScreenMeta = {
       strategy_name: "",
+      preset_name: "",
       scan_scope: "",
       exchange: "",
       ticker_list: "",
       disqualifiers: normalizeScreenDisqualifiers(),
     };
+    let screenPresetCatalog = {
+      active_name: "",
+      default_filters: { ...SCREEN_DEFAULT_FILTERS },
+      presets: [],
+    };
+    let screenFilters = JSON.parse(JSON.stringify(SCREEN_DEFAULT_FILTERS));
     let exportTopMatchesInFlight = false;
     const LAST_COMPLETED_STRATEGY_KEY = "etf-discovery:last-completed-strategy";
 
@@ -5162,6 +6286,7 @@
       lastScreenMatches = Array.isArray(matches) ? matches.slice() : [];
       lastScreenMeta = {
         strategy_name: String(meta.strategy_name || meta.strategy || currentStrategy || "").trim(),
+        preset_name: String(meta.preset_name || "").trim(),
         scan_scope: String(meta.scan_scope || "").trim(),
         exchange: String(meta.exchange || "").trim(),
         ticker_list: String(meta.ticker_list || "").trim(),
@@ -5395,6 +6520,10 @@
         globalBar: document.getElementById("nav-scan-global-bar"),
         globalText: document.getElementById("nav-scan-global-text"),
         globalLabel: document.getElementById("nav-scan-global-label"),
+        pagePanel: document.getElementById("page-progress-banner"),
+        pageBar: document.getElementById("page-progress-bar"),
+        pageText: document.getElementById("page-progress-text"),
+        pageLabel: document.getElementById("page-progress-label"),
       };
     }
 
@@ -5405,6 +6534,11 @@
         nodes.panel.classList.remove("hidden");
       } else if (show === false && nodes.panel) {
         nodes.panel.classList.add("hidden");
+      }
+      if (show === true && nodes.pagePanel) {
+        nodes.pagePanel.hidden = false;
+      } else if (show === false && nodes.pagePanel) {
+        nodes.pagePanel.hidden = true;
       }
 
       if (state.contextLabel && nodes.contextLabel) {
@@ -5434,11 +6568,61 @@
       if (state.globalWorking !== undefined && nodes.globalBar) {
         nodes.globalBar.classList.toggle("animate-pulse", Boolean(state.globalWorking));
       }
+
+      if (nodes.pageLabel) {
+        const nextLabel = state.contextLabel || state.globalLabel || nodes.contextLabel?.textContent || nodes.globalLabel?.textContent || "Working";
+        nodes.pageLabel.textContent = nextLabel;
+      }
+      if (nodes.pageText) {
+        const nextText = state.globalText || state.contextText || nodes.globalText?.textContent || nodes.contextText?.textContent || "Working...";
+        nodes.pageText.textContent = nextText;
+      }
+      if (nodes.pageBar) {
+        const rawPct = state.globalPct !== undefined
+          ? state.globalPct
+          : state.contextPct !== undefined
+            ? state.contextPct
+            : parseFloat(String(nodes.globalBar?.style.width || nodes.pageBar.style.width || "0").replace("%", ""));
+        const pct = Math.max(0, Math.min(100, Number(rawPct) || 0));
+        nodes.pageBar.style.width = `${pct}%`;
+        const working = state.globalWorking !== undefined
+          ? Boolean(state.globalWorking)
+          : state.contextWorking !== undefined
+            ? Boolean(state.contextWorking)
+            : false;
+        nodes.pageBar.classList.toggle("animate-pulse", working);
+      }
+    }
+
+    function syncScreenerRunButtonState(running = false) {
+      const runBtn = document.getElementById("run-btn");
+      if (!runBtn) {
+        return;
+      }
+      runBtn.dataset.running = running ? "1" : "0";
+      if (running) {
+        runBtn.innerHTML = `
+            <svg class="w-3.5 h-3.5 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" stroke-width="2" stroke-opacity="0.3"></circle>
+              <path d="M21 12a9 9 0 00-9-9" stroke-width="2" stroke-linecap="round"></path>
+            </svg>
+            Running
+          `;
+        runBtn.classList.remove("bg-green-600", "hover:bg-green-500");
+        runBtn.classList.add("bg-emerald-500", "cursor-wait");
+        runBtn.disabled = true;
+        return;
+      }
+      runBtn.textContent = "Run Screener";
+      runBtn.classList.remove("bg-emerald-500", "cursor-wait");
+      runBtn.classList.add("bg-green-600", "hover:bg-green-500");
+      runBtn.disabled = !tickerUniverseExplicitlyChosen;
+      runBtn.title = tickerUniverseExplicitlyChosen ? "Run the control-based screener" : "Choose a ticker universe first";
     }
 
     function updateScanActionButtonsState() {
       const readiness = tickerUniverseExplicitlyChosen
-        ? { ready: true, reason: "Run screener" }
+        ? { ready: true, reason: "Run the control-based screener" }
         : { ready: false, reason: "Choose a ticker universe first" };
       const scanBtn = document.getElementById("scan-btn");
       const runBtn = document.getElementById("run-btn");
@@ -5474,6 +6658,7 @@
 
       if (list) list.style.opacity = "1.0";
       scanAbortController = null;
+      syncScreenerRunButtonState(false);
       updateScanActionButtonsState();
     }
 
@@ -5482,7 +6667,6 @@
       const spinner = document.getElementById("loading-spinner");
       const scanBtn = document.getElementById("scan-btn");
       const runBtn = document.getElementById("run-btn");
-      const strategySelect = document.getElementById("strategy-select");
       const errorSection = document.getElementById("error-section");
       const errorList = document.getElementById("error-list");
 
@@ -5491,7 +6675,7 @@
         return;
       }
 
-      if ((normalizeScanScope(tickerScanScope) === "list" || normalizeScanScope(tickerScanScope) === "all_lists") && getScopeTickers(tickerScanScope).length === 0) {
+      if (normalizeScanScope(tickerScanScope) === "list" && getScopeTickers(tickerScanScope).length === 0) {
         await openListEditorModal();
         return;
       }
@@ -5523,18 +6707,7 @@
         scanBtn.disabled = true;
       }
 
-      if (runBtn) {
-        runBtn.innerHTML = `
-            <svg class="w-3.5 h-3.5 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="9" stroke-width="2" stroke-opacity="0.3"></circle>
-              <path d="M21 12a9 9 0 00-9-9" stroke-width="2" stroke-linecap="round"></path>
-            </svg>
-            Running
-          `;
-        runBtn.classList.remove("bg-green-600");
-        runBtn.classList.add("bg-emerald-500", "cursor-wait");
-        runBtn.disabled = true;
-      }
+      syncScreenerRunButtonState(true);
 
       if (list) list.style.opacity = "0.5";
 
@@ -5555,7 +6728,11 @@
         let url = "/api/screen";
         const universeParams = getUniverseFilterParams();
         const screenParams = getScreenDisqualifierParams();
+        const controlParams = buildScreenFilterParams();
         screenParams.forEach((value, key) => {
+          universeParams.set(key, value);
+        });
+        controlParams.forEach((value, key) => {
           universeParams.set(key, value);
         });
         const screenQuery = universeParams.toString();
@@ -5566,14 +6743,13 @@
           url += `${screenQuery ? "&" : "?"}dsl_content=${encodeURIComponent(customDsl)}`;
           syncStrategySelections("");
           currentStrategy = "";
-        } else if (strategySelect.value) {
-          url += `${screenQuery ? "&" : "?"}strategy=${strategySelect.value}`;
-          currentStrategy = strategySelect.value;
         } else {
           currentStrategy = "";
         }
+        const activePresetName = String(document.getElementById("screen-preset-select")?.value || "").trim();
         setLastScreenMatches([], {
           strategy_name: currentStrategy || (customDsl ? "Editor Draft" : ""),
+          preset_name: activePresetName,
           scan_scope: normalizeScanScope(tickerScanScope),
           ticker_list: universeParams.get("ticker_list") || "",
           disqualifiers: screenDisqualifiers,
@@ -5582,8 +6758,8 @@
         console.log("Current strategy:", currentStrategy);
 
         // Fake progress only for the early part of the wait. Once the bar
-        // reaches the high-80s, switch to an indeterminate "working" state
-        // so the UI does not appear frozen while the backend finishes.
+        // reaches 90%, hold it steady and mark it as working so the UI stays
+        // calm while the backend finishes.
         let fakeProg = 0;
         let isWorkingPhase = false;
         let progInterval = null;
@@ -5611,12 +6787,10 @@
                 contextWorking: true,
               });
             }
-
-            const pulse = 88 + Math.round(4 * (0.5 + 0.5 * Math.sin(Date.now() / 350)));
             setNavScanProgress({
               contextLabel: "Screen",
               contextText: "WORKING",
-              contextPct: pulse,
+              contextPct: 90,
               contextWorking: true,
             });
           }, 300);
@@ -5670,7 +6844,8 @@
           document.getElementById("match-count").textContent = matches.length;
           console.log("List cleared, match count updated to:", matches.length);
           setLastScreenMatches(matches, {
-            strategy_name: currentStrategy || (customDsl ? "Editor Draft" : ""),
+            strategy_name: rawData.strategy_name || currentStrategy || (customDsl ? "Editor Draft" : "Custom Controls"),
+            preset_name: rawData.preset_name || activePresetName,
             scan_scope: normalizeScanScope(tickerScanScope),
             ticker_list: universeParams.get("ticker_list") || "",
             disqualifiers: screenDisqualifiers,
@@ -5685,10 +6860,10 @@
           }
 
           // Update ticker dropdown options based on screen results.
-          if (matches.length > 0 && (strategySelect.value || customDsl)) {
+          if (matches.length > 0) {
             setTickerSelectUniverse(matches.map((item) => ({
               ticker: item.ticker,
-              label: item.ticker,
+              label: item.name || item.ticker,
             })));
             renderTickerSelectOptions({ preserveSelection: true });
           }
@@ -5714,7 +6889,7 @@
 
           if (matches.length === 0) {
             list.innerHTML =
-              '<div class="text-sm text-slate-400 italic p-4 text-center">No matching ETFs found for this strategy...</div>';
+              '<div class="text-sm text-slate-400 italic p-4 text-center">No matching tickers found for the current screener controls.</div>';
           }
 
           matches.forEach((item, idx) => {
@@ -5730,10 +6905,11 @@
                   : "text-indigo-600";
 
               const closeVal = Number(item.close ?? 0);
-              const volumeVal = Number(item.volume ?? 0);
-              const returnPctVal = Number(item.return_pct ?? 0);
+              const volumeVal = Number(item.recent_avg_volume ?? item.volume ?? 0);
               const changePctVal = Number(item.change_pct ?? 0);
               const scoreVal = Number(item.score ?? 0);
+              const rsiVal = Number(item.rsi ?? 0);
+              const sequenceText = String(item.event_sequence || "").trim();
 
               const changeVal = Number.isFinite(changePctVal)
                 ? changePctVal.toFixed(2)
@@ -5749,20 +6925,19 @@
                                   <span class="font-bold text-slate-800 text-lg leading-none">${item.ticker}</span>
                                   <span class="text-[10px] font-bold text-indigo-400">#${idx + 1}</span>
                                 </div>
+                                <span class="mt-1 text-[11px] text-slate-500">${escapeHtml(item.name || "")}</span>
                                 <span class="text-[10px] ${statusColor} mt-1 uppercase tracking-wider">${statusText}</span>
                             </div>
                             <div class="flex flex-col items-end">
-                              <span class="text-slate-800 font-bold font-mono">${closeVal.toFixed(2)}â‚¬</span>
+                              <span class="text-slate-800 font-bold font-mono">${closeVal.toFixed(2)}</span>
                                 <span class="text-[10px] ${changeColor} font-mono">${sign}${changeVal}%</span>
                             </div>
                         </div>
-                        <div class="mt-2 pt-2 border-t border-slate-200/50 flex justify-between items-center">
-                            <div class="text-[10px] text-slate-400 font-semibold">
-                              ${(volumeVal / 1000).toFixed(0)}K VOLUME
-                            </div>
-                            <div class="text-[10px] font-bold text-indigo-600">
-                              ${(scoreVal * 100).toFixed(0)} pts
-                            </div>
+                        <div class="mt-2 text-[11px] font-semibold text-rose-700">${escapeHtml(sequenceText || "Event sequence")}</div>
+                        <div class="mt-2 grid grid-cols-3 gap-2 rounded-lg bg-slate-100/80 px-2 py-2 text-[10px] font-semibold text-slate-500">
+                            <div>RSI <span class="block text-sm font-bold text-slate-800">${Number.isFinite(rsiVal) ? rsiVal.toFixed(1) : "-"}</span></div>
+                            <div>VOL20 <span class="block text-sm font-bold text-slate-800">${formatCompactVolume(volumeVal)}</span></div>
+                            <div>SCORE <span class="block text-sm font-bold text-slate-800">${scoreVal.toFixed(1)}</span></div>
                         </div>
                     `;
               list.appendChild(card);
@@ -5796,6 +6971,7 @@
         });
         setLastScreenMatches([], {
           strategy_name: currentStrategy || (customDsl ? "Editor Draft" : ""),
+          preset_name: String(document.getElementById("screen-preset-select")?.value || "").trim(),
           scan_scope: normalizeScanScope(tickerScanScope),
           ticker_list: getUniverseFilterParams().get("ticker_list") || "",
           disqualifiers: screenDisqualifiers,
@@ -6012,10 +7188,21 @@
       updateQueryControls();
       updateBacktestStrategyCount();
       syncBacktestStrategyCheckboxChrome();
+      bindScreenControlInputs();
       updateScanActionButtonsState();
       updateBacktestRunButtonState();
       updateRangeChrome();
+      const playbookRiskNode = document.getElementById("playbook-risk-pct");
+      if (playbookRiskNode) {
+        playbookRiskNode.value = String(getPlaybookRiskPct());
+      }
       await loadMarketStatus();
+      try {
+        await loadScreenPresets();
+      } catch (err) {
+        console.warn("Could not load screener presets", err);
+        applyScreenFilters(SCREEN_DEFAULT_FILTERS);
+      }
       syncExportMatchesButtonState();
     })();
 
@@ -6034,6 +7221,7 @@
       loadBacktestMetrics,
       openQueryTickerChart,
       loadQueryResults,
+      loadPlaybook,
       loadShortlist,
       mergeBacktestScatterRows,
       prepareBacktestLiveResults,
@@ -6045,15 +7233,20 @@
       refreshMarketData,
       ensureFreshMarketData,
       exportTopMatches,
+      applyScreenPreset,
       resetDashboardTabPreference,
       runScreen,
+      saveScreenPreset,
       saveAsStrategy,
       saveFromModal,
       saveStrategy,
+      activateCustomTickerList,
+      setActiveCustomTickerList,
       setBacktestSourceMode,
       setListBuilderExchange,
       setListBuilderSearch,
       setListBuilderList,
+      toggleListBuilderSelectedOnly,
       setScanSource,
       setScreenAutoExportEnabled,
       setScreenDisqualifier,
@@ -6062,6 +7255,7 @@
       startJobProgressPolling,
       stopJobProgressPolling,
       dashboardReadyPromise,
+      deleteListEditorSelection,
       setShortlistFilter,
       showTab,
       testMe,

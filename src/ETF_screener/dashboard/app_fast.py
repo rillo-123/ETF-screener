@@ -12,7 +12,7 @@ import json
 import logging as _logging_mod
 import math
 import uuid
-from collections import deque
+from collections import OrderedDict, deque
 from functools import lru_cache
 from datetime import date, datetime, timezone
 from io import StringIO
@@ -47,6 +47,17 @@ from ETF_screener.market_data_service import (
 )
 from ETF_screener.query_service import ETFQueryService
 from ETF_screener.shortlist_engine import ETFShortlistEngine
+from ETF_screener.screener_controls import (
+    DEFAULT_MACD_CROSS_MODE,
+    DEFAULT_RSI_CROSS_MODE,
+    DEFAULT_SCREEN_FILTERS,
+    DEFAULT_RSI_CROSS_VALUE,
+    DEFAULT_STOCH_CROSS_MODE,
+    DEFAULT_STOCH_CROSS_VALUE,
+    DEFAULT_VOLUME_MAX,
+    normalize_screen_filters,
+    screen_with_controls,
+)
 from ETF_screener.scripts.churn_strategies import (
     evaluate_strategies,
     find_recent_entry_days,
@@ -74,6 +85,9 @@ logger = setup_logging()
 CUSTOM_TICKER_LIST_SCHEMA_VERSION = "custom_ticker_lists_v3"
 CUSTOM_TICKER_LIST_CONFIG_PATH = Path("config") / "custom_ticker_list.json"
 CUSTOM_TICKER_LIST_DEFAULT_NAME = "My List"
+SCREEN_PRESET_SCHEMA_VERSION = "screen_presets_v1"
+SCREEN_PRESET_CONFIG_PATH = Path("config") / "screener_presets.json"
+SCREEN_PRESET_DEFAULT_NAME = "Sequence Default"
 XETRA_METADATA_PATH = Path("config") / "xetra.json"
 SWEDEN_METADATA_PATH = Path("config") / "sweden.json"
 NASDAQ_METADATA_PATH = Path("config") / "nasdaq.json"
@@ -110,10 +124,20 @@ _BACKTEST_EVENT_LOCK = Lock()
 _BACKTEST_EVENT_RUNS: dict[str, dict[str, object]] = {}
 _BACKTEST_EVENT_MAX_RUNS = 8
 _BACKTEST_EVENT_MAX_EVENTS = 2000
+_SCOPED_SHORTLIST_CACHE_LOCK = Lock()
+_SCOPED_SHORTLIST_CACHE: "OrderedDict[str, pd.DataFrame]" = OrderedDict()
+_SCOPED_SHORTLIST_CACHE_MAX_ENTRIES = 16
 SCREEN_OVERBOUGHT_RSI_THRESHOLD = 70.0
 SCREEN_MIN_RECENT_AVG_VOLUME = 50_000.0
 SCREEN_MIN_RECENT_AVG_DOLLAR_VOLUME = 500_000.0
 SCREEN_MAX_RECENT_ZERO_VOLUME_ROWS = 1
+PLAYBOOK_DEFAULT_RISK_PCT = 5.0
+PLAYBOOK_MIN_AVG_VOLUME_20 = 250_000.0
+PLAYBOOK_MIN_RSI = 45.0
+PLAYBOOK_MAX_RSI = 65.0
+PLAYBOOK_MAX_SIGNAL_AGE_DAYS = 5
+PLAYBOOK_MIN_PULLBACK_PCT = 2.0
+PLAYBOOK_MAX_PULLBACK_PCT = 8.0
 
 
 def _safe_float(val, default=None):
@@ -1394,7 +1418,7 @@ def _normalize_market_source(value: object | None) -> str:
     if cleaned in {"list", "chosen", "chosen_list", "custom"}:
         return "list"
     if cleaned in {"all_lists", "alllists", "all list", "all lists"}:
-        return "all_lists"
+        return "list"
     if cleaned in {"xetra", "germany", "de", "exchange", "all"}:
         return "xetra"
     return "xetra"
@@ -1408,9 +1432,353 @@ def _market_source_config(source: object | None) -> tuple[Path, str]:
         return SWEDEN_METADATA_PATH, "active"
     if normalized == "list":
         return CUSTOM_TICKER_LIST_CONFIG_PATH, "active"
-    if normalized == "all_lists":
-        return CUSTOM_TICKER_LIST_CONFIG_PATH, "all"
     return XETRA_METADATA_PATH, "active"
+
+
+def _scoped_shortlist_cache_key(
+    *,
+    db: ETFDatabase,
+    scan_scope: str,
+    tickers: list[str],
+) -> str:
+    """Build a stable cache key for a scoped shortlist request."""
+    payload = {
+        "scope": str(scan_scope or ""),
+        "tickers": [str(ticker).upper() for ticker in tickers],
+        "latest_market_date": _latest_market_date_for(db),
+        "artifact_version": str(
+            getattr(ETFShortlistEngine, "ARTIFACT_VERSION", "shortlist_v1")
+        ),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _get_cached_scoped_shortlist(cache_key: str) -> pd.DataFrame | None:
+    """Return a cached scoped shortlist copy when available."""
+    with _SCOPED_SHORTLIST_CACHE_LOCK:
+        cached = _SCOPED_SHORTLIST_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        _SCOPED_SHORTLIST_CACHE.move_to_end(cache_key)
+        return cached.copy()
+
+
+def _store_cached_scoped_shortlist(cache_key: str, df: pd.DataFrame) -> None:
+    """Store a scoped shortlist in the in-process cache with simple LRU eviction."""
+    cached_df = df.copy()
+    with _SCOPED_SHORTLIST_CACHE_LOCK:
+        _SCOPED_SHORTLIST_CACHE[cache_key] = cached_df
+        _SCOPED_SHORTLIST_CACHE.move_to_end(cache_key)
+        while len(_SCOPED_SHORTLIST_CACHE) > _SCOPED_SHORTLIST_CACHE_MAX_ENTRIES:
+            _SCOPED_SHORTLIST_CACHE.popitem(last=False)
+
+
+def _filter_shortlist_frame(
+    df: pd.DataFrame,
+    *,
+    label: str | None = None,
+    limit: int | None = None,
+) -> pd.DataFrame:
+    """Apply label and limit filters to a shortlist frame."""
+    filtered = df.copy()
+    if label:
+        filtered = filtered[filtered["label"] == label].copy()
+    if limit is not None:
+        filtered = filtered.head(max(1, int(limit))).copy()
+    return filtered.reset_index(drop=True)
+
+
+def _normalize_playbook_risk_pct(value: object | None) -> float:
+    """Clamp the playbook stop-distance control to a sane percent range."""
+    try:
+        risk_pct = float(value if value is not None else PLAYBOOK_DEFAULT_RISK_PCT)
+    except (TypeError, ValueError):
+        risk_pct = PLAYBOOK_DEFAULT_RISK_PCT
+    return max(0.5, min(risk_pct, 25.0))
+
+
+def _frame_series(frame: pd.DataFrame, *names: str) -> pd.Series:
+    """Return the first matching column from a frame, or an empty series."""
+    if frame is None or frame.empty:
+        return pd.Series(dtype="float64")
+    for name in names:
+        if name in frame.columns:
+            return frame[name]
+    return pd.Series(dtype="float64")
+
+
+def _frame_latest_value(frame: pd.DataFrame, *names: str) -> object | None:
+    """Return the latest value for the first matching column name."""
+    series = _frame_series(frame, *names)
+    if series.empty:
+        return None
+    return series.iloc[-1]
+
+
+def _playbook_stop_plan(frame: pd.DataFrame, risk_pct: float) -> dict[str, object]:
+    """Build a simple stop plan from nearby technical support and a risk cap."""
+    if frame is None or frame.empty:
+        return {
+            "entry": 0.0,
+            "stop": 0.0,
+            "stop_basis": "risk_cap",
+            "support_level": None,
+            "support_basis": None,
+            "technical_risk_pct": None,
+            "max_loss_pct": round(float(risk_pct), 2),
+            "note": "No market history was available for stop planning.",
+        }
+
+    entry = _safe_float(_frame_latest_value(frame, "Close", "close"), 0.0) or 0.0
+    if entry <= 0:
+        return {
+            "entry": 0.0,
+            "stop": 0.0,
+            "stop_basis": "risk_cap",
+            "support_level": None,
+            "support_basis": None,
+            "technical_risk_pct": None,
+            "max_loss_pct": round(float(risk_pct), 2),
+            "note": "The latest close was unavailable, so the stop could not be priced.",
+        }
+
+    support_candidates: list[tuple[str, float]] = []
+
+    def add_support(label: str, raw_value: object) -> None:
+        value = _safe_float(raw_value)
+        if value is None or value <= 0 or value >= entry:
+            return
+        support_candidates.append((label, float(value)))
+
+    add_support("EMA 50", _frame_latest_value(frame, "EMA_50", "ema_50"))
+    add_support(
+        "Supertrend",
+        _frame_latest_value(frame, "Supertrend", "supertrend"),
+    )
+    lows = pd.to_numeric(_frame_series(frame, "Low", "low"), errors="coerce").dropna()
+    if not lows.empty:
+        add_support("20D low", lows.tail(20).min())
+
+    support_basis = None
+    support_level = None
+    technical_risk_pct = None
+    if support_candidates:
+        support_basis, support_level = max(
+            support_candidates,
+            key=lambda item: item[1],
+        )
+        technical_risk_pct = ((entry - support_level) / entry) * 100.0
+
+    risk_stop = entry * (1.0 - (float(risk_pct) / 100.0))
+    stop = risk_stop
+    stop_basis = "risk_cap"
+    note = f"Using the {risk_pct:.1f}% risk cap because no nearby support was available."
+
+    if support_level is not None and support_level >= risk_stop:
+        stop = support_level
+        stop_basis = "technical"
+        note = f"Nearest support ({support_basis}) sits inside your {risk_pct:.1f}% risk limit."
+    elif support_level is not None:
+        note = (
+            f"{support_basis} support would risk {technical_risk_pct:.2f}%, "
+            f"so the stop is capped at {risk_pct:.1f}%."
+        )
+
+    max_loss_pct = ((entry - stop) / entry) * 100.0 if entry else float(risk_pct)
+    return {
+        "entry": round(entry, 4),
+        "stop": round(stop, 4),
+        "stop_basis": stop_basis,
+        "support_level": (
+            round(float(support_level), 4) if support_level is not None else None
+        ),
+        "support_basis": support_basis,
+        "technical_risk_pct": (
+            round(float(technical_risk_pct), 2)
+            if technical_risk_pct is not None
+            else None
+        ),
+        "max_loss_pct": round(float(max_loss_pct), 2),
+        "note": note,
+    }
+
+
+def _playbook_candidate_metrics(frame: pd.DataFrame) -> dict[str, object]:
+    """Summarize the rule inputs used by the hard-rule playbook screen."""
+    if frame is None or frame.empty:
+        return {
+            "entry": None,
+            "ema_50": None,
+            "supertrend": None,
+            "rsi": None,
+            "pullback_pct": None,
+            "avg_volume_20": None,
+            "signal_age_days": None,
+        }
+
+    volume_series = pd.to_numeric(
+        _frame_series(frame, "Volume", "volume"),
+        errors="coerce",
+    ).dropna()
+    avg_volume_20 = (
+        _safe_float(volume_series.tail(20).mean()) if not volume_series.empty else None
+    )
+    signal_series = _frame_series(frame, "Signal", "signal")
+    signal_age = None
+    if not signal_series.empty:
+        signals = signal_series.fillna(0).astype(int)
+        limit = min(len(signals), 31)
+        for age in range(limit):
+            idx = len(signals) - 1 - age
+            if idx < 0:
+                break
+            if signals.iloc[idx] != 1:
+                continue
+            if idx + 1 < len(signals) and (signals.iloc[idx + 1 :] == -1).any():
+                continue
+            signal_age = age
+            break
+    return {
+        "entry": _safe_float(_frame_latest_value(frame, "Close", "close")),
+        "ema_50": _safe_float(_frame_latest_value(frame, "EMA_50", "ema_50")),
+        "supertrend": _safe_float(
+            _frame_latest_value(frame, "Supertrend", "supertrend")
+        ),
+        "rsi": _safe_float(_frame_latest_value(frame, "RSI", "rsi")),
+        "pullback_pct": _safe_float(
+            _frame_latest_value(frame, "Pullback_Pct", "pullback_pct")
+        ),
+        "avg_volume_20": avg_volume_20,
+        "signal_age_days": signal_age,
+    }
+
+
+def _evaluate_playbook_rules(frame: pd.DataFrame) -> dict[str, object]:
+    """Apply the dedicated evening swing hard rules for playbook trades."""
+    metrics = _playbook_candidate_metrics(frame)
+    entry = metrics["entry"]
+    ema_50 = metrics["ema_50"]
+    supertrend = metrics["supertrend"]
+    rsi = metrics["rsi"]
+    pullback_pct = metrics["pullback_pct"]
+    avg_volume_20 = metrics["avg_volume_20"]
+    signal_age_days = metrics["signal_age_days"]
+
+    checks = [
+        {
+            "key": "above_ema_50",
+            "label": "Above EMA 50",
+            "passed": (
+                entry is not None and ema_50 is not None and float(entry) > float(ema_50)
+            ),
+            "detail": (
+                f"Close {entry:.2f} vs EMA 50 {ema_50:.2f}"
+                if entry is not None and ema_50 is not None
+                else "EMA 50 unavailable"
+            ),
+        },
+        {
+            "key": "above_supertrend",
+            "label": "Above Supertrend",
+            "passed": (
+                entry is not None
+                and supertrend is not None
+                and float(entry) > float(supertrend)
+            ),
+            "detail": (
+                f"Close {entry:.2f} vs Supertrend {supertrend:.2f}"
+                if entry is not None and supertrend is not None
+                else "Supertrend unavailable"
+            ),
+        },
+        {
+            "key": "healthy_rsi",
+            "label": "RSI 45-65",
+            "passed": (
+                rsi is not None and PLAYBOOK_MIN_RSI <= float(rsi) <= PLAYBOOK_MAX_RSI
+            ),
+            "detail": (
+                f"RSI {rsi:.2f}"
+                if rsi is not None
+                else "RSI unavailable"
+            ),
+        },
+        {
+            "key": "recent_signal",
+            "label": f"Signal <= {PLAYBOOK_MAX_SIGNAL_AGE_DAYS}d",
+            "passed": (
+                signal_age_days is not None
+                and int(signal_age_days) <= PLAYBOOK_MAX_SIGNAL_AGE_DAYS
+            ),
+            "detail": (
+                f"Signal age {int(signal_age_days)}d"
+                if signal_age_days is not None
+                else "No recent signal"
+            ),
+        },
+        {
+            "key": "liquidity_floor",
+            "label": "20D avg vol >= 250k",
+            "passed": (
+                avg_volume_20 is not None
+                and float(avg_volume_20) >= PLAYBOOK_MIN_AVG_VOLUME_20
+            ),
+            "detail": (
+                f"20D avg vol {avg_volume_20:,.0f}"
+                if avg_volume_20 is not None
+                else "Volume unavailable"
+            ),
+        },
+        {
+            "key": "constructive_pullback",
+            "label": "Pullback 2-8%",
+            "passed": (
+                pullback_pct is not None
+                and PLAYBOOK_MIN_PULLBACK_PCT
+                <= float(pullback_pct)
+                <= PLAYBOOK_MAX_PULLBACK_PCT
+            ),
+            "detail": (
+                f"Pullback {pullback_pct:.2f}%"
+                if pullback_pct is not None
+                else "Pullback unavailable"
+            ),
+        },
+    ]
+    passed_checks = [check for check in checks if bool(check["passed"])]
+    failed_checks = [check for check in checks if not bool(check["passed"])]
+    return {
+        "passed": len(failed_checks) == 0,
+        "checks": checks,
+        "passed_checks": passed_checks,
+        "failed_checks": failed_checks,
+        "metrics": metrics,
+    }
+
+
+def _resolve_shortlist_universe(
+    *,
+    db: ETFDatabase,
+    scan_scope: object | None = None,
+    ticker_list: str | None = None,
+) -> list[str]:
+    """Return the shortlist universe implied by the current scan source."""
+    normalized_scope = _normalize_market_source(scan_scope)
+    latest_market_date = _latest_market_date_for(db)
+    tickers = filter_tickers_by_exchange_and_list(
+        list(_cached_backtest_universe(_db_path_for(db), latest_market_date)),
+        ticker_list=ticker_list,
+        scan_scope=normalized_scope,
+    )
+    if normalized_scope == "nasdaq":
+        tickers = filter_low_vitality_nasdaq_tickers(
+            db_path=_db_path_for(db),
+            latest_market_date=latest_market_date,
+            tickers=tickers,
+        )
+    return [str(ticker).upper() for ticker in tickers if str(ticker).strip()]
 
 
 # Database access function (FastAPI style)
@@ -1517,6 +1885,111 @@ def _save_cached_screen_result(cache_key: str, payload: dict) -> None:
                 cache_path.unlink()
         except Exception:
             pass
+
+
+def _normalize_screen_preset_name(value: object) -> str:
+    """Return a stable preset label for the control-based screener."""
+    name = str(value or "").strip()
+    return name or SCREEN_PRESET_DEFAULT_NAME
+
+
+def _normalize_screen_preset_entry(
+    value: object,
+    fallback_name: str | None = None,
+) -> dict[str, object]:
+    """Normalize one saved screener preset."""
+    raw = value if isinstance(value, dict) else {}
+    name = _normalize_screen_preset_name(raw.get("name") or fallback_name)
+    filters = normalize_screen_filters(raw.get("filters", raw))
+    return {
+        "name": name,
+        "filters": filters,
+    }
+
+
+def _normalize_screen_preset_payload(payload: object) -> dict[str, object]:
+    """Normalize the full saved screener preset collection."""
+    entries: list[dict[str, object]] = []
+    updated_at = None
+    active_name = SCREEN_PRESET_DEFAULT_NAME
+
+    if isinstance(payload, dict):
+        updated_at = payload.get("updated_at")
+        active_name = _normalize_screen_preset_name(
+            payload.get("active_name") or payload.get("name")
+        )
+        raw_presets = payload.get("presets")
+        if isinstance(raw_presets, list):
+            for raw_entry in raw_presets:
+                entries.append(_normalize_screen_preset_entry(raw_entry))
+        else:
+            entries.append(
+                _normalize_screen_preset_entry(payload, fallback_name=active_name)
+            )
+
+    deduped: list[dict[str, object]] = []
+    seen_names: set[str] = set()
+    for entry in entries:
+        name = _normalize_screen_preset_name(entry.get("name"))
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+        deduped.append(
+            {
+                "name": name,
+                "filters": normalize_screen_filters(entry.get("filters")),
+            }
+        )
+
+    if not deduped:
+        deduped.append(
+            {
+                "name": SCREEN_PRESET_DEFAULT_NAME,
+                "filters": normalize_screen_filters(DEFAULT_SCREEN_FILTERS),
+            }
+        )
+
+    active = next(
+        (entry for entry in deduped if entry["name"] == active_name),
+        deduped[0],
+    )
+    return {
+        "schema_version": SCREEN_PRESET_SCHEMA_VERSION,
+        "updated_at": updated_at,
+        "active_name": active["name"],
+        "default_filters": normalize_screen_filters(DEFAULT_SCREEN_FILTERS),
+        "presets": deduped,
+    }
+
+
+def _load_screen_preset_payload() -> dict[str, object]:
+    """Load the saved screener presets from config."""
+    if not SCREEN_PRESET_CONFIG_PATH.exists():
+        return _normalize_screen_preset_payload({})
+    try:
+        with open(SCREEN_PRESET_CONFIG_PATH, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except Exception as exc:
+        logger.warning("Failed to read screener preset JSON: %s", exc, exc_info=True)
+        fallback = _normalize_screen_preset_payload({})
+        fallback["error"] = "could_not_read"
+        return fallback
+    return _normalize_screen_preset_payload(payload)
+
+
+def _save_screen_preset_payload(payload: object) -> dict[str, object]:
+    """Persist the saved screener preset collection to config."""
+    normalized = _normalize_screen_preset_payload(payload)
+    SCREEN_PRESET_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    saved_payload = {
+        "schema_version": SCREEN_PRESET_SCHEMA_VERSION,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "active_name": normalized["active_name"],
+        "presets": normalized["presets"],
+    }
+    with open(SCREEN_PRESET_CONFIG_PATH, "w", encoding="utf-8") as handle:
+        json.dump(saved_payload, handle, indent=2, sort_keys=True)
+    return _normalize_screen_preset_payload(saved_payload)
 
 
 def _normalize_custom_ticker_list_value(value: object) -> list[str]:
@@ -1741,10 +2214,39 @@ async def index(request: Request):
         tickers = []
 
     strategies = get_strategies()
+    custom_ticker_lists = _load_custom_ticker_list_payload()
+    dashboard_js_version = "dev"
+    browser_log_relay_version = "dev"
+    try:
+        dashboard_js_version = str(
+            int(
+                (Path(__file__).parent / "static" / "js" / "dashboard.js")
+                .stat()
+                .st_mtime
+            )
+        )
+    except Exception:
+        pass
+    try:
+        browser_log_relay_version = str(
+            int(
+                (Path(__file__).parent / "static" / "js" / "browser-log-relay.js")
+                .stat()
+                .st_mtime
+            )
+        )
+    except Exception:
+        pass
     response = templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"tickers": tickers, "strategies": strategies},
+        context={
+            "tickers": tickers,
+            "strategies": strategies,
+            "custom_ticker_lists": custom_ticker_lists,
+            "dashboard_js_version": dashboard_js_version,
+            "browser_log_relay_version": browser_log_relay_version,
+        },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -1812,6 +2314,7 @@ async def query_run(
     dataset: str,
     ticker: Optional[str] = None,
     source: Optional[str] = None,
+    ticker_list: Optional[str] = None,
     signal: Optional[str] = None,
     min_reliability: Optional[float] = None,
     signal_age_max: Optional[int] = None,
@@ -1830,10 +2333,17 @@ async def query_run(
         refresh_meta: dict[str, object] | None = None
         if str(dataset or "").strip().lower() == "signal_scan" and refresh_if_needed:
             metadata_path, collection_mode = _market_source_config(source)
+            tracked_tickers_override = None
+            if (
+                _normalize_market_source(source) == "list"
+                and str(ticker_list or "").strip()
+            ):
+                tracked_tickers_override = _parse_strategy_selection(ticker_list)
             refresher = MarketDataRefresher(
                 db_path=str(get_db().db_path),
                 etfs_file=str(metadata_path),
                 collection_mode=collection_mode,
+                tracked_tickers_override=tracked_tickers_override,
             )
             status = refresher.get_status(stale_after_days=0)
             refresh_meta = {
@@ -1844,6 +2354,7 @@ async def query_run(
             if bool(status.get("is_stale")):
                 refresh_result = _refresh_market_data_for_gui(
                     source=source,
+                    ticker_list=ticker_list,
                     rebuild_shortlist=False,
                 )
                 refresh_meta["requested"] = True
@@ -1909,14 +2420,46 @@ async def save_custom_ticker_list(request: Request):
     }
 
 
+@app.get("/api/screen/presets")
+async def get_screen_presets():
+    """Return the saved control-based screener presets."""
+    return _load_screen_preset_payload()
+
+
+@app.post("/api/screen/presets")
+async def save_screen_presets(request: Request):
+    """Persist control-based screener presets to config/screener_presets.json."""
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        logger.warning("Invalid screener preset JSON: %s", exc, exc_info=True)
+        raise HTTPException(status_code=400, detail="invalid json")
+
+    try:
+        saved = _save_screen_preset_payload(payload)
+    except Exception as exc:
+        logger.error("Screener preset save failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return saved
+
+
 @app.get("/api/market-status")
-def market_status(stale_after_days: int = 0, source: Optional[str] = None):
+def market_status(
+    stale_after_days: int = 0,
+    source: Optional[str] = None,
+    ticker_list: Optional[str] = None,
+):
     """Return freshness information about the underlying market data cache."""
     metadata_path, collection_mode = _market_source_config(source)
+    tracked_tickers_override = None
+    if _normalize_market_source(source) == "list" and str(ticker_list or "").strip():
+        tracked_tickers_override = _parse_strategy_selection(ticker_list)
     refresher = MarketDataRefresher(
         db_path=str(get_db().db_path),
         etfs_file=str(metadata_path),
         collection_mode=collection_mode,
+        tracked_tickers_override=tracked_tickers_override,
     )
     try:
         return refresher.get_status(stale_after_days=stale_after_days)
@@ -1932,24 +2475,30 @@ def refresh_market_data(
     depth: int = 400,
     max_workers: int = 8,
     source: Optional[str] = None,
+    ticker_list: Optional[str] = None,
 ):
     """Refresh stale market data, then rebuild shortlist artifacts."""
     safe_depth = max(60, min(int(depth), 1500))
     safe_workers = max(1, min(int(max_workers), 16))
     safe_stale_after_days = max(0, min(int(stale_after_days), 30))
     metadata_path, collection_mode = _market_source_config(source)
+    tracked_tickers_override = None
+    if _normalize_market_source(source) == "list" and str(ticker_list or "").strip():
+        tracked_tickers_override = _parse_strategy_selection(ticker_list)
     logger.info(
-        "Dashboard market refresh requested: source=%s force=%s stale_after_days=%s depth=%s max_workers=%s",
+        "Dashboard market refresh requested: source=%s force=%s stale_after_days=%s depth=%s max_workers=%s ticker_count=%s",
         source or "default",
         force,
         safe_stale_after_days,
         safe_depth,
         safe_workers,
+        len(tracked_tickers_override or []),
     )
     refresher = MarketDataRefresher(
         db_path=str(get_db().db_path),
         etfs_file=str(metadata_path),
         collection_mode=collection_mode,
+        tracked_tickers_override=tracked_tickers_override,
     )
     try:
         refresh_kwargs = {
@@ -2000,21 +2549,27 @@ def refresh_market_data(
 
 def _refresh_market_data_for_gui(
     source: Optional[str] = None,
+    ticker_list: Optional[str] = None,
     *,
     rebuild_shortlist: bool = True,
 ) -> dict[str, object] | None:
     """Top up market data for GUI-driven actions when a user asks for it."""
     metadata_path, collection_mode = _market_source_config(source)
+    tracked_tickers_override = None
+    if _normalize_market_source(source) == "list" and str(ticker_list or "").strip():
+        tracked_tickers_override = _parse_strategy_selection(ticker_list)
     logger.info(
-        "Dashboard GUI refresh starting: source=%s metadata=%s collection_mode=%s",
+        "Dashboard GUI refresh starting: source=%s metadata=%s collection_mode=%s ticker_count=%s",
         source or "default",
         metadata_path,
         collection_mode,
+        len(tracked_tickers_override or []),
     )
     refresher = MarketDataRefresher(
         db_path=str(get_db().db_path),
         etfs_file=str(metadata_path),
         collection_mode=collection_mode,
+        tracked_tickers_override=tracked_tickers_override,
     )
     try:
         refresh_kwargs = {
@@ -2058,6 +2613,8 @@ async def shortlist(
     limit: int = 50,
     label: Optional[str] = None,
     refresh: bool = False,
+    scan_scope: Optional[str] = None,
+    ticker_list: Optional[str] = None,
 ):
     """Return the cached ETF shortlist, rebuilding it only when needed."""
     safe_limit = max(1, min(int(limit), 250))
@@ -2065,9 +2622,48 @@ async def shortlist(
     if safe_label not in {None, "Buy", "Watch", "Skip"}:
         raise HTTPException(status_code=400, detail="label must be Buy, Watch, or Skip")
 
-    engine = ETFShortlistEngine(db_path=str(get_db().db_path))
+    db = get_db()
+    normalized_scope = _normalize_market_source(scan_scope)
+    scoped_tickers = _resolve_shortlist_universe(
+        db=db,
+        scan_scope=normalized_scope,
+        ticker_list=ticker_list,
+    )
+    is_scoped_shortlist = normalized_scope in {"list", "sweden", "nasdaq"} or bool(
+        str(ticker_list or "").strip()
+    )
+    engine = ETFShortlistEngine(
+        db_path=str(db.db_path),
+        metadata_path=str(_market_source_config(normalized_scope)[0]),
+        metadata_map_override=_cached_etf_metadata_map() if is_scoped_shortlist else None,
+    )
     try:
-        df = engine.get_shortlist(limit=safe_limit, label=safe_label, refresh=refresh)
+        if is_scoped_shortlist:
+            if not scoped_tickers:
+                df = pd.DataFrame()
+            else:
+                cache_key = _scoped_shortlist_cache_key(
+                    db=db,
+                    scan_scope=normalized_scope,
+                    tickers=scoped_tickers,
+                )
+                cached_df = None if refresh else _get_cached_scoped_shortlist(cache_key)
+                if cached_df is None:
+                    cached_df = engine.get_shortlist(
+                        limit=None,
+                        label=None,
+                        refresh=refresh,
+                        tickers=scoped_tickers,
+                        persist=False,
+                    )
+                    _store_cached_scoped_shortlist(cache_key, cached_df)
+                df = _filter_shortlist_frame(
+                    cached_df,
+                    label=safe_label,
+                    limit=safe_limit,
+                )
+        else:
+            df = engine.get_shortlist(limit=safe_limit, label=safe_label, refresh=refresh)
     except Exception as e:
         logger.error("Shortlist endpoint failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -2124,6 +2720,169 @@ async def shortlist(
         "as_of_date": rows[0]["as_of_date"] if rows else None,
         "count": len(rows),
         "labels": label_counts,
+        "scan_scope": normalized_scope,
+        "source_count": len(scoped_tickers) if is_scoped_shortlist else None,
+        "rows": rows,
+    }
+
+
+@app.get("/api/playbook")
+async def playbook(
+    limit: int = 12,
+    risk_pct: float = PLAYBOOK_DEFAULT_RISK_PCT,
+    refresh: bool = False,
+    scan_scope: Optional[str] = None,
+    ticker_list: Optional[str] = None,
+):
+    """Return an actionable nightly trade list with simple stop planning."""
+    safe_limit = max(1, min(int(limit), 25))
+    safe_risk_pct = _normalize_playbook_risk_pct(risk_pct)
+
+    db = get_db()
+    latest_market_date = _latest_market_date_for(db)
+    latest_market_ts = (
+        pd.to_datetime(latest_market_date, errors="coerce")
+        if latest_market_date
+        else pd.NaT
+    )
+    normalized_scope = _normalize_market_source(scan_scope)
+    scoped_tickers = _resolve_shortlist_universe(
+        db=db,
+        scan_scope=normalized_scope,
+        ticker_list=ticker_list,
+    )
+    is_scoped_playbook = normalized_scope in {"list", "sweden", "nasdaq"} or bool(
+        str(ticker_list or "").strip()
+    )
+    engine = ETFShortlistEngine(
+        db_path=str(db.db_path),
+        metadata_path=str(_market_source_config(normalized_scope)[0]),
+        metadata_map_override=_cached_etf_metadata_map() if is_scoped_playbook else None,
+    )
+    try:
+        playbook_universe = (
+            [str(ticker).upper() for ticker in scoped_tickers]
+            if is_scoped_playbook
+            else [str(ticker).upper() for ticker in db.get_tickers()]
+        )
+    except Exception as exc:
+        logger.error("Playbook universe build failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    if not playbook_universe:
+        return {
+            "as_of_date": None,
+            "count": 0,
+            "risk_pct": safe_risk_pct,
+            "scan_scope": normalized_scope,
+            "source_count": len(scoped_tickers) if is_scoped_playbook else None,
+            "summary": {
+                "trade_count": 0,
+                "watch_count": 0,
+                "risk_capped_count": 0,
+                "stale_excluded_count": 0,
+            },
+            "rows": [],
+        }
+
+    rows: list[dict[str, object]] = []
+    stale_excluded_count = 0
+    for ticker in playbook_universe:
+        normalized_frame = engine._load_frame(ticker)
+        if normalized_frame.empty or len(normalized_frame) < 60:
+            continue
+        candidate_as_of_date = None
+        if "Date" in normalized_frame.columns:
+            candidate_as_of_date = (
+                pd.to_datetime(normalized_frame["Date"].iloc[-1], errors="coerce")
+                .strftime("%Y-%m-%d")
+            )
+        candidate_ts = (
+            pd.to_datetime(candidate_as_of_date, errors="coerce")
+            if candidate_as_of_date
+            else pd.NaT
+        )
+        if (
+            pd.notna(latest_market_ts)
+            and pd.notna(candidate_ts)
+            and (latest_market_ts.normalize() - candidate_ts.normalize()).days > 3
+        ):
+            stale_excluded_count += 1
+            continue
+        rule_eval = _evaluate_playbook_rules(normalized_frame)
+        if not bool(rule_eval["passed"]):
+            continue
+        stop_plan = _playbook_stop_plan(normalized_frame, safe_risk_pct)
+        decision = "Trade"
+        if stop_plan["stop_basis"] == "risk_cap":
+            decision = "Trade With Tight Cap"
+        meta = engine._build_metadata(ticker)
+        metrics = rule_eval["metrics"]
+        matched_rules = [
+            f"{check['label']}: {check['detail']}"
+            for check in rule_eval["passed_checks"]
+        ]
+        rule_score = len(rule_eval["passed_checks"])
+
+        rows.append(
+            {
+                "ticker": ticker,
+                "name": meta.get("name", ticker),
+                "label": "Buy",
+                "decision": decision,
+                "entry": stop_plan["entry"],
+                "stop": stop_plan["stop"],
+                "max_loss_pct": stop_plan["max_loss_pct"],
+                "stop_basis": stop_plan["stop_basis"],
+                "support_level": stop_plan["support_level"],
+                "support_basis": stop_plan["support_basis"],
+                "technical_risk_pct": stop_plan["technical_risk_pct"],
+                "note": stop_plan["note"],
+                "final_score": float(rule_score),
+                "recent_entry_days": (
+                    int(metrics["signal_age_days"])
+                    if metrics["signal_age_days"] is not None
+                    else None
+                ),
+                "close": round(float(metrics["entry"] or 0.0), 4),
+                "volume": int(metrics["avg_volume_20"] or 0),
+                "reasons": matched_rules[:6],
+                "data_source": "playbook_rules",
+                "rsi": round(float(metrics["rsi"]), 2) if metrics["rsi"] is not None else None,
+                "pullback_pct": (
+                    round(float(metrics["pullback_pct"]), 2)
+                    if metrics["pullback_pct"] is not None
+                    else None
+                ),
+                "as_of_date": candidate_as_of_date,
+            }
+        )
+    rows = sorted(
+        rows,
+        key=lambda item: (
+            int(item["recent_entry_days"]) if item["recent_entry_days"] is not None else 999,
+            -float(item["volume"] or 0),
+            str(item["ticker"] or ""),
+        ),
+    )[:safe_limit]
+
+    trade_count = len(rows)
+    watch_count = 0
+    risk_capped_count = sum(
+        1 for item in rows if str(item["stop_basis"]) == "risk_cap"
+    )
+    return {
+        "as_of_date": latest_market_date or (rows[0]["as_of_date"] if rows else None),
+        "count": len(rows),
+        "risk_pct": safe_risk_pct,
+        "scan_scope": normalized_scope,
+        "source_count": len(scoped_tickers) if is_scoped_playbook else None,
+        "summary": {
+            "trade_count": trade_count,
+            "watch_count": watch_count,
+            "risk_capped_count": risk_capped_count,
+            "stale_excluded_count": stale_excluded_count,
+        },
         "rows": rows,
     }
 
@@ -2163,6 +2922,23 @@ async def screen(
     exclude_overbought: bool = False,
     exclude_weak_liquidity: bool = False,
     exclude_unprofitable: bool = False,
+    preset_name: Optional[str] = None,
+    lookback_days: int = 180,
+    volume_min: float = 0.0,
+    volume_max: float = DEFAULT_VOLUME_MAX,
+    macd_event_enabled: bool = True,
+    rsi_event_enabled: bool = True,
+    stoch_event_enabled: bool = True,
+    rsi_min: float = 35.0,
+    rsi_max: float = 70.0,
+    rsi_cross_value: float = DEFAULT_RSI_CROSS_VALUE,
+    rsi_cross_mode: str = DEFAULT_RSI_CROSS_MODE,
+    stoch_cross_value: float = DEFAULT_STOCH_CROSS_VALUE,
+    stoch_cross_mode: str = DEFAULT_STOCH_CROSS_MODE,
+    macd_cross_mode: str = DEFAULT_MACD_CROSS_MODE,
+    macd_event_age: int = 45,
+    rsi_event_age: int = 90,
+    stoch_event_age: int = 15,
 ):
     """Run a dynamic screen based on selected strategies or provided DSL."""
     logger.info("=== SCREEN ENDPOINT START ===")
@@ -2191,8 +2967,29 @@ async def screen(
 
     try:
         if refresh:
-            _refresh_market_data_for_gui(source=scan_scope or exchange)
+            _refresh_market_data_for_gui(
+                source=scan_scope or exchange,
+                ticker_list=ticker_list,
+            )
             latest_market_date = _latest_market_date_for(db)
+
+        control_filters = normalize_screen_filters(
+            {
+                "lookback_days": lookback_days,
+                "volume_range": {"min": volume_min, "max": volume_max},
+                "macd_event_enabled": macd_event_enabled,
+                "rsi_event_enabled": rsi_event_enabled,
+                "stoch_event_enabled": stoch_event_enabled,
+                "rsi_cross_value": rsi_cross_value,
+                "rsi_cross_mode": rsi_cross_mode,
+                "stoch_cross_value": stoch_cross_value,
+                "stoch_cross_mode": stoch_cross_mode,
+                "macd_cross_mode": macd_cross_mode,
+                "macd_event_age": macd_event_age,
+                "rsi_event_age": rsi_event_age,
+                "stoch_event_age": stoch_event_age,
+            }
+        )
 
         # Priority: 1. Provided DSL content (from Lab), 2. Named strategy (from dropdown)
         content = ""
@@ -2208,15 +3005,33 @@ async def screen(
             )
 
         if not content:
+            tickers = list(_cached_screen_universe(db_path, latest_market_date))
+            tickers = filter_tickers_by_exchange_and_list(
+                tickers,
+                exchange=exchange,
+                ticker_list=ticker_list,
+                scan_scope=scan_scope,
+            )
+            if _normalize_market_source(scan_scope or exchange or "xetra") == "nasdaq":
+                tickers = filter_low_vitality_nasdaq_tickers(
+                    db_path=db_path,
+                    latest_market_date=latest_market_date,
+                    tickers=tickers,
+                )
+            control_signature = json.dumps(
+                control_filters,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
             cache_key = _screen_request_signature(
-                strategy_name="",
-                strategy_text="",
+                strategy_name=_normalize_screen_preset_name(preset_name or "controls"),
+                strategy_text=control_signature,
                 latest_market_date=latest_market_date,
                 scan_scope=scan_scope,
                 exchange=exchange,
                 ticker_list=ticker_list,
-                tickers=[],
-                fallback_mode=True,
+                tickers=tickers,
+                fallback_mode=False,
                 disqualifiers=disqualifiers,
             )
             cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
@@ -2232,34 +3047,78 @@ async def screen(
                         detail="Loaded cached results",
                         active=False,
                     )
-                    return cached_payload
+                    return _json_safe_value(cached_payload)
 
-            logger.info("No strategy/DSL, using fallback basic trend screen")
-            # Fallback to simple trend screen if no strategy found/selected
-            conn = db._get_connection()
-            query = """
-                SELECT ticker, close, volume, supertrend, st_lower
-                FROM etf_data 
-                WHERE date = (SELECT MAX(date) FROM etf_data)
-                AND close > st_lower
-                ORDER BY volume DESC
-                LIMIT 50
-            """
-            df = pd.read_sql_query(query, conn)
-            matches = _format_basic_screen_matches(df)
-            payload = {
-                "matches": matches,
-                "errors": [],
-                "total_errors": 0,
-                "total_candidates": len(matches),
-            }
+            logger.info("No strategy/DSL, using control-based recent-event screen")
+            logger.info("Control screen universe built: %d tickers", len(tickers))
+            if not tickers:
+                _set_job_progress(
+                    "screen",
+                    "done",
+                    pct=100.0,
+                    label="Screen",
+                    detail="No tickers selected",
+                    active=False,
+                )
+                return {
+                    "matches": [],
+                    "errors": [],
+                    "total_errors": 0,
+                    "total_candidates": 0,
+                }
+            payload = screen_with_controls(
+                db_path=db_path,
+                tickers=tickers,
+                latest_market_date=latest_market_date,
+                filters=control_filters,
+                metadata_map=_cached_etf_metadata_map(),
+            )
+            filtered_matches: list[dict[str, object]] = []
+            for match in payload.get("matches", []):
+                if not isinstance(match, dict):
+                    continue
+                if disqualifiers.get("exclude_overbought"):
+                    rsi_value = _safe_float(match.get("rsi"))
+                    if (
+                        rsi_value is not None
+                        and rsi_value > SCREEN_OVERBOUGHT_RSI_THRESHOLD
+                    ):
+                        continue
+                if disqualifiers.get("exclude_weak_liquidity"):
+                    recent_avg_volume = _safe_float(
+                        match.get("recent_avg_volume"), 0.0
+                    )
+                    close_value = _safe_float(match.get("close"), 0.0)
+                    if (
+                        recent_avg_volume < SCREEN_MIN_RECENT_AVG_VOLUME
+                        or (recent_avg_volume * close_value)
+                        < SCREEN_MIN_RECENT_AVG_DOLLAR_VOLUME
+                    ):
+                        continue
+                if disqualifiers.get("exclude_unprofitable"):
+                    profit_snapshot = _ticker_profitability_snapshot(
+                        str(match.get("ticker", ""))
+                    )
+                    if (
+                        not bool(profit_snapshot.get("is_fund"))
+                        and profit_snapshot.get("is_profitable") is False
+                    ):
+                        continue
+                filtered_matches.append(match)
+            payload["matches"] = filtered_matches
+            payload["total_candidates"] = len(filtered_matches)
+            payload["preset_name"] = _normalize_screen_preset_name(
+                preset_name or "Custom Controls"
+            )
+            payload["strategy_name"] = str(payload["preset_name"])
+            payload = _json_safe_value(payload)
             _save_cached_screen_result(cache_key, payload)
             _set_job_progress(
                 "screen",
                 "done",
                 pct=100.0,
                 label="Screen",
-                detail=f"{len(matches)} matches found",
+                detail=f"{len(filtered_matches)} matches found",
                 active=False,
             )
             return payload
@@ -2718,7 +3577,10 @@ async def backtest_view(
 
     try:
         if refresh:
-            _refresh_market_data_for_gui(source=scan_scope or exchange)
+            _refresh_market_data_for_gui(
+                source=scan_scope or exchange,
+                ticker_list=ticker_list,
+            )
 
         evaluate_kwargs = {
             "strategy_path": (strat_path.as_posix() if not dsl_text else None),
@@ -3187,7 +4049,10 @@ async def backtest_matrix_view(
 
     try:
         if refresh:
-            _refresh_market_data_for_gui(source=scan_scope or exchange)
+            _refresh_market_data_for_gui(
+                source=scan_scope or exchange,
+                ticker_list=ticker_list,
+            )
         strategy_state_lock = Lock()
 
         async def _run_strategy_worker(index: int, strategy_name: str):

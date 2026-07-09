@@ -83,6 +83,62 @@
       filter: brightness(1.06);
     }
 
+    #page-progress-banner {
+      position: sticky;
+      top: 0;
+      z-index: 45;
+      padding: 0.7rem 1.5rem 0.75rem;
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.96));
+      border-bottom: 1px solid rgba(96, 165, 250, 0.28);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+      backdrop-filter: blur(12px);
+    }
+
+    #page-progress-banner[hidden] {
+      display: none !important;
+    }
+
+    #page-progress-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.45rem;
+    }
+
+    #page-progress-label {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #bfdbfe;
+    }
+
+    #page-progress-text {
+      font-size: 12px;
+      font-weight: 700;
+      color: #e0f2fe;
+      text-align: right;
+    }
+
+    #page-progress-track {
+      width: 100%;
+      height: 0.55rem;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+    }
+
+    #page-progress-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #38bdf8, #818cf8, #22c55e);
+      transition: width 220ms ease;
+    }
+
     #plotly-tools-label {
       font-size: 10px;
       font-weight: 700;
@@ -188,11 +244,239 @@
       box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.15);
     }
 
-    #scan-scope-helper {
+    #scan-source-list-picker {
+      display: flex;
+      gap: 0.45rem;
+      align-items: center;
+      margin-top: 0.45rem;
+      opacity: 0.62;
+      transition: opacity 160ms ease;
+      flex-wrap: wrap;
+    }
+
+    #scan-source-list-picker.is-scan-active {
+      opacity: 1;
+    }
+
+    #list-select {
+      min-width: 220px;
+      flex: 1 1 auto;
+      border: 1px solid rgba(148, 163, 184, 0.32);
+      border-radius: 0.7rem;
+      padding: 0.6rem 0.75rem;
+      font-size: 12px;
+      font-weight: 800;
+      color: #e2e8f0;
+      background: rgba(15, 23, 42, 0.78);
+      outline: none;
+    }
+
+    #list-select.is-scan-active {
+      border-color: rgba(168, 85, 247, 0.8);
+      background: linear-gradient(180deg, rgba(76, 29, 149, 0.98), rgba(91, 33, 182, 0.94));
+      color: #faf5ff;
+      box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.15);
+    }
+
+    #list-select option {
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+
+    #list-select-universe-badge {
+      margin-top: 0.45rem;
+      display: none;
+      align-items: center;
+      gap: 0.35rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(15, 23, 42, 0.72);
+      color: #cbd5e1;
+      padding: 0.35rem 0.7rem;
       font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    #list-select-universe-badge.is-active {
+      border-color: rgba(168, 85, 247, 0.75);
+      background: linear-gradient(180deg, rgba(76, 29, 149, 0.98), rgba(91, 33, 182, 0.94));
+      color: #faf5ff;
+      box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.15);
+    }
+
+    #scan-source-list-preview {
+      margin-top: 0.55rem;
+      border-radius: 0.85rem;
+      border: 1px solid rgba(168, 85, 247, 0.28);
+      background: rgba(30, 27, 75, 0.42);
+      padding: 0.75rem 0.85rem;
+    }
+
+    #scan-source-list-preview[hidden] {
+      display: none !important;
+    }
+
+    #scan-source-list-preview-title {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #ddd6fe;
+    }
+
+    #scan-source-list-preview-body {
+      margin-top: 0.55rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      max-height: 7.5rem;
+      overflow: auto;
+      padding-right: 0.15rem;
+    }
+
+    .scan-source-list-chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid rgba(196, 181, 253, 0.35);
+      background: rgba(15, 23, 42, 0.9);
+      color: #f5f3ff;
+      padding: 0.25rem 0.55rem;
+      font-size: 11px;
+      font-weight: 700;
       line-height: 1.1;
-      color: rgba(203, 213, 225, 0.85);
-      letter-spacing: 0.02em;
+    }
+
+    .scan-source-list-empty {
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+
+    .screen-range-shell {
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 1rem;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.94));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+      padding: 1rem;
+    }
+
+    .screen-range-track {
+      position: relative;
+      height: 1.25rem;
+      margin-top: 0.85rem;
+    }
+
+    .screen-range-track::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 0.28rem;
+      transform: translateY(-50%);
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(14, 165, 233, 0.18), rgba(37, 99, 235, 0.35));
+    }
+
+    .screen-range-track input[type="range"] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      margin: 0;
+      pointer-events: none;
+      background: transparent;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .screen-range-track input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 1rem;
+      height: 1rem;
+      border-radius: 999px;
+      border: 2px solid #0f172a;
+      background: linear-gradient(135deg, #0ea5e9, #2563eb);
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.28);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .screen-range-track input[type="range"]::-moz-range-thumb {
+      width: 1rem;
+      height: 1rem;
+      border-radius: 999px;
+      border: 2px solid #0f172a;
+      background: linear-gradient(135deg, #0ea5e9, #2563eb);
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.28);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .screen-range-axis {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #64748b;
+      text-transform: uppercase;
+    }
+
+    .screen-timeline-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+      padding: 1rem;
+      border: 1px solid rgba(244, 63, 94, 0.16);
+      border-radius: 1.2rem;
+      background:
+        linear-gradient(180deg, rgba(255, 241, 242, 0.92), rgba(255, 255, 255, 0.98));
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.8),
+        0 12px 28px rgba(15, 23, 42, 0.06);
+    }
+
+    .screen-timeline-step {
+      position: relative;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 1rem;
+      background: rgba(255, 255, 255, 0.92);
+      padding: 1rem 1rem 0.9rem;
+    }
+
+    .screen-timeline-step:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      left: 1.25rem;
+      bottom: -0.95rem;
+      width: 2px;
+      height: 0.95rem;
+      background: linear-gradient(180deg, rgba(244, 63, 94, 0.4), rgba(14, 165, 233, 0.28));
+    }
+
+    .screen-timeline-step-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #e11d48;
+    }
+
+    .screen-timeline-step-label::before {
+      content: "";
+      width: 0.65rem;
+      height: 0.65rem;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #fb7185, #0ea5e9);
+      box-shadow: 0 0 0 4px rgba(251, 113, 133, 0.12);
+      flex: 0 0 auto;
     }
 
   </style>
@@ -206,36 +490,17 @@
       </h1>
       <div class="flex items-center gap-4">
         <div id="nav-tab-context" class="text-xs font-bold uppercase tracking-[0.18em] text-slate-300 text-right">
-          Screener controls
+          Screener: recent event sequencing over the selected universe
         </div>
-        <div id="nav-screener-controls" class="flex items-center space-x-4">
-          <div class="flex items-center h-10">
-          <button id="modify-btn" onclick="modifyStrategy()"
-            class="h-10 bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold px-3 rounded-l-lg border border-amber-400/60 transition-all flex items-center justify-center leading-none whitespace-nowrap"
-            title="Open strategy in editor to modify and save as a new file">
-            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
-              </path>
-            </svg>
-            Modify
-          </button>
-          <select id="strategy-select" onchange="updateEditorContent(this.value)"
-            class="h-10 bg-slate-800 text-white px-3 border border-l-0 border-indigo-500/50 min-w-[200px] leading-none">
-            <option value="">-- Select Screener Strategy --</option>
-            {% for strat in strategies %}
-            <option value="{{ strat }}">{{ strat }}</option>
-            {% endfor %}
-          </select>
+        <div id="nav-screener-controls" class="hidden flex items-center space-x-4">
           <button id="run-btn" onclick="runScreen()"
-            class="h-10 bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-3 border border-l-0 border-green-500/60 rounded-r-lg transition-all flex items-center justify-center leading-none whitespace-nowrap"
-            title="Run the selected strategy in the Screener tab">
+            class="h-10 bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-4 rounded-lg border border-green-500/60 transition-all flex items-center justify-center leading-none whitespace-nowrap"
+            title="Run the control-based screener">
             <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24">
               <path d="M5 3l14 9-14 9V3z" />
             </svg>
             Run Screener
           </button>
-          </div>
         <div id="nav-scan-progress"
             class="hidden ml-2 min-w-[250px] rounded-lg border border-indigo-500/30 bg-slate-800/90 px-2.5 py-1.5 shadow-sm">
             <div class="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-slate-400">
@@ -262,10 +527,35 @@
             <button type="button" id="scan-source-xetra" class="scan-source-btn" data-scope="xetra" onclick="setScanSource('xetra')">Xetra</button>
             <button type="button" id="scan-source-nasdaq" class="scan-source-btn" data-scope="nasdaq" onclick="setScanSource('nasdaq')">Nasdaq</button>
             <button type="button" id="scan-source-sweden" class="scan-source-btn" data-scope="sweden" onclick="setScanSource('sweden')">Sweden</button>
-            <button type="button" id="scan-source-list" class="scan-source-btn" data-scope="list" onclick="setScanSource('list')">My List</button>
-            <button type="button" id="scan-source-all-lists" class="scan-source-btn" data-scope="all_lists" onclick="setScanSource('all_lists')">All Lists</button>
+            <button type="button" id="scan-source-list" class="scan-source-btn" data-scope="list" onclick="setScanSource('list')">List</button>
           </div>
-          <div id="scan-scope-helper">Pick the source the scanner should work on.</div>
+          <div id="scan-source-list-picker">
+            <select id="list-select" onchange="activateCustomTickerList(this.value)"
+              title="Choose the saved list the scanner should use">
+              {% set saved_lists = custom_ticker_lists.get('lists', []) %}
+              {% set active_saved_list_name = custom_ticker_lists.get('active_name', 'My List') %}
+              {% for saved_list in saved_lists %}
+              <option value="{{ saved_list.get('name', 'My List') }}" {% if saved_list.get('name', 'My List') == active_saved_list_name %}selected{% endif %}>
+                {{ saved_list.get('name', 'My List') }} ({{ saved_list.get('count', (saved_list.get('tickers', []) | length)) }})
+              </option>
+              {% endfor %}
+            </select>
+            <button id="list-edit-btn" type="button" onclick="openListEditorModal()"
+              class="scan-source-btn" style="min-width:88px"
+              title="Create, rename, or edit your saved lists">
+              Edit
+            </button>
+            <button id="list-preview-btn" type="button" onclick="toggleScanSourceListPreview()"
+              class="scan-source-btn" style="min-width:96px"
+              title="Show the tickers inside the selected saved list">
+              Hide Tickers
+            </button>
+          </div>
+          <div id="list-select-universe-badge">List universe: {{ custom_ticker_lists.get('active_name', 'My List') }}</div>
+          <div id="scan-source-list-preview" hidden>
+            <div id="scan-source-list-preview-title">{{ custom_ticker_lists.get('active_name', 'My List') }} · {{ custom_ticker_lists.get('count', 0) }} tickers</div>
+            <div id="scan-source-list-preview-body"></div>
+          </div>
         </div>
         <div class="rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 min-w-[280px]">
           <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">Disqualify</div>
@@ -301,11 +591,6 @@
           </label>
           <div class="mt-2 text-[11px] text-slate-400">Exports the current matches into your Drive folder named Auto Exports after each successful screen run when backend Google credentials are configured.</div>
         </div>
-        <button id="list-edit-btn" type="button" onclick="openListEditorModal()"
-          class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg border border-indigo-500/50 min-w-[190px] text-left transition-colors"
-          title="Edit the saved custom list">
-          Edit My List...
-        </button>
         <div class="flex items-center gap-3">
         <div class="flex rounded-md shadow-sm" role="group">
           <button id="range-btn-1m" type="button" onclick="setRange(21)"
@@ -338,13 +623,29 @@
         </div>
       </div>
     </div>
-  </nav>
+</nav>
+
+  <div id="page-progress-banner" hidden>
+    <div id="page-progress-meta">
+      <div id="page-progress-label">Working</div>
+      <div id="page-progress-text">0%</div>
+    </div>
+    <div id="page-progress-track">
+      <div id="page-progress-bar"></div>
+    </div>
+  </div>
 
   <div class="hidden">
     <select id="ticker-select">
       <option value="">Select Ticker...</option>
       {% for ticker in tickers %}
       <option value="{{ ticker }}">{{ ticker }}</option>
+      {% endfor %}
+    </select>
+    <select id="strategy-select">
+      <option value="">-- Select Saved Strategy --</option>
+      {% for strat in strategies %}
+      <option value="{{ strat }}">{{ strat }}</option>
       {% endfor %}
     </select>
   </div>
@@ -369,51 +670,290 @@
   <div id="dashboard-tabs" class="flex space-x-3 bg-slate-800 px-6 pt-3 pb-2 border-b border-slate-700">
     <button id="tab-btn-screener" class="tab-btn active bg-rose-600 text-white font-bold py-2.5 px-5 rounded-lg border border-rose-400/50 shadow-sm"
       onclick="showTab('screener')">Screener</button>
-    <button id="tab-btn-shortlist" class="tab-btn bg-sky-700 text-white font-bold py-2.5 px-5 rounded-lg border border-sky-400/40 shadow-sm"
-      onclick="showTab('shortlist')">Shortlist</button>
     <button id="tab-btn-query" class="tab-btn bg-amber-700 text-white font-bold py-2.5 px-5 rounded-lg border border-amber-400/40 shadow-sm"
       onclick="showTab('query')">Query</button>
+    <button id="tab-btn-playbook" class="tab-btn bg-violet-700 text-white font-bold py-2.5 px-5 rounded-lg border border-violet-400/40 shadow-sm"
+      onclick="showTab('playbook')">Playbook</button>
+    <button id="tab-btn-shortlist" class="tab-btn bg-sky-700 text-white font-bold py-2.5 px-5 rounded-lg border border-sky-400/40 shadow-sm"
+      onclick="showTab('shortlist')">Shortlist</button>
     <button id="tab-btn-backtest" class="tab-btn bg-emerald-700 text-white font-bold py-2.5 px-5 rounded-lg border border-emerald-400/40 shadow-sm"
       onclick="showTab('backtest')">Backtester</button>
   </div>
 
   <!-- Tab Content Sections -->
-  <div id="tab-screener">
-    <div class="w-full flex gap-6 px-6 mt-6 pb-12">
-      <!-- Sidebar for matching tickers -->
-      <aside class="w-80 flex flex-col gap-4 overflow-hidden shrink-0">
-        <div id="screener-results-panel" class="bg-white shadow-xl rounded-xl p-4 overflow-hidden max-h-[65vh] border-t-4 border-indigo-500 flex flex-col">
-          <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
-            Top Matches
-            <div class="flex items-center gap-2">
-              <button id="export-matches-btn" type="button" onclick="exportTopMatches()"
-                class="text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-600 text-white border border-emerald-500/60 hover:bg-emerald-500 transition-colors"
-                title="Create and download a CSV of the current top matches">
-                Export CSV
-              </button>
-              <span id="match-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">0</span>
+  <div id="tab-playbook" class="hidden">
+    <div class="p-6 space-y-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">Playbook</h2>
+          <p class="text-sm text-slate-500">A focused nightly trade list built from explicit evening swing rules, with stops capped by the risk you are willing to take.</p>
+        </div>
+        <div class="flex flex-col items-end gap-2">
+          <div id="playbook-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Ready to build tonight&apos;s trade list.</div>
+          <div class="text-right text-[11px] text-slate-500 max-w-md">Playbook follows the active universe above. Use `List` when you want a smaller watchlist-driven set of candidates.</div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-violet-100 bg-white shadow">
+        <div class="flex flex-wrap items-end justify-between gap-4 border-b border-violet-100 px-5 py-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <label class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              Max Risk %
+              <input id="playbook-risk-pct" type="number" min="0.5" max="25" step="0.5" value="5"
+                class="mt-1 block w-32 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-violet-400">
+            </label>
+          </div>
+          <button id="playbook-run-btn" onclick="loadPlaybook(true)"
+            class="bg-violet-700 hover:bg-violet-600 text-white text-sm font-bold py-2 px-4 rounded-lg border border-violet-500/60 transition-all">
+            Run Playbook
+          </button>
+        </div>
+        <div class="p-5">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="rounded-xl bg-white shadow p-4 border-t-4 border-violet-500">
+              <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">As Of</div>
+              <div id="playbook-as-of" class="mt-2 text-lg font-bold text-slate-800">-</div>
             </div>
-          </h2>
-          <div id="ticker-list" class="space-y-2 pb-6 overflow-y-auto flex-1 h-full">
-            <!-- Ticker list items will appear here -->
-            <div class="text-sm text-slate-400 italic">
-              No matches... run screen
+            <div class="rounded-xl bg-white shadow p-4 border-t-4 border-emerald-500">
+              <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Trade</div>
+              <div id="playbook-trade-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
+            </div>
+            <div class="rounded-xl bg-white shadow p-4 border-t-4 border-amber-500">
+              <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Watch</div>
+              <div id="playbook-watch-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
+            </div>
+            <div class="rounded-xl bg-white shadow p-4 border-t-4 border-rose-500">
+              <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Risk Capped</div>
+              <div id="playbook-risk-capped-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- Error/Failed Tickers Section -->
-        <div id="error-section" class="hidden bg-white shadow-lg rounded-xl p-4 border-t-4 border-red-400 flex flex-col flex-1 overflow-hidden max-h-[25vh]">
-          <h3 class="text-sm font-bold text-red-600 mb-2 flex justify-between">
-            Failed to Load
-            <span id="error-count" class="bg-red-50 text-red-600 px-1.5 rounded">0</span>
-          </h3>
-          <div id="error-list" class="text-[10px] text-slate-500 overflow-y-auto font-mono"></div>
+      <div id="playbook-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+        Run the playbook to build a list of tonight&apos;s candidates.
+      </div>
+
+      <div id="playbook-content" class="hidden">
+        <div class="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-950">
+          <span class="font-bold">Hard rules:</span> above `EMA 50`, above `Supertrend`, RSI between `45` and `65`, recent signal within `5` days, 20-day average volume above `250k`, and pullback between `2%` and `8%`.
         </div>
-      </aside>
+        <div class="overflow-hidden rounded-xl bg-white shadow border border-slate-200">
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-100 text-slate-600 uppercase text-xs tracking-wide">
+                <tr>
+                  <th class="px-4 py-3 text-left">Ticker</th>
+                  <th class="px-4 py-3 text-left">Decision</th>
+                  <th class="px-4 py-3 text-left">Entry</th>
+                  <th class="px-4 py-3 text-left">Stop</th>
+                  <th class="px-4 py-3 text-left">Risk</th>
+                  <th class="px-4 py-3 text-left">Basis</th>
+                  <th class="px-4 py-3 text-left">Notes</th>
+                </tr>
+              </thead>
+              <tbody id="playbook-table-body" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-      <!-- Main Chart Display -->
-      <main class="flex-1 min-w-0">
+  <div id="tab-screener">
+    <div class="px-6 mt-6">
+      <section class="rounded-[1.6rem] border border-slate-200 bg-white/95 shadow-xl shadow-slate-200/70 p-5">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-[0.22em] text-rose-500">Graphical Screener</div>
+            <h2 class="mt-2 text-2xl font-bold text-slate-900">Tune the sequence, then scan the universe.</h2>
+            <p class="mt-1 text-sm text-slate-500">The screener works on recent MACD, RSI, and StochRSI events over roughly the last six months.</p>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-[minmax(0,220px)_minmax(0,180px)_auto]">
+            <label class="block">
+              <span class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Preset</span>
+              <select id="screen-preset-select" onchange="applyScreenPreset(this.value)"
+                class="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
+                <option value="">Custom</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Save As</span>
+              <input id="screen-preset-name" type="text" value="Sequence Default"
+                class="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400"
+                placeholder="My preset">
+            </label>
+            <button id="screen-save-preset-btn" type="button" onclick="saveScreenPreset()"
+              class="self-end rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-rose-500">
+              Save Preset
+            </button>
+          </div>
+        </div>
+        <div class="mt-5 grid gap-4 xl:grid-cols-3 md:grid-cols-2">
+          <div class="screen-range-shell">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Volume Filter</div>
+                <div class="mt-1 text-base font-bold text-slate-900">Average 20D Volume</div>
+              </div>
+              <div id="screen-volume-readout" class="text-right text-xs font-bold text-sky-700">0 - 20.0M</div>
+            </div>
+            <div class="screen-range-track">
+              <input id="screen-volume-min" type="range" min="0" max="20000000" step="50000" value="0">
+              <input id="screen-volume-max" type="range" min="0" max="20000000" step="50000" value="20000000">
+            </div>
+            <div class="screen-range-axis"><span>0</span><span>20M</span></div>
+          </div>
+          <div class="screen-range-shell">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">RSI Level</div>
+                <div class="mt-1 text-base font-bold text-slate-900">RSI Trigger Level</div>
+              </div>
+              <div id="screen-rsi-cross-value-readout" class="text-right text-xs font-bold text-sky-700">50</div>
+            </div>
+            <div class="mt-6">
+              <input id="screen-rsi-cross-value" type="range" min="0" max="100" step="1" value="50" class="w-full accent-rose-600">
+            </div>
+            <div class="screen-range-axis"><span>0</span><span>100</span></div>
+          </div>
+          <div class="screen-range-shell">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">StochRSI Level</div>
+                <div class="mt-1 text-base font-bold text-slate-900">StochRSI Trigger Level</div>
+              </div>
+              <div id="screen-stoch-cross-value-readout" class="text-right text-xs font-bold text-sky-700">20</div>
+            </div>
+            <div class="mt-6">
+              <input id="screen-stoch-cross-value" type="range" min="0" max="100" step="1" value="20" class="w-full accent-rose-600">
+            </div>
+            <div class="screen-range-axis"><span>0</span><span>100</span></div>
+          </div>
+          <div class="screen-timeline-stack xl:col-span-2 xl:row-span-2">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-500">Timeline Stack</div>
+                <div class="mt-1 text-base font-bold text-slate-900">Place the events in visual order.</div>
+              </div>
+              <div id="screen-sequence-summary" class="text-right text-xs font-bold text-rose-700">RSI, MACD, and StochRSI can be placed in the order you want.</div>
+            </div>
+            <p class="text-sm text-slate-500">Each row has one blue event marker. The left side is further back in time, the right side is today, and the event may happen once or many times anywhere in that span.</p>
+            <div id="screen-sequence-badges" class="flex flex-wrap gap-2"></div>
+            <div id="screen-rsi-event-step" class="screen-timeline-step">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="screen-timeline-step-label">RSI Event</div>
+                  <div class="mt-1 text-base font-bold text-slate-900">RSI Cross Point</div>
+                  <div id="screen-rsi-mode-readout" class="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">Cross Up</div>
+                </div>
+                <div id="screen-rsi-cross-readout" class="text-right text-xs font-bold text-sky-700">90d ago</div>
+              </div>
+              <label class="mt-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                <input id="screen-rsi-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                Use RSI Event
+              </label>
+              <label class="mt-3 block">
+                <span class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">RSI Type</span>
+                <select id="screen-rsi-cross-mode"
+                  class="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
+                  <option value="cross_up">Cross Up</option>
+                  <option value="cross_down">Cross Down</option>
+                </select>
+              </label>
+              <div class="screen-range-track">
+                <input id="screen-rsi-cross-age" type="range" min="0" max="180" step="1" value="90">
+              </div>
+              <div class="screen-range-axis"><span id="screen-rsi-axis-left">180d ago</span><span>Today</span></div>
+            </div>
+            <div id="screen-macd-event-step" class="screen-timeline-step">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="screen-timeline-step-label">MACD Event</div>
+                  <div class="mt-1 text-base font-bold text-slate-900">MACD Cross Point</div>
+                  <div id="screen-macd-mode-readout" class="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">Low Cross / Buy</div>
+                </div>
+                <div id="screen-macd-cross-readout" class="text-right text-xs font-bold text-sky-700">45d ago</div>
+              </div>
+              <label class="mt-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                <input id="screen-macd-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                Use MACD Event
+              </label>
+              <label class="mt-3 block">
+                <span class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">MACD Type</span>
+                <select id="screen-macd-cross-mode"
+                  class="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
+                  <option value="low_cross_buy">Low Cross (Buy)</option>
+                  <option value="high_cross_sell">High Cross (Sell)</option>
+                  <option value="bullish_cross">Any Bullish Cross</option>
+                  <option value="bearish_cross">Any Bearish Cross</option>
+                </select>
+              </label>
+              <div class="screen-range-track">
+                <input id="screen-macd-cross-age" type="range" min="0" max="180" step="1" value="135">
+              </div>
+              <div class="screen-range-axis"><span id="screen-macd-axis-left">180d ago</span><span>Today</span></div>
+            </div>
+            <div id="screen-stoch-event-step" class="screen-timeline-step">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="screen-timeline-step-label">StochRSI Event</div>
+                  <div class="mt-1 text-base font-bold text-slate-900">StochRSI Cross Point</div>
+                  <div id="screen-stoch-mode-readout" class="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">Cross Up</div>
+                </div>
+                <div id="screen-stoch-cross-readout" class="text-right text-xs font-bold text-sky-700">15d ago</div>
+              </div>
+              <label class="mt-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                <input id="screen-stoch-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                Use StochRSI Event
+              </label>
+              <label class="mt-3 block">
+                <span class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">StochRSI Type</span>
+                <select id="screen-stoch-cross-mode"
+                  class="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
+                  <option value="cross_up">Cross Up</option>
+                  <option value="cross_down">Cross Down</option>
+                </select>
+              </label>
+              <div class="screen-range-track">
+                <input id="screen-stoch-cross-age" type="range" min="0" max="180" step="1" value="165">
+              </div>
+              <div class="screen-range-axis"><span id="screen-stoch-axis-left">180d ago</span><span>Today</span></div>
+            </div>
+          </div>
+          <div class="xl:row-span-2 flex min-h-0 flex-col gap-4">
+            <div id="screener-results-panel" class="bg-white shadow-xl rounded-xl p-4 overflow-hidden min-h-[28rem] max-h-[48rem] border-t-4 border-indigo-500 flex flex-col">
+              <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
+                Top Matches
+                <div class="flex items-center gap-2">
+                  <button id="export-matches-btn" type="button" onclick="exportTopMatches()"
+                    class="text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-600 text-white border border-emerald-500/60 hover:bg-emerald-500 transition-colors"
+                    title="Create and download a CSV of the current top matches">
+                    Export CSV
+                  </button>
+                  <span id="match-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">0</span>
+                </div>
+              </h2>
+              <div id="ticker-list" class="space-y-2 pb-6 overflow-y-auto flex-1 h-full">
+                <div class="text-sm text-slate-400 italic">
+                  No matches... run screen
+                </div>
+              </div>
+            </div>
+
+            <div id="error-section" class="hidden bg-white shadow-lg rounded-xl p-4 border-t-4 border-red-400 flex flex-col flex-1 overflow-hidden min-h-[10rem] max-h-[16rem]">
+              <h3 class="text-sm font-bold text-red-600 mb-2 flex justify-between">
+                Failed to Load
+                <span id="error-count" class="bg-red-50 text-red-600 px-1.5 rounded">0</span>
+              </h3>
+              <div id="error-list" class="text-[10px] text-slate-500 overflow-y-auto font-mono"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="w-full px-6 mt-6 pb-12">
+      <main class="min-w-0">
         <div id="chart-card" class="bg-white shadow-xl rounded-xl p-4 h-[85vh] flex flex-col border border-indigo-100 mb-8 overflow-hidden relative">
           <!-- Strategy Pop-out Window -->
           <div id="strategy-panel" class="hidden absolute top-0 right-0 w-[450px] h-full bg-slate-900 shadow-2xl z-50 transform transition-transform border-l border-indigo-500/30 flex flex-col">
@@ -489,19 +1029,19 @@
       <div class="flex items-start justify-between gap-4">
         <div>
           <h2 class="text-xl font-bold text-slate-800">ETF Shortlist</h2>
-          <p class="text-sm text-slate-500">Use this tab to browse ETF candidates first, then click any card to inspect the full chart in Screener.</p>
+          <p class="text-sm text-slate-500">Shortlist always runs on the currently chosen universe. That can be Xetra, Nasdaq, Sweden, or a saved List if you want to narrow the search and reduce computation.</p>
         </div>
         <div class="flex flex-col items-end gap-3">
           <div id="shortlist-market-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Checking market data freshness...</div>
-          <div id="shortlist-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Using cached shortlist snapshot</div>
+          <div id="shortlist-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Shortlist uses the active universe</div>
+          <div class="max-w-[420px] text-right text-[11px] text-slate-500">
+            Shortlist follows the selected universe above. Use `List` when you want a smaller focused universe, then use the refresh button here to fetch fresh data and rebuild that shortlist.
+          </div>
           <div class="flex flex-wrap justify-end gap-2">
-            <button id="market-refresh-btn" onclick="refreshMarketData()"
-              class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-indigo-500/60 transition-all">
-              Refresh Market Data
-            </button>
-            <button id="shortlist-refresh-btn" onclick="loadShortlist(true)"
-              class="bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-sky-500/60 transition-all">
-              Rebuild Shortlist
+            <button id="shortlist-refresh-btn" onclick="refreshMarketData()"
+              class="bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-sky-500/60 transition-all"
+              title="Fetch fresh market data for the active source, then rebuild the shortlist">
+              Refresh Shortlist
             </button>
           </div>
         </div>
@@ -1001,7 +1541,7 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js?v=20260617"></script>
+  <script src="/static/js/dashboard.js?v={{ dashboard_js_version }}"></script>
 
   <!-- ===============================================================
          Browser â†’ Server log relay
@@ -1009,7 +1549,7 @@
          each entry to /api/log so it appears in the server-side debug
          log file alongside all Python / uvicorn log records.
     ================================================================ -->
-  <script src="/static/js/browser-log-relay.js?v=20260515r1"></script>
+  <script src="/static/js/browser-log-relay.js?v={{ browser_log_relay_version }}"></script>
 
   <!-- List Editor Modal -->
   <div id="list-modal"
@@ -1020,7 +1560,7 @@
       <div style="padding:1rem 1.25rem;border-bottom:1px solid rgba(148,163,184,0.2);display:flex;align-items:center;justify-content:space-between;gap:1rem">
         <div>
           <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#93c5fd">Ticker List</div>
-          <div style="font-size:1rem;font-weight:700;color:#f8fafc">Build My List</div>
+          <div id="list-modal-title" style="font-size:1rem;font-weight:700;color:#f8fafc">Build Saved Lists</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.25rem">
           <div id="list-modal-count" style="font-size:0.75rem;font-weight:700;color:#cbd5e1;text-transform:uppercase;letter-spacing:0.08em">0 selected</div>
@@ -1028,7 +1568,7 @@
         </div>
       </div>
       <div style="padding:1rem 1.25rem 0.75rem;color:#cbd5e1;font-size:0.9rem;line-height:1.5">
-        Search by ticker, company name, issuer, or region, then tick the entries you want in your list. The list is saved as JSON in `config/`.
+        Search by ticker, company name, issuer, or region, then tick the entries you want in your list. Create as many named lists as you want; the active one is saved as JSON in `config/`. Wildcards are supported, so searches like `SEB*`, `*BANK*`, or `INVE?` work too.
       </div>
       <div style="padding:0 1.25rem 0.85rem;display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center">
         <div style="display:flex;flex-direction:column;gap:0.3rem;min-width:220px">
@@ -1051,7 +1591,7 @@
         </div>
       </div>
       <div style="padding:0 1.25rem 0.9rem;display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center">
-        <input id="list-modal-search" type="text" placeholder="Search tickers..."
+        <input id="list-modal-search" type="text" placeholder="Search tickers or use * wildcards..."
           oninput="setListBuilderSearch(this.value)"
           style="min-width:220px;flex:1;border-radius:0.55rem;border:1px solid rgba(148,163,184,0.35);background:#020617;color:#e2e8f0;padding:0.7rem 0.9rem;font-size:0.92rem;outline:none">
         <button type="button" data-list-exchange="all" onclick="setListBuilderExchange('all')"
@@ -1062,6 +1602,8 @@
           style="border-radius:999px;border:1px solid rgba(148,163,184,0.35);background:#1e293b;color:#e2e8f0;font-weight:700;padding:0.45rem 0.85rem">Nasdaq</button>
         <button type="button" data-list-exchange="sweden" onclick="setListBuilderExchange('sweden')"
           style="border-radius:999px;border:1px solid rgba(148,163,184,0.35);background:#1e293b;color:#e2e8f0;font-weight:700;padding:0.45rem 0.85rem">Sweden</button>
+        <button id="list-modal-selected-only-btn" type="button" onclick="toggleListBuilderSelectedOnly()"
+          style="border-radius:999px;border:1px solid rgba(96,165,250,0.4);background:#0f172a;color:#bfdbfe;font-weight:700;padding:0.45rem 0.85rem">Selected Only</button>
         <div style="flex-basis:100%;height:0"></div>
         <button type="button" onclick="toggleVisibleListBuilderTickers(true)"
           style="border-radius:0.5rem;border:1px solid rgba(99,102,241,0.35);background:#312e81;color:#e0e7ff;font-weight:700;padding:0.45rem 0.8rem">Select Visible</button>
@@ -1070,13 +1612,23 @@
         <div id="list-modal-preview" style="margin-left:auto;font-size:0.8rem;color:#94a3b8">My List: No custom tickers selected yet</div>
       </div>
       <div style="padding:0 1.25rem 1rem;overflow:hidden;display:flex;flex-direction:column;gap:0.75rem;flex:1">
+        <div id="list-modal-selected-panel" style="border-radius:0.7rem;border:1px solid rgba(99,102,241,0.22);background:#111827;padding:0.8rem 0.9rem">
+          <div id="list-modal-selected-title" style="font-size:0.72rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#c7d2fe">Selected Tickers</div>
+          <div id="list-modal-selected-list" style="margin-top:0.65rem;display:flex;flex-wrap:wrap;gap:0.45rem"></div>
+        </div>
         <div id="list-modal-grid" style="overflow:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.55rem;padding-right:0.15rem"></div>
       </div>
-      <div style="padding:0 1.25rem 1.25rem;display:flex;justify-content:flex-end;gap:0.65rem">
+      <div style="padding:0 1.25rem 1.25rem;display:flex;justify-content:space-between;gap:0.65rem">
+        <button id="list-modal-delete-btn" type="button" onclick="deleteListEditorSelection()"
+          style="border-radius:0.5rem;border:1px solid rgba(248,113,113,0.35);background:#450a0a;color:#fecaca;font-weight:700;padding:0.55rem 0.9rem">
+          Delete List
+        </button>
+        <div style="display:flex;justify-content:flex-end;gap:0.65rem">
         <button type="button" onclick="closeListEditorModal()"
           style="border-radius:0.5rem;border:1px solid rgba(148,163,184,0.35);background:#1e293b;color:#e2e8f0;font-weight:700;padding:0.55rem 0.9rem">Cancel</button>
         <button type="button" onclick="saveListEditor()"
           style="border-radius:0.5rem;border:1px solid rgba(59,130,246,0.45);background:#2563eb;color:white;font-weight:700;padding:0.55rem 0.95rem">Apply List</button>
+        </div>
       </div>
     </div>
   </div>

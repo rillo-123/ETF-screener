@@ -117,6 +117,7 @@ class MarketDataRefresher:
         fetcher: Optional[YFinanceFetcher] = None,
         storage: Optional[ParquetStorage] = None,
         collection_mode: str = "active",
+        tracked_tickers_override: object | None = None,
     ):
         self.db = ETFDatabase(db_path=db_path)
         self.etfs_file = Path(etfs_file)
@@ -127,6 +128,7 @@ class MarketDataRefresher:
         self.collection_mode = (
             "all" if str(collection_mode).strip().lower() == "all" else "active"
         )
+        self.tracked_tickers_override = tracked_tickers_override
 
     @staticmethod
     def _parse_day(raw: str | None) -> Optional[date]:
@@ -175,6 +177,14 @@ class MarketDataRefresher:
 
     def _load_tracked_tickers(self) -> list[str]:
         blacklist = self._load_blacklist()
+        if self.tracked_tickers_override is not None:
+            return sorted(
+                ticker
+                for ticker in self._normalize_ticker_values(
+                    self.tracked_tickers_override
+                )
+                if ticker not in blacklist
+            )
         tickers: set[str] = set()
         if self.etfs_file.exists():
             with open(self.etfs_file, "r", encoding="utf-8") as handle:

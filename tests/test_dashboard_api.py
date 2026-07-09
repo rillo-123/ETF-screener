@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from fastapi.testclient import TestClient
 
+from ETF_screener import screener_controls
 from ETF_screener.dashboard import app_fast
 from ETF_screener.dashboard.app_fast import app
 from ETF_screener.google_drive_exports import build_screen_google_sheet_title
@@ -58,11 +59,15 @@ def test_tab_bar_visible():
     assert 'id="scan-source-nasdaq"' in html
     assert 'id="scan-source-sweden"' in html
     assert 'id="scan-source-list"' in html
-    assert 'id="scan-source-all-lists"' in html
+    assert 'id="scan-source-list-picker"' in html
     assert 'id="disqualify-overbought"' in html
     assert 'id="disqualify-weak-liquidity"' in html
     assert 'id="disqualify-unprofitable"' in html
     assert 'id="auto-export-google-drive"' in html
+    assert 'id="list-select"' in html
+    assert 'id="list-select-universe-badge"' in html
+    assert "SwedeBig (8)" in html
+    assert "Sweden Finance (42)" in html
     assert 'id="list-edit-btn"' in html
     assert ">Screener<" in html
     assert "StratFinder" not in html
@@ -78,6 +83,22 @@ def test_tab_bar_visible():
     assert ">Shortlist<" in html
     assert ">Query<" in html
     assert ">Backtester<" in html
+    assert html.index('id="tab-btn-screener"') < html.index('id="tab-btn-query"')
+    assert 'id="tab-btn-screener" class="tab-btn active' in html
+    assert 'id="tab-query" class="hidden"' in html
+    assert 'id="screen-preset-select"' in html
+    assert 'id="screen-preset-name"' in html
+    assert 'id="screen-save-preset-btn"' in html
+    assert 'id="screen-volume-min"' in html
+    assert 'id="screen-volume-max"' in html
+    assert 'id="screen-rsi-cross-value"' in html
+    assert 'id="screen-rsi-cross-mode"' in html
+    assert 'id="screen-stoch-cross-value"' in html
+    assert 'id="screen-stoch-cross-mode"' in html
+    assert 'id="screen-macd-cross-mode"' in html
+    assert 'id="screen-macd-cross-age"' in html
+    assert 'id="screen-rsi-cross-age"' in html
+    assert 'id="screen-stoch-cross-age"' in html
     assert ">Swarm<" not in html
     assert ">Swarm Lab<" not in html
     assert ">Churner<" not in html
@@ -88,8 +109,13 @@ def test_tab_bar_visible():
     assert "Signal Window" in html
     assert 'id="shortlist-grid"' in html
     assert 'id="tab-btn-query"' in html
+    assert 'id="tab-btn-playbook"' in html
     assert 'id="tab-query"' in html
+    assert 'id="tab-playbook"' in html
     assert 'id="query-dataset"' in html
+    assert 'id="playbook-risk-pct"' in html
+    assert 'id="playbook-run-btn"' in html
+    assert 'id="playbook-table-body"' in html
     assert 'id="query-run-btn"' in html
     assert 'id="query-results-body"' in html
     assert 'value="elusive_dip"' in html
@@ -103,11 +129,12 @@ def test_tab_bar_visible():
     assert 'id="shortlist-filter-buy"' in html
     assert 'id="shortlist-filter-watch"' in html
     assert 'id="shortlist-filter-skip"' in html
-    assert 'id="market-refresh-btn"' in html
     assert 'id="export-matches-btn"' in html
     assert "/api/swarm-history" not in dashboard_source
-    assert "/api/market-status?stale_after_days=0" in dashboard_source
-    assert "force=true&stale_after_days=0" in dashboard_source
+    assert "/api/market-status?" in dashboard_source
+    assert 'statusParams.set("stale_after_days", "0")' in dashboard_source
+    assert "/api/market-data/refresh?" in dashboard_source
+    assert 'refreshParams.set("force", "true")' in dashboard_source
     assert "/static/js/dashboard-loader.js" not in html
     assert "/static/js/browser-log-relay.js" in html
     assert "supertrend_continuation" in html
@@ -127,6 +154,7 @@ def test_tab_bar_visible():
     assert 'id="list-modal-search"' in html
     assert 'id="list-modal-list-select"' in html
     assert 'id="list-modal-name"' in html
+    assert 'id="list-modal-delete-btn"' in html
 
 def test_query_catalog_endpoint(monkeypatch):
     class _FakeDb:
@@ -232,7 +260,7 @@ def test_query_run_endpoint_executes_signal_scan_and_refreshes_if_needed(monkeyp
     monkeypatch.setattr(
         app_fast,
         "_refresh_market_data_for_gui",
-        lambda source=None, rebuild_shortlist=True: {
+        lambda source=None, rebuild_shortlist=True, **kwargs: {
             "source": source,
             "rebuild_shortlist": rebuild_shortlist,
             "refreshed": 2,
@@ -290,6 +318,177 @@ def test_screen_endpoint_refreshes_on_gui_request(monkeypatch):
     assert response.status_code == 200
     assert captured["called"] is True
     assert captured["source"] is None
+
+
+def test_screen_presets_endpoint_returns_defaults():
+    response = client.get("/api/screen/presets")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["schema_version"] == "screen_presets_v1"
+    assert "default_filters" in data
+    assert data["default_filters"]["lookback_days"] == 180
+    assert isinstance(data["presets"], list)
+
+
+def test_screen_endpoint_uses_control_screening_when_no_strategy(monkeypatch, tmp_path):
+    monkeypatch.setattr(app_fast, "_latest_market_date_for", lambda _db: "2026-07-08")
+    monkeypatch.setattr(app_fast, "_cached_screen_universe", lambda *_args: ("AAA.DE", "BBB.ST"))
+    monkeypatch.setattr(
+        app_fast,
+        "filter_tickers_by_exchange_and_list",
+        lambda tickers, **_kwargs: list(tickers),
+    )
+    captured = {}
+
+    def fake_screen_with_controls(**kwargs):
+        captured.update(kwargs)
+        return {
+            "matches": [
+                {
+                    "ticker": "AAA.DE",
+                    "name": "Alpha ETF",
+                    "close": 101.2,
+                    "recent_avg_volume": 550000.0,
+                    "rsi": 54.2,
+                    "macd_cross_days_ago": 8,
+                    "rsi_cross_days_ago": 20,
+                    "stoch_cross_days_ago": 3,
+                    "event_sequence": "RSI -> MACD -> StochRSI",
+                    "score": 312.4,
+                }
+            ],
+            "errors": [],
+            "total_errors": 0,
+            "total_candidates": 1,
+            "filters": kwargs["filters"],
+        }
+
+    monkeypatch.setattr(app_fast, "screen_with_controls", fake_screen_with_controls)
+    monkeypatch.setattr(app_fast, "_screen_cache_dir", lambda: tmp_path / "control_screen_cache")
+
+    response = client.get(
+        "/api/screen",
+        params={
+            "scan_scope": "sweden",
+            "volume_min": "150000",
+            "volume_max": "1200000",
+            "macd_event_enabled": "false",
+            "rsi_event_enabled": "true",
+            "stoch_event_enabled": "false",
+            "rsi_cross_value": "30",
+            "rsi_cross_mode": "cross_down",
+            "stoch_cross_value": "25",
+            "stoch_cross_mode": "cross_up",
+            "macd_cross_mode": "high_cross_sell",
+            "macd_event_age": "40",
+            "rsi_event_age": "80",
+            "stoch_event_age": "10",
+            "preset_name": "Sequence Alpha",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["preset_name"] == "Sequence Alpha"
+    assert data["strategy_name"] == "Sequence Alpha"
+    assert data["matches"][0]["ticker"] == "AAA.DE"
+    assert captured["tickers"] == ["AAA.DE", "BBB.ST"]
+    assert captured["filters"]["volume_range"] == {"min": 150000.0, "max": 1200000.0}
+    assert captured["filters"]["macd_event_enabled"] is False
+    assert captured["filters"]["rsi_event_enabled"] is True
+    assert captured["filters"]["stoch_event_enabled"] is False
+    assert captured["filters"]["rsi_cross_value"] == 30.0
+    assert captured["filters"]["rsi_cross_mode"] == "cross_down"
+    assert captured["filters"]["stoch_cross_value"] == 25.0
+    assert captured["filters"]["stoch_cross_mode"] == "cross_up"
+    assert captured["filters"]["macd_cross_mode"] == "high_cross_sell"
+    assert captured["filters"]["macd_event_age"] == 40
+    assert captured["filters"]["rsi_event_age"] == 80
+    assert captured["filters"]["stoch_event_age"] == 10
+
+
+def test_screen_with_controls_reuses_indicator_history_cache(monkeypatch):
+    screener_controls.clear_indicator_history_cache()
+    call_counts = {
+        "load": 0,
+        "rsi": 0,
+        "macd": 0,
+        "stoch": 0,
+    }
+
+    dates = pd.date_range(end="2026-07-06", periods=80, freq="B")
+    closes = pd.Series(np.linspace(100.0, 120.0, len(dates)))
+    volumes = pd.Series(np.full(len(dates), 500_000.0))
+
+    def fake_load_recent_price_history(*_args, **_kwargs):
+        call_counts["load"] += 1
+        return pd.DataFrame(
+            {
+                "ticker": ["AAA.DE"] * len(dates),
+                "date": dates,
+                "close": closes,
+                "volume": volumes,
+            }
+        )
+
+    def fake_calculate_rsi(close, period=14):
+        call_counts["rsi"] += 1
+        return pd.Series(np.linspace(40.0, 60.0, len(close)))
+
+    def fake_calculate_macd(close):
+        call_counts["macd"] += 1
+        base = pd.Series(np.linspace(-1.0, 1.0, len(close)))
+        return base, base.shift(1).fillna(base.iloc[0]), pd.Series(np.zeros(len(close)))
+
+    def fake_calculate_stoch_rsi(close, **_kwargs):
+        call_counts["stoch"] += 1
+        base = pd.Series(np.linspace(20.0, 80.0, len(close)))
+        return base, base
+
+    monkeypatch.setattr(
+        screener_controls,
+        "load_recent_price_history",
+        fake_load_recent_price_history,
+    )
+    monkeypatch.setattr(screener_controls, "calculate_rsi", fake_calculate_rsi)
+    monkeypatch.setattr(screener_controls, "calculate_macd", fake_calculate_macd)
+    monkeypatch.setattr(
+        screener_controls,
+        "calculate_stoch_rsi",
+        fake_calculate_stoch_rsi,
+    )
+
+    base_filters = {
+        "lookback_days": 180,
+        "volume_range": {"min": 0.0, "max": 20_000_000.0},
+        "macd_event_enabled": False,
+        "rsi_event_enabled": False,
+        "stoch_event_enabled": False,
+    }
+    first = screener_controls.screen_with_controls(
+        db_path="fake.db",
+        tickers=["AAA.DE"],
+        latest_market_date="2026-07-06",
+        filters=base_filters,
+    )
+    second = screener_controls.screen_with_controls(
+        db_path="fake.db",
+        tickers=["AAA.DE"],
+        latest_market_date="2026-07-06",
+        filters={**base_filters, "volume_range": {"min": 100_000.0, "max": 800_000.0}},
+    )
+
+    assert len(first["matches"]) == 1
+    assert len(second["matches"]) == 1
+    assert first["indicator_cache_hit"] is False
+    assert second["indicator_cache_hit"] is True
+    assert call_counts == {
+        "load": 1,
+        "rsi": 1,
+        "macd": 1,
+        "stoch": 1,
+    }
 
 
 def test_cached_screen_universe_uses_db_backed_tickers_only(monkeypatch):
@@ -503,6 +702,80 @@ def test_screen_export_google_endpoint_returns_sheet_metadata(monkeypatch):
     assert data["spreadsheet_id"] == "sheet-123"
     assert data["folder_name"] == "Auto Exports"
     assert data["match_count"] == 1
+
+
+def test_screen_endpoint_fallback_honors_sweden_scan_scope(monkeypatch, tmp_path):
+    captured = {}
+    cache_dir = None
+
+    class FakeDb:
+        db_path = "fake-db"
+
+        def get_latest_market_date(self):
+            return "2026-04-01"
+
+        def _get_connection(self):
+            return object()
+
+    def fake_get_db():
+        return FakeDb()
+
+    def fake_universe(db_path, latest_market_date):
+        captured["universe_args"] = (db_path, latest_market_date)
+        return ("AAA.DE", "BBB.ST", "CCC.ST")
+
+    def fake_filter(tickers, exchange=None, ticker_list=None, scan_scope=None):
+        captured["filter_args"] = {
+            "tickers": list(tickers),
+            "exchange": exchange,
+            "ticker_list": ticker_list,
+            "scan_scope": scan_scope,
+        }
+        return ["BBB.ST", "CCC.ST"] if scan_scope == "sweden" else list(tickers)
+
+    def fake_cache_dir():
+        nonlocal cache_dir
+        if cache_dir is None:
+            cache_dir = tmp_path / "screen_requests_fallback_sweden"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+
+    def fake_screen_with_controls(**kwargs):
+        captured["screen_kwargs"] = kwargs
+        return {
+            "matches": [
+                {"ticker": "BBB.ST", "name": "BBB.ST", "close": 20.0, "recent_avg_volume": 2000.0, "rsi": 52.0, "score": 100.0},
+                {"ticker": "CCC.ST", "name": "CCC.ST", "close": 30.0, "recent_avg_volume": 3000.0, "rsi": 55.0, "score": 98.0},
+            ],
+            "errors": [],
+            "total_errors": 0,
+            "total_candidates": 2,
+            "filters": kwargs["filters"],
+        }
+
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", fake_get_db)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._cached_screen_universe", fake_universe
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.filter_tickers_by_exchange_and_list",
+        fake_filter,
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.screen_with_controls",
+        fake_screen_with_controls,
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._screen_cache_dir", fake_cache_dir
+    )
+
+    response = client.get("/api/screen?scan_scope=sweden")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert captured["filter_args"]["scan_scope"] == "sweden"
+    assert captured["screen_kwargs"]["tickers"] == ["BBB.ST", "CCC.ST"]
+    assert [match["ticker"] for match in data["matches"]] == ["BBB.ST", "CCC.ST"]
 
 
 def test_screen_endpoint_reuses_cached_result(monkeypatch, tmp_path):
@@ -1148,6 +1421,27 @@ def test_custom_ticker_list_api_roundtrip(monkeypatch, tmp_path):
         persisted = json.load(handle)
     assert persisted["name"] == "Growth Basket"
     assert persisted["tickers"] == ["MSFT", "AAPL", "NVDA"]
+
+    multi_save_response = client.post(
+        "/api/custom-ticker-list",
+        json={
+            "active_name": "Dividend Basket",
+            "lists": [
+                {"name": "Growth Basket", "tickers": ["MSFT", "AAPL"]},
+                {"name": "Dividend Basket", "tickers": ["JNJ", "KO", "PG"]},
+            ],
+        },
+    )
+    assert multi_save_response.status_code == 200
+    multi_saved = multi_save_response.json()
+    assert multi_saved["active_name"] == "Dividend Basket"
+    assert multi_saved["name"] == "Dividend Basket"
+    assert multi_saved["tickers"] == ["JNJ", "KO", "PG"]
+    assert multi_saved["list_count"] == 2
+    assert multi_saved["lists"] == [
+        {"name": "Growth Basket", "tickers": ["MSFT", "AAPL"], "count": 2},
+        {"name": "Dividend Basket", "tickers": ["JNJ", "KO", "PG"], "count": 3},
+    ]
 
 
 def test_ticker_universe_api():
@@ -2007,10 +2301,18 @@ def test_shortlist_endpoint_returns_cached_rows(monkeypatch):
     )
 
     class FakeEngine:
-        def __init__(self, db_path=None):
+        def __init__(self, db_path=None, metadata_path=None, metadata_map_override=None):
             self.db_path = db_path
 
-        def get_shortlist(self, limit=50, label=None, refresh=False):
+        def get_shortlist(
+            self,
+            limit=50,
+            label=None,
+            refresh=False,
+            max_workers=None,
+            tickers=None,
+            persist=None,
+        ):
             return fake_df
 
     monkeypatch.setattr(
@@ -2028,4 +2330,233 @@ def test_shortlist_endpoint_returns_cached_rows(monkeypatch):
         "Trusted issuer: iShares",
         "Price above EMA 50",
     ]
+
+
+def test_shortlist_endpoint_honors_scan_scope_list(monkeypatch):
+    fake_df = pd.DataFrame(
+        [
+            {
+                "ticker": "SEB-A.ST",
+                "name": "SEB A",
+                "label": "Watch",
+                "issuer": "SEB",
+                "asset_class": "Equity",
+                "region": "Sweden",
+                "close": 145.25,
+                "volume": 420000,
+                "recent_entry_days": 5,
+                "product_score": 70.0,
+                "exposure_score": 62.0,
+                "technical_score": 66.0,
+                "final_score": 67.2,
+                "reasons_json": '["Recent signal 5d ago"]',
+                "components_json": '{"style": "Sector/Thematic"}',
+                "as_of_date": "2026-07-04",
+                "updated_at": "2026-07-04 22:00:00",
+            }
+        ]
+    )
+    captured = {}
+    app_fast._SCOPED_SHORTLIST_CACHE.clear()
+
+    class FakeEngine:
+        def __init__(self, db_path=None, metadata_path=None, metadata_map_override=None):
+            captured["db_path"] = db_path
+            captured["metadata_path"] = metadata_path
+            captured["metadata_map_override"] = metadata_map_override
+
+        def get_shortlist(
+            self,
+            limit=50,
+            label=None,
+            refresh=False,
+            max_workers=None,
+            tickers=None,
+            persist=None,
+        ):
+            captured["limit"] = limit
+            captured["label"] = label
+            captured["refresh"] = refresh
+            captured["tickers"] = list(tickers or [])
+            captured["persist"] = persist
+            return fake_df
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.ETFShortlistEngine",
+        FakeEngine,
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._resolve_shortlist_universe",
+        lambda db, scan_scope=None, ticker_list=None: ["SEB-A.ST", "SHB-A.ST"],
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._cached_etf_metadata_map",
+        lambda: {"SEB-A.ST": {"name": "SEB A"}, "SHB-A.ST": {"name": "Sv. Handelsbanken A"}},
+    )
+
+    response = client.get(
+        "/api/shortlist?limit=5&scan_scope=list&ticker_list=SEB-A.ST,SHB-A.ST"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["scan_scope"] == "list"
+    assert data["source_count"] == 2
+    assert data["rows"][0]["ticker"] == "SEB-A.ST"
+    assert captured["tickers"] == ["SEB-A.ST", "SHB-A.ST"]
+    assert captured["persist"] is False
+
+
+def test_shortlist_endpoint_caches_scoped_watchlist(monkeypatch):
+    fake_df = pd.DataFrame(
+        [
+            {
+                "ticker": "SEB-A.ST",
+                "name": "SEB A",
+                "label": "Watch",
+                "issuer": "SEB",
+                "asset_class": "Equity",
+                "region": "Sweden",
+                "close": 145.25,
+                "volume": 420000,
+                "recent_entry_days": 5,
+                "product_score": 70.0,
+                "exposure_score": 62.0,
+                "technical_score": 66.0,
+                "final_score": 67.2,
+                "reasons_json": '["Recent signal 5d ago"]',
+                "components_json": '{"style": "Sector/Thematic"}',
+                "as_of_date": "2026-07-04",
+                "updated_at": "2026-07-04 22:00:00",
+            }
+        ]
+    )
+    call_count = {"value": 0}
+    app_fast._SCOPED_SHORTLIST_CACHE.clear()
+
+    class FakeEngine:
+        def __init__(self, db_path=None, metadata_path=None, metadata_map_override=None):
+            pass
+
+        def get_shortlist(
+            self,
+            limit=50,
+            label=None,
+            refresh=False,
+            max_workers=None,
+            tickers=None,
+            persist=None,
+        ):
+            call_count["value"] += 1
+            return fake_df
+
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.ETFShortlistEngine",
+        FakeEngine,
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._resolve_shortlist_universe",
+        lambda db, scan_scope=None, ticker_list=None: ["SEB-A.ST", "SHB-A.ST"],
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._cached_etf_metadata_map",
+        lambda: {"SEB-A.ST": {"name": "SEB A"}, "SHB-A.ST": {"name": "Sv. Handelsbanken A"}},
+    )
+
+    first = client.get("/api/shortlist?limit=5&scan_scope=list&ticker_list=SEB-A.ST,SHB-A.ST")
+    second = client.get("/api/shortlist?limit=5&scan_scope=list&ticker_list=SEB-A.ST,SHB-A.ST")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert call_count["value"] == 1
+
+
+def test_playbook_endpoint_builds_trade_rows_with_risk_capped_stops(monkeypatch):
+    class FakeEngine:
+        def __init__(self, db_path=None, metadata_path=None, metadata_map_override=None):
+            self.db_path = db_path
+
+        def _load_frame(self, ticker):
+            if ticker == "AAA.DE":
+                return pd.DataFrame(
+                    {
+                        "Date": pd.date_range("2026-04-06", periods=60, freq="B"),
+                        "Close": [100.0] * 60,
+                        "Low": [99.0] * 60,
+                        "Volume": [300_000] * 60,
+                        "EMA_50": [97.5] * 60,
+                        "Supertrend": [96.0] * 60,
+                        "RSI": [55.0] * 60,
+                        "Pullback_Pct": [4.0] * 60,
+                        "Signal": ([0] * 58) + [1, 1],
+                    }
+                )
+            if ticker == "BBB.DE":
+                return pd.DataFrame(
+                    {
+                        "Date": pd.date_range("2026-04-06", periods=60, freq="B"),
+                        "Close": [90.0] * 60,
+                        "Low": [84.0] * 60,
+                        "Volume": [300_000] * 60,
+                        "EMA_50": [84.0] * 60,
+                        "Supertrend": [83.5] * 60,
+                        "RSI": [50.0] * 60,
+                        "Pullback_Pct": [4.0] * 60,
+                        "Signal": ([0] * 55) + [1, 1, 1, 1, 1],
+                    }
+                )
+            return pd.DataFrame(
+                {
+                    "Date": pd.date_range("2026-04-06", periods=60, freq="B"),
+                    "Close": [90.0] * 60,
+                    "Low": [89.0] * 60,
+                    "Volume": [100_000] * 60,
+                    "EMA_50": [95.0] * 60,
+                    "Supertrend": [96.0] * 60,
+                    "RSI": [72.0] * 60,
+                    "Pullback_Pct": [12.0] * 60,
+                    "Signal": [0] * 60,
+                }
+            )
+
+        def _build_metadata(self, ticker):
+            return {"name": f"{ticker} Fund"}
+
+    class FakeDb:
+        db_path = "fake.db"
+
+        def get_latest_market_date(self):
+            return "2026-06-25"
+
+        def get_tickers(self):
+            return ["AAA.DE", "BBB.DE", "CCC.DE"]
+
+    monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", lambda: FakeDb())
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.ETFShortlistEngine",
+        FakeEngine,
+    )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._resolve_shortlist_universe",
+        lambda db, scan_scope=None, ticker_list=None: ["AAA.DE", "BBB.DE", "CCC.DE"],
+    )
+
+    response = client.get("/api/playbook?risk_pct=5&limit=5")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] == 2
+    assert data["risk_pct"] == 5.0
+    assert data["summary"]["trade_count"] == 2
+    assert data["summary"]["watch_count"] == 0
+    assert data["summary"]["risk_capped_count"] == 1
+    assert data["rows"][0]["ticker"] == "AAA.DE"
+    assert data["rows"][0]["recent_entry_days"] == 0
+    assert data["rows"][0]["stop_basis"] == "technical"
+    assert data["rows"][0]["stop"] == 99.0
+    assert data["rows"][0]["decision"] == "Trade"
+    assert data["rows"][1]["ticker"] == "BBB.DE"
+    assert data["rows"][1]["recent_entry_days"] == 0
+    assert data["rows"][1]["stop_basis"] == "risk_cap"
+    assert data["rows"][1]["stop"] == 85.5
+    assert data["rows"][1]["decision"] == "Trade With Tight Cap"
 
