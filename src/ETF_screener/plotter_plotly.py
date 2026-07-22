@@ -11,6 +11,7 @@ from plotly.subplots import make_subplots
 import logging
 
 from ETF_screener.dsl_parser import parse_strategy_blocks, resolve_block
+from ETF_screener.indicators import calculate_ema, calculate_macd, calculate_rsi, calculate_stoch_rsi, calculate_supertrend
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,10 @@ class RibbonLayoutConfig:
 class InteractivePlotter:
     """Plot ETF data with technical indicators using Plotly for interactivity."""
 
-    def __init__(self, output_dir: str = "plots"):
+    def __init__(self, output_dir: str = "plots", show_ribbons: bool = True):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
+        self.show_ribbons = bool(show_ribbons)
         self.ribbon_config = self._load_ribbon_settings()
 
     def _load_ribbon_settings(self) -> dict:
@@ -183,7 +185,7 @@ class InteractivePlotter:
             ),
         )
 
-        lane_count = 1 + max(0, num_ribbons)  # aggregated lane + ribbon lanes
+        lane_count = max(0, num_ribbons)
         strategy_panel_px = int(self._layout_numeric_setting("strategy_panel_px", 140))
         fixed_px = (
             cfg.price_panel_px
@@ -193,14 +195,20 @@ class InteractivePlotter:
         available_for_lanes = max(
             cfg.max_total_height_px - fixed_px, lane_count * cfg.min_lane_px
         )
-        lane_px = max(
-            cfg.min_lane_px, min(cfg.target_lane_px, available_for_lanes // lane_count)
+        lane_px = (
+            max(
+                cfg.min_lane_px,
+                min(cfg.target_lane_px, available_for_lanes // lane_count),
+            )
+            if lane_count
+            else 0
         )
 
         total_height_px = fixed_px + (lane_px * lane_count)
         raw_heights = (
-            [cfg.price_panel_px, cfg.volume_panel_px]
+            [cfg.price_panel_px]
             + [strategy_panel_px] * max(0, num_strategy_panels)
+            + [cfg.volume_panel_px]
             + [lane_px] * lane_count
         )
         normalizer = float(sum(raw_heights)) if raw_heights else 1.0
@@ -988,8 +996,82 @@ class InteractivePlotter:
         )
         return s
 
+    @staticmethod
+    def _chart_period(value: object, default: int, minimum: int = 1, maximum: int = 200) -> int:
+        try:
+            parsed = int(float(value))
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, min(maximum, parsed))
+
+    @staticmethod
+    def _chart_level(value: object, default: float) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(0.0, min(100.0, parsed))
+
+    def _apply_chart_indicator_params(
+        self, df: pd.DataFrame, params: dict | None = None
+    ) -> None:
+        """Add the editable chart TA series using bounded user parameters."""
+        raw = params if isinstance(params, dict) else {}
+        fast = self._chart_period(raw.get("macd_fast"), 12, 2, 100)
+        slow = self._chart_period(raw.get("macd_slow"), 26, 3, 200)
+        if slow <= fast:
+            slow = min(200, fast + 1)
+        signal = self._chart_period(raw.get("macd_signal"), 9, 1, 100)
+        rsi_period = self._chart_period(raw.get("rsi_period"), 14, 2, 100)
+        stoch_period = self._chart_period(raw.get("stoch_rsi_period"), 14, 2, 100)
+        stoch_k = self._chart_period(raw.get("stoch_rsi_k"), 3, 1, 30)
+        stoch_d = self._chart_period(raw.get("stoch_rsi_d"), 3, 1, 30)
+        supertrend_period = self._chart_period(raw.get("supertrend_period"), 10, 2, 100)
+        try:
+            supertrend_multiplier = max(0.5, min(10.0, float(raw.get("supertrend_multiplier", 3.0))))
+        except (TypeError, ValueError):
+            supertrend_multiplier = 3.0
+        rsi_trigger = self._chart_level(raw.get("rsi_trigger"), 50.0)
+        stoch_trigger = self._chart_level(raw.get("stoch_trigger"), 20.0)
+        self._active_chart_rsi_trigger = rsi_trigger
+        self._active_chart_stoch_trigger = stoch_trigger
+
+        close = df["Close"] if "Close" in df.columns else df["close"]
+        macd, macd_signal, macd_hist = calculate_macd(
+            close, fast=fast, slow=slow, signal=signal
+        )
+        df["MACD"] = macd
+        df["MACD_Signal"] = macd_signal
+        df["MACD_Hist"] = macd_hist
+        df["RSI"] = calculate_rsi(close, period=rsi_period)
+        stoch_k_series, stoch_d_series = calculate_stoch_rsi(
+            close,
+            rsi_period=rsi_period,
+            stoch_period=stoch_period,
+            k_period=stoch_k,
+            d_period=stoch_d,
+        )
+        df["StochRSI_K"] = stoch_k_series
+        df["StochRSI_D"] = stoch_d_series
+        if "supertrend_period" in raw or "supertrend_multiplier" in raw:
+            high = df["High"] if "High" in df.columns else df["high"]
+            low = df["Low"] if "Low" in df.columns else df["low"]
+            supertrend, st_upper, st_lower = calculate_supertrend(
+                pd.DataFrame({"high": high, "low": low, "close": close}),
+                period=supertrend_period,
+                multiplier=supertrend_multiplier,
+            )
+            df["Supertrend"] = supertrend
+            green_regime = supertrend.eq(st_lower)
+            df["ST_Upper"] = st_upper.where(~green_regime)
+            df["ST_Lower"] = st_lower.where(green_regime)
+
     def create_plot(
-        self, df: pd.DataFrame, symbol: str, strategy_content: str | None = None
+        self,
+        df: pd.DataFrame,
+        symbol: str,
+        strategy_content: str | None = None,
+        indicator_params: dict | None = None,
     ) -> go.Figure:
         """
         Internal implementation that generates and returns the Plotly Figure object.
@@ -1000,13 +1082,30 @@ class InteractivePlotter:
         if "Date" in df.columns:
             df["Date"] = pd.to_datetime(df["Date"])
 
+        self._apply_chart_indicator_params(df, indicator_params)
+        chart_params = indicator_params if isinstance(indicator_params, dict) else {}
+        rsi_trigger = getattr(self, "_active_chart_rsi_trigger", 50.0)
+        stoch_trigger = getattr(self, "_active_chart_stoch_trigger", 20.0)
+
         strategy_indicator_names = self._extract_strategy_indicator_names(
             strategy_content
         )
+        requested_ema_periods = chart_params.get("ema_overlay_periods")
+        if requested_ema_periods is None:
+            ema_periods_for_chart = self._extract_ema_periods(strategy_content)
+        else:
+            ema_periods_for_chart = [int(period) for period in requested_ema_periods]
+            close = df["Close"] if "Close" in df.columns else df["close"]
+            for period in ema_periods_for_chart:
+                if period < 2:
+                    continue
+                ema_column = self._find_column_case_insensitive(df, f"ema_{period}")
+                if not ema_column:
+                    df[f"EMA_{period}"] = calculate_ema(close, period=period)
         overlay_names = {
             *[
                 f"ema_{period}"
-                for period in self._extract_ema_periods(strategy_content)
+                for period in ema_periods_for_chart
             ],
             *[
                 f"supertrend_{period}_{mult}"
@@ -1055,35 +1154,58 @@ class InteractivePlotter:
                 if items:
                     strategy_panel_groups.append({"title": title, "items": items})
 
-        # Determine available ribbons.
-        # Strategy-focused mode: when DSL is provided, use only DSL-derived ribbons.
-        if strategy_content and strategy_content.strip():
-            ribbon_settings = self._build_strategy_layer_ribbons(strategy_content)
-            # Do not pre-filter DSL ribbons by currently present columns.
-            # Some expressions (e.g. was_true(st_10_4_is_green, 10)) require
-            # derived helper columns materialized later during eval prep.
-            active_ribbons = ribbon_settings
-        else:
-            ribbon_settings = self.ribbon_config.get("ribbons", [])
-            active_ribbons = []
-            available_cols = [c.lower() for c in df.columns]
+        fixed_panel_columns = {
+            "MACD": ["MACD", "MACD_Signal"],
+            "RSI": ["RSI"],
+            "StochRSI": ["StochRSI_K", "StochRSI_D"],
+        }
+        fixed_panel_groups = [
+            {
+                "title": title,
+                "items": [
+                    {"column": column, "label": column.replace("_", " ")}
+                    for column in columns
+                    if column in df.columns
+                ],
+            }
+            for title, columns in fixed_panel_columns.items()
+        ]
+        fixed_columns = {
+            column.lower()
+            for columns in fixed_panel_columns.values()
+            for column in columns
+        }
+        for panel in strategy_panel_groups:
+            panel["items"] = [
+                item
+                for item in panel["items"]
+                if str(item.get("column", "")).lower() not in fixed_columns
+            ]
+        strategy_panel_groups = fixed_panel_groups + [
+            panel for panel in strategy_panel_groups if panel["items"]
+        ]
 
-            for rib in ribbon_settings:
-                ribbon_condition = str(rib.get("condition", "")).lower().strip()
-                layers = rib.get("layers", [])
-                ribbon_is_possible = False
-                conditions_to_check = (
-                    [ribbon_condition]
-                    if ribbon_condition
-                    else [str(layer.get("condition", "")).lower() for layer in layers]
-                )
-                for condition in conditions_to_check:
-                    words = re.findall(r"[a-z_][a-z0-9_]*", condition)
-                    if any(word in available_cols for word in words):
-                        ribbon_is_possible = True
-                        break
-                if ribbon_is_possible or "supertrend" in rib.get("label", "").lower():
-                    active_ribbons.append(rib)
+        # Use DSL-derived ribbons when a strategy is selected; otherwise use
+        # compatible configured ribbons for the regular chart.
+        if not self.show_ribbons:
+            active_ribbons = []
+        elif strategy_content and strategy_content.strip():
+            active_ribbons = self._build_strategy_layer_ribbons(strategy_content)
+        else:
+            active_ribbons = []
+            available_cols = [str(column).lower() for column in df.columns]
+            for ribbon in self.ribbon_config.get("ribbons", []):
+                condition = str(ribbon.get("condition", "")).lower().strip()
+                layers = ribbon.get("layers", [])
+                candidates = ([condition] if condition else [
+                    str(layer.get("condition", "")).lower()
+                    for layer in layers
+                ])
+                if any(
+                    any(word in available_cols for word in re.findall(r"[a-z_][a-z0-9_]*", candidate))
+                    for candidate in candidates
+                ) or "supertrend" in str(ribbon.get("label", "")).lower():
+                    active_ribbons.append(ribbon)
 
         ribbon_render_data: list[dict] = []
         context_lane_mask = np.zeros(len(df), dtype=bool)
@@ -1229,12 +1351,13 @@ class InteractivePlotter:
 
         num_ribbons = len(visible_ribbon_data)
         num_strategy_panels = len(strategy_panel_groups)
-        layout_spec = self._get_ribbon_layout(num_ribbons, num_strategy_panels)
+        layout_spec = self._get_ribbon_layout(num_ribbons + 1, num_strategy_panels)
         row_heights = layout_spec["row_heights"]
         lane_line_width = layout_spec["lane_line_width"]
 
-        strategy_row_start = 3
-        ribbon_row_start = strategy_row_start + num_strategy_panels
+        strategy_row_start = 2
+        volume_row = strategy_row_start + num_strategy_panels
+        ribbon_row_start = volume_row + 1
         aggregated_row = ribbon_row_start + num_ribbons
 
         # We start with a clean subplot setup
@@ -1245,10 +1368,11 @@ class InteractivePlotter:
             shared_xaxes=True,
             vertical_spacing=0.0,
             row_heights=row_heights,
-            subplot_titles=[f"{symbol} Analysis", "Volume"]
+            subplot_titles=[f"{symbol} Analysis"]
             + [panel["title"] for panel in strategy_panel_groups]
-            + ["Buy/Sell Conditions"]
-            + [""] * num_ribbons,
+            + ["Volume"]
+            + [""] * num_ribbons
+            + ["Aggregated"],
         )
 
         # Drop empty subplot-title annotations so ribbon lanes don't reserve extra headroom.
@@ -1282,7 +1406,7 @@ class InteractivePlotter:
         )
 
         # Add only EMA curves that are explicitly referenced by the active strategy.
-        ema_periods = self._extract_ema_periods(strategy_content)
+        ema_periods = ema_periods_for_chart
         ema_colors = ["#f59e0b", "#3b82f6", "#10b981", "#ef4444", "#8b5cf6", "#14b8a6"]
         for idx, period in enumerate(ema_periods):
             lower_col = f"ema_{period}"
@@ -1346,9 +1470,18 @@ class InteractivePlotter:
                 col_name = item["column"]
                 if col_name not in df.columns:
                     continue
-                color = strategy_curve_palette[
-                    (panel_idx + item_idx) % len(strategy_curve_palette)
-                ]
+                panel_colors = {
+                    "macd": ["#2563eb", "#dc2626"],
+                    "stochrsi": ["#2563eb", "#dc2626"],
+                }
+                colors_for_panel = panel_colors.get(panel["title"].lower())
+                color = (
+                    colors_for_panel[item_idx % len(colors_for_panel)]
+                    if colors_for_panel
+                    else strategy_curve_palette[
+                        (panel_idx + item_idx) % len(strategy_curve_palette)
+                    ]
+                )
                 series = pd.to_numeric(df[col_name], errors="coerce")
                 if series.dropna().empty:
                     continue
@@ -1366,25 +1499,41 @@ class InteractivePlotter:
                     col=1,
                 )
 
-            if panel["title"].lower() == "oscillators":
+            panel_title = panel["title"].lower()
+            if panel_title in {"rsi", "stochrsi", "oscillators"}:
                 fig.update_yaxes(
                     range=[0, 100],
                     row=row,
                     col=1,
                 )
+                lower_band, upper_band = (20, 80) if panel_title == "stochrsi" else (30, 70)
                 fig.add_hline(
-                    y=70,
+                    y=upper_band,
                     line=dict(color="#cbd5e1", width=1, dash="dot"),
                     row=row,
                     col=1,
                 )
                 fig.add_hline(
-                    y=30,
+                    y=lower_band,
                     line=dict(color="#cbd5e1", width=1, dash="dot"),
                     row=row,
                     col=1,
                 )
-            elif panel["title"].lower() == "momentum":
+                if panel_title == "rsi":
+                    fig.add_hline(
+                        y=rsi_trigger,
+                        line=dict(color="#f43f5e", width=1.5, dash="solid"),
+                        row=row,
+                        col=1,
+                    )
+                elif panel_title == "stochrsi":
+                    fig.add_hline(
+                        y=stoch_trigger,
+                        line=dict(color="#0ea5e9", width=1.5, dash="solid"),
+                        row=row,
+                        col=1,
+                    )
+            elif panel_title in {"macd", "momentum"}:
                 fig.add_hline(
                     y=0,
                     line=dict(color="#cbd5e1", width=1, dash="dot"),
@@ -1434,7 +1583,8 @@ class InteractivePlotter:
             valid = ~np.isnan(st_active) & ~np.isnan(close_values)
             is_green_regime = valid & (close_values > st_active)
 
-        if st_active is not None and is_green_regime is not None:
+        show_supertrend_overlay = chart_params.get("show_supertrend_overlay", True)
+        if show_supertrend_overlay and st_active is not None and is_green_regime is not None:
             valid_mask = ~np.isnan(st_active)
 
             # Split into contiguous same-color runs and draw one trace per run.
@@ -1493,7 +1643,7 @@ class InteractivePlotter:
                 marker_color=colors,
                 opacity=0.7,
             ),
-            row=2,
+            row=volume_row,
             col=1,
         )
 
@@ -1518,7 +1668,7 @@ class InteractivePlotter:
                     ),
                     connectgaps=False,
                 ),
-                row=2,
+                row=volume_row,
                 col=1,
             )
 
@@ -1568,48 +1718,41 @@ class InteractivePlotter:
                 align="left",
             )
 
-        # Bottom-most lane: Aggregated state ribbon (single lane)
+        # Bottom-most lane: aggregated strategy state.
         agg_lane_min, agg_lane_max = 0.9, 1.1
-        agg_lane_span = agg_lane_max - agg_lane_min
-
-        agg_fill_label = fill_condition
         bucket_ms = self._time_bucket_width_ms(df_state["Date"])
         fig.add_trace(
             go.Bar(
                 x=df_state["Date"],
-                y=np.where(agg_mask_np, agg_lane_span, 0.0),
+                y=np.where(agg_mask_np, agg_lane_max - agg_lane_min, 0.0),
                 base=agg_lane_min,
                 width=bucket_ms,
                 marker=dict(color="#16a34a", line=dict(width=0)),
                 opacity=1.0,
                 showlegend=False,
                 name="Aggregated",
-                hovertemplate=f"Aggregated Fill: {agg_fill_label}<br>Date: %{{x}}<extra></extra>",
+                hovertemplate=f"Aggregated Fill: {fill_condition}<br>Date: %{{x}}<extra></extra>",
             ),
             row=aggregated_row,
             col=1,
         )
         fig.update_yaxes(
             showticklabels=False,
-            range=[0.9, 1.1],
+            range=[agg_lane_min, agg_lane_max],
             showgrid=False,
             zeroline=False,
             row=aggregated_row,
             col=1,
         )
-
-        # Add label for aggregated lane
         agg_yaxis_name = "yaxis" if aggregated_row == 1 else f"yaxis{aggregated_row}"
         agg_domain = fig.layout[agg_yaxis_name].domain
-        agg_mid = (agg_domain[0] + agg_domain[1]) / 2
         fig.add_annotation(
             xref="paper",
             yref="paper",
             x=left_gutter_x,
-            y=agg_mid,
+            y=(agg_domain[0] + agg_domain[1]) / 2,
             xanchor="left",
             yanchor="middle",
-            xshift=0,
             text="<b>Aggregated</b>",
             showarrow=False,
             font=dict(size=10, color="#0f766e"),
@@ -1635,7 +1778,7 @@ class InteractivePlotter:
                 layout[key]["type"] = "date"
                 layout[key]["tickformat"] = "%b %Y"
                 row_num = 1 if key == "xaxis" else int(key.replace("xaxis", ""))
-                is_ribbon_axis = row_num >= ribbon_row_start
+                is_ribbon_axis = bool(num_ribbons) and row_num >= ribbon_row_start
                 layout[key]["showgrid"] = not is_ribbon_axis
                 layout[key]["gridcolor"] = "lightgray"
                 layout[key]["ticks"] = "outside" if is_bottom else ""

@@ -359,13 +359,34 @@
       border-radius: 1rem;
       background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.94));
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
-      padding: 1rem;
+      padding: 0.7rem 0.85rem 0.55rem;
+    }
+
+    .screen-filter-header {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      min-width: 0;
+    }
+
+    .screen-filter-header > div:first-child {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      min-width: 0;
+    }
+
+    .screen-filter-header > div:first-child > div:last-child {
+      margin-top: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .screen-range-track {
       position: relative;
       height: 1.25rem;
-      margin-top: 0.85rem;
+      margin-top: 0.35rem;
     }
 
     .screen-range-track::before {
@@ -418,7 +439,7 @@
     .screen-range-axis {
       display: flex;
       justify-content: space-between;
-      margin-top: 0.5rem;
+      margin-top: 0.15rem;
       font-size: 11px;
       font-weight: 700;
       letter-spacing: 0.04em;
@@ -429,8 +450,8 @@
     .screen-timeline-stack {
       display: flex;
       flex-direction: column;
-      gap: 0.9rem;
-      padding: 1rem;
+      gap: 0.55rem;
+      padding: 0.75rem;
       border: 1px solid rgba(244, 63, 94, 0.16);
       border-radius: 1.2rem;
       background:
@@ -440,12 +461,178 @@
         0 12px 28px rgba(15, 23, 42, 0.06);
     }
 
+    /* Let the event stack own this row's height; the results list scrolls inside it. */
+    @media (min-width: 1280px) {
+      .screen-results-column {
+        align-self: stretch;
+        /* Do not let the ticker cards participate in sizing the event row. */
+        contain: size;
+      }
+    }
+
     .screen-timeline-step {
       position: relative;
       border: 1px solid rgba(148, 163, 184, 0.2);
       border-radius: 1rem;
       background: rgba(255, 255, 255, 0.92);
-      padding: 1rem 1rem 0.9rem;
+      padding: 0.7rem 0.85rem 0.65rem;
+    }
+
+    .screen-timeline-step-header {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      min-width: 0;
+    }
+
+    .screen-timeline-step-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      flex: 0 0 auto;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+
+    .screen-timeline-step.is-disabled .screen-timeline-step-controls {
+      display: none;
+    }
+
+    .screen-timeline-step-header .screen-timeline-step-label,
+    .screen-timeline-step-header .screen-timeline-step-title,
+    .screen-timeline-step-header .screen-timeline-step-mode {
+      margin-top: 0;
+      white-space: nowrap;
+    }
+
+    .screen-timeline-step-header .screen-timeline-step-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .screen-timeline-step-controls {
+      display: grid;
+      grid-template-columns: minmax(7rem, 0.75fr) minmax(9rem, 0.9fr) minmax(0, 1.5fr);
+      align-items: center;
+      gap: 0.35rem 0.65rem;
+      margin-top: 0.35rem;
+    }
+
+    .screen-timeline-step-controls > label {
+      margin-top: 0;
+    }
+
+    .screen-timeline-step-controls .screen-timeline-type {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .screen-timeline-step-controls .screen-timeline-type span {
+      flex: 0 0 auto;
+    }
+
+    .screen-timeline-step-controls .screen-timeline-type select {
+      margin-top: 0;
+      min-width: 0;
+    }
+
+    .screen-timeline-step-controls .screen-stoch-type {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.15rem;
+    }
+
+    .screen-stoch-region-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.55rem;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: none;
+      color: #475569;
+    }
+
+    .screen-stoch-region-options label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      white-space: nowrap;
+    }
+
+    .screen-timeline-step-controls .screen-macd-type {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.15rem;
+    }
+
+    .screen-macd-region-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.55rem;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: none;
+      color: #475569;
+    }
+
+    .screen-macd-region-options label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      white-space: nowrap;
+    }
+
+    #screen-macd-event-step .screen-timeline-type {
+      grid-column: 1 / span 2;
+    }
+
+    #screen-supertrend-event-step .screen-timeline-type {
+      grid-column: 1 / span 2;
+    }
+
+    .screen-timeline-trigger {
+      min-width: 0;
+    }
+
+    .screen-timeline-trigger-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.35rem;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+
+    .screen-timeline-trigger input[type="range"] {
+      display: block;
+      width: 100%;
+      margin-top: 0.35rem;
+      accent-color: #e11d48;
+    }
+
+    .screen-timeline-step-controls .screen-range-track,
+    .screen-timeline-step-controls .screen-range-axis {
+      grid-column: 3;
+    }
+
+    .screen-timeline-step-controls .screen-range-track {
+      grid-row: 1;
+    }
+
+    .screen-timeline-step-controls .screen-range-axis {
+      grid-row: 2;
+      margin-top: -0.35rem;
     }
 
     .screen-timeline-step:not(:last-child)::after {
@@ -492,35 +679,6 @@
         <div id="nav-tab-context" class="text-xs font-bold uppercase tracking-[0.18em] text-slate-300 text-right">
           Screener: recent event sequencing over the selected universe
         </div>
-        <div id="nav-screener-controls" class="hidden flex items-center space-x-4">
-          <button id="run-btn" onclick="runScreen()"
-            class="h-10 bg-green-600 hover:bg-green-500 text-white text-xs font-bold px-4 rounded-lg border border-green-500/60 transition-all flex items-center justify-center leading-none whitespace-nowrap"
-            title="Run the control-based screener">
-            <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M5 3l14 9-14 9V3z" />
-            </svg>
-            Run Screener
-          </button>
-        <div id="nav-scan-progress"
-            class="hidden ml-2 min-w-[250px] rounded-lg border border-indigo-500/30 bg-slate-800/90 px-2.5 py-1.5 shadow-sm">
-            <div class="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-slate-400">
-              <span id="nav-scan-context-label" class="font-bold text-emerald-200">Context</span>
-              <span id="nav-scan-context-text" class="font-bold text-emerald-100">0%</span>
-            </div>
-            <div class="h-1.5 w-full rounded-full overflow-hidden bg-slate-700">
-              <div id="nav-scan-context-bar" class="h-full bg-gradient-to-r from-emerald-400 to-teal-300 transition-all duration-300"
-                style="width: 0%"></div>
-            </div>
-            <div class="mt-1.5 flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-slate-400">
-              <span id="nav-scan-global-label" class="font-bold text-indigo-200">Global</span>
-              <span id="nav-scan-global-text" class="font-bold text-indigo-100">0%</span>
-            </div>
-            <div class="h-1.5 w-full rounded-full overflow-hidden bg-slate-700">
-              <div id="nav-scan-global-bar" class="h-full bg-gradient-to-r from-indigo-400 to-violet-300 transition-all duration-300"
-                style="width: 0%"></div>
-            </div>
-          </div>
-        </div>
         <div id="scan-scope-panel" title="Choose which source the scanner should use">
           <div id="scan-scope-label">Scan Source</div>
           <div class="scan-source-toggle" id="scan-source-toggle" role="group" aria-label="Scan source">
@@ -558,30 +716,6 @@
           </div>
         </div>
         <div class="rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 min-w-[280px]">
-          <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">Disqualify</div>
-          <div class="mt-2 space-y-2 text-sm text-slate-200">
-            <label class="flex items-center gap-2">
-              <input id="disqualify-overbought" type="checkbox"
-                class="h-4 w-4 rounded border-slate-500 bg-slate-800 text-amber-500 focus:ring-amber-400"
-                onchange="setScreenDisqualifier('exclude_overbought', this.checked)">
-              <span>Overbought setups</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input id="disqualify-weak-liquidity" type="checkbox"
-                class="h-4 w-4 rounded border-slate-500 bg-slate-800 text-amber-500 focus:ring-amber-400"
-                onchange="setScreenDisqualifier('exclude_weak_liquidity', this.checked)">
-              <span>Weak liquidity</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input id="disqualify-unprofitable" type="checkbox"
-                class="h-4 w-4 rounded border-slate-500 bg-slate-800 text-amber-500 focus:ring-amber-400"
-                onchange="setScreenDisqualifier('exclude_unprofitable', this.checked)">
-              <span>Unprofitable companies</span>
-            </label>
-          </div>
-          <div class="mt-2 text-[11px] text-slate-400">Profitability is only checked for operating companies; funds keep the liquidity rule instead.</div>
-        </div>
-        <div class="rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 min-w-[280px]">
           <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">Auto Export</div>
           <label class="mt-2 flex items-center gap-2 text-sm text-slate-200">
             <input id="auto-export-google-drive" type="checkbox"
@@ -591,7 +725,7 @@
           </label>
           <div class="mt-2 text-[11px] text-slate-400">Exports the current matches into your Drive folder named Auto Exports after each successful screen run when backend Google credentials are configured.</div>
         </div>
-        <div class="flex items-center gap-3">
+        <div id="nav-chart-range-controls" class="flex items-center gap-3">
         <div class="flex rounded-md shadow-sm" role="group">
           <button id="range-btn-1m" type="button" onclick="setRange(21)"
             class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border border-slate-700 rounded-s-lg hover:bg-slate-700">
@@ -670,14 +804,8 @@
   <div id="dashboard-tabs" class="flex space-x-3 bg-slate-800 px-6 pt-3 pb-2 border-b border-slate-700">
     <button id="tab-btn-screener" class="tab-btn active bg-rose-600 text-white font-bold py-2.5 px-5 rounded-lg border border-rose-400/50 shadow-sm"
       onclick="showTab('screener')">Screener</button>
-    <button id="tab-btn-query" class="tab-btn bg-amber-700 text-white font-bold py-2.5 px-5 rounded-lg border border-amber-400/40 shadow-sm"
-      onclick="showTab('query')">Query</button>
     <button id="tab-btn-playbook" class="tab-btn bg-violet-700 text-white font-bold py-2.5 px-5 rounded-lg border border-violet-400/40 shadow-sm"
-      onclick="showTab('playbook')">Playbook</button>
-    <button id="tab-btn-shortlist" class="tab-btn bg-sky-700 text-white font-bold py-2.5 px-5 rounded-lg border border-sky-400/40 shadow-sm"
-      onclick="showTab('shortlist')">Shortlist</button>
-    <button id="tab-btn-backtest" class="tab-btn bg-emerald-700 text-white font-bold py-2.5 px-5 rounded-lg border border-emerald-400/40 shadow-sm"
-      onclick="showTab('backtest')">Backtester</button>
+      onclick="showTab('playbook')">Graph Playground</button>
   </div>
 
   <!-- Tab Content Sections -->
@@ -685,12 +813,12 @@
     <div class="p-6 space-y-6">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h2 class="text-xl font-bold text-slate-800">Playbook</h2>
+          <h2 class="text-xl font-bold text-slate-800">Graph Playground</h2>
           <p class="text-sm text-slate-500">A focused nightly trade list built from explicit evening swing rules, with stops capped by the risk you are willing to take.</p>
         </div>
         <div class="flex flex-col items-end gap-2">
           <div id="playbook-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Ready to build tonight&apos;s trade list.</div>
-          <div class="text-right text-[11px] text-slate-500 max-w-md">Playbook follows the active universe above. Use `List` when you want a smaller watchlist-driven set of candidates.</div>
+          <div class="text-right text-[11px] text-slate-500 max-w-md">Graph Playground follows the active universe above. Use `List` when you want a smaller watchlist-driven set of candidates.</div>
         </div>
       </div>
 
@@ -705,7 +833,7 @@
           </div>
           <button id="playbook-run-btn" onclick="loadPlaybook(true)"
             class="bg-violet-700 hover:bg-violet-600 text-white text-sm font-bold py-2 px-4 rounded-lg border border-violet-500/60 transition-all">
-            Run Playbook
+            Run Graph Playground
           </button>
         </div>
         <div class="p-5">
@@ -731,7 +859,7 @@
       </div>
 
       <div id="playbook-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-        Run the playbook to build a list of tonight&apos;s candidates.
+        Run Graph Playground to build a list of tonight&apos;s candidates.
       </div>
 
       <div id="playbook-content" class="hidden">
@@ -767,9 +895,9 @@
           <div>
             <div class="text-[11px] font-bold uppercase tracking-[0.22em] text-rose-500">Graphical Screener</div>
             <h2 class="mt-2 text-2xl font-bold text-slate-900">Tune the sequence, then scan the universe.</h2>
-            <p class="mt-1 text-sm text-slate-500">The screener works on recent MACD, RSI, and StochRSI events over roughly the last six months.</p>
+            <p class="mt-1 text-sm text-slate-500">The screener focuses on recent MACD, RSI, and StochRSI events from the last 30 days.</p>
           </div>
-          <div class="grid gap-3 sm:grid-cols-[minmax(0,220px)_minmax(0,180px)_auto]">
+          <div class="grid gap-3 sm:grid-cols-[minmax(0,220px)_minmax(0,180px)_auto_auto]">
             <label class="block">
               <span class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Preset</span>
               <select id="screen-preset-select" onchange="applyScreenPreset(this.value)"
@@ -787,11 +915,22 @@
               class="self-end rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-rose-500">
               Save Preset
             </button>
+            <button id="run-btn" type="button" onclick="runScreen()"
+              class="self-end rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-500"
+              title="Run the control-based screener">
+              <span class="inline-flex items-center gap-1.5">
+                <svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 3l14 9-14 9V3z" />
+                </svg>
+                Run Screener
+              </span>
+            </button>
           </div>
         </div>
-        <div class="mt-5 grid gap-4 xl:grid-cols-3 md:grid-cols-2">
-          <div class="screen-range-shell">
-            <div class="flex items-start justify-between gap-3">
+        <div id="screen-ta-controls-slot" class="mt-5"></div>
+        <div class="mt-5 grid gap-4 xl:grid-cols-3 xl:grid-rows-[max-content_max-content] md:grid-cols-2">
+          <div class="screen-range-shell xl:col-start-1 xl:row-start-1 xl:self-start">
+            <div class="screen-filter-header">
               <div>
                 <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Volume Filter</div>
                 <div class="mt-1 text-base font-bold text-slate-900">Average 20D Volume</div>
@@ -804,33 +943,42 @@
             </div>
             <div class="screen-range-axis"><span>0</span><span>20M</span></div>
           </div>
-          <div class="screen-range-shell">
-            <div class="flex items-start justify-between gap-3">
+          <div class="screen-range-shell xl:col-start-2 xl:row-start-1 xl:self-start">
+            <div class="screen-filter-header">
               <div>
-                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">RSI Level</div>
-                <div class="mt-1 text-base font-bold text-slate-900">RSI Trigger Level</div>
+                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">EMA Trend</div>
+                <div class="mt-1 text-base font-bold text-slate-900">Slope at Latest Bar</div>
               </div>
-              <div id="screen-rsi-cross-value-readout" class="text-right text-xs font-bold text-sky-700">50</div>
+              <div class="text-right text-[10px] font-bold uppercase tracking-wide text-slate-400">Measured at latest bar</div>
             </div>
-            <div class="mt-6">
-              <input id="screen-rsi-cross-value" type="range" min="0" max="100" step="1" value="50" class="w-full accent-rose-600">
+            <p class="mt-2 text-[11px] leading-4 text-slate-500">Compares the EMA at the latest available bar with its value the selected number of bars earlier.</p>
+            <div class="mt-2 grid grid-cols-3 gap-2">
+              <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA 20
+                <select id="screen-ema-20-slope" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+                  <option value="any">Any</option><option value="positive">Positive</option><option value="flat">Flat</option><option value="negative">Negative</option>
+                </select>
+              </label>
+              <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA 50
+                <select id="screen-ema-50-slope" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+                  <option value="any">Any</option><option value="positive">Positive</option><option value="flat">Flat</option><option value="negative">Negative</option>
+                </select>
+              </label>
+              <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA 200
+                <select id="screen-ema-200-slope" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+                  <option value="any">Any</option><option value="positive">Positive</option><option value="flat">Flat</option><option value="negative">Negative</option>
+                </select>
+              </label>
             </div>
-            <div class="screen-range-axis"><span>0</span><span>100</span></div>
+            <div class="mt-2 grid grid-cols-2 gap-2">
+              <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Lookback bars
+                <input id="screen-ema-slope-lookback" type="number" min="1" max="30" value="5" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+              </label>
+              <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Flat ±%
+                <input id="screen-ema-slope-tolerance" type="number" min="0" max="5" step="0.05" value="0.10" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+              </label>
+            </div>
           </div>
-          <div class="screen-range-shell">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">StochRSI Level</div>
-                <div class="mt-1 text-base font-bold text-slate-900">StochRSI Trigger Level</div>
-              </div>
-              <div id="screen-stoch-cross-value-readout" class="text-right text-xs font-bold text-sky-700">20</div>
-            </div>
-            <div class="mt-6">
-              <input id="screen-stoch-cross-value" type="range" min="0" max="100" step="1" value="20" class="w-full accent-rose-600">
-            </div>
-            <div class="screen-range-axis"><span>0</span><span>100</span></div>
-          </div>
-          <div class="screen-timeline-stack xl:col-span-2 xl:row-span-2">
+          <div class="screen-timeline-stack xl:col-start-1 xl:row-start-2 xl:col-span-2 xl:self-start">
             <div class="flex items-start justify-between gap-3">
               <div>
                 <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-500">Timeline Stack</div>
@@ -841,88 +989,149 @@
             <p class="text-sm text-slate-500">Each row has one blue event marker. The left side is further back in time, the right side is today, and the event may happen once or many times anywhere in that span.</p>
             <div id="screen-sequence-badges" class="flex flex-wrap gap-2"></div>
             <div id="screen-rsi-event-step" class="screen-timeline-step">
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <div class="screen-timeline-step-label">RSI Event</div>
-                  <div class="mt-1 text-base font-bold text-slate-900">RSI Cross Point</div>
-                  <div id="screen-rsi-mode-readout" class="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">Cross Up</div>
+              <div class="screen-timeline-step-header">
+                <label class="screen-timeline-step-toggle">
+                  <input id="screen-rsi-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                  Use
+                </label>
+                <div class="screen-timeline-step-label">RSI Event</div>
+                <div class="screen-timeline-step-title text-sm font-bold text-slate-900">RSI Cross Point</div>
+                <div id="screen-rsi-mode-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">Cross Up</div>
+                <div id="screen-rsi-cross-readout" class="ml-auto text-right text-xs font-bold text-sky-700">90d ago</div>
+              </div>
+              <div class="screen-timeline-step-controls">
+                <label class="screen-timeline-trigger">
+                  <span class="screen-timeline-trigger-header"><span>Trigger level</span><span id="screen-rsi-cross-value-readout" class="text-sky-700">50</span></span>
+                  <input id="screen-rsi-cross-value" type="range" min="0" max="100" step="1" value="50">
+                </label>
+                <label class="screen-timeline-type block">
+                  <span class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Type</span>
+                  <select id="screen-rsi-cross-mode"
+                    class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
+                    <option value="cross_up">Cross Up</option>
+                    <option value="cross_down">Cross Down</option>
+                  </select>
+                </label>
+                <div class="screen-range-track">
+                  <input id="screen-rsi-cross-age" type="range" min="0" max="180" step="1" value="90">
                 </div>
-                <div id="screen-rsi-cross-readout" class="text-right text-xs font-bold text-sky-700">90d ago</div>
+                <div class="screen-range-axis"><span id="screen-rsi-axis-left">30d ago</span><span>Today</span></div>
               </div>
-              <label class="mt-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                <input id="screen-rsi-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
-                Use RSI Event
-              </label>
-              <label class="mt-3 block">
-                <span class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">RSI Type</span>
-                <select id="screen-rsi-cross-mode"
-                  class="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
-                  <option value="cross_up">Cross Up</option>
-                  <option value="cross_down">Cross Down</option>
-                </select>
-              </label>
-              <div class="screen-range-track">
-                <input id="screen-rsi-cross-age" type="range" min="0" max="180" step="1" value="90">
-              </div>
-              <div class="screen-range-axis"><span id="screen-rsi-axis-left">180d ago</span><span>Today</span></div>
             </div>
             <div id="screen-macd-event-step" class="screen-timeline-step">
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <div class="screen-timeline-step-label">MACD Event</div>
-                  <div class="mt-1 text-base font-bold text-slate-900">MACD Cross Point</div>
-                  <div id="screen-macd-mode-readout" class="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">Low Cross / Buy</div>
+              <div class="screen-timeline-step-header">
+                <label class="screen-timeline-step-toggle">
+                  <input id="screen-macd-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                  Use
+                </label>
+                <div class="screen-timeline-step-label">MACD Event</div>
+                <div class="screen-timeline-step-title text-sm font-bold text-slate-900">MACD Cross Point</div>
+                <div id="screen-macd-mode-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">MACD/Signal bullish cross below zero</div>
+                <div id="screen-macd-cross-readout" class="ml-auto text-right text-xs font-bold text-sky-700">45d ago</div>
+              </div>
+              <div class="screen-timeline-step-controls">
+                <label class="screen-timeline-type screen-macd-type block">
+                  <span class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Type</span>
+                  <select id="screen-macd-cross-mode"
+                    class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
+                    <option value="bullish_cross">Bullish MACD/Signal cross</option>
+                    <option value="bearish_cross">Bearish MACD/Signal cross</option>
+                  </select>
+                  <span class="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Cross region</span>
+                  <span class="screen-macd-region-options">
+                    <label><input id="screen-macd-cross-region-below" type="radio" name="screen-macd-cross-region" value="below" checked> Below zero</label>
+                    <label><input id="screen-macd-cross-region-above" type="radio" name="screen-macd-cross-region" value="above"> Above zero</label>
+                    <label><input id="screen-macd-cross-region-any" type="radio" name="screen-macd-cross-region" value="any"> Any region</label>
+                  </span>
+                </label>
+                <div class="screen-range-track">
+                  <input id="screen-macd-cross-age" type="range" min="0" max="180" step="1" value="135">
                 </div>
-                <div id="screen-macd-cross-readout" class="text-right text-xs font-bold text-sky-700">45d ago</div>
+                <div class="screen-range-axis"><span id="screen-macd-axis-left">30d ago</span><span>Today</span></div>
               </div>
-              <label class="mt-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                <input id="screen-macd-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
-                Use MACD Event
-              </label>
-              <label class="mt-3 block">
-                <span class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">MACD Type</span>
-                <select id="screen-macd-cross-mode"
-                  class="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
-                  <option value="low_cross_buy">Low Cross (Buy)</option>
-                  <option value="high_cross_sell">High Cross (Sell)</option>
-                  <option value="bullish_cross">Any Bullish Cross</option>
-                  <option value="bearish_cross">Any Bearish Cross</option>
-                </select>
-              </label>
-              <div class="screen-range-track">
-                <input id="screen-macd-cross-age" type="range" min="0" max="180" step="1" value="135">
-              </div>
-              <div class="screen-range-axis"><span id="screen-macd-axis-left">180d ago</span><span>Today</span></div>
             </div>
             <div id="screen-stoch-event-step" class="screen-timeline-step">
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <div class="screen-timeline-step-label">StochRSI Event</div>
-                  <div class="mt-1 text-base font-bold text-slate-900">StochRSI Cross Point</div>
-                  <div id="screen-stoch-mode-readout" class="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">Cross Up</div>
+              <div class="screen-timeline-step-header">
+                <label class="screen-timeline-step-toggle">
+                  <input id="screen-stoch-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                  Use
+                </label>
+                <div class="screen-timeline-step-label">StochRSI Event</div>
+                <div class="screen-timeline-step-title text-sm font-bold text-slate-900">StochRSI Cross Point</div>
+                <div id="screen-stoch-mode-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">K/D Cross Up</div>
+                <div id="screen-stoch-cross-readout" class="ml-auto text-right text-xs font-bold text-sky-700">15d ago</div>
+              </div>
+              <div class="screen-timeline-step-controls">
+                <label class="screen-timeline-trigger">
+                  <span class="screen-timeline-trigger-header"><span>Trigger level</span><span id="screen-stoch-cross-value-readout" class="text-sky-700">20</span></span>
+                  <input id="screen-stoch-cross-value" type="range" min="0" max="100" step="1" value="20">
+                </label>
+                <label class="screen-timeline-type screen-stoch-type block">
+                  <span class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Type</span>
+                  <select id="screen-stoch-cross-mode"
+                    class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
+                    <option value="cross_up">K/D Cross Up</option>
+                    <option value="cross_down">K/D Cross Down</option>
+                  </select>
+                  <span class="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Cross region</span>
+                  <span class="screen-stoch-region-options">
+                    <label><input id="screen-stoch-cross-region-below" type="radio" name="screen-stoch-cross-region" value="below" checked> Below trigger</label>
+                    <label><input id="screen-stoch-cross-region-above" type="radio" name="screen-stoch-cross-region" value="above"> Above trigger</label>
+                    <label><input id="screen-stoch-cross-region-any" type="radio" name="screen-stoch-cross-region" value="any"> Any</label>
+                  </span>
+                </label>
+                <div class="screen-range-track">
+                  <input id="screen-stoch-cross-age" type="range" min="0" max="180" step="1" value="165">
                 </div>
-                <div id="screen-stoch-cross-readout" class="text-right text-xs font-bold text-sky-700">15d ago</div>
+                <div class="screen-range-axis"><span id="screen-stoch-axis-left">30d ago</span><span>Today</span></div>
               </div>
-              <label class="mt-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                <input id="screen-stoch-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
-                Use StochRSI Event
-              </label>
-              <label class="mt-3 block">
-                <span class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">StochRSI Type</span>
-                <select id="screen-stoch-cross-mode"
-                  class="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
-                  <option value="cross_up">Cross Up</option>
-                  <option value="cross_down">Cross Down</option>
-                </select>
-              </label>
-              <div class="screen-range-track">
-                <input id="screen-stoch-cross-age" type="range" min="0" max="180" step="1" value="165">
+            </div>
+            <div id="screen-supertrend-event-step" class="screen-timeline-step">
+              <div class="screen-timeline-step-header">
+                <label class="screen-timeline-step-toggle">
+                  <input id="screen-supertrend-event-enabled" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                  Use
+                </label>
+                <div class="screen-timeline-step-label">Supertrend Event</div>
+                <div class="screen-timeline-step-title text-sm font-bold text-slate-900">Supertrend Direction Change</div>
+                <div id="screen-supertrend-mode-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">Red to green</div>
+                <div id="screen-supertrend-cross-readout" class="ml-auto text-right text-xs font-bold text-sky-700">30d ago</div>
               </div>
-              <div class="screen-range-axis"><span id="screen-stoch-axis-left">180d ago</span><span>Today</span></div>
+              <div class="screen-timeline-step-controls">
+                <label class="screen-timeline-type block">
+                  <span class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Direction</span>
+                  <select id="screen-supertrend-cross-mode"
+                    class="block w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
+                    <option value="red_to_green">Red to green</option>
+                    <option value="green_to_red">Green to red</option>
+                  </select>
+                </label>
+                <div class="screen-range-track">
+                  <input id="screen-supertrend-cross-age" type="range" min="0" max="180" step="1" value="30">
+                </div>
+                <div class="screen-range-axis"><span id="screen-supertrend-axis-left">30d ago</span><span>Today</span></div>
+              </div>
+            </div>
+            <div id="screen-ema-relationship-event-step" class="screen-timeline-step">
+              <div class="screen-timeline-step-header">
+                <label class="screen-timeline-step-toggle"><input id="screen-ema-relationship-event-enabled" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"> Use</label>
+                <div class="screen-timeline-step-label">EMA Cross Event</div>
+                <div class="screen-timeline-step-title text-sm font-bold text-slate-900">Fast EMA crossed slow EMA</div>
+                <div id="screen-ema-relationship-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">10 / 20 · positive</div>
+                <div id="screen-ema-relationship-event-readout" class="ml-auto text-right text-xs font-bold text-sky-700">Cross within last 30d</div>
+              </div>
+              <div class="screen-timeline-step-controls grid grid-cols-2 gap-2">
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Fast EMA<input id="screen-ema-relationship-fast" type="number" min="2" max="200" value="10" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Slow EMA<input id="screen-ema-relationship-slow" type="number" min="3" max="400" value="20" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Slope<select id="screen-ema-relationship-slope" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"><option value="positive" selected>Positive</option><option value="negative">Negative</option><option value="any">Either</option></select></label>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Divergence allowance<input id="screen-ema-relationship-allowance" type="number" min="0" max="5" step="0.05" value="0.10" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                <div class="screen-range-track col-span-2"><input id="screen-ema-relationship-age" type="range" min="0" max="180" step="1" value="30" aria-label="EMA cross window"></div>
+                <div class="screen-range-axis col-span-2"><span id="screen-ema-relationship-axis-left">Earlier</span><span>Today</span></div>
+              </div>
             </div>
           </div>
-          <div class="xl:row-span-2 flex min-h-0 flex-col gap-4">
-            <div id="screener-results-panel" class="bg-white shadow-xl rounded-xl p-4 overflow-hidden min-h-[28rem] max-h-[48rem] border-t-4 border-indigo-500 flex flex-col">
+          <div class="screen-results-column xl:col-start-3 xl:row-start-1 xl:row-span-2 min-h-0 flex flex-col gap-4 overflow-hidden">
+            <div id="screener-results-panel" class="flex-1 min-h-0 bg-white shadow-xl rounded-xl p-4 overflow-hidden border-t-4 border-indigo-500 flex flex-col">
               <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
                 Top Matches
                 <div class="flex items-center gap-2">
@@ -934,7 +1143,7 @@
                   <span id="match-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">0</span>
                 </div>
               </h2>
-              <div id="ticker-list" class="space-y-2 pb-6 overflow-y-auto flex-1 h-full">
+              <div id="ticker-list" class="space-y-2 pb-6 overflow-y-auto flex-1 min-h-0">
                 <div class="text-sm text-slate-400 italic">
                   No matches... run screen
                 </div>
@@ -998,13 +1207,40 @@
               </div>
             </div>
           </div>
-          <div id="layer-legend" class="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-[11px] font-semibold text-slate-600">
-            <span class="uppercase tracking-wide text-slate-500">Layer Shading</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-blue-600"></span>Context</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-amber-500"></span>Setup</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-emerald-600"></span>Trigger</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-red-600"></span>Exit</span>
-            <span class="text-slate-400">Shown when strategy layers are evaluable on chart data.</span>
+          <div id="chart-ta-controls" class="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <span class="mr-1 pb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">TA Parameters</span>
+            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">MACD Fast
+              <input id="chart-macd-fast" type="number" min="2" max="100" value="12" class="mt-1 w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+            </label>
+            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Slow
+              <input id="chart-macd-slow" type="number" min="3" max="200" value="26" class="mt-1 w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+            </label>
+            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Signal
+              <input id="chart-macd-signal" type="number" min="1" max="100" value="9" class="mt-1 w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+            </label>
+            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">RSI
+              <input id="chart-rsi-period" type="number" min="2" max="100" value="14" class="mt-1 w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+            </label>
+            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Stoch Period
+              <input id="chart-stoch-rsi-period" type="number" min="2" max="100" value="14" class="mt-1 w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+            </label>
+            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">K
+              <input id="chart-stoch-rsi-k" type="number" min="1" max="30" value="3" class="mt-1 w-14 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+            </label>
+            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">D
+              <input id="chart-stoch-rsi-d" type="number" min="1" max="30" value="3" class="mt-1 w-14 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+            </label>
+            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Supertrend Period
+              <input id="chart-supertrend-period" type="number" min="2" max="100" value="10" class="mt-1 w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+            </label>
+            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Supertrend Multiplier
+              <input id="chart-supertrend-multiplier" type="number" min="0.5" max="10" step="0.1" value="3.0" class="mt-1 w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+            </label>
+            <button id="chart-ta-apply-btn" type="button" onclick="applyChartTAParameters()"
+              class="rounded bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-indigo-600"
+              disabled>
+              Apply
+            </button>
           </div>
           <div id="plotly-tools-dock">
             <div id="plotly-tools-box"><span id="plotly-tools-label">Tools</span><div id="plotly-tools-actions"></div></div>
@@ -1024,534 +1260,9 @@
     </div>
   </div>
 
-  <div id="tab-shortlist" class="hidden">
-    <div class="p-6 space-y-6">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 class="text-xl font-bold text-slate-800">ETF Shortlist</h2>
-          <p class="text-sm text-slate-500">Shortlist always runs on the currently chosen universe. That can be Xetra, Nasdaq, Sweden, or a saved List if you want to narrow the search and reduce computation.</p>
-        </div>
-        <div class="flex flex-col items-end gap-3">
-          <div id="shortlist-market-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Checking market data freshness...</div>
-          <div id="shortlist-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Shortlist uses the active universe</div>
-          <div class="max-w-[420px] text-right text-[11px] text-slate-500">
-            Shortlist follows the selected universe above. Use `List` when you want a smaller focused universe, then use the refresh button here to fetch fresh data and rebuild that shortlist.
-          </div>
-          <div class="flex flex-wrap justify-end gap-2">
-            <button id="shortlist-refresh-btn" onclick="refreshMarketData()"
-              class="bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-sky-500/60 transition-all"
-              title="Fetch fresh market data for the active source, then rebuild the shortlist">
-              Refresh Shortlist
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-sky-500">
-          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Data As Of</div>
-          <div id="shortlist-as-of" class="mt-2 text-lg font-bold text-slate-800">-</div>
-        </div>
-        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-indigo-500">
-          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Candidates</div>
-          <div id="shortlist-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
-        </div>
-        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-emerald-500">
-          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Buy</div>
-          <div id="shortlist-buy-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
-        </div>
-        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-amber-500">
-          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Watch</div>
-          <div id="shortlist-watch-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
-        </div>
-        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-rose-500">
-          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Skip</div>
-          <div id="shortlist-skip-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
-        </div>
-      </div>
-
-      <div id="shortlist-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-        Open the Shortlist tab to load the cached ETF ranking snapshot.
-      </div>
-
-      <div id="shortlist-content" class="hidden">
-        <div class="mb-4 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-          <span class="font-bold">How to use it:</span> treat the shortlist as a ranked idea queue, not an auto-buy list. Open the chart, confirm the setup, then decide whether it belongs in `Buy`, `Watch`, or `Skip` for you.
-        </div>
-        <div class="mb-4 flex flex-wrap items-center gap-2">
-          <span class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Show</span>
-          <button id="shortlist-filter-all" type="button" onclick="setShortlistFilter('All')"
-            class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-            All
-          </button>
-          <button id="shortlist-filter-buy" type="button" onclick="setShortlistFilter('Buy')"
-            class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-            Buy
-          </button>
-          <button id="shortlist-filter-watch" type="button" onclick="setShortlistFilter('Watch')"
-            class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-            Watch
-          </button>
-          <button id="shortlist-filter-skip" type="button" onclick="setShortlistFilter('Skip')"
-            class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-all">
-            Skip
-          </button>
-        </div>
-        <div id="shortlist-grid" class="grid grid-cols-1 xl:grid-cols-2 gap-4"></div>
-      </div>
-    </div>
-  </div>
-
-  <div id="tab-query" class="hidden">
-    <div class="p-6 space-y-6">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 class="text-xl font-bold text-slate-800">Query</h2>
-          <p class="text-sm text-slate-500">Use this tab for direct data exploration without mixing it into Screener or Backtester flow.</p>
-        </div>
-        <div class="flex flex-col items-end gap-2">
-          <div id="query-status" class="text-xs font-bold uppercase tracking-wide text-slate-500">Ready to scan the chosen universe.</div>
-          <button id="query-run-btn" onclick="loadQueryResults()"
-            class="bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold py-2 px-4 rounded-lg border border-amber-500/60 transition-all">
-            Run Query
-          </button>
-        </div>
-      </div>
-
-      <div id="query-progress-shell" class="hidden rounded-2xl border border-amber-200 bg-white shadow">
-        <div class="border-b border-amber-100 bg-amber-50/70 px-4 py-3">
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <div id="query-progress-label" class="text-[11px] font-bold uppercase tracking-wide text-amber-700">Query Progress</div>
-              <div id="query-progress-message" class="mt-1 text-sm font-semibold text-slate-800">Waiting for the next query run.</div>
-            </div>
-            <div id="query-progress-pct" class="text-xs font-bold uppercase tracking-wide text-amber-700">0%</div>
-          </div>
-          <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-            <div id="query-progress-bar" class="h-full rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-emerald-400 transition-all duration-500"
-              style="width: 0%"></div>
-          </div>
-        </div>
-        <div class="bg-slate-950 px-4 py-3">
-          <div class="flex items-center justify-between gap-3">
-            <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400">Activity Gutter</div>
-            <div id="query-activity-caption" class="text-[11px] text-slate-500">Latest query steps appear here.</div>
-          </div>
-          <div id="query-activity-log" class="mt-3 space-y-2"></div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 xl:grid-cols-6 gap-4 rounded-2xl border border-amber-100 bg-white p-4 shadow">
-        <div>
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Dataset</label>
-          <select id="query-dataset" onchange="updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-            <option value="signal_scan">Actionable Signal Scan</option>
-            <option value="price_history">Ticker History (Advanced)</option>
-            <option value="shortlist">Shortlist Snapshot (Advanced)</option>
-          </select>
-        </div>
-        <div id="query-source-group">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Universe</label>
-          <div id="query-source-readout"
-            class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800">
-            Xetra
-          </div>
-          <div id="query-source-note" class="mt-2 text-[11px] text-slate-500">
-            Uses the ticker universe selected in the top bar.
-          </div>
-        </div>
-        <div id="query-signal-group">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Signal</label>
-          <select id="query-signal" onchange="updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-            <option value="trend_forming">Trend Forming</option>
-            <option value="elusive_dip">Elusive Dip</option>
-            <option value="downtrend_turnaround">Downtrend Turnaround</option>
-            <option value="trend_weakening">Trend Weakening</option>
-          </select>
-        </div>
-        <div id="query-signal-age-group">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Signal Age Max</label>
-          <input id="query-signal-age-max" type="number" min="0" step="1" value="5" oninput="this.dataset.userEdited='true'; updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-        </div>
-        <div id="query-reliability-group">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Min Reliability</label>
-          <input id="query-min-reliability" type="number" min="0" max="10" step="0.1" value="6.0" oninput="this.dataset.userEdited='true'; updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-        </div>
-        <div id="query-refresh-group" class="xl:col-span-2">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Data Freshness</label>
-          <label class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            <input id="query-refresh-if-needed" type="checkbox" checked onchange="updateQueryControls()">
-            <span>Refresh only when needed for the chosen universe</span>
-          </label>
-        </div>
-        <div id="query-ticker-group">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Ticker</label>
-          <select id="query-ticker" onchange="updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-            <option value="">Select ticker...</option>
-            {% for ticker in tickers %}
-            <option value="{{ ticker }}">{{ ticker }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div id="query-label-group" class="hidden">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Label</label>
-          <select id="query-label" onchange="updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-            <option value="All">All</option>
-            <option value="Buy">Buy</option>
-            <option value="Watch">Watch</option>
-            <option value="Skip">Skip</option>
-          </select>
-        </div>
-        <div id="query-days-group">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Days</label>
-          <input id="query-days" type="number" min="1" step="1" value="90" oninput="updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-        </div>
-        <div id="query-start-group">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Start Date</label>
-          <input id="query-start-date" type="date" onchange="updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-        </div>
-        <div id="query-end-group">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">End Date</label>
-          <input id="query-end-date" type="date" onchange="updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-        </div>
-        <div>
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Limit</label>
-          <input id="query-limit" type="number" min="1" step="1" value="120" oninput="updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-        </div>
-        <div class="xl:col-span-3">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Columns</label>
-          <input id="query-columns" type="text" placeholder="date,close,volume or *" oninput="updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-        </div>
-        <div id="query-sort-group" class="hidden">
-          <label class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Sort By</label>
-          <select id="query-sort-by" onchange="updateQueryControls()"
-            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-            <option value="final_score">final_score</option>
-            <option value="technical_score">technical_score</option>
-            <option value="product_score">product_score</option>
-            <option value="exposure_score">exposure_score</option>
-            <option value="volume">volume</option>
-            <option value="recent_entry_days">recent_entry_days</option>
-            <option value="ticker">ticker</option>
-            <option value="label">label</option>
-            <option value="as_of_date">as_of_date</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-amber-500">
-          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Mode</div>
-          <div id="query-summary-dataset" class="mt-2 text-lg font-bold text-slate-800">Signal Scan</div>
-        </div>
-        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-slate-500">
-          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Matched</div>
-          <div id="query-summary-rows" class="mt-2 text-lg font-bold text-slate-800">0</div>
-        </div>
-        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-indigo-500">
-          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Previewed</div>
-          <div id="query-summary-returned" class="mt-2 text-lg font-bold text-slate-800">0</div>
-        </div>
-        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-emerald-500">
-          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Latest Market Date</div>
-          <div id="query-summary-range" class="mt-2 text-sm font-bold text-slate-800">-</div>
-        </div>
-        <div class="rounded-xl bg-white shadow p-4 border-t-4 border-sky-500">
-          <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Universe</div>
-          <div id="query-summary-source" class="mt-2 text-sm font-bold text-slate-800">-</div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div class="rounded-xl border border-slate-200 bg-slate-950 px-4 py-3 shadow">
-          <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400">Equivalent API Call</div>
-          <pre id="query-api-call" class="mt-2 whitespace-pre-wrap break-all text-xs text-emerald-200">/api/query/run?dataset=signal_scan&amp;source=xetra&amp;signal=trend_forming&amp;signal_age_max=5&amp;min_reliability=6.0&amp;refresh_if_needed=true&amp;limit=120</pre>
-        </div>
-        <div class="rounded-xl border border-slate-200 bg-slate-950 px-4 py-3 shadow">
-          <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400">Equivalent CLI Call</div>
-          <pre id="query-cli-call" class="mt-2 whitespace-pre-wrap break-all text-xs text-amber-200">etfs query --dataset signal_scan --source xetra --signal trend_forming --signal-age-max 5 --min-reliability 6.0 --limit 120</pre>
-        </div>
-      </div>
-
-      <div id="query-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-        Run an actionable signal scan to get current tickers from the selected universe.
-      </div>
-
-      <div id="query-content" class="hidden rounded-2xl border border-slate-200 bg-white shadow overflow-hidden">
-        <div class="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Query preview. Results are bounded so the tab stays responsive even on large universes. Click any ticker to open the full chart in Screener, then come back here to continue exploring.
-        </div>
-        <div class="overflow-auto max-h-[60vh]">
-          <table class="min-w-full text-sm">
-            <thead id="query-results-head" class="bg-slate-900 text-slate-100 sticky top-0"></thead>
-            <tbody id="query-results-body" class="divide-y divide-slate-100"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div id="tab-backtest" class="hidden">
-    <div class="p-6 space-y-6">
-      <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_22rem] gap-6 items-start">
-        <div class="space-y-4">
-          <h2 class="text-xl font-bold text-slate-800">Backtester</h2>
-          <p class="text-sm text-slate-500">Evaluate saved strategies or the current editor draft and refine them with ranked quality metrics.</p>
-          <div class="grid grid-cols-1 2xl:grid-cols-2 gap-4">
-            <div id="backtest-structure-panel" class="hidden overflow-hidden rounded-xl bg-white shadow border border-slate-200">
-              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-                <div class="text-sm font-bold text-slate-700">Strategy Structure Radar</div>
-                <div class="mt-1 text-xs text-slate-500">DSL-derived structure scores for the active strategies.</div>
-              </div>
-              <div id="backtest-structure-chart" class="w-full h-[360px] xl:h-[400px]"></div>
-            </div>
-            <div id="backtest-behavior-panel" class="hidden overflow-hidden rounded-xl bg-white shadow border border-slate-200">
-              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-                <div class="text-sm font-bold text-slate-700">Realized Behavior Radar</div>
-                <div class="mt-1 text-xs text-slate-500">Normalized backtest outcomes for the active strategies. Farther out is better on each axis; area alone is not the score.</div>
-              </div>
-              <div id="backtest-behavior-chart" class="w-full h-[360px] xl:h-[400px]"></div>
-            </div>
-          </div>
-        </div>
-        <div class="flex flex-col items-stretch xl:items-end gap-3">
-          <div class="inline-flex rounded-lg border border-slate-300 bg-white p-1 shadow-sm">
-            <button id="bt-source-saved" type="button" onclick="setBacktestSourceMode('saved')"
-              class="rounded-md px-3 py-2 text-sm font-bold bg-indigo-600 text-white">Saved Strategy</button>
-            <button id="bt-source-editor" type="button" onclick="setBacktestSourceMode('editor')"
-              class="rounded-md px-3 py-2 text-sm font-bold text-slate-600">Editor Draft</button>
-          </div>
-          <div class="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm w-full max-w-sm">
-            <label for="backtest-strategy-list" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">
-              Saved Strategies
-            </label>
-            <div id="backtest-strategy-list"
-              class="mt-2 max-h-56 overflow-y-auto rounded-lg border border-slate-300 bg-white text-sm font-mono text-slate-800">
-              {% for strat in strategies %}
-              <label class="flex items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-b-0 hover:bg-slate-50">
-                <input type="checkbox" class="backtest-strategy-checkbox h-4 w-4 rounded border-slate-300 text-indigo-600"
-                  value="{{ strat }}" onchange="handleBacktestStrategyChooserChange()">
-                <span class="truncate">{{ strat }}</span>
-              </label>
-              {% endfor %}
-            </div>
-            <div class="mt-2 flex flex-wrap items-center gap-2">
-              <button id="backtest-select-all-btn" type="button" onclick="selectBacktestStrategies('all')"
-                class="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50">All</button>
-              <button id="backtest-select-none-btn" type="button" onclick="selectBacktestStrategies('none')"
-                class="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50">None</button>
-              <span id="backtest-selected-count" class="ml-auto text-[11px] font-bold uppercase tracking-wide text-slate-500">0 selected</span>
-            </div>
-          </div>
-          <div class="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm w-full max-w-sm">
-            <label for="backtest-since-days" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500">
-              Signal Window
-            </label>
-            <div class="mt-2 flex items-center gap-2">
-              <input id="backtest-since-days" type="number" min="1" step="1" placeholder="Auto" oninput="updateBacktestRunButtonState()"
-                class="w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono text-slate-800 outline-none focus:border-indigo-400">
-              <span class="text-xs text-slate-500">Blank shows the full backtest set; enter a value to filter recent signals</span>
-            </div>
-          </div>
-          <button id="backtest-run-btn" onclick="loadBacktestMetrics()" disabled
-            class="bg-slate-300 text-slate-500 text-sm font-bold py-2 px-4 rounded-lg border border-slate-300 transition-all cursor-not-allowed"
-            title="Select at least one saved strategy, or switch to Editor Draft with DSL content.">
-            Evaluate Selected
-          </button>
-        </div>
-      </div>
-
-      <div id="backtest-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-        Select a saved strategy or switch to Editor Draft to evaluate the current DSL in the GUI.
-      </div>
-
-      <div id="backtest-progress-panel" class="hidden rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
-        <div class="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <div class="text-xs font-bold uppercase tracking-wide text-emerald-700">Backtest Progress</div>
-            <div id="backtest-progress-detail" class="mt-1 text-sm text-slate-600">Waiting...</div>
-          </div>
-          <div id="backtest-progress-percent" class="font-mono text-sm font-bold text-slate-700">0%</div>
-        </div>
-        <div class="space-y-3">
-          <div>
-            <div class="mb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wide text-slate-500">
-              <span id="backtest-context-label">Request</span>
-              <span id="backtest-context-text">0%</span>
-            </div>
-            <div class="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div id="backtest-context-bar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300" style="width:0%"></div>
-            </div>
-          </div>
-          <div>
-            <div class="mb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wide text-slate-500">
-              <span id="backtest-global-label">Backend</span>
-              <span id="backtest-global-text">Waiting...</span>
-            </div>
-            <div class="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div id="backtest-global-bar" class="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-300" style="width:0%"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div id="backtest-content" class="hidden space-y-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
-          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-emerald-500">
-            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Strategy</div>
-            <div id="bt-strategy" class="mt-2 text-lg font-bold text-slate-800">-</div>
-          </div>
-          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-indigo-500">
-            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Candidates</div>
-            <div id="bt-count" class="mt-2 text-lg font-bold text-slate-800">0</div>
-          </div>
-          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-amber-500">
-            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Best Quality</div>
-            <div id="bt-best-quality" class="mt-2 text-lg font-bold text-slate-800">0.00</div>
-          </div>
-          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-rose-500">
-            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Avg Return</div>
-            <div id="bt-avg-return" class="mt-2 text-lg font-bold text-slate-800">0.00%</div>
-          </div>
-          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-cyan-500">
-            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Avg Sharpe</div>
-            <div id="bt-avg-sharpe" class="mt-2 text-lg font-bold text-slate-800">0.00</div>
-          </div>
-          <div class="rounded-xl bg-white shadow p-4 border-t-4 border-violet-500">
-            <div class="text-xs uppercase tracking-wide text-slate-500 font-bold">Best Structure</div>
-            <div id="bt-best-structure" class="mt-2 text-lg font-bold text-slate-800">0.00</div>
-          </div>
-        </div>
-
-        <div class="overflow-hidden rounded-xl bg-white shadow border border-slate-200">
-          <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 flex flex-wrap items-end justify-between gap-3">
-            <div class="text-sm font-bold text-slate-700">2D Metric Map</div>
-            <div class="flex flex-wrap items-end gap-3">
-              <label class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                X Axis
-                <select id="backtest-x-axis" onchange="renderBacktestScatter()"
-                  class="mt-1 block rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-mono text-slate-800 outline-none focus:border-indigo-400">
-                </select>
-              </label>
-              <label class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                Y Axis
-                <select id="backtest-y-axis" onchange="renderBacktestScatter()"
-                  class="mt-1 block rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-mono text-slate-800 outline-none focus:border-indigo-400">
-                </select>
-              </label>
-            </div>
-          </div>
-          <div id="backtest-chart" class="w-full h-[360px]"></div>
-        </div>
-
-        <div class="overflow-hidden rounded-xl bg-white shadow border border-slate-200">
-          <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-sm font-bold text-slate-700">Top Ranked Results</div>
-          <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-              <thead class="bg-slate-100 text-slate-600 uppercase text-xs tracking-wide">
-                <tr>
-                  <th class="px-4 py-3 text-left">
-                    <button id="backtest-sort-ticker" type="button" onclick="setBacktestTableSort('ticker')"
-                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      title="Sort by ticker">
-                      Ticker
-                    </button>
-                  </th>
-                  <th class="px-4 py-3 text-left">
-                    <button id="backtest-sort-strategy" type="button" onclick="setBacktestTableSort('strategy')"
-                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      title="Sort by strategy">
-                      Strategy
-                    </button>
-                  </th>
-                  <th class="px-4 py-3 text-left">
-                    <button id="backtest-sort-quality_score" type="button" onclick="setBacktestTableSort('quality_score')"
-                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      title="Sort by quality score">
-                      Quality
-                    </button>
-                  </th>
-                  <th class="px-4 py-3 text-left">
-                    <button id="backtest-sort-return_pct" type="button" onclick="setBacktestTableSort('return_pct')"
-                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      title="Sort by return">
-                      Return
-                    </button>
-                  </th>
-                  <th class="px-4 py-3 text-left">
-                    <button id="backtest-sort-win_rate_pct" type="button" onclick="setBacktestTableSort('win_rate_pct')"
-                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      title="Sort by win rate">
-                      Win Rate
-                    </button>
-                  </th>
-                  <th class="px-4 py-3 text-left">
-                    <button id="backtest-sort-sharpe" type="button" onclick="setBacktestTableSort('sharpe')"
-                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      title="Sort by sharpe">
-                      Sharpe
-                    </button>
-                  </th>
-                  <th class="px-4 py-3 text-left">
-                    <button id="backtest-sort-profit_factor" type="button" onclick="setBacktestTableSort('profit_factor')"
-                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      title="Sort by profit factor">
-                      PF
-                    </button>
-                  </th>
-                  <th class="px-4 py-3 text-left">
-                    <button id="backtest-sort-max_dd_pct" type="button" onclick="setBacktestTableSort('max_dd_pct')"
-                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      title="Sort by max drawdown">
-                      Max DD
-                    </button>
-                  </th>
-                  <th class="px-4 py-3 text-left">
-                    <button id="backtest-sort-trades" type="button" onclick="setBacktestTableSort('trades')"
-                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      title="Sort by trade count">
-                      Trades
-                    </button>
-                  </th>
-                  <th class="px-4 py-3 text-left">
-                    <button id="backtest-sort-days_since_entry" type="button" onclick="setBacktestTableSort('days_since_entry')"
-                      class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      title="Sort by days since entry">
-                      Days Since Entry
-                    </button>
-                  </th>
-                  <th class="px-4 py-3 text-left">Exclude</th>
-                </tr>
-              </thead>
-              <tbody id="backtest-table-body" class="divide-y divide-slate-100"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <script src="/static/js/dashboard.js?v={{ dashboard_js_version }}"></script>
-
-  <!-- ===============================================================
-         Browser â†’ Server log relay
-         Intercepts console.log / warn / error / info / debug and POSTs
-         each entry to /api/log so it appears in the server-side debug
-         log file alongside all Python / uvicorn log records.
-    ================================================================ -->
   <script src="/static/js/browser-log-relay.js?v={{ browser_log_relay_version }}"></script>
 
-  <!-- List Editor Modal -->
   <div id="list-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;align-items:center;justify-content:center;padding:1rem"
     onclick="if(event.target===this)closeListEditorModal()">

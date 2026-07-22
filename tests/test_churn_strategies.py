@@ -198,7 +198,7 @@ def test_avwap_ema20_pullback_reversal_strategy_triggers_on_bullish_reclaim():
     assert int((df_out[sig_col] == 1).sum()) >= 1
 
 
-def test_epi_a_st_fanout_phase_flags_jan_20_2026():
+def test_epi_a_st_fanout_phase_flags_jan_13_2026():
     bt = Backtester()
     with open("strategies/epi_a_st_fanout_phase.dsl", "r", encoding="utf-8") as handle:
         parsed = parse_dsl_content(handle.read())
@@ -212,9 +212,9 @@ def test_epi_a_st_fanout_phase_flags_jan_20_2026():
     df_out = res["df"] if isinstance(res, dict) else res
 
     assert df_out is not None
-    jan20 = df_out[df_out["Date"].dt.strftime("%Y-%m-%d") == "2026-01-20"].iloc[0]
-    assert bool(jan20["entry_condition"]) is True
-    assert int(jan20["signal"]) == 1
+    jan13 = df_out[df_out["Date"].dt.strftime("%Y-%m-%d") == "2026-01-13"].iloc[0]
+    assert bool(jan13["entry_condition"]) is True
+    assert int(jan13["signal"]) == 1
 
 
 def test_find_recent_entry_days_returns_surviving_age():

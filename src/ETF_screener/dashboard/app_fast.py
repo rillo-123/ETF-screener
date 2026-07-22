@@ -54,6 +54,9 @@ from ETF_screener.screener_controls import (
     DEFAULT_RSI_CROSS_VALUE,
     DEFAULT_STOCH_CROSS_MODE,
     DEFAULT_STOCH_CROSS_VALUE,
+    DEFAULT_STOCH_CROSS_REGION,
+    DEFAULT_SUPERTREND_EVENT_ENABLED,
+    DEFAULT_SUPERTREND_CROSS_MODE,
     DEFAULT_VOLUME_MAX,
     normalize_screen_filters,
     screen_with_controls,
@@ -1118,7 +1121,9 @@ def _cached_dashboard_universe(
             db_info.get("source") or fallback_info.get("source") or ""
         ).lower()
         exchange = _backtest_ticker_exchange_bucket(upper_ticker)
-        if "sweden" in source_hint:
+        if upper_ticker.endswith((".ST", ".SS")):
+            exchange = "sweden"
+        elif "sweden" in source_hint:
             exchange = "sweden"
         elif "nasdaq" in source_hint or "nasdaqlisted.txt" in source_hint:
             exchange = "nasdaq"
@@ -1819,7 +1824,7 @@ def _is_stale_date(raw_date: object, threshold_days: int = 0) -> bool:
     return (date.today() - latest_day).days > max(0, int(threshold_days))
 
 
-SCREEN_RESULT_CACHE_VERSION = "screen_result_v1"
+SCREEN_RESULT_CACHE_VERSION = "screen_result_v2"
 
 
 def _screen_cache_dir() -> Path:
@@ -2472,7 +2477,7 @@ def market_status(
 def refresh_market_data(
     force: bool = True,
     stale_after_days: int = 0,
-    depth: int = 400,
+    depth: int = 180,
     max_workers: int = 8,
     source: Optional[str] = None,
     ticker_list: Optional[str] = None,
@@ -2573,7 +2578,7 @@ def _refresh_market_data_for_gui(
     )
     try:
         refresh_kwargs = {
-            "depth": 400,
+            "depth": 180,
             "stale_after_days": 0,
             "force": False,
             "max_workers": 8,
@@ -2923,7 +2928,7 @@ async def screen(
     exclude_weak_liquidity: bool = False,
     exclude_unprofitable: bool = False,
     preset_name: Optional[str] = None,
-    lookback_days: int = 180,
+    lookback_days: int = 30,
     volume_min: float = 0.0,
     volume_max: float = DEFAULT_VOLUME_MAX,
     macd_event_enabled: bool = True,
@@ -2935,10 +2940,27 @@ async def screen(
     rsi_cross_mode: str = DEFAULT_RSI_CROSS_MODE,
     stoch_cross_value: float = DEFAULT_STOCH_CROSS_VALUE,
     stoch_cross_mode: str = DEFAULT_STOCH_CROSS_MODE,
+    stoch_cross_region: str = DEFAULT_STOCH_CROSS_REGION,
     macd_cross_mode: str = DEFAULT_MACD_CROSS_MODE,
     macd_event_age: int = 45,
     rsi_event_age: int = 90,
     stoch_event_age: int = 15,
+    supertrend_event_enabled: bool = DEFAULT_SUPERTREND_EVENT_ENABLED,
+    supertrend_cross_mode: str = DEFAULT_SUPERTREND_CROSS_MODE,
+    supertrend_event_age: int = 30,
+    ema_relationship_enabled: bool = False,
+    ema_relationship_fast: int = 10,
+    ema_relationship_slow: int = 20,
+    ema_relationship_slope: str = "positive",
+    ema_relationship_allowance: float = 0.1,
+    ema_relationship_age: int = 30,
+    supertrend_period: int = 10,
+    supertrend_multiplier: float = 3.0,
+    ema_slope_20: str = "any",
+    ema_slope_50: str = "any",
+    ema_slope_200: str = "any",
+    ema_slope_lookback: int = 5,
+    ema_slope_flat_tolerance: float = 0.1,
 ):
     """Run a dynamic screen based on selected strategies or provided DSL."""
     logger.info("=== SCREEN ENDPOINT START ===")
@@ -2984,10 +3006,29 @@ async def screen(
                 "rsi_cross_mode": rsi_cross_mode,
                 "stoch_cross_value": stoch_cross_value,
                 "stoch_cross_mode": stoch_cross_mode,
+                "stoch_cross_region": stoch_cross_region,
                 "macd_cross_mode": macd_cross_mode,
                 "macd_event_age": macd_event_age,
                 "rsi_event_age": rsi_event_age,
                 "stoch_event_age": stoch_event_age,
+                "supertrend_event_enabled": supertrend_event_enabled,
+                "supertrend_cross_mode": supertrend_cross_mode,
+                "supertrend_event_age": supertrend_event_age,
+                "ema_relationship_enabled": ema_relationship_enabled,
+                "ema_relationship_fast": ema_relationship_fast,
+                "ema_relationship_slow": ema_relationship_slow,
+                "ema_relationship_slope": ema_relationship_slope,
+                "ema_relationship_allowance": ema_relationship_allowance,
+                "ema_relationship_age": ema_relationship_age,
+                "chart_ta": {
+                    "supertrend_period": supertrend_period,
+                    "supertrend_multiplier": supertrend_multiplier,
+                },
+                "ema_slope_20": ema_slope_20,
+                "ema_slope_50": ema_slope_50,
+                "ema_slope_200": ema_slope_200,
+                "ema_slope_lookback": ema_slope_lookback,
+                "ema_slope_flat_tolerance": ema_slope_flat_tolerance,
             }
         )
 
@@ -4617,6 +4658,21 @@ async def get_chart(
     days: int = 365 * 2,
     strategy: Optional[str] = None,
     dsl_content: Optional[str] = None,
+    macd_fast: int = 12,
+    macd_slow: int = 26,
+    macd_signal: int = 9,
+    rsi_period: int = 14,
+    stoch_rsi_period: int = 14,
+    stoch_rsi_k: int = 3,
+    stoch_rsi_d: int = 3,
+    supertrend_period: int = 10,
+    supertrend_multiplier: float = 3.0,
+    rsi_trigger: float = 50.0,
+    stoch_trigger: float = 20.0,
+    ema_relationship_enabled: bool = False,
+    ema_relationship_fast: int = 10,
+    ema_relationship_slow: int = 20,
+    supertrend_event_enabled: bool = False,
 ):
     """Generate and return an interactive chart for a ticker. Fetches if missing."""
     db = get_db()
@@ -4816,8 +4872,28 @@ async def get_chart(
                 "layout": figure.get("layout", {}),
             }
 
-        plotter = InteractivePlotter()
-        fig = plotter.create_plot(df, ticker, strategy_content=strategy_content)
+        plotter = InteractivePlotter(show_ribbons=False)
+        fig = plotter.create_plot(
+            df,
+            ticker,
+            strategy_content=strategy_content,
+            indicator_params={
+                "macd_fast": macd_fast,
+                "macd_slow": macd_slow,
+                "macd_signal": macd_signal,
+                "rsi_period": rsi_period,
+                "stoch_rsi_period": stoch_rsi_period,
+                "stoch_rsi_k": stoch_rsi_k,
+                "stoch_rsi_d": stoch_rsi_d,
+                "supertrend_period": supertrend_period,
+                "supertrend_multiplier": supertrend_multiplier,
+                "rsi_trigger": rsi_trigger,
+                "stoch_trigger": stoch_trigger,
+                "ema_overlay_periods": [ema_relationship_fast, ema_relationship_slow]
+                if ema_relationship_enabled else [],
+                "show_supertrend_overlay": supertrend_event_enabled,
+            },
+        )
         # Fastapi JSONResponse or direct dict return will handle this.
         # But we need to ensure it's a DICT, not a JSON string,
         # because the frontend is now expecting the un-wrapped object.

@@ -11,9 +11,9 @@ from typing import Iterable
 
 import pandas as pd
 
-from ETF_screener.indicators import calculate_macd, calculate_rsi, calculate_stoch_rsi
+from ETF_screener.indicators import calculate_macd, calculate_rsi, calculate_stoch_rsi, calculate_supertrend
 
-DEFAULT_LOOKBACK_DAYS = 180
+DEFAULT_LOOKBACK_DAYS = 30
 DEFAULT_HISTORY_DAYS = 365
 DEFAULT_VOLUME_MAX = 20_000_000.0
 DEFAULT_RSI_CROSS_VALUE = 50.0
@@ -21,6 +21,14 @@ DEFAULT_MACD_CROSS_MODE = "low_cross_buy"
 DEFAULT_RSI_CROSS_MODE = "cross_up"
 DEFAULT_STOCH_CROSS_VALUE = 20.0
 DEFAULT_STOCH_CROSS_MODE = "cross_up"
+DEFAULT_STOCH_CROSS_REGION = "below"
+DEFAULT_SUPERTREND_EVENT_ENABLED = False
+DEFAULT_SUPERTREND_CROSS_MODE = "red_to_green"
+DEFAULT_EMA_RELATIONSHIP_ENABLED = False
+DEFAULT_EMA_RELATIONSHIP_FAST = 10
+DEFAULT_EMA_RELATIONSHIP_SLOW = 20
+DEFAULT_EMA_RELATIONSHIP_SLOPE = "positive"
+DEFAULT_EMA_RELATIONSHIP_ALLOWANCE = 0.1
 INDICATOR_HISTORY_CACHE_MAXSIZE = 6
 
 DEFAULT_SCREEN_FILTERS: dict[str, object] = {
@@ -33,10 +41,25 @@ DEFAULT_SCREEN_FILTERS: dict[str, object] = {
     "rsi_cross_mode": DEFAULT_RSI_CROSS_MODE,
     "stoch_cross_value": DEFAULT_STOCH_CROSS_VALUE,
     "stoch_cross_mode": DEFAULT_STOCH_CROSS_MODE,
+    "stoch_cross_region": DEFAULT_STOCH_CROSS_REGION,
+    "supertrend_event_enabled": DEFAULT_SUPERTREND_EVENT_ENABLED,
+    "supertrend_cross_mode": DEFAULT_SUPERTREND_CROSS_MODE,
     "macd_cross_mode": DEFAULT_MACD_CROSS_MODE,
     "macd_event_age": 45,
     "rsi_event_age": 90,
     "stoch_event_age": 15,
+    "supertrend_event_age": 30,
+    "ema_relationship_enabled": DEFAULT_EMA_RELATIONSHIP_ENABLED,
+    "ema_relationship_fast": DEFAULT_EMA_RELATIONSHIP_FAST,
+    "ema_relationship_slow": DEFAULT_EMA_RELATIONSHIP_SLOW,
+    "ema_relationship_slope": DEFAULT_EMA_RELATIONSHIP_SLOPE,
+    "ema_relationship_allowance": DEFAULT_EMA_RELATIONSHIP_ALLOWANCE,
+    "ema_relationship_age": 30,
+    "ema_slope_20": "any",
+    "ema_slope_50": "any",
+    "ema_slope_200": "any",
+    "ema_slope_lookback": 5,
+    "ema_slope_flat_tolerance": 0.1,
 }
 
 _INDICATOR_HISTORY_CACHE: OrderedDict[
@@ -180,6 +203,19 @@ def normalize_screen_filters(payload: object | None = None) -> dict[str, object]
         )
         .strip()
         .lower(),
+        "stoch_cross_region": str(
+            raw.get("stoch_cross_region") or DEFAULT_STOCH_CROSS_REGION
+        )
+        .strip()
+        .lower(),
+        "supertrend_event_enabled": bool(
+            raw.get("supertrend_event_enabled", DEFAULT_SUPERTREND_EVENT_ENABLED)
+        ),
+        "supertrend_cross_mode": str(
+            raw.get("supertrend_cross_mode") or DEFAULT_SUPERTREND_CROSS_MODE
+        )
+        .strip()
+        .lower(),
         "macd_cross_mode": str(raw.get("macd_cross_mode") or DEFAULT_MACD_CROSS_MODE)
         .strip()
         .lower(),
@@ -210,7 +246,26 @@ def normalize_screen_filters(payload: object | None = None) -> dict[str, object]
                 default=int(DEFAULT_SCREEN_FILTERS["stoch_event_age"]),
             ),
         ),
+        "supertrend_event_age": _normalize_event_age(
+            raw.get("supertrend_event_age"),
+            lookback_days=lookback_days,
+            default=int(DEFAULT_SCREEN_FILTERS["supertrend_event_age"]),
+        ),
+        "ema_relationship_enabled": _coerce_bool(raw.get("ema_relationship_enabled"), DEFAULT_EMA_RELATIONSHIP_ENABLED),
+        "ema_relationship_fast": _coerce_int(raw.get("ema_relationship_fast"), DEFAULT_EMA_RELATIONSHIP_FAST, minimum=2, maximum=200),
+        "ema_relationship_slow": _coerce_int(raw.get("ema_relationship_slow"), DEFAULT_EMA_RELATIONSHIP_SLOW, minimum=3, maximum=400),
+        "ema_relationship_slope": str(raw.get("ema_relationship_slope") or DEFAULT_EMA_RELATIONSHIP_SLOPE).strip().lower(),
+        "ema_relationship_allowance": _coerce_float(raw.get("ema_relationship_allowance"), DEFAULT_EMA_RELATIONSHIP_ALLOWANCE, minimum=0.0, maximum=5.0),
+        "ema_relationship_age": _normalize_event_age(raw.get("ema_relationship_age"), lookback_days=lookback_days, default=30),
+        "ema_slope_20": str(raw.get("ema_slope_20") or "any").strip().lower(),
+        "ema_slope_50": str(raw.get("ema_slope_50") or "any").strip().lower(),
+        "ema_slope_200": str(raw.get("ema_slope_200") or "any").strip().lower(),
+        "ema_slope_lookback": _coerce_int(raw.get("ema_slope_lookback"), 5, minimum=1, maximum=30),
+        "ema_slope_flat_tolerance": _coerce_float(raw.get("ema_slope_flat_tolerance"), 0.1, minimum=0.0, maximum=5.0),
     }
+    chart_ta = raw.get("chart_ta")
+    if isinstance(chart_ta, dict):
+        filters["chart_ta"] = dict(chart_ta)
     if filters["macd_cross_mode"] not in {
         "low_cross_buy",
         "high_cross_sell",
@@ -222,6 +277,19 @@ def normalize_screen_filters(payload: object | None = None) -> dict[str, object]
         filters["rsi_cross_mode"] = DEFAULT_RSI_CROSS_MODE
     if filters["stoch_cross_mode"] not in {"cross_up", "cross_down"}:
         filters["stoch_cross_mode"] = DEFAULT_STOCH_CROSS_MODE
+    if filters["stoch_cross_region"] not in {"below", "above", "any"}:
+        filters["stoch_cross_region"] = DEFAULT_STOCH_CROSS_REGION
+    if filters["supertrend_cross_mode"] not in {"green_to_red", "red_to_green"}:
+        filters["supertrend_cross_mode"] = DEFAULT_SUPERTREND_CROSS_MODE
+    if filters["ema_relationship_slope"] not in {"any", "positive", "negative"}:
+        filters["ema_relationship_slope"] = DEFAULT_EMA_RELATIONSHIP_SLOPE
+    if filters["ema_relationship_fast"] >= filters["ema_relationship_slow"]:
+        filters["ema_relationship_fast"], filters["ema_relationship_slow"] = (
+            filters["ema_relationship_slow"], filters["ema_relationship_fast"]
+        )
+    for key in ("ema_slope_20", "ema_slope_50", "ema_slope_200"):
+        if filters[key] not in {"any", "positive", "flat", "negative"}:
+            filters[key] = "any"
     return filters
 
 
@@ -371,9 +439,13 @@ def load_recent_indicator_history(
         scoped["close"] = pd.to_numeric(scoped["close"], errors="coerce")
         scoped["volume"] = pd.to_numeric(scoped["volume"], errors="coerce").fillna(0.0)
         close = scoped["close"]
+        high = pd.to_numeric(scoped["high"] if "high" in scoped else close, errors="coerce")
+        low = pd.to_numeric(scoped["low"] if "low" in scoped else close, errors="coerce")
+        scoped["high"] = high
+        scoped["low"] = low
         rsi = calculate_rsi(close, period=14)
         macd, macd_signal, _ = calculate_macd(close)
-        stoch_k, _ = calculate_stoch_rsi(
+        stoch_k, stoch_d = calculate_stoch_rsi(
             close,
             rsi_period=14,
             stoch_period=14,
@@ -384,17 +456,26 @@ def load_recent_indicator_history(
         scoped["macd"] = macd
         scoped["macd_signal"] = macd_signal
         scoped["stoch_k"] = stoch_k
+        scoped["stoch_d"] = stoch_d
+        supertrend, st_upper, st_lower = calculate_supertrend(
+            pd.DataFrame({"high": high, "low": low, "close": close})
+        )
+        scoped["supertrend_green"] = supertrend.eq(st_lower).where(supertrend.notna())
         enriched_frames.append(
             scoped[
                 [
                     "ticker",
                     "date",
+                    "high",
+                    "low",
                     "close",
                     "volume",
                     "rsi",
                     "macd",
                     "macd_signal",
                     "stoch_k",
+                    "stoch_d",
+                    "supertrend_green",
                 ]
             ]
         )
@@ -437,6 +518,22 @@ def _latest_event_age_days(mask: pd.Series, dates: pd.Series, *, lookback_days: 
     return int((latest_date - event_date).days)
 
 
+def _ema_slope_state(
+    close: pd.Series, *, period: int, lookback: int, flat_tolerance: float
+) -> str:
+    ema = pd.to_numeric(close, errors="coerce").ewm(span=period, adjust=False).mean()
+    if len(ema) <= lookback:
+        return "unknown"
+    current = _finite_or_none(ema.iloc[-1])
+    previous = _finite_or_none(ema.iloc[-1 - lookback])
+    if current is None or previous in (None, 0):
+        return "unknown"
+    change_pct = ((current / previous) - 1.0) * 100.0
+    if abs(change_pct) <= flat_tolerance:
+        return "flat"
+    return "positive" if change_pct > 0 else "negative"
+
+
 def _event_matches_target(
     age_days: int | None,
     target_age: int,
@@ -444,6 +541,39 @@ def _event_matches_target(
     if age_days is None:
         return False
     return int(age_days) <= int(target_age)
+
+
+def _ema_cross_event_mask(
+    close: pd.Series,
+    *,
+    fast_period: int,
+    slow_period: int,
+    divergence_allowance: float,
+    slope_direction: str = DEFAULT_EMA_RELATIONSHIP_SLOPE,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
+    fast = pd.to_numeric(close, errors="coerce").ewm(span=fast_period, adjust=False).mean()
+    slow = pd.to_numeric(close, errors="coerce").ewm(span=slow_period, adjust=False).mean()
+    states = pd.Series("unknown", index=close.index, dtype="object")
+    valid = fast.notna() & slow.notna()
+    states.loc[valid & fast.gt(slow)] = "fast above slow"
+    states.loc[valid & fast.lt(slow)] = "fast below slow"
+
+    cross_up = _crossed_above(fast, slow)
+    cross_down = _crossed_below(fast, slow)
+    cross = (cross_up | cross_down).fillna(False)
+    gap_pct = ((fast - slow) / slow.replace(0, pd.NA)).abs() * 100.0
+    gap_change = gap_pct.diff()
+    divergence = gap_change.ge(-float(divergence_allowance)).fillna(False)
+    slope_lookback = 5
+    pair_slope = (fast.pct_change(slope_lookback) + slow.pct_change(slope_lookback)) / 2.0 * 100.0
+    direction = str(slope_direction or DEFAULT_EMA_RELATIONSHIP_SLOPE).strip().lower()
+    slope_matches = (
+        direction == "any"
+        if direction == "any"
+        else pair_slope.gt(0) if direction == "positive" else pair_slope.lt(0)
+    )
+    mask = cross & slope_matches
+    return mask.fillna(False), states, divergence
 
 
 def _macd_cross_mask(
@@ -467,12 +597,12 @@ def _macd_cross_mask(
 def _macd_cross_label(mode: str) -> str:
     normalized_mode = str(mode or DEFAULT_MACD_CROSS_MODE).strip().lower()
     if normalized_mode == "high_cross_sell":
-        return "MACD high cross"
+        return "MACD/Signal bearish cross above zero"
     if normalized_mode == "bearish_cross":
-        return "MACD bearish cross"
+        return "MACD/Signal bearish cross in any region"
     if normalized_mode == "bullish_cross":
-        return "MACD bullish cross"
-    return "MACD low cross"
+        return "MACD/Signal bullish cross in any region"
+    return "MACD/Signal bullish cross below zero"
 
 
 def _rsi_cross_mask(rsi: pd.Series, *, level: float, mode: str) -> pd.Series:
@@ -488,17 +618,52 @@ def _rsi_cross_label(mode: str, level: float) -> str:
     return f"RSI crossed {direction} {float(level):.0f}"
 
 
-def _stoch_cross_mask(stoch: pd.Series, *, level: float, mode: str) -> pd.Series:
+def _stoch_cross_mask(
+    stoch_k: pd.Series,
+    stoch_d: pd.Series,
+    *,
+    level: float,
+    mode: str,
+    region: str,
+) -> pd.Series:
     normalized_mode = str(mode or DEFAULT_STOCH_CROSS_MODE).strip().lower()
+    k_prev = stoch_k.shift(1)
+    d_prev = stoch_d.shift(1)
     if normalized_mode == "cross_down":
-        return _crossed_below_value(stoch, level)
-    return _crossed_above_value(stoch, level)
+        crossed = (k_prev >= d_prev) & (stoch_k < stoch_d)
+    else:
+        crossed = (k_prev <= d_prev) & (stoch_k > stoch_d)
+    normalized_region = str(region or DEFAULT_STOCH_CROSS_REGION).strip().lower()
+    if normalized_region == "below":
+        crossed &= stoch_k <= level
+        crossed &= stoch_d <= level
+    elif normalized_region == "above":
+        crossed &= stoch_k >= level
+        crossed &= stoch_d >= level
+    return crossed.fillna(False)
 
 
-def _stoch_cross_label(mode: str, level: float) -> str:
+def _stoch_cross_label(mode: str, level: float, region: str) -> str:
     normalized_mode = str(mode or DEFAULT_STOCH_CROSS_MODE).strip().lower()
     direction = "down through" if normalized_mode == "cross_down" else "up through"
-    return f"StochRSI crossed {direction} {float(level):.0f}"
+    region_label = {
+        "below": "below",
+        "above": "above",
+        "any": "any region",
+    }.get(str(region or "").strip().lower(), "below")
+    return f"StochRSI {direction} between K/D {region_label} {float(level):.0f}"
+
+
+def _supertrend_cross_mask(green: pd.Series, *, mode: str) -> pd.Series:
+    normalized_mode = str(mode or DEFAULT_SUPERTREND_CROSS_MODE).strip().lower()
+    previous = green.shift(1)
+    if normalized_mode == "green_to_red":
+        return (previous == True) & (green == False)
+    return (previous == False) & (green == True)
+
+
+def _supertrend_cross_label(mode: str) -> str:
+    return "Supertrend green to red" if str(mode).strip().lower() == "green_to_red" else "Supertrend red to green"
 
 
 def screen_with_controls(
@@ -512,11 +677,24 @@ def screen_with_controls(
     """Scan the selected universe using recent MACD/RSI/StochRSI event controls."""
     normalized_filters = normalize_screen_filters(filters)
     lookback_days = int(normalized_filters["lookback_days"])
+    relationship_warmup_days = 0
+    if bool(normalized_filters["ema_relationship_enabled"]):
+        # History is calendar-day based while EMA periods are trading bars.
+        # Five calendar days per slow-EMA period gives the EMA enough warm-up
+        # data even for long periods and avoids relying on unstable startup values.
+        relationship_warmup_days = (
+            int(normalized_filters["ema_relationship_slow"]) * 5
+            + 5
+        )
     history, indicator_cache_hit = load_recent_indicator_history(
         db_path,
         tickers,
         latest_market_date=latest_market_date,
-        history_days=max(DEFAULT_HISTORY_DAYS, lookback_days + 120),
+        history_days=max(
+            DEFAULT_HISTORY_DAYS,
+            lookback_days + 120,
+            relationship_warmup_days + lookback_days,
+        ),
     )
     metadata_map = metadata_map or {}
     if history.empty:
@@ -529,6 +707,7 @@ def screen_with_controls(
         }
 
     matches: list[dict[str, object]] = []
+    candidate_pool: list[dict[str, object]] = []
     errors: list[dict[str, object]] = []
 
     grouped = {
@@ -566,8 +745,23 @@ def screen_with_controls(
                 avg_volume_20 = 0.0
 
             volume_range = normalized_filters["volume_range"]
-            if not (float(volume_range["min"]) <= avg_volume_20 <= float(volume_range["max"])):
-                continue
+            volume_matches = float(volume_range["min"]) <= avg_volume_20 <= float(volume_range["max"])
+
+            slope_lookback = int(normalized_filters["ema_slope_lookback"])
+            slope_tolerance = float(normalized_filters["ema_slope_flat_tolerance"])
+            ema_slope_states = {
+                period: _ema_slope_state(
+                    close,
+                    period=period,
+                    lookback=slope_lookback,
+                    flat_tolerance=slope_tolerance,
+                )
+                for period in (20, 50, 200)
+            }
+            slope_matches = not any(
+                normalized_filters[f"ema_slope_{period}"] not in {"any", ema_slope_states[period]}
+                for period in (20, 50, 200)
+            )
 
             macd_mode = str(normalized_filters["macd_cross_mode"])
             macd_enabled = bool(normalized_filters["macd_event_enabled"])
@@ -575,8 +769,11 @@ def screen_with_controls(
             rsi_enabled = bool(normalized_filters["rsi_event_enabled"])
             rsi_level = float(normalized_filters["rsi_cross_value"])
             stoch_mode = str(normalized_filters["stoch_cross_mode"])
+            stoch_region = str(normalized_filters["stoch_cross_region"])
             stoch_enabled = bool(normalized_filters["stoch_event_enabled"])
             stoch_level = float(normalized_filters["stoch_cross_value"])
+            supertrend_enabled = bool(normalized_filters["supertrend_event_enabled"])
+            supertrend_mode = str(normalized_filters["supertrend_cross_mode"])
             macd_age = _latest_event_age_days(
                 _macd_cross_mask(macd, macd_signal, mode=macd_mode),
                 dates,
@@ -587,11 +784,82 @@ def screen_with_controls(
                 dates,
                 lookback_days=lookback_days,
             )
+            stoch_d = pd.to_numeric(frame["stoch_d"], errors="coerce")
             stoch_age = _latest_event_age_days(
-                _stoch_cross_mask(stoch_k, level=stoch_level, mode=stoch_mode),
+                _stoch_cross_mask(
+                    stoch_k,
+                    stoch_d,
+                    level=stoch_level,
+                    mode=stoch_mode,
+                    region=stoch_region,
+                ),
                 dates,
                 lookback_days=lookback_days,
             )
+            chart_ta = normalized_filters.get("chart_ta") if isinstance(normalized_filters.get("chart_ta"), dict) else {}
+            st_period = _coerce_int(chart_ta.get("supertrend_period"), 10, minimum=2, maximum=100)
+            st_multiplier = _coerce_float(chart_ta.get("supertrend_multiplier"), 3.0, minimum=0.5, maximum=10.0)
+            st_high = pd.to_numeric(frame["high"] if "high" in frame else close, errors="coerce")
+            st_low = pd.to_numeric(frame["low"] if "low" in frame else close, errors="coerce")
+            st_line, _st_upper, st_lower = calculate_supertrend(
+                pd.DataFrame({"high": st_high, "low": st_low, "close": close}),
+                period=st_period,
+                multiplier=st_multiplier,
+            )
+            supertrend_green = st_line.eq(st_lower).where(st_line.notna())
+            supertrend_age = _latest_event_age_days(
+                _supertrend_cross_mask(supertrend_green, mode=supertrend_mode),
+                dates,
+                lookback_days=lookback_days,
+            )
+            ema_relationship_enabled = bool(normalized_filters["ema_relationship_enabled"])
+            ema_fast_period = int(normalized_filters["ema_relationship_fast"])
+            ema_slow_period = int(normalized_filters["ema_relationship_slow"])
+            ema_relationship_mask, ema_relationship_states, ema_divergence = _ema_cross_event_mask(
+                close,
+                fast_period=ema_fast_period,
+                slow_period=ema_slow_period,
+                divergence_allowance=float(normalized_filters["ema_relationship_allowance"]),
+                slope_direction=str(normalized_filters["ema_relationship_slope"]),
+            )
+            ema_relationship_age = _latest_event_age_days(
+                ema_relationship_mask, dates, lookback_days=lookback_days
+            )
+            ema_relationship_state = str(ema_relationship_states.iloc[-1])
+            ema_relationship_is_diverging = bool(ema_divergence.iloc[-1])
+
+            metadata = metadata_map.get(ticker, {})
+            change_pct = (
+                ((current_close / previous_close) - 1.0) * 100.0
+                if previous_close
+                else 0.0
+            )
+            candidate_pool.append(
+                {
+                    "ticker": ticker,
+                    "name": str(metadata.get("name") or ticker).strip() or ticker,
+                    "close": round(current_close, 4),
+                    "volume": int(float(volume.iloc[-1] or 0.0)),
+                    "recent_avg_volume": round(avg_volume_20, 2),
+                    "change_pct": round(change_pct, 2),
+                    "rsi": round(current_rsi, 2),
+                    "ema_slope_20_state": ema_slope_states[20],
+                    "ema_slope_50_state": ema_slope_states[50],
+                    "ema_slope_200_state": ema_slope_states[200],
+                    "macd_cross_days_ago": macd_age,
+                    "rsi_cross_days_ago": rsi_age,
+                    "stoch_cross_days_ago": stoch_age,
+                    "supertrend_cross_days_ago": supertrend_age,
+                    "ema_relationship_state": ema_relationship_state,
+                    "ema_relationship_is_diverging": ema_relationship_is_diverging,
+                    "ema_relationship_days_ago": ema_relationship_age,
+                    "volume_matches": volume_matches,
+                    "slope_matches": slope_matches,
+                }
+            )
+
+            if not volume_matches or not slope_matches:
+                continue
 
             if macd_enabled and not _event_matches_target(
                 macd_age,
@@ -608,8 +876,19 @@ def screen_with_controls(
                 int(normalized_filters["stoch_event_age"]),
             ):
                 continue
+            if supertrend_enabled and not _event_matches_target(
+                supertrend_age,
+                int(normalized_filters["supertrend_event_age"]),
+            ):
+                continue
+            if ema_relationship_enabled and not _event_matches_target(
+                ema_relationship_age,
+                int(normalized_filters["ema_relationship_age"]),
+            ):
+                continue
+            if ema_relationship_enabled and not ema_relationship_is_diverging:
+                continue
 
-            metadata = metadata_map.get(ticker, {})
             event_pairs: list[tuple[str, int]] = []
             if rsi_enabled:
                 event_pairs.append(("RSI", int(rsi_age or 0)))
@@ -617,6 +896,13 @@ def screen_with_controls(
                 event_pairs.append(("MACD", int(macd_age or 0)))
             if stoch_enabled:
                 event_pairs.append(("StochRSI", int(stoch_age or 0)))
+            if supertrend_enabled:
+                event_pairs.append(("Supertrend", int(supertrend_age or 0)))
+            if ema_relationship_enabled:
+                event_pairs.append((
+                    f"EMA {ema_fast_period}/{ema_slow_period} cross",
+                    int(ema_relationship_age or 0),
+                ))
             ordered_events = sorted(event_pairs, key=lambda item: item[1], reverse=True)
             sequence = " -> ".join(label for label, _ in ordered_events) or "Volume only"
             total_age = sum(age for _, age in event_pairs)
@@ -629,11 +915,6 @@ def screen_with_controls(
                     else 0.0
                 ),
                 2,
-            )
-            change_pct = (
-                ((current_close / previous_close) - 1.0) * 100.0
-                if previous_close
-                else 0.0
             )
             matches.append(
                 {
@@ -651,6 +932,15 @@ def screen_with_controls(
                     "rsi_cross_value": rsi_level,
                     "stoch_cross_mode": stoch_mode,
                     "stoch_cross_value": stoch_level,
+                    "stoch_cross_region": stoch_region,
+                    "supertrend_event_enabled": supertrend_enabled,
+                    "supertrend_cross_mode": supertrend_mode,
+                    "supertrend_cross_days_ago": supertrend_age,
+                    "ema_relationship_enabled": ema_relationship_enabled,
+                    "ema_relationship_fast": ema_fast_period,
+                    "ema_relationship_slow": ema_slow_period,
+                    "ema_relationship_days_ago": ema_relationship_age,
+                    "ema_relationship_state": ema_relationship_state,
                     "macd_cross_mode": macd_mode,
                     "macd_cross_days_ago": macd_age,
                     "rsi_cross_days_ago": rsi_age,
@@ -672,8 +962,18 @@ def screen_with_controls(
                             else []
                         )
                         + (
-                            [f"{_stoch_cross_label(stoch_mode, stoch_level)} {int(stoch_age or 0)}d ago"]
+                            [f"{_stoch_cross_label(stoch_mode, stoch_level, stoch_region)} {int(stoch_age or 0)}d ago"]
                             if stoch_enabled
+                            else []
+                        )
+                        + (
+                            [f"{_supertrend_cross_label(supertrend_mode)} {int(supertrend_age or 0)}d ago"]
+                            if supertrend_enabled
+                            else []
+                        )
+                        + (
+                            [f"EMA {ema_fast_period}/{ema_slow_period} cross {int(ema_relationship_age or 0)}d ago"]
+                            if ema_relationship_enabled
                             else []
                         )
                         + [f"Sequence {sequence}"]
@@ -698,6 +998,7 @@ def screen_with_controls(
         "errors": errors,
         "total_errors": len(errors),
         "total_candidates": len(matches),
+        "candidate_pool": candidate_pool,
         "filters": normalized_filters,
         "indicator_cache_hit": indicator_cache_hit,
     }

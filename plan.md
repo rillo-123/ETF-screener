@@ -1,6 +1,6 @@
 # Plan
 
-Last updated: 2026-06-17 20:30:25 +02:00
+Last updated: 2026-07-22 21:50:20 +02:00
 
 ## Current objective
 

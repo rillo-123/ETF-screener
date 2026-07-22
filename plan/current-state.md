@@ -2,6 +2,8 @@
 
 - -Summary
 
+- -Summary
+
 - Added a Nasdaq-only vitality gate so source-selected scans now drop recent low-energy names before ranking them, using recent trading continuity, average close, share volume, and dollar-volume thresholds instead of only the raw listing universe.
 - Wired that vitality filter through the Query scan path plus the Screener, Backtester, and Swarm scope resolution paths so Nasdaq behaves more like an actionable universe than a raw directory dump.
 - Verified the vitality pass with `.\run.ps1 -Tests`; the full pytest and Playwright suite passed.

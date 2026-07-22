@@ -60,9 +60,6 @@ def test_tab_bar_visible():
     assert 'id="scan-source-sweden"' in html
     assert 'id="scan-source-list"' in html
     assert 'id="scan-source-list-picker"' in html
-    assert 'id="disqualify-overbought"' in html
-    assert 'id="disqualify-weak-liquidity"' in html
-    assert 'id="disqualify-unprofitable"' in html
     assert 'id="auto-export-google-drive"' in html
     assert 'id="list-select"' in html
     assert 'id="list-select-universe-badge"' in html
@@ -80,12 +77,12 @@ def test_tab_bar_visible():
     assert 'id="stratfinder-results"' not in html
     assert 'id="stratfinder-result-count"' not in html
     assert 'id="export-stratfinder-btn"' not in html
-    assert ">Shortlist<" in html
-    assert ">Query<" in html
-    assert ">Backtester<" in html
-    assert html.index('id="tab-btn-screener"') < html.index('id="tab-btn-query"')
+    assert ">Graph Playground<" in html
+    assert ">Shortlist<" not in html
+    assert ">Query<" not in html
+    assert ">Backtester<" not in html
     assert 'id="tab-btn-screener" class="tab-btn active' in html
-    assert 'id="tab-query" class="hidden"' in html
+    assert 'id="tab-query"' not in html
     assert 'id="screen-preset-select"' in html
     assert 'id="screen-preset-name"' in html
     assert 'id="screen-save-preset-btn"' in html
@@ -103,32 +100,23 @@ def test_tab_bar_visible():
     assert ">Swarm Lab<" not in html
     assert ">Churner<" not in html
     assert ">Discovery<" not in html
-    assert 'id="backtest-chart"' in html
-    assert 'id="backtest-table-body"' in html
+    assert 'id="backtest-chart"' not in html
+    assert 'id="backtest-table-body"' not in html
     assert 'id="backtest-race-fuel"' not in html
-    assert "Signal Window" in html
-    assert 'id="shortlist-grid"' in html
-    assert 'id="tab-btn-query"' in html
+    assert 'id="shortlist-grid"' not in html
+    assert 'id="tab-btn-query"' not in html
     assert 'id="tab-btn-playbook"' in html
-    assert 'id="tab-query"' in html
+    assert 'id="tab-query"' not in html
     assert 'id="tab-playbook"' in html
-    assert 'id="query-dataset"' in html
     assert 'id="playbook-risk-pct"' in html
     assert 'id="playbook-run-btn"' in html
     assert 'id="playbook-table-body"' in html
-    assert 'id="query-run-btn"' in html
-    assert 'id="query-results-body"' in html
-    assert 'value="elusive_dip"' in html
-    assert "Elusive Dip" in html
     assert 'id="tab-btn-swarm"' not in html
     assert 'id="tab-btn-swarm-lab"' not in html
     assert 'id="tab-swarm"' not in html
     assert 'id="tab-swarm-lab"' not in html
     assert 'id="swarm-canvas"' not in html
     assert 'id="swarm-lab-canvas"' not in html
-    assert 'id="shortlist-filter-buy"' in html
-    assert 'id="shortlist-filter-watch"' in html
-    assert 'id="shortlist-filter-skip"' in html
     assert 'id="export-matches-btn"' in html
     assert "/api/swarm-history" not in dashboard_source
     assert "/api/market-status?" in dashboard_source
@@ -136,19 +124,14 @@ def test_tab_bar_visible():
     assert "/api/market-data/refresh?" in dashboard_source
     assert 'refreshParams.set("force", "true")' in dashboard_source
     assert "/static/js/dashboard-loader.js" not in html
-    assert "/static/js/browser-log-relay.js" in html
     assert "supertrend_continuation" in html
     assert "SWARM_DNA_SCHEMA_VERSION" not in dashboard_source
     assert "SWARM_DNA_CONFIG_PATH" not in dashboard_source
     assert "config/swarm_agent_dna.json" not in dashboard_source
-    assert "/api/query/catalog" in dashboard_source
-    assert "/api/query/run?" in dashboard_source
     assert "loadSwarmLab" not in dashboard_source
     assert "/api/swarm-dna/save" not in dashboard_source
     assert "dashboard-loader.js" not in dashboard_source
     assert "swarmLoadingPromise" not in dashboard_source
-    assert "Saved Strategy" in html
-    assert "Editor Draft" in html
     assert 'id="list-modal"' in html
     assert 'id="list-modal-grid"' in html
     assert 'id="list-modal-search"' in html
@@ -313,6 +296,16 @@ def test_screen_endpoint_refreshes_on_gui_request(monkeypatch):
         "ETF_screener.dashboard.app_fast._refresh_market_data_for_gui",
         fake_refresh,
     )
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast.screen_with_controls",
+        lambda **_kwargs: {
+            "matches": [],
+            "errors": [],
+            "total_errors": 0,
+            "total_candidates": 0,
+            "filters": {},
+        },
+    )
 
     response = client.get("/api/screen?refresh=true")
     assert response.status_code == 200
@@ -327,7 +320,7 @@ def test_screen_presets_endpoint_returns_defaults():
     data = response.json()
     assert data["schema_version"] == "screen_presets_v1"
     assert "default_filters" in data
-    assert data["default_filters"]["lookback_days"] == 180
+    assert data["default_filters"]["lookback_days"] == 30
     assert isinstance(data["presets"], list)
 
 
@@ -403,8 +396,8 @@ def test_screen_endpoint_uses_control_screening_when_no_strategy(monkeypatch, tm
     assert captured["filters"]["stoch_cross_value"] == 25.0
     assert captured["filters"]["stoch_cross_mode"] == "cross_up"
     assert captured["filters"]["macd_cross_mode"] == "high_cross_sell"
-    assert captured["filters"]["macd_event_age"] == 40
-    assert captured["filters"]["rsi_event_age"] == 80
+    assert captured["filters"]["macd_event_age"] == 30
+    assert captured["filters"]["rsi_event_age"] == 30
     assert captured["filters"]["stoch_event_age"] == 10
 
 
@@ -2103,7 +2096,7 @@ def test_get_chart_valid_ticker():
     print(f"\nSupertrend indicator found: {st_present}")
 
 
-def test_get_chart_keeps_supertrend_overlay_with_non_supertrend_strategy():
+def test_get_chart_hides_supertrend_overlay_when_event_is_disabled():
     with patch(
         "ETF_screener.dashboard.app_fast.MarketDataRefresher.refresh_ticker_data",
         return_value=add_indicators(_make_fake_ohlcv("DTE.DE")),
@@ -2118,9 +2111,7 @@ def test_get_chart_keeps_supertrend_overlay_with_non_supertrend_strategy():
     supertrend_traces = [
         trace for trace in fig["data"] if str(trace.get("name", "")) == "Supertrend"
     ]
-    assert (
-        supertrend_traces
-    ), "Expected Supertrend overlay to remain visible on the chart"
+    assert not supertrend_traces, "Supertrend should stay hidden unless its event is enabled"
 
 
 def test_on_demand_fetch_persists():

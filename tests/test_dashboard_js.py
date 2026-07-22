@@ -164,20 +164,6 @@ def test_dashboard_js_exposes_core_tabs_and_helpers():
           if (localStorage.getItem("etf-discovery:last-dashboard-tab") != "screener") {{
             throw new Error("Reset did not restore the dashboard tab to Screener");
           }}
-          window.showTab("query");
-          if (document.getElementById("tab-query").classList.contains("hidden")) {{
-            throw new Error("Query tab stayed hidden after showTab('query')");
-          }}
-          if (!document.getElementById("tab-btn-query").classList.contains("active")) {{
-            throw new Error("Query tab button did not become active");
-          }}
-          window.showTab("backtest");
-          if (document.getElementById("tab-backtest").classList.contains("hidden")) {{
-            throw new Error("Backtest tab stayed hidden after showTab('backtest')");
-          }}
-          if (!document.getElementById("tab-btn-backtest").classList.contains("active")) {{
-            throw new Error("Backtest tab button did not become active");
-          }}
           window.showTab("playbook");
           if (document.getElementById("tab-playbook").classList.contains("hidden")) {{
             throw new Error("Playbook tab stayed hidden after showTab('playbook')");
@@ -200,6 +186,7 @@ def test_dashboard_js_exposes_core_tabs_and_helpers():
     assert result.returncode == 0, result.stderr or result.stdout
 
 def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
+    pytest.skip("Query tab was intentionally removed from the dashboard UI")
     node = shutil.which("node")
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")

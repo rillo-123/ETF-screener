@@ -1,16 +1,7 @@
 ﻿    let backtestSourceMode = "saved";
-    let shortlistLoaded = false;
-    let shortlistSourceSignature = "";
-    let shortlistRows = [];
-    let shortlistFilter = "All";
     let playbookLoaded = false;
     let playbookSourceSignature = "";
     let playbookRows = [];
-    let queryCatalog = null;
-    let queryRows = [];
-    let queryColumns = [];
-    let queryLoaded = false;
-    let queryProgressTimers = [];
     let marketDataAutoRefreshAttempted = false;
     let tickerSelectUniverse = [];
     let tickerUniverseLoadPromise = null;
@@ -72,20 +63,53 @@
     const LAST_BACKTEST_RACE_KEY = "etf-discovery:last-backtest-race";
     const LAST_BACKTEST_RACE_FUEL_KEY = "etf-discovery:last-backtest-race-fuel";
     const SCREEN_DEFAULT_FILTERS = {
-      lookback_days: 180,
+      lookback_days: 30,
       volume_range: { min: 0, max: 20000000 },
       macd_event_enabled: true,
       rsi_event_enabled: true,
       stoch_event_enabled: true,
+      supertrend_event_enabled: false,
       rsi_cross_value: 50,
       rsi_cross_mode: "cross_up",
       stoch_cross_value: 20,
       stoch_cross_mode: "cross_up",
+      stoch_cross_region: "below",
       macd_cross_mode: "low_cross_buy",
       macd_event_age: 45,
       rsi_event_age: 90,
       stoch_event_age: 15,
+      supertrend_event_age: 30,
+      ema_relationship_enabled: false,
+      ema_relationship_fast: 10,
+      ema_relationship_slow: 20,
+      ema_relationship_slope: "positive",
+      ema_relationship_allowance: 0.1,
+      ema_relationship_age: 30,
+      supertrend_cross_mode: "red_to_green",
+      ema_slope_20: "any",
+      ema_slope_50: "any",
+      ema_slope_200: "any",
+      ema_slope_lookback: 5,
+      ema_slope_flat_tolerance: 0.1,
     };
+    const CHART_TA_DEFAULTS = {
+      macd_fast: 12,
+      macd_slow: 26,
+      macd_signal: 9,
+      rsi_period: 14,
+      stoch_rsi_period: 14,
+      stoch_rsi_k: 3,
+      stoch_rsi_d: 3,
+      supertrend_period: 10,
+      supertrend_multiplier: 3.0,
+      rsi_trigger: 50,
+      stoch_trigger: 20,
+    };
+    const CHART_TA_PARAMETER_KEYS = [
+      "macd_fast", "macd_slow", "macd_signal", "rsi_period",
+      "stoch_rsi_period", "stoch_rsi_k", "stoch_rsi_d",
+      "supertrend_period", "supertrend_multiplier",
+    ];
     const BACKTEST_RACE_FUEL_METRICS = [
       { key: "return_pct", label: "Profitability", kind: "percent" },
       { key: "avg_quality_score", label: "Quality", kind: "score" },
@@ -117,7 +141,7 @@
       { key: "payoff_efficiency", label: "Profit Factor", max: 10 },
       { key: "drawdown_control", label: "Drawdown Control", max: 10 },
     ];
-    const DASHBOARD_TABS = ["screener", "query", "playbook", "shortlist", "backtest"];
+    const DASHBOARD_TABS = ["screener", "playbook"];
 
     function getDashboardTabs() {
       return DASHBOARD_TABS
@@ -167,561 +191,14 @@
       return Math.max(0.5, Math.min(25, raw));
     }
 
-    function getQueryDataset() {
-      const node = document.getElementById("query-dataset");
-      return String(node?.value || "signal_scan").trim().toLowerCase();
+    function clampNumber(value, minimum, maximum, fallback) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        return fallback;
+      }
+      return Math.max(minimum, Math.min(maximum, numeric));
     }
 
-    function getQueryDatasetConfig(dataset = getQueryDataset()) {
-      if (!queryCatalog || typeof queryCatalog !== "object") {
-        return {};
-      }
-      const config = queryCatalog?.[dataset];
-      return config && typeof config === "object" ? config : {};
-    }
-
-    function populateQueryTickerOptions(tickers = []) {
-      const select = document.getElementById("query-ticker");
-      if (!select) {
-        return;
-      }
-      const currentValue = String(select.value || "").trim().toUpperCase();
-      const options = Array.from(new Set((Array.isArray(tickers) ? tickers : [])
-        .map((item) => String(item || "").trim().toUpperCase())
-        .filter(Boolean)));
-      select.innerHTML = '<option value="">Select ticker...</option>';
-      options.forEach((ticker) => {
-        const option = document.createElement("option");
-        option.value = ticker;
-        option.textContent = ticker;
-        select.appendChild(option);
-      });
-      if (currentValue && options.includes(currentValue)) {
-        select.value = currentValue;
-      } else if (!currentValue && options.length) {
-        select.value = options[0];
-      }
-    }
-
-    function getQuerySignalConfig(signal = getQueryInputValue("query-signal", "trend_forming")) {
-      const signalEntries = Array.isArray(queryCatalog?.signal_scan?.signals)
-        ? queryCatalog.signal_scan.signals
-        : [];
-      return signalEntries.find((entry) => String(entry?.key || "") === String(signal || "")) || null;
-    }
-
-    async function loadQueryCatalog(force = false) {
-      if (queryLoaded && !force) {
-        return queryCatalog;
-      }
-      const resp = await fetch("/api/query/catalog", { cache: "no-store" });
-      if (!resp.ok) {
-        throw new Error("Could not load query catalog");
-      }
-      queryCatalog = await resp.json();
-      populateQueryTickerOptions(queryCatalog?.tickers || []);
-      queryLoaded = true;
-      updateQueryControls();
-      return queryCatalog;
-    }
-
-    function getQueryInputValue(id, fallback = "") {
-      const node = document.getElementById(id);
-      return node ? String(node.value || "").trim() : fallback;
-    }
-
-    function setQueryStatus(message, tone = "slate") {
-      const node = document.getElementById("query-status");
-      if (!node) {
-        return;
-      }
-      node.textContent = String(message || "");
-      node.className = `text-xs font-bold uppercase tracking-wide text-${tone}-500`;
-    }
-
-    function formatQueryCell(value) {
-      if (value === null || value === undefined || value === "") {
-        return "â€”";
-      }
-      if (typeof value === "object") {
-        try {
-          return JSON.stringify(value);
-        } catch (err) {
-          return String(value);
-        }
-      }
-      return String(value);
-    }
-
-    function clearQueryProgressTimers() {
-      queryProgressTimers.forEach((handle) => {
-        try {
-          clearTimeout(handle);
-        } catch (err) {
-          // Ignore timer cleanup issues in constrained environments.
-        }
-      });
-      queryProgressTimers = [];
-    }
-
-    function hideQueryProgressPanel() {
-      const shell = document.getElementById("query-progress-shell");
-      if (shell) {
-        shell.classList.add("hidden");
-      }
-    }
-
-    function appendQueryActivity(message, tone = "slate") {
-      const log = document.getElementById("query-activity-log");
-      if (!log) {
-        return;
-      }
-      const entry = document.createElement("div");
-      entry.className = `rounded-lg border border-${tone}-500/20 bg-slate-900/70 px-3 py-2 text-xs text-slate-200`;
-      entry.textContent = String(message || "");
-      log.appendChild(entry);
-      const children = Array.from(log.children || []);
-      while (children.length > 6) {
-        const oldest = children.shift();
-        if (oldest && typeof oldest.remove === "function") {
-          oldest.remove();
-        }
-      }
-      const caption = document.getElementById("query-activity-caption");
-      if (caption) {
-        caption.textContent = `${Array.from(log.children || []).length} recent update${(log.children || []).length === 1 ? "" : "s"}`;
-      }
-    }
-
-    function setQueryProgress(value, message, tone = "amber", options = {}) {
-      const shell = document.getElementById("query-progress-shell");
-      const label = document.getElementById("query-progress-label");
-      const messageNode = document.getElementById("query-progress-message");
-      const pctNode = document.getElementById("query-progress-pct");
-      const bar = document.getElementById("query-progress-bar");
-      const safeValue = Math.max(0, Math.min(100, Number(value || 0)));
-      const indeterminate = Boolean(options?.indeterminate);
-      if (shell) {
-        shell.classList.remove("hidden");
-      }
-      if (label) {
-        label.className = `text-[11px] font-bold uppercase tracking-wide text-${tone}-700`;
-      }
-      if (messageNode) {
-        messageNode.textContent = String(message || "");
-      }
-      if (pctNode) {
-        pctNode.textContent = indeterminate ? "Working..." : `${Math.round(safeValue)}%`;
-        pctNode.className = `text-xs font-bold uppercase tracking-wide text-${tone}-700`;
-      }
-      if (bar) {
-        bar.style.width = `${safeValue}%`;
-        bar.classList.toggle("animate-pulse", indeterminate);
-      }
-    }
-
-    function resetQueryProgressPanel() {
-      clearQueryProgressTimers();
-      const log = document.getElementById("query-activity-log");
-      if (log) {
-        log.innerHTML = "";
-      }
-      const caption = document.getElementById("query-activity-caption");
-      if (caption) {
-        caption.textContent = "Latest query steps appear here.";
-      }
-      setQueryProgress(0, "Waiting for the next query run.", "amber");
-    }
-
-    function startQueryProgress(details) {
-      clearQueryProgressTimers();
-      const signalRun = details?.dataset === "signal_scan";
-      const stages = signalRun
-        ? [
-            { pct: 8, message: "Preparing the actionable signal scan.", activity: "Loaded the current query settings and selected universe." },
-            { pct: 22, message: "Checking data freshness for the chosen universe.", activity: "Verifying whether the stored market backbone needs a refresh." },
-            { pct: 48, message: "Scanning stored price history across the selected universe.", activity: "Running the signal rules against the cached price backbone." },
-            { pct: 76, message: "Ranking the strongest actionable matches.", activity: "Sorting candidates by reliability and signal age." },
-            { pct: 82, message: "Still scanning the selected universe. This can take a while on larger runs.", activity: "The backend is still working through the remaining ticker histories.", indeterminate: true },
-          ]
-        : [
-            { pct: 10, message: "Preparing the structured query.", activity: "Collected the requested filters and preview columns." },
-            { pct: 38, message: "Reading the requested dataset.", activity: "Pulling the matching rows from the stored backbone." },
-            { pct: 72, message: "Formatting the preview rows.", activity: "Shaping the response so the preview stays responsive." },
-            { pct: 80, message: "Still working on the response.", activity: "Waiting for the backend query to finish and return the preview.", indeterminate: true },
-          ];
-      const delays = signalRun ? [0, 200, 700, 1400, 2600] : [0, 200, 700, 1800];
-      stages.forEach((stage, index) => {
-        const handle = setTimeout(() => {
-          setQueryProgress(stage.pct, stage.message, "amber", { indeterminate: Boolean(stage.indeterminate) });
-          appendQueryActivity(stage.activity, "amber");
-        }, delays[index] || 0);
-        queryProgressTimers.push(handle);
-      });
-    }
-
-    function finishQueryProgress(message, success = true) {
-      clearQueryProgressTimers();
-      const tone = success ? "emerald" : "rose";
-      setQueryProgress(100, message, tone);
-      appendQueryActivity(message, tone);
-      if (success) {
-        const handle = setTimeout(() => {
-          hideQueryProgressPanel();
-        }, 1200);
-        queryProgressTimers.push(handle);
-      }
-    }
-
-    function getQuerySignalScanSource() {
-      return normalizeScanScope(tickerScanScope || "xetra");
-    }
-
-    async function openQueryTickerChart(ticker) {
-      const symbol = String(ticker || "").trim().toUpperCase();
-      if (!symbol) {
-        return;
-      }
-      showTab("screener");
-      await loadChart(symbol);
-    }
-
-    function buildQueryRequestDetails() {
-      const dataset = getQueryDataset();
-      const params = new URLSearchParams();
-      params.set("dataset", dataset);
-      const cliParts = ["etfs", "query", "--dataset", dataset];
-      if (dataset === "signal_scan") {
-        const source = getQuerySignalScanSource();
-        const signal = getQueryInputValue("query-signal", "trend_forming");
-        const signalAgeMax = getQueryInputValue("query-signal-age-max", "5");
-        const minReliability = getQueryInputValue("query-min-reliability", "6.0");
-        const refreshIfNeededNode = document.getElementById("query-refresh-if-needed");
-        const refreshIfNeeded = Boolean(refreshIfNeededNode?.checked);
-        params.set("source", source);
-        params.set("signal", signal);
-        params.set("signal_age_max", signalAgeMax);
-        params.set("min_reliability", minReliability);
-        params.set("refresh_if_needed", refreshIfNeeded ? "true" : "false");
-        cliParts.push(
-          "--source", source,
-          "--signal", signal,
-          "--signal-age-max", signalAgeMax,
-          "--min-reliability", minReliability,
-        );
-      } else if (dataset === "price_history") {
-        const ticker = getQueryInputValue("query-ticker").toUpperCase();
-        const days = getQueryInputValue("query-days", "90");
-        const startDate = getQueryInputValue("query-start-date");
-        const endDate = getQueryInputValue("query-end-date");
-        if (ticker) {
-          params.set("ticker", ticker);
-          cliParts.push("--ticker", ticker);
-        }
-        if (days) {
-          params.set("days", days);
-          cliParts.push("--days", days);
-        }
-        if (startDate) {
-          params.set("start_date", startDate);
-          cliParts.push("--start-date", startDate);
-        }
-        if (endDate) {
-          params.set("end_date", endDate);
-          cliParts.push("--end-date", endDate);
-        }
-      } else if (dataset === "shortlist") {
-        const label = getQueryInputValue("query-label", "All");
-        const sortBy = getQueryInputValue("query-sort-by", "final_score");
-        params.set("label", label);
-        params.set("sort_by", sortBy);
-        cliParts.push("--label", label, "--sort-by", sortBy);
-      }
-      const limit = getQueryInputValue("query-limit", "120");
-      const columns = getQueryInputValue("query-columns");
-      if (limit) {
-        params.set("limit", limit);
-        cliParts.push("--limit", limit);
-      }
-      if (columns) {
-        params.set("columns", columns);
-        cliParts.push("--columns", columns);
-      }
-      return {
-        dataset,
-        params,
-        apiPath: `/api/query/run?${params.toString()}`,
-        cliCall: cliParts.join(" "),
-      };
-    }
-
-    function updateQueryCallPreviews() {
-      const details = buildQueryRequestDetails();
-      const apiNode = document.getElementById("query-api-call");
-      const cliNode = document.getElementById("query-cli-call");
-      if (apiNode) {
-        apiNode.textContent = details.apiPath;
-      }
-      if (cliNode) {
-        cliNode.textContent = details.cliCall;
-      }
-    }
-
-    function updateQueryControls() {
-      const dataset = getQueryDataset();
-      const isSignalScan = dataset === "signal_scan";
-      const isPriceHistory = dataset === "price_history";
-      const sourceGroup = document.getElementById("query-source-group");
-      const sourceReadout = document.getElementById("query-source-readout");
-      const sourceNote = document.getElementById("query-source-note");
-      const signalGroup = document.getElementById("query-signal-group");
-      const signalAgeGroup = document.getElementById("query-signal-age-group");
-      const reliabilityGroup = document.getElementById("query-reliability-group");
-      const refreshGroup = document.getElementById("query-refresh-group");
-      const tickerGroup = document.getElementById("query-ticker-group");
-      const labelGroup = document.getElementById("query-label-group");
-      const daysGroup = document.getElementById("query-days-group");
-      const startGroup = document.getElementById("query-start-group");
-      const endGroup = document.getElementById("query-end-group");
-      const sortGroup = document.getElementById("query-sort-group");
-      if (sourceGroup) sourceGroup.classList.toggle("hidden", !isSignalScan);
-      if (signalGroup) signalGroup.classList.toggle("hidden", !isSignalScan);
-      if (signalAgeGroup) signalAgeGroup.classList.toggle("hidden", !isSignalScan);
-      if (reliabilityGroup) reliabilityGroup.classList.toggle("hidden", !isSignalScan);
-      if (refreshGroup) refreshGroup.classList.toggle("hidden", !isSignalScan);
-      if (tickerGroup) tickerGroup.classList.toggle("hidden", !isPriceHistory);
-      if (daysGroup) daysGroup.classList.toggle("hidden", !isPriceHistory);
-      if (startGroup) startGroup.classList.toggle("hidden", !isPriceHistory);
-      if (endGroup) endGroup.classList.toggle("hidden", !isPriceHistory);
-      if (labelGroup) labelGroup.classList.toggle("hidden", isSignalScan || isPriceHistory);
-      if (sortGroup) sortGroup.classList.toggle("hidden", isSignalScan || isPriceHistory);
-      const datasetCard = document.getElementById("query-summary-dataset");
-      const signalSource = getQuerySignalScanSource();
-      const sourceMap = {
-        xetra: "Xetra",
-        nasdaq: "Nasdaq",
-        sweden: "Sweden",
-        list: "List",
-      };
-      if (datasetCard) {
-        datasetCard.textContent = dataset === "signal_scan"
-          ? "Signal Scan"
-          : dataset === "shortlist"
-          ? "Shortlist Snapshot"
-          : "Ticker History";
-      }
-      if (sourceReadout) {
-        sourceReadout.textContent = sourceMap[signalSource] || "Xetra";
-      }
-      if (sourceNote) {
-        sourceNote.textContent = "Uses the ticker universe selected in the top bar.";
-        sourceNote.className = "mt-2 text-[11px] text-slate-500";
-      }
-      if (isSignalScan) {
-        const signalConfig = getQuerySignalConfig();
-        const ageNode = document.getElementById("query-signal-age-max");
-        const reliabilityNode = document.getElementById("query-min-reliability");
-        if (signalConfig && ageNode && !String(ageNode.dataset.userEdited || "").trim()) {
-          ageNode.value = String(signalConfig.default_age_max || 5);
-        }
-        if (signalConfig && reliabilityNode && !String(reliabilityNode.dataset.userEdited || "").trim()) {
-          reliabilityNode.value = String(signalConfig.default_min_reliability || 6.0);
-        }
-      }
-      updateQueryCallPreviews();
-    }
-
-    function renderQueryResults(result) {
-      queryRows = Array.isArray(result?.rows) ? result.rows.slice() : [];
-      queryColumns = Array.isArray(result?.columns) ? result.columns.slice() : [];
-      const empty = document.getElementById("query-empty");
-      const content = document.getElementById("query-content");
-      const head = document.getElementById("query-results-head");
-      const body = document.getElementById("query-results-body");
-      const rowsNode = document.getElementById("query-summary-rows");
-      const returnedNode = document.getElementById("query-summary-returned");
-      const rangeNode = document.getElementById("query-summary-range");
-      const sourceNode = document.getElementById("query-summary-source");
-
-      if (rowsNode) {
-        rowsNode.textContent = String(result?.row_count || 0);
-      }
-      if (returnedNode) {
-        returnedNode.textContent = String(result?.returned_rows || 0);
-      }
-      if (sourceNode) {
-        if (result?.dataset === "signal_scan") {
-          const sourceMap = {
-            xetra: "Xetra",
-            nasdaq: "Nasdaq",
-            sweden: "Sweden",
-            list: "List",
-          };
-          sourceNode.textContent = sourceMap[String(result?.source || "").trim().toLowerCase()] || String(result?.source || "-");
-        } else {
-          sourceNode.textContent = String(result?.source || "-");
-        }
-      }
-      if (rangeNode) {
-        if (result?.dataset === "signal_scan") {
-          rangeNode.textContent = String(result?.summary?.latest_market_date || "â€”");
-        } else if (result?.dataset === "price_history") {
-          const earliest = result?.summary?.earliest_date || "â€”";
-          const latest = result?.summary?.latest_date || "â€”";
-          rangeNode.textContent = `${earliest} â†’ ${latest}`;
-        } else {
-          rangeNode.textContent = String(result?.summary?.as_of_date || "â€”");
-        }
-      }
-
-      if (head) {
-        head.innerHTML = "";
-        if (queryColumns.length) {
-          const tr = document.createElement("tr");
-          queryColumns.forEach((column) => {
-            const th = document.createElement("th");
-            th.className = "px-3 py-2 text-left text-xs font-bold uppercase tracking-wide";
-            th.textContent = String(column);
-            tr.appendChild(th);
-          });
-          head.appendChild(tr);
-        }
-      }
-
-      if (body) {
-        body.innerHTML = "";
-        queryRows.forEach((row) => {
-          const tr = document.createElement("tr");
-          queryColumns.forEach((column) => {
-            const td = document.createElement("td");
-            td.className = "px-3 py-2 align-top text-slate-700";
-            const rawValue = row?.[column];
-            if (String(column || "").trim().toLowerCase() === "ticker" && String(rawValue || "").trim()) {
-              const button = document.createElement("button");
-              button.type = "button";
-              button.className = "font-bold text-indigo-700 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-500";
-              button.textContent = formatQueryCell(rawValue);
-              button.title = `Open ${String(rawValue || "").trim().toUpperCase()} in Screener`;
-              button.addEventListener("click", () => {
-                openQueryTickerChart(rawValue).catch((err) => {
-                  console.warn("Could not open query ticker chart", err);
-                });
-              });
-              td.appendChild(button);
-            } else {
-              td.textContent = formatQueryCell(rawValue);
-            }
-            tr.appendChild(td);
-          });
-          body.appendChild(tr);
-        });
-      }
-
-      if (empty) {
-        empty.classList.toggle("hidden", queryRows.length > 0);
-        if (!queryRows.length) {
-          empty.textContent = result?.dataset === "signal_scan"
-            ? "No actionable tickers matched the current signal and universe."
-            : "The query returned no rows for the current filters.";
-        }
-      }
-      if (content) {
-        content.classList.toggle("hidden", queryRows.length === 0);
-      }
-    }
-
-    async function loadQueryResults() {
-      try {
-        await loadQueryCatalog();
-      } catch (err) {
-        setQueryStatus(`Catalog error: ${err.message || err}`, "rose");
-        finishQueryProgress(`Catalog load failed: ${err.message || err}`, false);
-        throw err;
-      }
-      const details = buildQueryRequestDetails();
-      if (details.dataset === "price_history" && !details.params.get("ticker")) {
-        setQueryStatus("Choose a ticker before running Ticker History.", "amber");
-        renderQueryResults({
-          dataset: details.dataset,
-          row_count: 0,
-          returned_rows: 0,
-          source: "-",
-          summary: {},
-          columns: [],
-          rows: [],
-        });
-        finishQueryProgress("Ticker History needs a ticker before the query can run.", false);
-        return;
-      }
-      if (details.dataset === "signal_scan") {
-        const source = String(details.params.get("source") || "xetra");
-        if (source === "list" && getScopeTickers(source).length === 0) {
-          setQueryStatus("Choose a universe with tickers before running Signal Scan.", "amber");
-          renderQueryResults({
-            dataset: details.dataset,
-            row_count: 0,
-            returned_rows: 0,
-            source,
-            summary: { latest_market_date: null },
-            columns: [],
-            rows: [],
-          });
-          finishQueryProgress("Signal Scan stopped because the selected list universe is empty.", false);
-          return;
-        }
-      }
-
-      const runBtn = document.getElementById("query-run-btn");
-      if (runBtn) {
-        runBtn.disabled = true;
-        runBtn.textContent = "Running...";
-      }
-      startQueryProgress(details);
-      setQueryStatus(details.dataset === "signal_scan" ? "Scanning actionable signals..." : "Running structured query...", "amber");
-      updateQueryCallPreviews();
-      try {
-        const resp = await fetch(details.apiPath, { cache: "no-store" });
-        appendQueryActivity("The query backend responded. Rendering the preview now.", "amber");
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data?.detail || "Query failed");
-        }
-        renderQueryResults(data);
-        if (details.dataset === "signal_scan") {
-          const refreshRequested = Boolean(data?.refresh?.requested);
-          const refreshed = Number(data?.refresh?.result?.refreshed || 0);
-          const refreshText = refreshRequested
-            ? ` Refreshed ${refreshed} stale tickers first.`
-            : " Market data was already fresh enough.";
-          const successMessage = `Found ${data.row_count || 0} actionable tickers.${refreshText}`;
-          setQueryStatus(successMessage, "emerald");
-          finishQueryProgress(successMessage, true);
-        } else {
-          const successMessage = `Returned ${data.returned_rows || 0} preview rows from ${data.row_count || 0} matching rows.`;
-          setQueryStatus(successMessage, "emerald");
-          finishQueryProgress(successMessage, true);
-        }
-      } catch (err) {
-        renderQueryResults({
-          dataset: details.dataset,
-          row_count: 0,
-          returned_rows: 0,
-          source: "-",
-          summary: {},
-          columns: [],
-          rows: [],
-        });
-        const errorMessage = `Query error: ${err.message || err}`;
-        setQueryStatus(errorMessage, "rose");
-        finishQueryProgress(errorMessage, false);
-        throw err;
-      } finally {
-        if (runBtn) {
-          runBtn.disabled = false;
-          runBtn.textContent = "Run Query";
-        }
-      }
-    }
 
     function readBacktestRaceSnapshot() {
       try {
@@ -833,7 +310,12 @@
           }
           const ticker = String(item.ticker || item.value || item.symbol || "").toUpperCase();
           const label = String(item.label || item.text || item.name || item.ticker || item.value || "").trim();
-          const exchange = normalizeExchangeFilter(item.exchange || getTickerExchangeBucket(item.ticker || item.value || item.symbol || "", item.label || item.text || item.name || ""));
+          const exchange = getTickerExchangeBucket(
+            item.ticker || item.value || item.symbol || "",
+            item.label || item.text || item.name || item.exchange || "",
+          ) === "sweden"
+            ? "sweden"
+            : normalizeExchangeFilter(item.exchange || getTickerExchangeBucket(item.ticker || item.value || item.symbol || "", item.label || item.text || item.name || ""));
           return {
             ticker,
             label,
@@ -1322,17 +804,6 @@
       return "Xetra";
     }
 
-    function syncShortlistRefreshControls() {
-      const shortlistRefreshBtn = document.getElementById("shortlist-refresh-btn");
-      const activeSourceLabel = getActiveSourceLabel(tickerScanScope);
-      if (shortlistRefreshBtn && shortlistRefreshBtn.disabled !== true) {
-        shortlistRefreshBtn.textContent = `Refresh ${activeSourceLabel} Shortlist`;
-        shortlistRefreshBtn.title = normalizeScanScope(tickerScanScope) === "list"
-          ? `Fetch fresh market data for ${activeSourceLabel}, then rebuild the shortlist`
-          : `Fetch fresh market data for the ${activeSourceLabel} universe, then rebuild the shortlist`;
-      }
-    }
-
     function updateScanScopeChrome() {
       const scopeButtons = getScanSourceButtons();
       const normalized = normalizeScanScope(tickerScanScope);
@@ -1368,16 +839,12 @@
         }
       }
       renderScanSourceListPreview();
-      syncShortlistRefreshControls();
       renderTickerSelectOptions({ preserveSelection: true });
-      updateQueryControls();
     }
 
     async function applyScanScopeSelection(mode) {
       const normalized = normalizeScanScope(mode);
       tickerScanScope = normalized;
-      shortlistLoaded = false;
-      shortlistSourceSignature = "";
       playbookLoaded = false;
       playbookSourceSignature = "";
       tickerUniverseExplicitlyChosen = true;
@@ -1454,8 +921,6 @@
       customTickerListName = activeName;
       customTickerList = tickers;
       scanSourceListPreviewOpen = true;
-      shortlistLoaded = false;
-      shortlistSourceSignature = "";
       playbookLoaded = false;
       playbookSourceSignature = "";
       writeCustomTickerList(tickers, activeName);
@@ -1804,8 +1269,6 @@
       customTickerListName = normalizeListName(saved.name || nextName);
       customTickerListActiveName = customTickerListName;
       customTickerListDraftSourceName = customTickerListName;
-      shortlistLoaded = false;
-      shortlistSourceSignature = "";
       playbookLoaded = false;
       playbookSourceSignature = "";
       tickerListMode = "custom";
@@ -1854,8 +1317,6 @@
       customTickerListActiveName = customTickerListName;
       customTickerListDraftSourceName = customTickerListName;
       customTickerListDraft = sortTickersByUniverse(customTickerList);
-      shortlistLoaded = false;
-      shortlistSourceSignature = "";
       playbookLoaded = false;
       playbookSourceSignature = "";
       updateListSelectChrome();
@@ -1998,6 +1459,7 @@
       { days: 365 * 3, label: "3Y", buttonId: "range-btn-3y" },
     ];
     const LAST_CHART_RANGE_KEY = "etf-discovery:last-chart-range-days";
+    const LAST_CHART_TA_PARAMS_KEY = "etf-discovery:last-chart-ta-params";
 
     function readSavedChartRangeDays() {
       try {
@@ -3338,196 +2800,15 @@
         status.textContent = "Playbook load failed";
       } finally {
         runBtn.disabled = false;
-        runBtn.textContent = "Run Playbook";
+        runBtn.textContent = "Run Graph Playground";
       }
     }
 
-    function setShortlistEmptyState(message) {
-      const emptyState = document.getElementById("shortlist-empty");
-      const content = document.getElementById("shortlist-content");
-      const grid = document.getElementById("shortlist-grid");
-      if (grid) {
-        grid.innerHTML = "";
-      }
-      if (emptyState) {
-        emptyState.textContent = message;
-        emptyState.classList.remove("hidden");
-      }
-      if (content) {
-        content.classList.add("hidden");
-      }
-    }
-
-    function getShortlistLabelClasses(label) {
-      if (label === "Buy") {
-        return "bg-emerald-100 text-emerald-700 border border-emerald-200";
-      }
-      if (label === "Watch") {
-        return "bg-amber-100 text-amber-700 border border-amber-200";
-      }
-      return "bg-rose-100 text-rose-700 border border-rose-200";
-    }
-
-    function formatShortlistEntryAge(days) {
-      if (days === null || days === undefined || Number.isNaN(Number(days))) {
-        return "No fresh signal";
-      }
-      const value = Number(days);
-      return value === 0 ? "Triggered today" : `${value} trading days ago`;
-    }
-
-    function updateShortlistFilterButtons() {
-      ["All", "Buy", "Watch", "Skip"].forEach((label) => {
-        const button = document.getElementById(`shortlist-filter-${label.toLowerCase()}`);
-        if (!button) {
-          return;
-        }
-        const isActive = shortlistFilter === label;
-        button.className = `rounded-full border px-3 py-1.5 text-xs font-bold transition-all ${
-          isActive
-            ? "border-sky-300 bg-sky-600 text-white shadow-sm"
-            : "border-slate-300 bg-white text-slate-700"
-        }`;
-      });
-    }
-
-    function getVisibleShortlistRows() {
-      if (shortlistFilter === "All") {
-        return shortlistRows;
-      }
-      return shortlistRows.filter((row) => row.label === shortlistFilter);
-    }
-
-    function renderShortlistRows() {
-      const grid = document.getElementById("shortlist-grid");
-      const emptyState = document.getElementById("shortlist-empty");
-      const content = document.getElementById("shortlist-content");
-      const countEl = document.getElementById("shortlist-count");
-
-      if (!grid || !emptyState || !content || !countEl) {
-        return;
-      }
-
-      updateShortlistFilterButtons();
-
-      if (shortlistRows.length === 0) {
-        setShortlistEmptyState("No shortlist artifacts were available yet.");
-        return;
-      }
-
-      const rows = getVisibleShortlistRows();
-      countEl.textContent = String(rows.length);
-      grid.innerHTML = "";
-
-      rows.forEach((row, idx) => {
-        const card = document.createElement("button");
-        card.type = "button";
-        card.className = "ticker-card text-left rounded-xl bg-white shadow border border-slate-200 p-4 hover:border-sky-300 hover:shadow-lg transition-all";
-        card.onclick = () => {
-          showTab("screener");
-          loadChart(row.ticker);
-        };
-
-        const reasons = Array.isArray(row.reasons) ? row.reasons.slice(0, 3) : [];
-        const reasonHtml = reasons.length
-          ? reasons.map((reason) => `<div class="text-[11px] text-slate-500">â€¢ ${reason}</div>`).join("")
-          : '<div class="text-[11px] text-slate-400">No explanation available yet.</div>';
-
-        card.innerHTML = `
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="text-[10px] font-bold text-sky-500">#${idx + 1}</span>
-                <span class="font-bold text-slate-900 text-lg leading-none">${row.ticker}</span>
-                <span class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getShortlistLabelClasses(row.label)}">${row.label}</span>
-              </div>
-              <div class="mt-1 text-sm text-slate-600 truncate">${row.name || row.ticker}</div>
-            </div>
-            <div class="text-right shrink-0">
-              <div class="text-[10px] uppercase tracking-wide text-slate-400 font-bold">Final Score</div>
-              <div class="text-2xl font-bold text-slate-900">${Number(row.final_score || 0).toFixed(1)}</div>
-            </div>
-          </div>
-          <div class="mt-3 grid grid-cols-2 gap-3 text-xs">
-            <div class="rounded-lg bg-slate-50 px-3 py-2">
-              <div class="uppercase tracking-wide text-slate-400 font-bold">Profile</div>
-              <div class="mt-1 font-semibold text-slate-700">${row.asset_class || "ETF"} Â· ${row.region || "Unknown"}</div>
-              <div class="text-slate-500">${row.issuer || "Unknown issuer"}</div>
-            </div>
-            <div class="rounded-lg bg-slate-50 px-3 py-2">
-              <div class="uppercase tracking-wide text-slate-400 font-bold">Timing</div>
-              <div class="mt-1 font-semibold text-slate-700">${formatShortlistEntryAge(row.recent_entry_days)}</div>
-              <div class="text-slate-500">Close ${Number(row.close || 0).toFixed(2)} Â· ${(Number(row.volume || 0) / 1000).toFixed(0)}K vol</div>
-            </div>
-          </div>
-          <div class="mt-3 grid grid-cols-3 gap-2 text-xs">
-            <div class="rounded-lg border border-slate-200 px-2 py-2">
-              <div class="uppercase tracking-wide text-slate-400 font-bold">Product</div>
-              <div class="mt-1 text-lg font-bold text-slate-800">${Number(row.product_score || 0).toFixed(0)}</div>
-            </div>
-            <div class="rounded-lg border border-slate-200 px-2 py-2">
-              <div class="uppercase tracking-wide text-slate-400 font-bold">Exposure</div>
-              <div class="mt-1 text-lg font-bold text-slate-800">${Number(row.exposure_score || 0).toFixed(0)}</div>
-            </div>
-            <div class="rounded-lg border border-slate-200 px-2 py-2">
-              <div class="uppercase tracking-wide text-slate-400 font-bold">Technical</div>
-              <div class="mt-1 text-lg font-bold text-slate-800">${Number(row.technical_score || 0).toFixed(0)}</div>
-            </div>
-          </div>
-          <div class="mt-3 space-y-1">
-            ${reasonHtml}
-          </div>
-          <div class="mt-3 pt-3 border-t border-slate-100 text-[11px] font-bold text-sky-600 uppercase tracking-wide">
-            Open chart drill-down
-          </div>
-        `;
-        grid.appendChild(card);
-      });
-
-      if (rows.length === 0) {
-        grid.innerHTML = `
-          <div class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500 xl:col-span-2">
-            No ${shortlistFilter.toLowerCase()} ideas in the current shortlist snapshot.
-          </div>
-        `;
-        emptyState.classList.add("hidden");
-        content.classList.remove("hidden");
-        return;
-      }
-
-      emptyState.classList.add("hidden");
-      content.classList.remove("hidden");
-    }
-
-    function setShortlistFilter(label) {
-      shortlistFilter = label;
-      renderShortlistRows();
-    }
-
-    function cloneScreenFilters(filters = SCREEN_DEFAULT_FILTERS) {
-      try {
-        return JSON.parse(JSON.stringify(filters || SCREEN_DEFAULT_FILTERS));
-      } catch (err) {
-        return JSON.parse(JSON.stringify(SCREEN_DEFAULT_FILTERS));
-      }
-    }
-
-    function clampNumber(value, minimum, maximum, fallback) {
-      const numeric = Number(value);
-      if (!Number.isFinite(numeric)) {
-        return fallback;
-      }
-      return Math.max(minimum, Math.min(maximum, numeric));
-    }
-
-    function coerceFilterBoolean(value, fallback = true) {
+    function coerceFilterBoolean(value, fallback) {
       if (typeof value === "boolean") {
         return value;
       }
-      if (value === null || value === undefined) {
-        return fallback;
-      }
-      const normalized = String(value).trim().toLowerCase();
+      const normalized = String(value ?? "").trim().toLowerCase();
       if (["1", "true", "yes", "on"].includes(normalized)) {
         return true;
       }
@@ -3550,6 +2831,12 @@
         macd_event_enabled: coerceFilterBoolean(raw.macd_event_enabled, SCREEN_DEFAULT_FILTERS.macd_event_enabled),
         rsi_event_enabled: coerceFilterBoolean(raw.rsi_event_enabled, SCREEN_DEFAULT_FILTERS.rsi_event_enabled),
         stoch_event_enabled: coerceFilterBoolean(raw.stoch_event_enabled, SCREEN_DEFAULT_FILTERS.stoch_event_enabled),
+        supertrend_event_enabled: coerceFilterBoolean(raw.supertrend_event_enabled, SCREEN_DEFAULT_FILTERS.supertrend_event_enabled),
+        ema_relationship_enabled: coerceFilterBoolean(raw.ema_relationship_enabled, SCREEN_DEFAULT_FILTERS.ema_relationship_enabled),
+        ema_relationship_fast: Math.round(clampNumber(raw.ema_relationship_fast, 2, 200, SCREEN_DEFAULT_FILTERS.ema_relationship_fast)),
+        ema_relationship_slow: Math.round(clampNumber(raw.ema_relationship_slow, 3, 400, SCREEN_DEFAULT_FILTERS.ema_relationship_slow)),
+        ema_relationship_slope: ["any", "positive", "negative"].includes(String(raw.ema_relationship_slope || "").trim()) ? String(raw.ema_relationship_slope).trim() : SCREEN_DEFAULT_FILTERS.ema_relationship_slope,
+        ema_relationship_allowance: clampNumber(raw.ema_relationship_allowance, 0, 5, SCREEN_DEFAULT_FILTERS.ema_relationship_allowance),
         rsi_cross_value: clampNumber(raw.rsi_cross_value, 0, 100, SCREEN_DEFAULT_FILTERS.rsi_cross_value),
         rsi_cross_mode: ["cross_up", "cross_down"].includes(String(raw.rsi_cross_mode || "").trim())
           ? String(raw.rsi_cross_mode).trim()
@@ -3558,6 +2845,9 @@
         stoch_cross_mode: ["cross_up", "cross_down"].includes(String(raw.stoch_cross_mode || "").trim())
           ? String(raw.stoch_cross_mode).trim()
           : SCREEN_DEFAULT_FILTERS.stoch_cross_mode,
+        stoch_cross_region: ["below", "above", "any"].includes(String(raw.stoch_cross_region || "").trim())
+          ? String(raw.stoch_cross_region).trim()
+          : SCREEN_DEFAULT_FILTERS.stoch_cross_region,
         macd_cross_mode: ["low_cross_buy", "high_cross_sell", "bullish_cross", "bearish_cross"].includes(String(raw.macd_cross_mode || "").trim())
           ? String(raw.macd_cross_mode).trim()
           : SCREEN_DEFAULT_FILTERS.macd_cross_mode,
@@ -3579,6 +2869,29 @@
           lookbackDays,
           raw?.stoch_cross_window ? (Number(raw.stoch_cross_window.min || 0) + Number(raw.stoch_cross_window.max || lookbackDays)) / 2 : SCREEN_DEFAULT_FILTERS.stoch_event_age,
         )),
+        supertrend_event_age: Math.round(clampNumber(raw.supertrend_event_age, 0, lookbackDays, SCREEN_DEFAULT_FILTERS.supertrend_event_age)),
+        ema_relationship_age: Math.round(clampNumber(raw.ema_relationship_age, 0, lookbackDays, SCREEN_DEFAULT_FILTERS.ema_relationship_age)),
+        supertrend_cross_mode: ["green_to_red", "red_to_green"].includes(String(raw.supertrend_cross_mode || "").trim())
+          ? String(raw.supertrend_cross_mode).trim()
+          : SCREEN_DEFAULT_FILTERS.supertrend_cross_mode,
+        ema_slope_20: ["any", "positive", "flat", "negative"].includes(String(raw.ema_slope_20 || "").trim()) ? String(raw.ema_slope_20).trim() : "any",
+        ema_slope_50: ["any", "positive", "flat", "negative"].includes(String(raw.ema_slope_50 || "").trim()) ? String(raw.ema_slope_50).trim() : "any",
+        ema_slope_200: ["any", "positive", "flat", "negative"].includes(String(raw.ema_slope_200 || "").trim()) ? String(raw.ema_slope_200).trim() : "any",
+        ema_slope_lookback: Math.round(clampNumber(raw.ema_slope_lookback, 1, 30, SCREEN_DEFAULT_FILTERS.ema_slope_lookback)),
+        ema_slope_flat_tolerance: clampNumber(raw.ema_slope_flat_tolerance, 0, 5, SCREEN_DEFAULT_FILTERS.ema_slope_flat_tolerance),
+        chart_ta: {
+          macd_fast: Math.round(clampNumber(raw?.chart_ta?.macd_fast, 2, 100, CHART_TA_DEFAULTS.macd_fast)),
+          macd_slow: Math.round(clampNumber(raw?.chart_ta?.macd_slow, 3, 200, CHART_TA_DEFAULTS.macd_slow)),
+          macd_signal: Math.round(clampNumber(raw?.chart_ta?.macd_signal, 1, 100, CHART_TA_DEFAULTS.macd_signal)),
+          rsi_period: Math.round(clampNumber(raw?.chart_ta?.rsi_period, 2, 100, CHART_TA_DEFAULTS.rsi_period)),
+          stoch_rsi_period: Math.round(clampNumber(raw?.chart_ta?.stoch_rsi_period, 2, 100, CHART_TA_DEFAULTS.stoch_rsi_period)),
+          stoch_rsi_k: Math.round(clampNumber(raw?.chart_ta?.stoch_rsi_k, 1, 30, CHART_TA_DEFAULTS.stoch_rsi_k)),
+          stoch_rsi_d: Math.round(clampNumber(raw?.chart_ta?.stoch_rsi_d, 1, 30, CHART_TA_DEFAULTS.stoch_rsi_d)),
+          supertrend_period: Math.round(clampNumber(raw?.chart_ta?.supertrend_period, 2, 100, CHART_TA_DEFAULTS.supertrend_period)),
+          supertrend_multiplier: clampNumber(raw?.chart_ta?.supertrend_multiplier, 0.5, 10, CHART_TA_DEFAULTS.supertrend_multiplier),
+          rsi_trigger: clampNumber(raw?.chart_ta?.rsi_trigger, 0, 100, raw.rsi_cross_value ?? CHART_TA_DEFAULTS.rsi_trigger),
+          stoch_trigger: clampNumber(raw?.chart_ta?.stoch_trigger, 0, 100, raw.stoch_cross_value ?? CHART_TA_DEFAULTS.stoch_trigger),
+        },
       };
       return normalized;
     }
@@ -3641,14 +2954,40 @@
         : `Within last ${numeric}d · ${positionPct}% toward today`;
     }
 
+    function updateEventAgeReadoutFromSlider(sliderId, readoutId) {
+      const readout = document.getElementById(readoutId);
+      if (!readout) {
+        return;
+      }
+      const age = getEventSliderAge(sliderId, screenFilters.lookback_days, 0);
+      readout.textContent = formatTimelinePosition(age, screenFilters.lookback_days);
+    }
+
     function getMacdModeShortLabel(mode) {
       const labels = {
-        low_cross_buy: "Low Buy",
-        high_cross_sell: "High Sell",
-        bullish_cross: "Bullish",
-        bearish_cross: "Bearish",
+        low_cross_buy: "Bullish below zero",
+        high_cross_sell: "Bearish above zero",
+        bullish_cross: "Bullish any region",
+        bearish_cross: "Bearish any region",
       };
       return labels[String(mode || "")] || labels.low_cross_buy;
+    }
+
+    function getMacdControlState(mode) {
+      const normalized = String(mode || "");
+      if (normalized === "low_cross_buy") return { direction: "bullish_cross", region: "below" };
+      if (normalized === "high_cross_sell") return { direction: "bearish_cross", region: "above" };
+      return { direction: normalized === "bearish_cross" ? "bearish_cross" : "bullish_cross", region: "any" };
+    }
+
+    function getMacdModeFromControls() {
+      const direction = document.getElementById("screen-macd-cross-mode")?.value === "bearish_cross"
+        ? "bearish_cross"
+        : "bullish_cross";
+      const region = ["below", "above", "any"].find((value) => document.getElementById(`screen-macd-cross-region-${value}`)?.checked) || "any";
+      if (direction === "bullish_cross" && region === "below") return "low_cross_buy";
+      if (direction === "bearish_cross" && region === "above") return "high_cross_sell";
+      return direction;
     }
 
     function getRsiModeShortLabel(mode) {
@@ -3669,26 +3008,31 @@
 
     function getStochModeShortLabel(mode) {
       const labels = {
-        cross_up: "Cross Up",
-        cross_down: "Cross Down",
+        cross_up: "K/D Up",
+        cross_down: "K/D Down",
       };
       return labels[String(mode || "")] || labels.cross_up;
     }
 
     function getStochModeLongLabel(mode) {
       const labels = {
-        cross_up: "Cross Up",
-        cross_down: "Cross Down",
+        cross_up: "K/D Cross Up",
+        cross_down: "K/D Cross Down",
       };
       return labels[String(mode || "")] || labels.cross_up;
     }
 
+    function getStochRegionLongLabel(region) {
+      const labels = { below: "Below trigger", above: "Above trigger", any: "Any region" };
+      return labels[String(region || "")] || labels.below;
+    }
+
     function getMacdModeLongLabel(mode) {
       const labels = {
-        low_cross_buy: "Low Cross / Buy",
-        high_cross_sell: "High Cross / Sell",
-        bullish_cross: "Any Bullish Cross",
-        bearish_cross: "Any Bearish Cross",
+        low_cross_buy: "MACD/Signal bullish cross below zero / Buy",
+        high_cross_sell: "MACD/Signal bearish cross above zero / Sell",
+        bullish_cross: "MACD/Signal bullish cross in any region",
+        bearish_cross: "MACD/Signal bearish cross in any region",
       };
       return labels[String(mode || "")] || labels.low_cross_buy;
     }
@@ -3713,6 +3057,12 @@
         filters.stoch_event_enabled
           ? { label: `StochRSI ${getStochModeShortLabel(filters.stoch_cross_mode)}`, age: Number(filters.stoch_event_age || 0) }
           : null,
+        filters.supertrend_event_enabled
+          ? { label: `Supertrend ${filters.supertrend_cross_mode === "green_to_red" ? "green to red" : "red to green"}`, age: Number(filters.supertrend_event_age || 0) }
+          : null,
+        filters.ema_relationship_enabled
+          ? { label: `EMA ${filters.ema_relationship_fast}/${filters.ema_relationship_slow} cross`, age: Number(filters.ema_relationship_age || 0) }
+          : null,
       ].filter(Boolean).sort((left, right) => right.age - left.age);
     }
 
@@ -3732,19 +3082,23 @@
     }
 
     function updateTimelineTrackBounds(lookbackDays) {
-      ["screen-rsi-cross-age", "screen-macd-cross-age", "screen-stoch-cross-age"].forEach((id) => {
+      ["screen-rsi-cross-age", "screen-macd-cross-age", "screen-stoch-cross-age", "screen-supertrend-cross-age", "screen-ema-relationship-age"].forEach((id) => {
         const node = document.getElementById(id);
         if (node) {
           node.max = String(lookbackDays);
         }
       });
       const leftLabel = `${Math.round(lookbackDays)}d ago`;
-      ["screen-rsi-axis-left", "screen-macd-axis-left", "screen-stoch-axis-left"].forEach((id) => {
+      ["screen-rsi-axis-left", "screen-macd-axis-left", "screen-stoch-axis-left", "screen-supertrend-axis-left"].forEach((id) => {
         const node = document.getElementById(id);
         if (node) {
           node.textContent = leftLabel;
         }
       });
+      const emaLeftLabel = document.getElementById("screen-ema-relationship-axis-left");
+      if (emaLeftLabel) {
+        emaLeftLabel.textContent = "Window start";
+      }
     }
 
     function updateScreenSequenceSummary(filters = screenFilters) {
@@ -3763,6 +3117,8 @@
         { key: "rsi_event_enabled", checkboxId: "screen-rsi-event-enabled", stepId: "screen-rsi-event-step" },
         { key: "macd_event_enabled", checkboxId: "screen-macd-event-enabled", stepId: "screen-macd-event-step" },
         { key: "stoch_event_enabled", checkboxId: "screen-stoch-event-enabled", stepId: "screen-stoch-event-step" },
+        { key: "supertrend_event_enabled", checkboxId: "screen-supertrend-event-enabled", stepId: "screen-supertrend-event-step" },
+        { key: "ema_relationship_enabled", checkboxId: "screen-ema-relationship-event-enabled", stepId: "screen-ema-relationship-event-step" },
       ].forEach(({ key, checkboxId, stepId }) => {
         const enabled = Boolean(filters[key]);
         const checkbox = document.getElementById(checkboxId);
@@ -3773,6 +3129,7 @@
         if (step) {
           step.style.opacity = enabled ? "1" : "0.5";
           step.style.filter = enabled ? "none" : "grayscale(0.2)";
+          step.classList.toggle("is-disabled", !enabled);
         }
       });
     }
@@ -3788,22 +3145,60 @@
         macd_event_enabled: document.getElementById("screen-macd-event-enabled")?.checked,
         rsi_event_enabled: document.getElementById("screen-rsi-event-enabled")?.checked,
         stoch_event_enabled: document.getElementById("screen-stoch-event-enabled")?.checked,
+        supertrend_event_enabled: document.getElementById("screen-supertrend-event-enabled")?.checked,
+        ema_relationship_enabled: document.getElementById("screen-ema-relationship-event-enabled")?.checked,
+        ema_relationship_fast: document.getElementById("screen-ema-relationship-fast")?.value,
+        ema_relationship_slow: document.getElementById("screen-ema-relationship-slow")?.value,
+        ema_relationship_slope: document.getElementById("screen-ema-relationship-slope")?.value,
+        ema_relationship_allowance: document.getElementById("screen-ema-relationship-allowance")?.value,
         rsi_cross_value: document.getElementById("screen-rsi-cross-value")?.value,
         rsi_cross_mode: document.getElementById("screen-rsi-cross-mode")?.value,
         stoch_cross_value: document.getElementById("screen-stoch-cross-value")?.value,
         stoch_cross_mode: document.getElementById("screen-stoch-cross-mode")?.value,
-        macd_cross_mode: document.getElementById("screen-macd-cross-mode")?.value,
+        stoch_cross_region: ["below", "above", "any"].find((region) => document.getElementById(`screen-stoch-cross-region-${region}`)?.checked),
+        macd_cross_mode: getMacdModeFromControls(),
         macd_event_age: getEventSliderAge("screen-macd-cross-age", screenFilters.lookback_days, screenFilters.macd_event_age),
         rsi_event_age: getEventSliderAge("screen-rsi-cross-age", screenFilters.lookback_days, screenFilters.rsi_event_age),
         stoch_event_age: getEventSliderAge("screen-stoch-cross-age", screenFilters.lookback_days, screenFilters.stoch_event_age),
+        supertrend_cross_mode: document.getElementById("screen-supertrend-cross-mode")?.value,
+        supertrend_event_age: getEventSliderAge("screen-supertrend-cross-age", screenFilters.lookback_days, screenFilters.supertrend_event_age),
+        ema_relationship_age: getEventSliderAge("screen-ema-relationship-age", screenFilters.lookback_days, screenFilters.ema_relationship_age),
+        ema_slope_20: document.getElementById("screen-ema-20-slope")?.value,
+        ema_slope_50: document.getElementById("screen-ema-50-slope")?.value,
+        ema_slope_200: document.getElementById("screen-ema-200-slope")?.value,
+        ema_slope_lookback: document.getElementById("screen-ema-slope-lookback")?.value,
+        ema_slope_flat_tolerance: document.getElementById("screen-ema-slope-tolerance")?.value,
       });
       screenFilters = nextFilters;
       applyScreenFilters(nextFilters, { syncPreset: false });
+      refreshScreenProjection();
       return nextFilters;
     }
 
     function applyScreenFilters(filters, { syncPreset = false } = {}) {
       screenFilters = normalizeScreenFiltersClient(filters);
+      const chartTA = screenFilters.chart_ta || CHART_TA_DEFAULTS;
+      Object.entries({
+        macd_fast: "chart-macd-fast",
+        macd_slow: "chart-macd-slow",
+        macd_signal: "chart-macd-signal",
+        rsi_period: "chart-rsi-period",
+        stoch_rsi_period: "chart-stoch-rsi-period",
+        stoch_rsi_k: "chart-stoch-rsi-k",
+        stoch_rsi_d: "chart-stoch-rsi-d",
+        supertrend_period: "chart-supertrend-period",
+        supertrend_multiplier: "chart-supertrend-multiplier",
+      }).forEach(([key, id]) => {
+        const node = document.getElementById(id);
+        if (node && chartTA[key] !== undefined) {
+          node.value = String(chartTA[key]);
+        }
+      });
+      saveChartTAParameters({
+        ...chartTA,
+        rsi_trigger: screenFilters.rsi_cross_value,
+        stoch_trigger: screenFilters.stoch_cross_value,
+      });
       const volumeMinNode = document.getElementById("screen-volume-min");
       const volumeMaxNode = document.getElementById("screen-volume-max");
       if (volumeMinNode) volumeMinNode.value = String(screenFilters.volume_range.min);
@@ -3812,6 +3207,22 @@
       setEventSliderValue("screen-macd-cross-age", screenFilters.macd_event_age, screenFilters.lookback_days);
       setEventSliderValue("screen-rsi-cross-age", screenFilters.rsi_event_age, screenFilters.lookback_days);
       setEventSliderValue("screen-stoch-cross-age", screenFilters.stoch_event_age, screenFilters.lookback_days);
+        setEventSliderValue("screen-supertrend-cross-age", screenFilters.supertrend_event_age, screenFilters.lookback_days);
+      setEventSliderValue("screen-ema-relationship-age", screenFilters.ema_relationship_age, screenFilters.lookback_days);
+      [
+        ["screen-ema-20-slope", screenFilters.ema_slope_20],
+        ["screen-ema-50-slope", screenFilters.ema_slope_50],
+        ["screen-ema-200-slope", screenFilters.ema_slope_200],
+        ["screen-ema-slope-lookback", screenFilters.ema_slope_lookback],
+        ["screen-ema-slope-tolerance", screenFilters.ema_slope_flat_tolerance],
+        ["screen-ema-relationship-fast", screenFilters.ema_relationship_fast],
+        ["screen-ema-relationship-slow", screenFilters.ema_relationship_slow],
+        ["screen-ema-relationship-slope", screenFilters.ema_relationship_slope],
+        ["screen-ema-relationship-allowance", screenFilters.ema_relationship_allowance],
+      ].forEach(([id, value]) => {
+        const node = document.getElementById(id);
+        if (node) node.value = String(value);
+      });
       syncScreenEventToggleChrome(screenFilters);
       const rsiCrossNode = document.getElementById("screen-rsi-cross-value");
       if (rsiCrossNode) {
@@ -3829,10 +3240,21 @@
       if (stochModeNode) {
         stochModeNode.value = String(screenFilters.stoch_cross_mode || SCREEN_DEFAULT_FILTERS.stoch_cross_mode);
       }
+      ["below", "above", "any"].forEach((region) => {
+        const node = document.getElementById(`screen-stoch-cross-region-${region}`);
+        if (node) node.checked = region === String(screenFilters.stoch_cross_region || "below");
+      });
       const macdModeNode = document.getElementById("screen-macd-cross-mode");
       if (macdModeNode) {
-        macdModeNode.value = String(screenFilters.macd_cross_mode || SCREEN_DEFAULT_FILTERS.macd_cross_mode);
+        macdModeNode.value = getMacdControlState(screenFilters.macd_cross_mode).direction;
       }
+      const macdControlState = getMacdControlState(screenFilters.macd_cross_mode);
+      ["below", "above", "any"].forEach((region) => {
+        const node = document.getElementById(`screen-macd-cross-region-${region}`);
+        if (node) node.checked = region === macdControlState.region;
+      });
+      const supertrendModeNode = document.getElementById("screen-supertrend-cross-mode");
+      if (supertrendModeNode) supertrendModeNode.value = String(screenFilters.supertrend_cross_mode || SCREEN_DEFAULT_FILTERS.supertrend_cross_mode);
       const volumeReadout = document.getElementById("screen-volume-readout");
       if (volumeReadout) {
         volumeReadout.textContent = `${formatCompactVolume(screenFilters.volume_range.min)} - ${formatCompactVolume(screenFilters.volume_range.max)}`;
@@ -3851,7 +3273,7 @@
       }
       const stochModeReadout = document.getElementById("screen-stoch-mode-readout");
       if (stochModeReadout) {
-        stochModeReadout.textContent = getStochModeLongLabel(screenFilters.stoch_cross_mode);
+        stochModeReadout.textContent = `${getStochModeLongLabel(screenFilters.stoch_cross_mode)} · ${getStochRegionLongLabel(screenFilters.stoch_cross_region)}`;
       }
       const macdReadout = document.getElementById("screen-macd-cross-readout");
       if (macdReadout) {
@@ -3869,6 +3291,14 @@
       if (stochReadout) {
         stochReadout.textContent = formatTimelinePosition(screenFilters.stoch_event_age, screenFilters.lookback_days);
       }
+      const supertrendReadout = document.getElementById("screen-supertrend-cross-readout");
+      if (supertrendReadout) supertrendReadout.textContent = formatTimelinePosition(screenFilters.supertrend_event_age, screenFilters.lookback_days);
+      const emaRelationshipReadout = document.getElementById("screen-ema-relationship-event-readout");
+      if (emaRelationshipReadout) emaRelationshipReadout.textContent = `Cross within last ${screenFilters.ema_relationship_age}d`;
+      const emaRelationshipLabel = document.getElementById("screen-ema-relationship-readout");
+      if (emaRelationshipLabel) emaRelationshipLabel.textContent = `${screenFilters.ema_relationship_fast} / ${screenFilters.ema_relationship_slow} · ${screenFilters.ema_relationship_slope} · ±${Number(screenFilters.ema_relationship_allowance).toFixed(2)}%`;
+      const supertrendModeReadout = document.getElementById("screen-supertrend-mode-readout");
+      if (supertrendModeReadout) supertrendModeReadout.textContent = screenFilters.supertrend_cross_mode === "green_to_red" ? "Green to red" : "Red to green";
       updateTimelineStepPositions(screenFilters);
       updateScreenSequenceSummary(screenFilters);
       if (syncPreset) {
@@ -3893,10 +3323,28 @@
       params.set("rsi_cross_mode", String(filters.rsi_cross_mode || SCREEN_DEFAULT_FILTERS.rsi_cross_mode));
       params.set("stoch_cross_value", String(filters.stoch_cross_value));
       params.set("stoch_cross_mode", String(filters.stoch_cross_mode || SCREEN_DEFAULT_FILTERS.stoch_cross_mode));
+      params.set("stoch_cross_region", String(filters.stoch_cross_region || SCREEN_DEFAULT_FILTERS.stoch_cross_region));
       params.set("macd_cross_mode", String(filters.macd_cross_mode || SCREEN_DEFAULT_FILTERS.macd_cross_mode));
       params.set("macd_event_age", String(filters.macd_event_age));
       params.set("rsi_event_age", String(filters.rsi_event_age));
       params.set("stoch_event_age", String(filters.stoch_event_age));
+      params.set("supertrend_event_enabled", filters.supertrend_event_enabled ? "true" : "false");
+      params.set("supertrend_cross_mode", String(filters.supertrend_cross_mode || SCREEN_DEFAULT_FILTERS.supertrend_cross_mode));
+      params.set("supertrend_event_age", String(filters.supertrend_event_age));
+      params.set("ema_relationship_enabled", filters.ema_relationship_enabled ? "true" : "false");
+      params.set("ema_relationship_fast", String(filters.ema_relationship_fast));
+      params.set("ema_relationship_slow", String(filters.ema_relationship_slow));
+      params.set("ema_relationship_slope", String(filters.ema_relationship_slope));
+      params.set("ema_relationship_allowance", String(filters.ema_relationship_allowance));
+      params.set("ema_relationship_age", String(filters.ema_relationship_age));
+      const chartTA = getChartTAParameters();
+      params.set("supertrend_period", String(chartTA.supertrend_period));
+      params.set("supertrend_multiplier", String(chartTA.supertrend_multiplier));
+      params.set("ema_slope_20", String(filters.ema_slope_20 || "any"));
+      params.set("ema_slope_50", String(filters.ema_slope_50 || "any"));
+      params.set("ema_slope_200", String(filters.ema_slope_200 || "any"));
+      params.set("ema_slope_lookback", String(filters.ema_slope_lookback));
+      params.set("ema_slope_flat_tolerance", String(filters.ema_slope_flat_tolerance));
       const presetSelect = document.getElementById("screen-preset-select");
       if (presetSelect && presetSelect.value) {
         params.set("preset_name", presetSelect.value);
@@ -3988,7 +3436,14 @@
       }
       const nextPreset = {
         name: presetName,
-        filters: getScreenFiltersForRequest(),
+        filters: {
+          ...getScreenFiltersForRequest(),
+          chart_ta: {
+            ...getChartTAParameters(),
+            rsi_trigger: Number(document.getElementById("screen-rsi-cross-value")?.value || 50),
+            stoch_trigger: Number(document.getElementById("screen-stoch-cross-value")?.value || 20),
+          },
+        },
       };
       const nextPresets = Array.isArray(screenPresetCatalog.presets)
         ? screenPresetCatalog.presets.filter((preset) => preset && preset.name !== presetName)
@@ -4033,11 +3488,27 @@
         "screen-stoch-cross-value",
         "screen-stoch-event-enabled",
         "screen-stoch-cross-mode",
+        "screen-supertrend-event-enabled",
+        "screen-supertrend-cross-mode",
         "screen-macd-event-enabled",
         "screen-macd-cross-mode",
         "screen-macd-cross-age",
         "screen-rsi-cross-age",
         "screen-stoch-cross-age",
+        "screen-supertrend-cross-age",
+        "screen-ema-relationship-age",
+        "screen-ema-relationship-event-enabled",
+        "screen-ema-relationship-fast",
+        "screen-ema-relationship-slow",
+        "screen-ema-relationship-mode",
+        "screen-ema-relationship-slope",
+        "screen-ema-relationship-lookback",
+        "screen-ema-relationship-tolerance",
+        "screen-ema-20-slope",
+        "screen-ema-50-slope",
+        "screen-ema-200-slope",
+        "screen-ema-slope-lookback",
+        "screen-ema-slope-tolerance",
       ].forEach((id) => {
         const node = document.getElementById(id);
         if (!node || node.dataset.bound === "1") {
@@ -4045,29 +3516,97 @@
         }
         node.dataset.bound = "1";
         node.addEventListener("input", () => {
+          const readoutIdBySlider = {
+            "screen-macd-cross-age": "screen-macd-cross-readout",
+            "screen-rsi-cross-age": "screen-rsi-cross-readout",
+            "screen-stoch-cross-age": "screen-stoch-cross-readout",
+            "screen-supertrend-cross-age": "screen-supertrend-cross-readout",
+            "screen-ema-relationship-age": "screen-ema-relationship-event-readout",
+          };
+          const readoutId = readoutIdBySlider[id];
+          if (readoutId) {
+            updateEventAgeReadoutFromSlider(id, readoutId);
+          }
           syncScreenFilterStateFromDom();
         });
       });
+      [
+        "chart-macd-fast",
+        "chart-macd-slow",
+        "chart-macd-signal",
+        "chart-rsi-period",
+        "chart-stoch-rsi-period",
+        "chart-stoch-rsi-k",
+        "chart-stoch-rsi-d",
+        "chart-supertrend-period",
+        "chart-supertrend-multiplier",
+      ].forEach((id) => {
+        const node = document.getElementById(id);
+        if (!node || node.dataset.taApplyBound === "1") {
+          return;
+        }
+        node.dataset.taApplyBound = "1";
+        node.addEventListener("input", updateChartTAApplyButton);
+      });
+      ["screen-rsi-cross-value", "screen-stoch-cross-value"].forEach((id) => {
+        const node = document.getElementById(id);
+        if (!node || node.dataset.chartTriggerBound === "1") {
+          return;
+        }
+        node.dataset.chartTriggerBound = "1";
+        node.addEventListener("input", scheduleChartTriggerRefresh);
+      });
+      [
+        "screen-ema-relationship-event-enabled",
+        "screen-ema-relationship-fast",
+        "screen-ema-relationship-slow",
+        "screen-ema-relationship-mode",
+        "screen-supertrend-event-enabled",
+      ].forEach((id) => {
+        const node = document.getElementById(id);
+        if (!node || node.dataset.chartOverlayBound === "1") {
+          return;
+        }
+        node.dataset.chartOverlayBound = "1";
+        node.addEventListener("input", scheduleChartTriggerRefresh);
+        node.addEventListener("change", scheduleChartTriggerRefresh);
+      });
+      ["below", "above", "any"].forEach((region) => {
+        const node = document.getElementById(`screen-stoch-cross-region-${region}`);
+        if (!node) return;
+        if (node.dataset.screenRegionBound === "1") {
+          return;
+        }
+        node.dataset.screenRegionBound = "1";
+        node.addEventListener("change", syncScreenFilterStateFromDom);
+      });
+      ["below", "above", "any"].forEach((region) => {
+        const node = document.getElementById(`screen-macd-cross-region-${region}`);
+        if (!node || node.dataset.screenRegionBound === "1") {
+          return;
+        }
+        node.dataset.screenRegionBound = "1";
+        node.addEventListener("change", syncScreenFilterStateFromDom);
+      });
       applyScreenFilters(screenFilters);
+      setChartTAParametersApplied();
     }
 
     function updateTabChrome(tab) {
       const screenerControls = document.getElementById("nav-screener-controls");
+      const chartRangeControls = document.getElementById("nav-chart-range-controls");
       const context = document.getElementById("nav-tab-context");
       if (screenerControls) {
         screenerControls.classList.toggle("hidden", tab !== "screener");
+      }
+      if (chartRangeControls) {
+        chartRangeControls.classList.toggle("hidden", tab === "screener");
       }
       if (!context) {
         return;
       }
       if (tab === "playbook") {
-        context.textContent = "Playbook: tonight's trade list with stops sized to your risk";
-      } else if (tab === "shortlist") {
-        context.textContent = "Shortlist: browse ideas, then open the chart";
-      } else if (tab === "query") {
-        context.textContent = "Query: direct data exploration over the stored backbone";
-      } else if (tab === "backtest") {
-        context.textContent = "Backtester: choose what to evaluate below";
+        context.textContent = "Graph Playground: experiment with visual trade setups";
       } else {
         context.textContent = "Screener: place the event markers, then click Run Screener";
       }
@@ -4149,22 +3688,10 @@
         activeSection.classList.remove('hidden');
       }
       updateTabChrome(tab);
-      if (tab === 'backtest') {
-        updateBacktestRunButtonState();
-      } else if (tab === 'playbook') {
+      if (tab === 'playbook') {
         loadPlaybook().catch((err) => {
           console.warn("Playbook failed to load", err);
         });
-      } else if (tab === 'query') {
-        loadQueryCatalog().catch((err) => {
-          console.warn("Query catalog failed to load", err);
-          setQueryStatus("Could not load query catalog.", "rose");
-        });
-      } else if (tab === 'shortlist') {
-        ensureGuiMarketBackbone({ allowRefresh: false }).catch((err) => {
-          console.warn("Market status check failed", err);
-        });
-        loadShortlist();
       }
     }
 
@@ -4236,7 +3763,7 @@
         });
         startJobProgressPolling("market-refresh", "Global");
         const refreshParams = new URLSearchParams();
-        refreshParams.set("depth", "400");
+        refreshParams.set("depth", "180");
         refreshParams.set("max_workers", "8");
         refreshParams.set("force", "true");
         refreshParams.set("stale_after_days", "0");
@@ -4263,12 +3790,9 @@
           contextPct: 94,
           contextWorking: true,
         });
-        shortlistLoaded = false;
-        shortlistSourceSignature = "";
         playbookLoaded = false;
         playbookSourceSignature = "";
         await loadMarketStatus();
-        await loadShortlist(true);
         if (!document.getElementById("tab-playbook")?.classList.contains("hidden")) {
           await loadPlaybook(true);
         }
@@ -4308,80 +3832,6 @@
         });
         if (shortlistRefreshBtn) {
           shortlistRefreshBtn.disabled = false;
-          syncShortlistRefreshControls();
-        }
-      }
-    }
-
-    async function loadShortlist(forceRefresh = false) {
-      const refreshBtn = document.getElementById("shortlist-refresh-btn");
-      const status = document.getElementById("shortlist-status");
-      const asOfEl = document.getElementById("shortlist-as-of");
-      const buyEl = document.getElementById("shortlist-buy-count");
-      const watchEl = document.getElementById("shortlist-watch-count");
-      const skipEl = document.getElementById("shortlist-skip-count");
-      const universeParams = getUniverseFilterParams();
-      const currentSignature = universeParams.toString();
-      const currentScope = universeParams.get("scan_scope") || "xetra";
-
-      if (shortlistLoaded && !forceRefresh && shortlistSourceSignature === currentSignature) {
-        return;
-      }
-
-      setShortlistEmptyState(forceRefresh ? "Refreshing shortlist snapshot..." : "Loading shortlist snapshot...");
-      if (refreshBtn) {
-        refreshBtn.disabled = true;
-        refreshBtn.textContent = forceRefresh ? `Refreshing ${getActiveSourceLabel(currentScope)}...` : "Loading...";
-      }
-      if (status) {
-        status.textContent = forceRefresh
-          ? `Rebuilding shortlist for ${describeActiveScanScope(currentScope)}...`
-          : `Loading shortlist for ${describeActiveScanScope(currentScope)}...`;
-      }
-
-      try {
-        await ensureGuiMarketBackbone({ allowRefresh: false });
-        universeParams.set("limit", "60");
-        if (forceRefresh) {
-          universeParams.set("refresh", "true");
-        }
-        const url = `/api/shortlist?${universeParams.toString()}`;
-        const resp = await fetch(url);
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.detail || "Shortlist request failed");
-        }
-
-        const rows = Array.isArray(data.rows) ? data.rows : [];
-        shortlistRows = rows;
-        asOfEl.textContent = data.as_of_date || "-";
-        buyEl.textContent = String((data.labels && data.labels.Buy) || 0);
-        watchEl.textContent = String((data.labels && data.labels.Watch) || 0);
-        skipEl.textContent = String((data.labels && data.labels.Skip) || 0);
-
-        if (rows.length === 0) {
-          setShortlistEmptyState("No shortlist artifacts were available yet.");
-          shortlistSourceSignature = currentSignature;
-          shortlistLoaded = true;
-          return;
-        }
-
-        renderShortlistRows();
-        if (status) {
-          const sourceCount = Number(data.source_count || 0);
-          status.textContent = `Snapshot date: ${data.as_of_date || "unknown"} • ${describeActiveScanScope(currentScope)}${sourceCount > 0 ? ` • ${sourceCount} source tickers` : ""}`;
-        }
-        shortlistSourceSignature = currentSignature;
-        shortlistLoaded = true;
-      } catch (err) {
-        setShortlistEmptyState(`Shortlist error: ${err.message || err}`);
-        if (status) {
-          status.textContent = "Shortlist load failed";
-        }
-      } finally {
-        if (refreshBtn) {
-          refreshBtn.disabled = false;
-          syncShortlistRefreshControls();
         }
       }
     }
@@ -5891,6 +5341,8 @@
     let navScanProgressPoller = null;
     let navScanProgressJob = null;
     let lastScreenMatches = [];
+    let lastScreenCandidatePool = [];
+    let lastScreenScanFilters = null;
     let lastScreenMeta = {
       strategy_name: "",
       preset_name: "",
@@ -5905,6 +5357,8 @@
       presets: [],
     };
     let screenFilters = JSON.parse(JSON.stringify(SCREEN_DEFAULT_FILTERS));
+    let appliedChartTAParameters = null;
+    let chartTriggerRefreshTimer = null;
     let exportTopMatchesInFlight = false;
     const LAST_COMPLETED_STRATEGY_KEY = "etf-discovery:last-completed-strategy";
 
@@ -6293,6 +5747,109 @@
         disqualifiers: normalizeScreenDisqualifiers(meta.disqualifiers || screenDisqualifiers),
       };
       syncExportMatchesButtonState();
+    }
+
+    function projectCachedScreenResults(filters = screenFilters) {
+      if (!Array.isArray(lastScreenCandidatePool) || lastScreenCandidatePool.length === 0) {
+        return null;
+      }
+      const eventSpecs = [
+        { enabled: "macd_event_enabled", age: "macd_event_age", value: "macd_cross_days_ago", label: "MACD" },
+        { enabled: "rsi_event_enabled", age: "rsi_event_age", value: "rsi_cross_days_ago", label: "RSI" },
+        { enabled: "stoch_event_enabled", age: "stoch_event_age", value: "stoch_cross_days_ago", label: "StochRSI" },
+        { enabled: "supertrend_event_enabled", age: "supertrend_event_age", value: "supertrend_cross_days_ago", label: "Supertrend" },
+      ];
+      const matches = lastScreenCandidatePool.filter((item) => {
+        const avgVolume = Number(item.recent_avg_volume || 0);
+        if (avgVolume < Number(filters.volume_range?.min || 0) || avgVolume > Number(filters.volume_range?.max || 0)) {
+          return false;
+        }
+        for (const [period, key] of [[20, "ema_slope_20"], [50, "ema_slope_50"], [200, "ema_slope_200"]]) {
+          const selected = String(filters[key] || "any");
+          if (selected !== "any" && selected !== String(item[`ema_slope_${period}_state`] || "unknown")) {
+            return false;
+          }
+        }
+        return eventSpecs.every((spec) => {
+          if (!filters[spec.enabled]) return true;
+          const rawAge = item[spec.value];
+          const age = Number(rawAge);
+          return rawAge !== null && rawAge !== undefined
+            && Number.isFinite(age) && age <= Number(filters[spec.age] || 0);
+        });
+      }).map((item) => {
+        const activeEvents = eventSpecs
+          .filter((spec) => filters[spec.enabled])
+          .map((spec) => ({ label: spec.label, age: Number(item[spec.value]) }))
+          .sort((a, b) => b.age - a.age);
+        const sequence = activeEvents.map((event) => event.label).join(" -> ") || "Volume only";
+        const totalAge = activeEvents.reduce((sum, event) => sum + event.age, 0);
+        const rsi = Number(item.rsi || 0);
+        const rsiLevel = Number(filters.rsi_cross_value || 50);
+        const score = Math.round((Math.max(0, Number(filters.lookback_days || 30) * 3 - totalAge)
+          + Math.min(18, Math.log10(Math.max(Number(item.recent_avg_volume || 1), 1)) * 3)
+          + (filters.rsi_event_enabled ? Math.max(0, 18 - Math.abs(rsi - rsiLevel)) : 0)) * 100) / 100;
+        return {
+          ...item,
+          event_sequence: sequence,
+          status: activeEvents.length ? "Sequence aligned" : "Volume aligned",
+          score,
+          macd_event_enabled: Boolean(filters.macd_event_enabled),
+          rsi_event_enabled: Boolean(filters.rsi_event_enabled),
+          stoch_event_enabled: Boolean(filters.stoch_event_enabled),
+        };
+      });
+      return matches.sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+    }
+
+    function canProjectScreenFiltersLocally(filters = screenFilters) {
+      if (!lastScreenScanFilters) return false;
+      const localKeys = [
+        "volume_range", "macd_event_enabled", "rsi_event_enabled", "stoch_event_enabled",
+        "supertrend_event_enabled", "macd_event_age", "rsi_event_age", "stoch_event_age", "supertrend_event_age",
+        "ema_slope_20", "ema_slope_50", "ema_slope_200",
+      ];
+      const comparable = (value) => JSON.stringify(value);
+      const scan = lastScreenScanFilters;
+      return Object.keys(filters).every((key) => localKeys.includes(key)
+        || comparable(filters[key]) === comparable(scan[key]));
+    }
+
+    function refreshScreenProjection() {
+      if (!canProjectScreenFiltersLocally(screenFilters)) return false;
+      const projected = projectCachedScreenResults(screenFilters);
+      if (!projected) return false;
+      const list = document.getElementById("ticker-list");
+      const count = document.getElementById("match-count");
+      if (count) count.textContent = String(projected.length);
+      if (list) {
+        const visibleMatches = projected.slice(0, 100);
+        list.innerHTML = visibleMatches.length
+          ? ""
+          : '<div class="text-sm text-slate-400 italic p-4 text-center">No matching tickers for the current controls.</div>';
+        if (projected.length > visibleMatches.length) {
+          const notice = document.createElement("div");
+          notice.className = "mb-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-700";
+          notice.textContent = `Showing the top 100 of ${projected.length} matches.`;
+          list.appendChild(notice);
+        }
+        visibleMatches.forEach((item, idx) => {
+          const card = document.createElement("div");
+          card.className = "ticker-card p-3 bg-slate-50 border-l-4 border-indigo-500 rounded shadow-sm hover:shadow-md hover:bg-indigo-50 cursor-pointer transition-all";
+          card.onclick = () => loadChart(item.ticker);
+          const change = Number(item.change_pct || 0);
+          card.innerHTML = `
+            <div class="flex justify-between items-start">
+              <div class="flex flex-col"><div class="flex items-baseline gap-1.5"><span class="font-bold text-slate-800 text-lg leading-none">${escapeHtml(item.ticker)}</span><span class="text-[10px] font-bold text-indigo-400">#${idx + 1}</span></div><span class="mt-1 text-[11px] text-slate-500">${escapeHtml(item.name || "")}</span><span class="text-[10px] text-indigo-600 mt-1 uppercase tracking-wider">${escapeHtml(item.status || "TRENDING")}</span></div>
+              <div class="flex flex-col items-end"><span class="text-slate-800 font-bold font-mono">${Number(item.close || 0).toFixed(2)}</span><span class="text-[10px] ${change >= 0 ? "text-emerald-500" : "text-rose-500"} font-mono">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</span></div>
+            </div>
+            <div class="mt-2 text-[11px] font-semibold text-rose-700">${escapeHtml(item.event_sequence || "Event sequence")}</div>
+            <div class="mt-2 grid grid-cols-3 gap-2 rounded-lg bg-slate-100/80 px-2 py-2 text-[10px] font-semibold text-slate-500"><div>RSI <span class="block text-sm font-bold text-slate-800">${Number(item.rsi || 0).toFixed(1)}</span></div><div>VOL20 <span class="block text-sm font-bold text-slate-800">${formatCompactVolume(Number(item.recent_avg_volume || item.volume || 0))}</span></div><div>SCORE <span class="block text-sm font-bold text-slate-800">${Number(item.score || 0).toFixed(1)}</span></div></div>`;
+          list.appendChild(card);
+        });
+      }
+      setLastScreenMatches(projected, lastScreenMeta);
+      return true;
     }
 
     async function exportTopMatchesToGoogleDrive(autoTriggered = false) {
@@ -6754,6 +6311,8 @@
           ticker_list: universeParams.get("ticker_list") || "",
           disqualifiers: screenDisqualifiers,
         });
+        lastScreenCandidatePool = [];
+        lastScreenScanFilters = null;
         console.log("Screen scan starting with URL:", url);
         console.log("Current strategy:", currentStrategy);
 
@@ -6850,6 +6409,10 @@
             ticker_list: universeParams.get("ticker_list") || "",
             disqualifiers: screenDisqualifiers,
           });
+          lastScreenCandidatePool = Array.isArray(rawData.candidate_pool)
+            ? rawData.candidate_pool.slice()
+            : [];
+          lastScreenScanFilters = normalizeScreenFiltersClient(rawData.filters || screenFilters);
 
           if (screenAutoExportEnabled && matches.length > 0) {
             try {
@@ -6980,6 +6543,101 @@
       }
     }
 
+    function getChartTAParameters() {
+      const read = (id, fallback) => {
+        const value = Number(document.getElementById(id)?.value);
+        return Number.isFinite(value) ? Math.round(value) : fallback;
+      };
+      return {
+        macd_fast: read("chart-macd-fast", 12),
+        macd_slow: read("chart-macd-slow", 26),
+        macd_signal: read("chart-macd-signal", 9),
+        rsi_period: read("chart-rsi-period", 14),
+        stoch_rsi_period: read("chart-stoch-rsi-period", 14),
+        stoch_rsi_k: read("chart-stoch-rsi-k", 3),
+        stoch_rsi_d: read("chart-stoch-rsi-d", 3),
+        supertrend_period: read("chart-supertrend-period", 10),
+        supertrend_multiplier: Number(document.getElementById("chart-supertrend-multiplier")?.value || 3),
+        rsi_trigger: read("screen-rsi-cross-value", 50),
+        stoch_trigger: read("screen-stoch-cross-value", 20),
+      };
+    }
+
+    function getAppliedChartTAParameters() {
+      const params = getChartTAParameters();
+      return Object.fromEntries(CHART_TA_PARAMETER_KEYS.map((key) => [key, params[key]]));
+    }
+
+    function setChartTAParametersApplied() {
+      appliedChartTAParameters = getAppliedChartTAParameters();
+      updateChartTAApplyButton();
+    }
+
+    function updateChartTAApplyButton() {
+      const button = document.getElementById("chart-ta-apply-btn");
+      if (!button || !appliedChartTAParameters) {
+        return;
+      }
+      button.disabled = JSON.stringify(getAppliedChartTAParameters()) === JSON.stringify(appliedChartTAParameters);
+    }
+
+    function saveChartTAParameters(params) {
+      try {
+        localStorage.setItem(LAST_CHART_TA_PARAMS_KEY, JSON.stringify(params));
+      } catch (err) {
+        // Ignore storage failures in privacy-restricted environments.
+      }
+    }
+
+    function restoreChartTAParameters() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(LAST_CHART_TA_PARAMS_KEY) || "null");
+        if (!raw || typeof raw !== "object") {
+          return;
+        }
+        const fields = {
+          macd_fast: "chart-macd-fast",
+          macd_slow: "chart-macd-slow",
+          macd_signal: "chart-macd-signal",
+          rsi_period: "chart-rsi-period",
+          stoch_rsi_period: "chart-stoch-rsi-period",
+          stoch_rsi_k: "chart-stoch-rsi-k",
+          stoch_rsi_d: "chart-stoch-rsi-d",
+          supertrend_period: "chart-supertrend-period",
+          supertrend_multiplier: "chart-supertrend-multiplier",
+        };
+        Object.entries(fields).forEach(([key, id]) => {
+          const node = document.getElementById(id);
+          if (node && raw[key] !== undefined) {
+            node.value = raw[key];
+          }
+        });
+      } catch (err) {
+        // Ignore malformed saved settings.
+      }
+    }
+
+    function applyChartTAParameters() {
+      saveChartTAParameters(getChartTAParameters());
+      setChartTAParametersApplied();
+      if (currentTicker) {
+        loadChart(currentTicker);
+      }
+    }
+
+    function scheduleChartTriggerRefresh() {
+      if (!currentTicker) {
+        return;
+      }
+      if (chartTriggerRefreshTimer) {
+        clearTimeout(chartTriggerRefreshTimer);
+      }
+      chartTriggerRefreshTimer = setTimeout(() => {
+        chartTriggerRefreshTimer = null;
+        loadChart(currentTicker);
+      }, 250);
+    }
+
     async function loadChart(ticker, strategyOverride = "") {
       console.log("loadChart starting for", ticker);
       currentTicker = ticker;
@@ -7011,8 +6669,16 @@
         syncStrategySelections(preferredStrategy, { syncBacktestCheckboxes: false });
         currentStrategy = preferredStrategy;
       }
-        const strategyPart = strategyName ? `&strategy=${encodeURIComponent(strategyName)}` : "";
-        const url = `/api/chart/${ticker}?days=${currentDays}${strategyPart}`;
+        const taParams = getChartTAParameters();
+        const chartQuery = new URLSearchParams({ days: String(currentDays), ...taParams });
+        chartQuery.set("ema_relationship_enabled", screenFilters.ema_relationship_enabled ? "true" : "false");
+        chartQuery.set("ema_relationship_fast", String(screenFilters.ema_relationship_fast));
+        chartQuery.set("ema_relationship_slow", String(screenFilters.ema_relationship_slow));
+        chartQuery.set("supertrend_event_enabled", screenFilters.supertrend_event_enabled ? "true" : "false");
+        if (strategyName) {
+          chartQuery.set("strategy", strategyName);
+        }
+        const url = `/api/chart/${ticker}?${chartQuery.toString()}`;
         console.info("loadChart request URL", url);
         const resp = await fetch(url);
         const responseData = await resp.json();
@@ -7068,14 +6734,22 @@
             if (figData.layout[key].visible === undefined) {
               figData.layout[key].visible = true;
             }
-            if (figData.layout[key].tickfont === undefined) {
-              figData.layout[key].tickfont = {
-                size: 11,
-                color: "#334155",
-              };
-            }
+          if (figData.layout[key].tickfont === undefined) {
+            figData.layout[key].tickfont = {
+              size: 11,
+              color: "#334155",
+            };
           }
-        });
+          figData.layout[key].showspikes = true;
+          figData.layout[key].spikemode = "across";
+          figData.layout[key].spikesnap = "cursor";
+          figData.layout[key].spikethickness = 1;
+          figData.layout[key].spikecolor = "#64748b";
+        }
+      });
+      figData.layout.hovermode = "x unified";
+      figData.layout.hoverdistance = -1;
+      figData.layout.spikedistance = -1;
 
         chartDiv.innerHTML = "";
         await Plotly.newPlot(chartDiv, figData.data, figData.layout, {
@@ -7172,6 +6846,12 @@
 
     // Initialize
     const dashboardReadyPromise = (async function initializeDashboard() {
+      const taControls = document.getElementById("chart-ta-controls");
+      const taSlot = document.getElementById("screen-ta-controls-slot");
+      if (taControls && taSlot) {
+        taSlot.appendChild(taControls);
+      }
+      restoreChartTAParameters();
       const restoredStrategy = await restoreLastCompletedStrategy();
       if (restoredStrategy) {
         console.info("Restored last completed strategy", restoredStrategy);
@@ -7185,7 +6865,6 @@
       bindBacktestStrategyChooserControls();
       bindBacktestRaceControls();
       renderBacktestRace();
-      updateQueryControls();
       updateBacktestStrategyCount();
       syncBacktestStrategyCheckboxChrome();
       bindScreenControlInputs();
@@ -7203,6 +6882,7 @@
         console.warn("Could not load screener presets", err);
         applyScreenFilters(SCREEN_DEFAULT_FILTERS);
       }
+      setChartTAParametersApplied();
       syncExportMatchesButtonState();
     })();
 
@@ -7219,10 +6899,7 @@
       openListEditorModal,
       handleBacktestStrategyChooserChange,
       loadBacktestMetrics,
-      openQueryTickerChart,
-      loadQueryResults,
       loadPlaybook,
-      loadShortlist,
       mergeBacktestScatterRows,
       prepareBacktestLiveResults,
       renderBacktestScatter,
@@ -7251,12 +6928,10 @@
       setScreenAutoExportEnabled,
       setScreenDisqualifier,
       setRange,
-      updateQueryControls,
       startJobProgressPolling,
       stopJobProgressPolling,
       dashboardReadyPromise,
       deleteListEditorSelection,
-      setShortlistFilter,
       showTab,
       testMe,
       toggleStrategyPanel,
