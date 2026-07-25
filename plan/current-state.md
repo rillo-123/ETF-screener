@@ -1,5 +1,11 @@
 # Current state
 
+## Event-stack timeline milestone — 2026-07-25
+
+- The Screener timeline stack now supports explicit up/down event ordering, chronological slider constraints, relative event markers, active-row highlighting, and repeated Left/Right keyboard adjustment.
+- The first event retains an absolute “days ago” position; subsequent events visually progress toward today while preserving their absolute readouts.
+- This interaction is now suitable for composing and testing dip-confirmation sequences across larger universes such as Nasdaq.
+
 - -Summary
 
 - -Summary

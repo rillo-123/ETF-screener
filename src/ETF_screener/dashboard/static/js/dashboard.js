@@ -3047,23 +3047,130 @@
     }
 
     function getScreenEventReadiness(filters = screenFilters) {
-      return [
-        filters.rsi_event_enabled
+      const eventDefinitions = {
+        rsi: filters.rsi_event_enabled
           ? { label: `RSI ${getRsiModeShortLabel(filters.rsi_cross_mode)}`, age: Number(filters.rsi_event_age || 0) }
           : null,
-        filters.macd_event_enabled
+        macd: filters.macd_event_enabled
           ? { label: `MACD ${getMacdModeShortLabel(filters.macd_cross_mode)}`, age: Number(filters.macd_event_age || 0) }
           : null,
-        filters.stoch_event_enabled
+        stoch: filters.stoch_event_enabled
           ? { label: `StochRSI ${getStochModeShortLabel(filters.stoch_cross_mode)}`, age: Number(filters.stoch_event_age || 0) }
           : null,
-        filters.supertrend_event_enabled
+        supertrend: filters.supertrend_event_enabled
           ? { label: `Supertrend ${filters.supertrend_cross_mode === "green_to_red" ? "green to red" : "red to green"}`, age: Number(filters.supertrend_event_age || 0) }
           : null,
-        filters.ema_relationship_enabled
+        ema_relationship: filters.ema_relationship_enabled
           ? { label: `EMA ${filters.ema_relationship_fast}/${filters.ema_relationship_slow} cross`, age: Number(filters.ema_relationship_age || 0) }
           : null,
-      ].filter(Boolean).sort((left, right) => right.age - left.age);
+      };
+      return screenEventOrder
+        .map((key) => eventDefinitions[key] ? { key, ...eventDefinitions[key] } : null)
+        .filter(Boolean);
+    }
+
+    function reorderTimelineSteps() {
+      const stack = document.getElementById("screen-sequence-badges")?.parentElement;
+      if (!stack) return;
+      screenEventOrder.forEach((key) => {
+        const step = document.getElementById(`screen-${key === "ema_relationship" ? "ema-relationship" : key}-event-step`);
+        if (step) stack.appendChild(step);
+      });
+    }
+
+    function getTimelineSliderId(key) {
+      return key === "ema_relationship"
+        ? "screen-ema-relationship-age"
+        : `screen-${key}-cross-age`;
+    }
+
+    function syncTimelineAgeConstraints({ clampValues = true } = {}) {
+      let previousSliderValue = 0;
+      screenEventOrder.forEach((key) => {
+        const slider = document.getElementById(getTimelineSliderId(key));
+        if (!slider) return;
+        if (clampValues && Number(slider.value) < previousSliderValue) {
+          slider.value = String(previousSliderValue);
+        }
+        previousSliderValue = Number(slider.value || 0);
+      });
+    }
+
+    function syncTimelineMoveButtons() {
+      document.querySelectorAll("[data-screen-event-move]").forEach((button) => {
+        const index = screenEventOrder.indexOf(button.dataset.screenEventMove);
+        button.disabled = button.dataset.direction === "up" ? index <= 0 : index < 0 || index >= screenEventOrder.length - 1;
+      });
+    }
+
+    function updateRelativeTimelineVisuals(filters = screenFilters) {
+      const enabledOrder = getScreenEventReadiness(filters).map((item) => item.key);
+      const firstKey = enabledOrder[0];
+      const lookback = Math.max(1, Number(filters.lookback_days || SCREEN_DEFAULT_FILTERS.lookback_days));
+      const firstAge = firstKey ? Number(getScreenEventReadiness(filters).find((item) => item.key === firstKey)?.age || 0) : 0;
+      const firstPosition = ((lookback - firstAge) / lookback) * 100;
+
+      screenEventOrder.forEach((key) => {
+        const slider = document.getElementById(getTimelineSliderId(key));
+        const track = slider?.closest(".screen-range-track");
+        if (!slider || !track) return;
+        const marker = track.querySelector(".screen-relative-age-marker");
+        const relativeIndex = enabledOrder.indexOf(key);
+        if (!firstKey || relativeIndex <= 0) {
+          slider.classList.remove("screen-relative-age-input");
+          track.classList.remove("screen-relative-age-track");
+          marker?.remove();
+          return;
+        }
+        slider.classList.add("screen-relative-age-input");
+        track.classList.add("screen-relative-age-track");
+        const age = Number(getScreenEventReadiness(filters).find((item) => item.key === key)?.age || 0);
+        const position = firstAge > 0
+          ? firstPosition + ((firstAge - age) / firstAge) * (100 - firstPosition)
+          : firstPosition;
+        const nextMarker = marker || document.createElement("span");
+        nextMarker.className = "screen-relative-age-marker";
+        nextMarker.style.left = `${Math.max(firstPosition, Math.min(100, position))}%`;
+        nextMarker.setAttribute("aria-hidden", "true");
+        if (!marker) track.appendChild(nextMarker);
+      });
+    }
+
+    function moveScreenEvent(key, direction) {
+      const index = screenEventOrder.indexOf(key);
+      const targetIndex = index + (direction === "up" ? -1 : 1);
+      if (index < 0 || targetIndex < 0 || targetIndex >= screenEventOrder.length) return;
+      const currentSlider = document.getElementById(getTimelineSliderId(key));
+      const targetKey = screenEventOrder[targetIndex];
+      const targetSlider = document.getElementById(getTimelineSliderId(targetKey));
+      if (currentSlider && targetSlider) {
+        [currentSlider.value, targetSlider.value] = [targetSlider.value, currentSlider.value];
+      }
+      [screenEventOrder[index], screenEventOrder[targetIndex]] = [screenEventOrder[targetIndex], screenEventOrder[index]];
+      reorderTimelineSteps();
+      syncTimelineAgeConstraints();
+      syncScreenFilterStateFromDom();
+    }
+
+    function getTimelineStepKey(step) {
+      const id = String(step?.id || "");
+      const match = id.match(/^screen-(.+)-event-step$/);
+      return match ? (match[1] === "ema-relationship" ? "ema_relationship" : match[1]) : "";
+    }
+
+    function selectTimelineEvent(key) {
+      screenActiveEventKey = screenEventOrder.includes(key) ? key : "";
+      document.querySelectorAll(".screen-timeline-step").forEach((step) => {
+        step.classList.toggle("is-active", getTimelineStepKey(step) === screenActiveEventKey);
+      });
+    }
+
+    function adjustActiveTimelineEvent(delta) {
+      const slider = document.getElementById(getTimelineSliderId(screenActiveEventKey));
+      if (!slider) return;
+      slider.value = String(Math.max(0, Math.min(Number(slider.max || 0), Number(slider.value || 0) + delta)));
+      syncTimelineAgeConstraints();
+      syncScreenFilterStateFromDom();
     }
 
     function updateTimelineStepPositions(filters = screenFilters) {
@@ -3074,11 +3181,15 @@
       }
       if (badges.length === 0) {
         node.innerHTML = '<span class="rounded-full bg-white/85 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Volume only</span>';
+        syncTimelineMoveButtons();
+        updateRelativeTimelineVisuals(filters);
         return;
       }
       node.innerHTML = badges
         .map((item) => `<span class="rounded-full bg-white/85 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-rose-700">${escapeHtml(item.label)} ${escapeHtml(formatEventAge(item.age))}</span>`)
         .join("");
+      syncTimelineMoveButtons();
+      updateRelativeTimelineVisuals(filters);
     }
 
     function updateTimelineTrackBounds(lookbackDays) {
@@ -3088,6 +3199,7 @@
           node.max = String(lookbackDays);
         }
       });
+      syncTimelineAgeConstraints({ clampValues: false });
       const leftLabel = `${Math.round(lookbackDays)}d ago`;
       ["screen-rsi-axis-left", "screen-macd-axis-left", "screen-stoch-axis-left", "screen-supertrend-axis-left"].forEach((id) => {
         const node = document.getElementById(id);
@@ -3209,6 +3321,8 @@
       setEventSliderValue("screen-stoch-cross-age", screenFilters.stoch_event_age, screenFilters.lookback_days);
         setEventSliderValue("screen-supertrend-cross-age", screenFilters.supertrend_event_age, screenFilters.lookback_days);
       setEventSliderValue("screen-ema-relationship-age", screenFilters.ema_relationship_age, screenFilters.lookback_days);
+      reorderTimelineSteps();
+      syncTimelineAgeConstraints();
       [
         ["screen-ema-20-slope", screenFilters.ema_slope_20],
         ["screen-ema-50-slope", screenFilters.ema_slope_50],
@@ -3516,6 +3630,7 @@
         }
         node.dataset.bound = "1";
         node.addEventListener("input", () => {
+          syncTimelineAgeConstraints();
           const readoutIdBySlider = {
             "screen-macd-cross-age": "screen-macd-cross-readout",
             "screen-rsi-cross-age": "screen-rsi-cross-readout",
@@ -3529,7 +3644,41 @@
           }
           syncScreenFilterStateFromDom();
         });
+        const sliderKey = screenEventOrder.find((key) => getTimelineSliderId(key) === id);
+        if (sliderKey) {
+          node.addEventListener("focus", () => selectTimelineEvent(sliderKey));
+        }
       });
+      document.querySelectorAll("[data-screen-event-move]").forEach((button) => {
+        if (button.dataset.screenMoveBound === "1") return;
+        button.dataset.screenMoveBound = "1";
+        button.addEventListener("click", () => moveScreenEvent(button.dataset.screenEventMove, button.dataset.direction));
+      });
+      document.querySelectorAll(".screen-timeline-step").forEach((step) => {
+        if (step.dataset.timelineSelectionBound === "1") return;
+        step.dataset.timelineSelectionBound = "1";
+        const key = getTimelineStepKey(step);
+        step.tabIndex = 0;
+        step.addEventListener("click", (event) => {
+          selectTimelineEvent(key);
+          if (!event.target.closest("input, select, button")) {
+            step.focus({ preventScroll: true });
+          }
+        });
+        step.addEventListener("focusin", () => selectTimelineEvent(key));
+      });
+      if (document.documentElement.dataset.timelineKeyboardBound !== "1") {
+        document.documentElement.dataset.timelineKeyboardBound = "1";
+        document.addEventListener("keydown", (event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          const activeStep = document.getElementById(`screen-${screenActiveEventKey === "ema_relationship" ? "ema-relationship" : screenActiveEventKey}-event-step`);
+          const target = event.target;
+          if (!activeStep || (target !== document.body && target !== activeStep && !activeStep.contains(target))) return;
+          event.preventDefault();
+          adjustActiveTimelineEvent(event.key === "ArrowLeft" ? -1 : 1);
+        });
+      }
+      selectTimelineEvent(screenActiveEventKey);
       [
         "chart-macd-fast",
         "chart-macd-slow",
@@ -5357,6 +5506,8 @@
       presets: [],
     };
     let screenFilters = JSON.parse(JSON.stringify(SCREEN_DEFAULT_FILTERS));
+    let screenEventOrder = ["rsi", "macd", "stoch", "supertrend", "ema_relationship"];
+    let screenActiveEventKey = "rsi";
     let appliedChartTAParameters = null;
     let chartTriggerRefreshTimer = null;
     let exportTopMatchesInFlight = false;

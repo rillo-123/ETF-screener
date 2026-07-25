@@ -1,6 +1,16 @@
 
 # Progress
 
+## 2026-07-25 — Event-stack timeline milestone
+
+- Added up/down controls to every screener event-stack member so users can explicitly define chronological event order.
+- Enforced chronology in the timeline controls: events below cannot be moved earlier than the event above, and moving rows swaps their timeline positions.
+- Added a relative timeline visualization: the first event keeps its absolute age slider, while later events are shown progressively toward today according to their relative timing.
+- Added active-event selection with a visible border and repeated Left/Right arrow-key adjustment in one-day increments.
+- Verified the dashboard API tests, JavaScript syntax, and diff formatting; the focused Playwright run passed 5 tests with 1 unrelated existing backtest-header failure.
+- Current status: the event stack is usable as a visual sequence builder for identifying viable dip setups.
+- Next resume point: test the interaction on broader universes and refine the relative timeline spacing if needed.
+
 ## 2026-07-22 21:50:20 +02:00
 
 - -Summary

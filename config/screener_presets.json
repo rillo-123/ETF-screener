@@ -1,5 +1,5 @@
 {
-  "active_name": "ema",
+  "active_name": "rsi-down-nasdaq",
   "presets": [
     {
       "filters": {
@@ -17,13 +17,11 @@
           "supertrend_period": 10
         },
         "ema_relationship_age": 30,
+        "ema_relationship_allowance": 0.1,
         "ema_relationship_enabled": false,
         "ema_relationship_fast": 10,
-        "ema_relationship_lookback": 5,
-        "ema_relationship_mode": "diverging",
         "ema_relationship_slope": "positive",
         "ema_relationship_slow": 20,
-        "ema_relationship_tolerance": 0.1,
         "ema_slope_20": "any",
         "ema_slope_200": "any",
         "ema_slope_50": "any",
@@ -68,13 +66,11 @@
           "supertrend_period": 10
         },
         "ema_relationship_age": 30,
+        "ema_relationship_allowance": 0.1,
         "ema_relationship_enabled": false,
         "ema_relationship_fast": 10,
-        "ema_relationship_lookback": 5,
-        "ema_relationship_mode": "diverging",
         "ema_relationship_slope": "positive",
         "ema_relationship_slow": 20,
-        "ema_relationship_tolerance": 0.1,
         "ema_slope_20": "any",
         "ema_slope_200": "any",
         "ema_slope_50": "any",
@@ -119,13 +115,11 @@
           "supertrend_period": 10
         },
         "ema_relationship_age": 30,
+        "ema_relationship_allowance": 0.1,
         "ema_relationship_enabled": false,
         "ema_relationship_fast": 10,
-        "ema_relationship_lookback": 5,
-        "ema_relationship_mode": "diverging",
         "ema_relationship_slope": "positive",
         "ema_relationship_slow": 20,
-        "ema_relationship_tolerance": 0.1,
         "ema_slope_20": "any",
         "ema_slope_200": "any",
         "ema_slope_50": "any",
@@ -170,13 +164,11 @@
           "supertrend_period": 10
         },
         "ema_relationship_age": 30,
+        "ema_relationship_allowance": 0.1,
         "ema_relationship_enabled": false,
         "ema_relationship_fast": 10,
-        "ema_relationship_lookback": 5,
-        "ema_relationship_mode": "diverging",
         "ema_relationship_slope": "positive",
         "ema_relationship_slow": 20,
-        "ema_relationship_tolerance": 0.1,
         "ema_slope_20": "any",
         "ema_slope_200": "any",
         "ema_slope_50": "any",
@@ -221,13 +213,11 @@
           "supertrend_period": 10
         },
         "ema_relationship_age": 9,
+        "ema_relationship_allowance": 0.1,
         "ema_relationship_enabled": true,
         "ema_relationship_fast": 10,
-        "ema_relationship_lookback": 5,
-        "ema_relationship_mode": "diverging",
         "ema_relationship_slope": "positive",
         "ema_relationship_slow": 20,
-        "ema_relationship_tolerance": 0.1,
         "ema_slope_20": "any",
         "ema_slope_200": "any",
         "ema_slope_50": "any",
@@ -255,8 +245,57 @@
         }
       },
       "name": "ema"
+    },
+    {
+      "filters": {
+        "chart_ta": {
+          "macd_fast": 12,
+          "macd_signal": 9,
+          "macd_slow": 26,
+          "rsi_period": 14,
+          "rsi_trigger": 30,
+          "stoch_rsi_d": 3,
+          "stoch_rsi_k": 3,
+          "stoch_rsi_period": 14,
+          "stoch_trigger": 20,
+          "supertrend_multiplier": 3,
+          "supertrend_period": 10
+        },
+        "ema_relationship_age": 3,
+        "ema_relationship_allowance": 0.1,
+        "ema_relationship_enabled": false,
+        "ema_relationship_fast": 10,
+        "ema_relationship_slope": "positive",
+        "ema_relationship_slow": 20,
+        "ema_slope_20": "any",
+        "ema_slope_200": "any",
+        "ema_slope_50": "any",
+        "ema_slope_flat_tolerance": 0.1,
+        "ema_slope_lookback": 5,
+        "lookback_days": 30,
+        "macd_cross_mode": "low_cross_buy",
+        "macd_event_age": 3,
+        "macd_event_enabled": false,
+        "rsi_cross_mode": "cross_down",
+        "rsi_cross_value": 30.0,
+        "rsi_event_age": 3,
+        "rsi_event_enabled": true,
+        "stoch_cross_mode": "cross_up",
+        "stoch_cross_region": "below",
+        "stoch_cross_value": 20.0,
+        "stoch_event_age": 3,
+        "stoch_event_enabled": false,
+        "supertrend_cross_mode": "red_to_green",
+        "supertrend_event_age": 3,
+        "supertrend_event_enabled": false,
+        "volume_range": {
+          "max": 20000000.0,
+          "min": 2100000.0
+        }
+      },
+      "name": "rsi-down-nasdaq"
     }
   ],
   "schema_version": "screen_presets_v1",
-  "updated_at": "2026-07-22T11:11:08.136506+00:00"
+  "updated_at": "2026-07-25T10:58:56.546550+00:00"
 }

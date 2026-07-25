@@ -478,6 +478,11 @@
       padding: 0.7rem 0.85rem 0.65rem;
     }
 
+    .screen-timeline-step.is-active {
+      border-color: rgba(225, 29, 72, 0.7);
+      box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.12), 0 8px 18px rgba(190, 24, 93, 0.08);
+    }
+
     .screen-timeline-step-header {
       display: flex;
       align-items: center;
@@ -511,6 +516,62 @@
     .screen-timeline-step-header .screen-timeline-step-title {
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .screen-timeline-step-move {
+      display: inline-flex;
+      flex: 0 0 auto;
+      gap: 0.2rem;
+      margin-left: auto;
+    }
+
+    .screen-timeline-step-move button {
+      width: 1.55rem;
+      height: 1.45rem;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      border-radius: 0.4rem;
+      background: #fff;
+      color: #475569;
+      font-size: 0.85rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .screen-timeline-step-move button:hover:not(:disabled) {
+      border-color: #fb7185;
+      background: #fff1f2;
+      color: #be123c;
+    }
+
+    .screen-timeline-step-move button:disabled {
+      cursor: not-allowed;
+      opacity: 0.3;
+    }
+
+    .screen-relative-age-track {
+      position: relative;
+    }
+
+    .screen-relative-age-input::-webkit-slider-thumb {
+      opacity: 0;
+    }
+
+    .screen-relative-age-input::-moz-range-thumb {
+      opacity: 0;
+    }
+
+    .screen-relative-age-marker {
+      position: absolute;
+      top: 50%;
+      z-index: 2;
+      width: 0.9rem;
+      height: 0.9rem;
+      border: 2px solid #fff;
+      border-radius: 999px;
+      background: #e11d48;
+      box-shadow: 0 1px 4px rgba(190, 24, 93, 0.35);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
     }
 
     .screen-timeline-step-controls {
@@ -997,7 +1058,11 @@
                 <div class="screen-timeline-step-label">RSI Event</div>
                 <div class="screen-timeline-step-title text-sm font-bold text-slate-900">RSI Cross Point</div>
                 <div id="screen-rsi-mode-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">Cross Up</div>
-                <div id="screen-rsi-cross-readout" class="ml-auto text-right text-xs font-bold text-sky-700">90d ago</div>
+                <div id="screen-rsi-cross-readout" class="text-right text-xs font-bold text-sky-700">90d ago</div>
+                <div class="screen-timeline-step-move" aria-label="Move RSI event in timeline">
+                  <button type="button" data-screen-event-move="rsi" data-direction="up" aria-label="Move RSI event up">↑</button>
+                  <button type="button" data-screen-event-move="rsi" data-direction="down" aria-label="Move RSI event down">↓</button>
+                </div>
               </div>
               <div class="screen-timeline-step-controls">
                 <label class="screen-timeline-trigger">
@@ -1027,7 +1092,11 @@
                 <div class="screen-timeline-step-label">MACD Event</div>
                 <div class="screen-timeline-step-title text-sm font-bold text-slate-900">MACD Cross Point</div>
                 <div id="screen-macd-mode-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">MACD/Signal bullish cross below zero</div>
-                <div id="screen-macd-cross-readout" class="ml-auto text-right text-xs font-bold text-sky-700">45d ago</div>
+                <div id="screen-macd-cross-readout" class="text-right text-xs font-bold text-sky-700">45d ago</div>
+                <div class="screen-timeline-step-move" aria-label="Move MACD event in timeline">
+                  <button type="button" data-screen-event-move="macd" data-direction="up" aria-label="Move MACD event up">↑</button>
+                  <button type="button" data-screen-event-move="macd" data-direction="down" aria-label="Move MACD event down">↓</button>
+                </div>
               </div>
               <div class="screen-timeline-step-controls">
                 <label class="screen-timeline-type screen-macd-type block">
@@ -1059,7 +1128,11 @@
                 <div class="screen-timeline-step-label">StochRSI Event</div>
                 <div class="screen-timeline-step-title text-sm font-bold text-slate-900">StochRSI Cross Point</div>
                 <div id="screen-stoch-mode-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">K/D Cross Up</div>
-                <div id="screen-stoch-cross-readout" class="ml-auto text-right text-xs font-bold text-sky-700">15d ago</div>
+                <div id="screen-stoch-cross-readout" class="text-right text-xs font-bold text-sky-700">15d ago</div>
+                <div class="screen-timeline-step-move" aria-label="Move StochRSI event in timeline">
+                  <button type="button" data-screen-event-move="stoch" data-direction="up" aria-label="Move StochRSI event up">↑</button>
+                  <button type="button" data-screen-event-move="stoch" data-direction="down" aria-label="Move StochRSI event down">↓</button>
+                </div>
               </div>
               <div class="screen-timeline-step-controls">
                 <label class="screen-timeline-trigger">
@@ -1095,7 +1168,11 @@
                 <div class="screen-timeline-step-label">Supertrend Event</div>
                 <div class="screen-timeline-step-title text-sm font-bold text-slate-900">Supertrend Direction Change</div>
                 <div id="screen-supertrend-mode-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">Red to green</div>
-                <div id="screen-supertrend-cross-readout" class="ml-auto text-right text-xs font-bold text-sky-700">30d ago</div>
+                <div id="screen-supertrend-cross-readout" class="text-right text-xs font-bold text-sky-700">30d ago</div>
+                <div class="screen-timeline-step-move" aria-label="Move Supertrend event in timeline">
+                  <button type="button" data-screen-event-move="supertrend" data-direction="up" aria-label="Move Supertrend event up">↑</button>
+                  <button type="button" data-screen-event-move="supertrend" data-direction="down" aria-label="Move Supertrend event down">↓</button>
+                </div>
               </div>
               <div class="screen-timeline-step-controls">
                 <label class="screen-timeline-type block">
@@ -1118,7 +1195,11 @@
                 <div class="screen-timeline-step-label">EMA Cross Event</div>
                 <div class="screen-timeline-step-title text-sm font-bold text-slate-900">Fast EMA crossed slow EMA</div>
                 <div id="screen-ema-relationship-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">10 / 20 · positive</div>
-                <div id="screen-ema-relationship-event-readout" class="ml-auto text-right text-xs font-bold text-sky-700">Cross within last 30d</div>
+                <div id="screen-ema-relationship-event-readout" class="text-right text-xs font-bold text-sky-700">Cross within last 30d</div>
+                <div class="screen-timeline-step-move" aria-label="Move EMA event in timeline">
+                  <button type="button" data-screen-event-move="ema_relationship" data-direction="up" aria-label="Move EMA event up">↑</button>
+                  <button type="button" data-screen-event-move="ema_relationship" data-direction="down" aria-label="Move EMA event down">↓</button>
+                </div>
               </div>
               <div class="screen-timeline-step-controls grid grid-cols-2 gap-2">
                 <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Fast EMA<input id="screen-ema-relationship-fast" type="number" min="2" max="200" value="10" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
