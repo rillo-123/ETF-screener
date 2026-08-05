@@ -387,6 +387,16 @@
       position: relative;
       height: 1.25rem;
       margin-top: 0.35rem;
+      padding: 0.1rem 0.35rem;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      border-radius: 0.55rem;
+      background: rgba(248, 250, 252, 0.9);
+    }
+
+    .screen-range-track:focus-within,
+    .screen-timeline-trigger:focus-within {
+      border-color: rgba(225, 29, 72, 0.75);
+      box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.12);
     }
 
     .screen-range-track::before {
@@ -661,6 +671,10 @@
 
     .screen-timeline-trigger {
       min-width: 0;
+      padding: 0.25rem 0.4rem 0.35rem;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      border-radius: 0.55rem;
+      background: rgba(248, 250, 252, 0.9);
     }
 
     .screen-timeline-trigger-header {

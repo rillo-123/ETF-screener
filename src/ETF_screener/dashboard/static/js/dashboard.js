@@ -3630,6 +3630,7 @@
         }
         node.dataset.bound = "1";
         node.addEventListener("input", () => {
+          const shouldRestoreFocus = document.activeElement === node;
           syncTimelineAgeConstraints();
           const readoutIdBySlider = {
             "screen-macd-cross-age": "screen-macd-cross-readout",
@@ -3643,10 +3644,20 @@
             updateEventAgeReadoutFromSlider(id, readoutId);
           }
           syncScreenFilterStateFromDom();
+          if (shouldRestoreFocus) {
+            node.focus({ preventScroll: true });
+            requestAnimationFrame(() => node.focus({ preventScroll: true }));
+          }
         });
         const sliderKey = screenEventOrder.find((key) => getTimelineSliderId(key) === id);
         if (sliderKey) {
           node.addEventListener("focus", () => selectTimelineEvent(sliderKey));
+        }
+        if (node.type === "range") {
+          const stepKey = getTimelineStepKey(node.closest(".screen-timeline-step"));
+          if (stepKey) {
+            node.addEventListener("focus", () => selectTimelineEvent(stepKey));
+          }
         }
       });
       document.querySelectorAll("[data-screen-event-move]").forEach((button) => {
@@ -3675,6 +3686,17 @@
           const target = event.target;
           if (!activeStep || (target !== document.body && target !== activeStep && !activeStep.contains(target))) return;
           event.preventDefault();
+          if (target instanceof HTMLInputElement && target.type === "range") {
+            const step = Number(target.step || 1);
+            const min = Number(target.min || 0);
+            const max = Number(target.max || 100);
+            const direction = event.key === "ArrowLeft" ? -1 : 1;
+            target.value = String(Math.max(min, Math.min(max, Number(target.value || 0) + (direction * step))));
+            target.dispatchEvent(new Event("input", { bubbles: true }));
+            target.focus({ preventScroll: true });
+            requestAnimationFrame(() => target.focus({ preventScroll: true }));
+            return;
+          }
           adjustActiveTimelineEvent(event.key === "ArrowLeft" ? -1 : 1);
         });
       }
