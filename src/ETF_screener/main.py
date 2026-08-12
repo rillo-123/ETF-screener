@@ -146,8 +146,23 @@ def evaluate_condition(value: float, operator: str, threshold: float) -> bool:
     """
 
     if pd.isna(value):
-
         return False
+
+    value = float(value)
+    threshold = float(threshold)
+    if operator == "gt":
+        return value > threshold
+    if operator == "gte":
+        return value >= threshold
+    if operator == "lt":
+        return value < threshold
+    if operator == "lte":
+        return value <= threshold
+    if operator == "eq":
+        return abs(value - threshold) < 0.0001
+    if operator == "ne":
+        return abs(value - threshold) >= 0.0001
+    return False
 
 
 def run_query_cli(
@@ -196,42 +211,10 @@ def run_query_cli(
 
     print(rendered)
 
-    value = float(value)
-
-    threshold = float(threshold)
-
-    if operator == "gt":
-
-        return value > threshold
-
-    elif operator == "gte":
-
-        return value >= threshold
-
-    elif operator == "lt":
-
-        return value < threshold
-
-    elif operator == "lte":
-
-        return value <= threshold
-
-    elif operator == "eq":
-
-        return abs(value - threshold) < 0.0001  # Float equality with tolerance
-
-    elif operator == "ne":
-
-        return abs(value - threshold) >= 0.0001
-
-    else:
-
-        return False
-
-
 def fetch_and_analyze(
     symbols: list[str],
     days: int = 365,
+    interval: str = "1d",
     api_key: Optional[str] = None,
     data_dir: str = "data",
     plot_dir: str = "plots",
@@ -260,6 +243,14 @@ def fetch_and_analyze(
     """
 
     try:
+        interval = interval.lower()
+        if interval not in {"1d", "4h"}:
+            raise ValueError("Only 1d and 4h intervals are supported by this command")
+        if interval != "1d" and source.lower() != "yfinance":
+            raise ValueError("Intraday intervals require --source yfinance")
+        if interval != "1d" and data_dir == "data":
+            data_dir = str(Path(data_dir) / interval)
+
         # Wipe plots if requested and plot_results is True
         if clean_plots and plot_results and Path(plot_dir).exists():
             if not quiet:
@@ -289,9 +280,17 @@ def fetch_and_analyze(
         # Fetch data for all symbols
 
         if not quiet:
-            print(f"Fetching data for {len(symbols)} ETFs (past {days} days)...")
+            print(
+                f"Fetching {interval} data for {len(symbols)} ETFs "
+                f"(past {days} days)..."
+            )
 
-        etf_data = fetcher.fetch_multiple_etfs(symbols, days=days, quiet=quiet)
+        if source.lower() == "yfinance":
+            etf_data = fetcher.fetch_multiple_etfs(
+                symbols, days=days, quiet=quiet, interval=interval
+            )
+        else:
+            etf_data = fetcher.fetch_multiple_etfs(symbols, days=days, quiet=quiet)
 
         if not etf_data:
 
@@ -310,6 +309,14 @@ def fetch_and_analyze(
             etf_data[symbol] = add_indicators(df)
 
         # Save to database if enabled
+
+        if use_db and interval != "1d":
+            if not quiet:
+                print(
+                    "Skipping SQLite storage for intraday data; "
+                    f"writing {interval} candles to parquet only."
+                )
+            use_db = False
 
         if use_db:
 
@@ -1595,6 +1602,13 @@ def main() -> None:
     )
 
     fetch_parser.add_argument(
+        "--interval",
+        choices=["1d", "4h"],
+        default="1d",
+        help="Yahoo Finance candle interval (default: 1d)",
+    )
+
+    fetch_parser.add_argument(
         "--source",
         choices=["yfinance", "finnhub"],
         default="yfinance",
@@ -2127,6 +2141,7 @@ def main() -> None:
         fetch_and_analyze(
             args.symbols,
             days=args.days,
+            interval=args.interval,
             api_key=args.api_key,
             data_dir=args.data_dir,
             plot_dir=args.plot_dir,

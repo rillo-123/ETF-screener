@@ -139,6 +139,7 @@ def test_tab_bar_visible():
     assert 'id="list-modal-name"' in html
     assert 'id="list-modal-delete-btn"' in html
 
+
 def test_query_catalog_endpoint(monkeypatch):
     class _FakeDb:
         db_path = "fake.db"
@@ -159,9 +160,7 @@ def test_query_catalog_endpoint(monkeypatch):
     data = response.json()
     assert data["datasets"][0]["key"] == "signal_scan"
     assert data["signal_scan"]["signals"][0]["key"] == "trend_forming"
-    assert any(
-        item["key"] == "elusive_dip" for item in data["signal_scan"]["signals"]
-    )
+    assert any(item["key"] == "elusive_dip" for item in data["signal_scan"]["signals"])
     assert data["shortlist"]["labels"] == ["All", "Buy", "Watch", "Skip"]
     assert data["tickers"] == ["AAA.DE", "BBB.ST"]
 
@@ -321,12 +320,21 @@ def test_screen_presets_endpoint_returns_defaults():
     assert data["schema_version"] == "screen_presets_v1"
     assert "default_filters" in data
     assert data["default_filters"]["lookback_days"] == 30
+    assert data["default_filters"]["timeline_order"] == [
+        "rsi",
+        "macd",
+        "stoch",
+        "supertrend",
+        "ema_relationship",
+    ]
     assert isinstance(data["presets"], list)
 
 
 def test_screen_endpoint_uses_control_screening_when_no_strategy(monkeypatch, tmp_path):
     monkeypatch.setattr(app_fast, "_latest_market_date_for", lambda _db: "2026-07-08")
-    monkeypatch.setattr(app_fast, "_cached_screen_universe", lambda *_args: ("AAA.DE", "BBB.ST"))
+    monkeypatch.setattr(
+        app_fast, "_cached_screen_universe", lambda *_args: ("AAA.DE", "BBB.ST")
+    )
     monkeypatch.setattr(
         app_fast,
         "filter_tickers_by_exchange_and_list",
@@ -358,7 +366,9 @@ def test_screen_endpoint_uses_control_screening_when_no_strategy(monkeypatch, tm
         }
 
     monkeypatch.setattr(app_fast, "screen_with_controls", fake_screen_with_controls)
-    monkeypatch.setattr(app_fast, "_screen_cache_dir", lambda: tmp_path / "control_screen_cache")
+    monkeypatch.setattr(
+        app_fast, "_screen_cache_dir", lambda: tmp_path / "control_screen_cache"
+    )
 
     response = client.get(
         "/api/screen",
@@ -401,8 +411,13 @@ def test_screen_endpoint_uses_control_screening_when_no_strategy(monkeypatch, tm
     assert captured["filters"]["stoch_event_age"] == 10
 
 
-def test_screen_with_controls_reuses_indicator_history_cache(monkeypatch):
+def test_screen_with_controls_reuses_indicator_history_cache(monkeypatch, tmp_path):
     screener_controls.clear_indicator_history_cache()
+    monkeypatch.setattr(
+        screener_controls,
+        "INDICATOR_HISTORY_DISK_CACHE",
+        str(tmp_path / "indicator-history-cache"),
+    )
     call_counts = {
         "load": 0,
         "rsi": 0,
@@ -737,8 +752,22 @@ def test_screen_endpoint_fallback_honors_sweden_scan_scope(monkeypatch, tmp_path
         captured["screen_kwargs"] = kwargs
         return {
             "matches": [
-                {"ticker": "BBB.ST", "name": "BBB.ST", "close": 20.0, "recent_avg_volume": 2000.0, "rsi": 52.0, "score": 100.0},
-                {"ticker": "CCC.ST", "name": "CCC.ST", "close": 30.0, "recent_avg_volume": 3000.0, "rsi": 55.0, "score": 98.0},
+                {
+                    "ticker": "BBB.ST",
+                    "name": "BBB.ST",
+                    "close": 20.0,
+                    "recent_avg_volume": 2000.0,
+                    "rsi": 52.0,
+                    "score": 100.0,
+                },
+                {
+                    "ticker": "CCC.ST",
+                    "name": "CCC.ST",
+                    "close": 30.0,
+                    "recent_avg_volume": 3000.0,
+                    "rsi": 55.0,
+                    "score": 98.0,
+                },
             ],
             "errors": [],
             "total_errors": 0,
@@ -873,9 +902,7 @@ def test_screen_request_signature_changes_with_disqualifiers():
     )
     overbought_signature = app_fast._screen_request_signature(
         **base_kwargs,
-        disqualifiers=app_fast._normalize_screen_disqualifiers(
-            exclude_overbought=True
-        ),
+        disqualifiers=app_fast._normalize_screen_disqualifiers(exclude_overbought=True),
     )
 
     assert base_signature != overbought_signature
@@ -961,14 +988,21 @@ def test_screen_endpoint_disqualifies_matches_when_filters_enabled(
     monkeypatch.setattr("ETF_screener.dashboard.app_fast.get_db", lambda: FakeDb())
     monkeypatch.setattr(
         "ETF_screener.dashboard.app_fast._cached_screen_universe",
-        lambda db_path, latest_market_date: ("OVER.ST", "THIN.ST", "LOSS.ST", "KEEP.ST"),
+        lambda db_path, latest_market_date: (
+            "OVER.ST",
+            "THIN.ST",
+            "LOSS.ST",
+            "KEEP.ST",
+        ),
     )
     monkeypatch.setattr(
         "ETF_screener.dashboard.app_fast.filter_tickers_by_exchange_and_list",
         lambda tickers, exchange=None, ticker_list=None, scan_scope=None: list(tickers),
     )
     monkeypatch.setattr("ETF_screener.dashboard.app_fast.Backtester", FakeBacktester)
-    monkeypatch.setattr("ETF_screener.dashboard.app_fast._screen_cache_dir", fake_cache_dir)
+    monkeypatch.setattr(
+        "ETF_screener.dashboard.app_fast._screen_cache_dir", fake_cache_dir
+    )
     monkeypatch.setattr(
         "ETF_screener.dashboard.app_fast._ticker_profitability_snapshot",
         fake_profitability_snapshot,
@@ -2111,7 +2145,9 @@ def test_get_chart_hides_supertrend_overlay_when_event_is_disabled():
     supertrend_traces = [
         trace for trace in fig["data"] if str(trace.get("name", "")) == "Supertrend"
     ]
-    assert not supertrend_traces, "Supertrend should stay hidden unless its event is enabled"
+    assert (
+        not supertrend_traces
+    ), "Supertrend should stay hidden unless its event is enabled"
 
 
 def test_on_demand_fetch_persists():
@@ -2292,7 +2328,9 @@ def test_shortlist_endpoint_returns_cached_rows(monkeypatch):
     )
 
     class FakeEngine:
-        def __init__(self, db_path=None, metadata_path=None, metadata_map_override=None):
+        def __init__(
+            self, db_path=None, metadata_path=None, metadata_map_override=None
+        ):
             self.db_path = db_path
 
         def get_shortlist(
@@ -2351,7 +2389,9 @@ def test_shortlist_endpoint_honors_scan_scope_list(monkeypatch):
     app_fast._SCOPED_SHORTLIST_CACHE.clear()
 
     class FakeEngine:
-        def __init__(self, db_path=None, metadata_path=None, metadata_map_override=None):
+        def __init__(
+            self, db_path=None, metadata_path=None, metadata_map_override=None
+        ):
             captured["db_path"] = db_path
             captured["metadata_path"] = metadata_path
             captured["metadata_map_override"] = metadata_map_override
@@ -2382,7 +2422,10 @@ def test_shortlist_endpoint_honors_scan_scope_list(monkeypatch):
     )
     monkeypatch.setattr(
         "ETF_screener.dashboard.app_fast._cached_etf_metadata_map",
-        lambda: {"SEB-A.ST": {"name": "SEB A"}, "SHB-A.ST": {"name": "Sv. Handelsbanken A"}},
+        lambda: {
+            "SEB-A.ST": {"name": "SEB A"},
+            "SHB-A.ST": {"name": "Sv. Handelsbanken A"},
+        },
     )
 
     response = client.get(
@@ -2425,7 +2468,9 @@ def test_shortlist_endpoint_caches_scoped_watchlist(monkeypatch):
     app_fast._SCOPED_SHORTLIST_CACHE.clear()
 
     class FakeEngine:
-        def __init__(self, db_path=None, metadata_path=None, metadata_map_override=None):
+        def __init__(
+            self, db_path=None, metadata_path=None, metadata_map_override=None
+        ):
             pass
 
         def get_shortlist(
@@ -2450,11 +2495,18 @@ def test_shortlist_endpoint_caches_scoped_watchlist(monkeypatch):
     )
     monkeypatch.setattr(
         "ETF_screener.dashboard.app_fast._cached_etf_metadata_map",
-        lambda: {"SEB-A.ST": {"name": "SEB A"}, "SHB-A.ST": {"name": "Sv. Handelsbanken A"}},
+        lambda: {
+            "SEB-A.ST": {"name": "SEB A"},
+            "SHB-A.ST": {"name": "Sv. Handelsbanken A"},
+        },
     )
 
-    first = client.get("/api/shortlist?limit=5&scan_scope=list&ticker_list=SEB-A.ST,SHB-A.ST")
-    second = client.get("/api/shortlist?limit=5&scan_scope=list&ticker_list=SEB-A.ST,SHB-A.ST")
+    first = client.get(
+        "/api/shortlist?limit=5&scan_scope=list&ticker_list=SEB-A.ST,SHB-A.ST"
+    )
+    second = client.get(
+        "/api/shortlist?limit=5&scan_scope=list&ticker_list=SEB-A.ST,SHB-A.ST"
+    )
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -2463,7 +2515,9 @@ def test_shortlist_endpoint_caches_scoped_watchlist(monkeypatch):
 
 def test_playbook_endpoint_builds_trade_rows_with_risk_capped_stops(monkeypatch):
     class FakeEngine:
-        def __init__(self, db_path=None, metadata_path=None, metadata_map_override=None):
+        def __init__(
+            self, db_path=None, metadata_path=None, metadata_map_override=None
+        ):
             self.db_path = db_path
 
         def _load_frame(self, ticker):
@@ -2500,12 +2554,12 @@ def test_playbook_endpoint_builds_trade_rows_with_risk_capped_stops(monkeypatch)
                     "Date": pd.date_range("2026-04-06", periods=60, freq="B"),
                     "Close": [90.0] * 60,
                     "Low": [89.0] * 60,
-                    "Volume": [100_000] * 60,
-                    "EMA_50": [95.0] * 60,
-                    "Supertrend": [96.0] * 60,
-                    "RSI": [72.0] * 60,
+                    "Volume": [300_000] * 60,
+                    "EMA_50": [85.0] * 60,
+                    "Supertrend": [86.0] * 60,
+                    "RSI": [55.0] * 60,
                     "Pullback_Pct": [12.0] * 60,
-                    "Signal": [0] * 60,
+                    "Signal": ([0] * 58) + [1, 1],
                 }
             )
 
@@ -2535,19 +2589,25 @@ def test_playbook_endpoint_builds_trade_rows_with_risk_capped_stops(monkeypatch)
 
     assert response.status_code == 200
     data = response.json()
-    assert data["count"] == 2
+    assert data["count"] == 3
     assert data["risk_pct"] == 5.0
     assert data["summary"]["trade_count"] == 2
-    assert data["summary"]["watch_count"] == 0
+    assert data["summary"]["watch_count"] == 1
     assert data["summary"]["risk_capped_count"] == 1
     assert data["rows"][0]["ticker"] == "AAA.DE"
     assert data["rows"][0]["recent_entry_days"] == 0
     assert data["rows"][0]["stop_basis"] == "technical"
     assert data["rows"][0]["stop"] == 99.0
+    assert data["rows"][0]["target"] == 102.0
+    assert data["rows"][0]["reward_risk_ratio"] == 2.0
     assert data["rows"][0]["decision"] == "Trade"
     assert data["rows"][1]["ticker"] == "BBB.DE"
     assert data["rows"][1]["recent_entry_days"] == 0
     assert data["rows"][1]["stop_basis"] == "risk_cap"
     assert data["rows"][1]["stop"] == 85.5
+    assert data["rows"][1]["target"] == 99.0
+    assert data["rows"][1]["reward_risk_ratio"] == 2.0
     assert data["rows"][1]["decision"] == "Trade With Tight Cap"
-
+    assert data["rows"][2]["ticker"] == "CCC.DE"
+    assert data["rows"][2]["decision"] == "Watch"
+    assert data["rows"][2]["final_score"] == 5.0

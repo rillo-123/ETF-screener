@@ -62,3 +62,5 @@
 - Keep a root `plan.md` entrypoint plus companion files under `plan/` tracked in the repo.
 - Refresh both plan docs and `progress.md` on every future implementation turn when state changes meaningfully.
 - Treat "set the milestone" as shorthand for: update the plan docs and `progress.md`, run the full quality gate, fix remaining failures until the repo is green, then commit and push the checkpoint.
+- Use consistent timeline terminology: a reusable definition is a `Timeline Rule`, a placed instance is a `Timeline Step`, the ordered sequence is a `Timeline Stack`, and the collection of reusable definitions is the `Rule Library`.
+- Treat the Timeline Stack as chronological: the topmost Timeline Step must happen first, and each lower step must happen later or at the same event point.

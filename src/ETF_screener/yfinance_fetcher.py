@@ -20,14 +20,18 @@ class YFinanceFetcher:
         self.name = "Yahoo Finance"
 
     def _fetch_yf(
-        self, symbol: str, start_date: datetime, end_date: datetime
+        self,
+        symbol: str,
+        start_date: datetime,
+        end_date: datetime,
+        interval: str = "1d",
     ) -> pd.DataFrame:
         """Raw yfinance fetch, returns normalized DataFrame or empty DataFrame."""
         try:
             df = yf.Ticker(symbol).history(
                 start=start_date,
                 end=end_date,
-                interval="1d",
+                interval=interval,
                 auto_adjust=False,
                 actions=True,
             )
@@ -51,6 +55,7 @@ class YFinanceFetcher:
         days: int = 365,
         start_date: Optional[datetime | date | str] = None,
         end_date: Optional[datetime | date | str] = None,
+        interval: str = "1d",
     ) -> pd.DataFrame:
         """
         Fetch historical OHLCV data for an ETF.
@@ -80,7 +85,9 @@ class YFinanceFetcher:
         df = pd.DataFrame()
         attempts = 3
         for attempt in range(attempts):
-            df = self._fetch_yf(symbol, resolved_start, resolved_end)
+            df = self._fetch_yf(
+                symbol, resolved_start, resolved_end, interval=interval
+            )
             if not df.empty:
                 break
             if attempt < attempts - 1:
@@ -97,7 +104,9 @@ class YFinanceFetcher:
                     "No data for %s, retrying with fallback %s", symbol, fallback
                 )
                 for attempt in range(attempts):
-                    df = self._fetch_yf(fallback, resolved_start, resolved_end)
+                    df = self._fetch_yf(
+                        fallback, resolved_start, resolved_end, interval=interval
+                    )
                     if not df.empty:
                         break
                     if attempt < attempts - 1:
@@ -112,7 +121,11 @@ class YFinanceFetcher:
         return df
 
     def fetch_multiple_etfs(
-        self, symbols: list[str], days: int = 365, quiet: bool = False
+        self,
+        symbols: list[str],
+        days: int = 365,
+        quiet: bool = False,
+        interval: str = "1d",
     ) -> dict:
         """
         Fetch data for multiple ETFs.
@@ -128,7 +141,9 @@ class YFinanceFetcher:
         results = {}
         for symbol in tqdm(symbols, desc="Downloading ETFs", unit="ETF", disable=quiet):
             try:
-                results[symbol] = self.fetch_historical_data(symbol, days)
+                results[symbol] = self.fetch_historical_data(
+                    symbol, days, interval=interval
+                )
             except Exception as e:
                 logger.warning(f"Skipping {symbol}: {str(e)}")
                 if not quiet:

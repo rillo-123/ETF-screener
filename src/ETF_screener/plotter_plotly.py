@@ -59,6 +59,59 @@ class InteractivePlotter:
         except (TypeError, ValueError):
             return float(default)
 
+    @staticmethod
+    def _non_trading_day_rangebreaks(dates: pd.Series) -> list[dict]:
+        """Return Plotly breaks for weekends and missing weekdays in the data."""
+        parsed = pd.to_datetime(dates, errors="coerce").dropna()
+        if parsed.empty:
+            return [{"bounds": ["sat", "mon"]}]
+
+        observed_days = set(parsed.dt.strftime("%Y-%m-%d"))
+        calendar_days = pd.date_range(
+            start=parsed.min().normalize(), end=parsed.max().normalize(), freq="D"
+        )
+        missing_weekdays = [
+            day.strftime("%Y-%m-%d")
+            for day in calendar_days
+            if day.weekday() < 5 and day.strftime("%Y-%m-%d") not in observed_days
+        ]
+
+        breaks: list[dict] = [{"bounds": ["sat", "mon"]}]
+        if missing_weekdays:
+            breaks.append({"values": missing_weekdays})
+        return breaks
+
+    @staticmethod
+    def _heikin_ashi_ohlc(df: pd.DataFrame) -> tuple[pd.Series, ...]:
+        """Calculate Heikin-Ashi OHLC while leaving the source data untouched."""
+        raw_open = pd.to_numeric(df["Open"], errors="coerce").to_numpy()
+        raw_high = pd.to_numeric(df["High"], errors="coerce").to_numpy()
+        raw_low = pd.to_numeric(df["Low"], errors="coerce").to_numpy()
+        raw_close = pd.to_numeric(df["Close"], errors="coerce").to_numpy()
+
+        ha_open = np.full(len(df), np.nan, dtype=float)
+        ha_high = np.full(len(df), np.nan, dtype=float)
+        ha_low = np.full(len(df), np.nan, dtype=float)
+        ha_close = np.full(len(df), np.nan, dtype=float)
+        for index, (o, h, l, c) in enumerate(
+            zip(raw_open, raw_high, raw_low, raw_close)
+        ):
+            if not all(np.isfinite(value) for value in (o, h, l, c)):
+                continue
+            ha_close[index] = (o + h + l + c) / 4.0
+            ha_open[index] = (
+                (o + c) / 2.0
+                if index == 0 or not np.isfinite(ha_open[index - 1])
+                else (ha_open[index - 1] + ha_close[index - 1]) / 2.0
+            )
+            ha_high[index] = max(h, ha_open[index], ha_close[index])
+            ha_low[index] = min(l, ha_open[index], ha_close[index])
+
+        return tuple(
+            pd.Series(values, index=df.index)
+            for values in (ha_open, ha_high, ha_low, ha_close)
+        )
+
     def _dsl_layer_style(self, layer_key: str, defaults: dict) -> dict:
         """Read configurable DSL layer style (label/color/alpha/height) from settings."""
         if not isinstance(self.ribbon_config, dict):
@@ -1084,6 +1137,7 @@ class InteractivePlotter:
 
         self._apply_chart_indicator_params(df, indicator_params)
         chart_params = indicator_params if isinstance(indicator_params, dict) else {}
+        candle_mode = str(chart_params.get("candle_mode", "heikin_ashi")).lower()
         rsi_trigger = getattr(self, "_active_chart_rsi_trigger", 50.0)
         stoch_trigger = getattr(self, "_active_chart_stoch_trigger", 20.0)
 
@@ -1091,17 +1145,42 @@ class InteractivePlotter:
             strategy_content
         )
         requested_ema_periods = chart_params.get("ema_overlay_periods")
+        requested_ema_specs = chart_params.get("ema_overlay_specs")
         if requested_ema_periods is None:
             ema_periods_for_chart = self._extract_ema_periods(strategy_content)
         else:
             ema_periods_for_chart = [int(period) for period in requested_ema_periods]
             close = df["Close"] if "Close" in df.columns else df["close"]
-            for period in ema_periods_for_chart:
-                if period < 2:
-                    continue
-                ema_column = self._find_column_case_insensitive(df, f"ema_{period}")
-                if not ema_column:
-                    df[f"EMA_{period}"] = calculate_ema(close, period=period)
+            ema_specs_for_chart = []
+            ema_source_overrides = {}
+            if candle_mode == "heikin_ashi":
+                ha_open, ha_high, ha_low, ha_close = self._heikin_ashi_ohlc(df)
+                ema_source_overrides = {
+                    "open": ha_open,
+                    "high": ha_high,
+                    "low": ha_low,
+                    "close": ha_close,
+                }
+            if isinstance(requested_ema_specs, list) and requested_ema_specs:
+                for spec in requested_ema_specs:
+                    if not isinstance(spec, dict):
+                        continue
+                    period = int(spec.get("period", 0))
+                    source = str(spec.get("source", "close")).strip().lower()
+                    if period >= 2 and source in {"open", "high", "low", "close"}:
+                        ema_specs_for_chart.append((period, source))
+            if not ema_specs_for_chart:
+                ema_specs_for_chart = [(period, "close") for period in ema_periods_for_chart if period >= 2]
+            for period, source in ema_specs_for_chart:
+                source_column = self._find_column_case_insensitive(df, source.title()) or self._find_column_case_insensitive(df, source)
+                source_series = (
+                    ema_source_overrides.get(source)
+                    if source in ema_source_overrides
+                    else (df[source_column] if source_column else close)
+                )
+                ema_column = f"EMA_{period}_{source}"
+                df[ema_column] = calculate_ema(source_series, period=period)
+            chart_params["ema_overlay_specs_resolved"] = ema_specs_for_chart
         overlay_names = {
             *[
                 f"ema_{period}"
@@ -1368,11 +1447,9 @@ class InteractivePlotter:
             shared_xaxes=True,
             vertical_spacing=0.0,
             row_heights=row_heights,
-            subplot_titles=[f"{symbol} Analysis"]
-            + [panel["title"] for panel in strategy_panel_groups]
-            + ["Volume"]
-            + [""] * num_ribbons
-            + ["Aggregated"],
+            # Panel names are added in the left gutter below, where they stay
+            # aligned with the panel instead of appearing as centered titles.
+            subplot_titles=[""] * (3 + num_strategy_panels + num_ribbons),
         )
 
         # Drop empty subplot-title annotations so ribbon lanes don't reserve extra headroom.
@@ -1386,20 +1463,41 @@ class InteractivePlotter:
         # Fixed left gutter anchor so legend and ribbon labels are visually justified.
         # Tunable in config/ribbon_settings.json under layout.left_gutter_x.
         left_gutter_x = self._layout_numeric_setting("left_gutter_x", -0.18)
+        panel_label_x = self._layout_numeric_setting("panel_label_x", -0.08)
 
         # 1. Price Chart (Candlestick)
+        if candle_mode == "heikin_ashi":
+            candle_open, candle_high, candle_low, candle_close = (
+                self._heikin_ashi_ohlc(df)
+            )
+            candle_name = "Heikin Ashi"
+            candle_colors = {
+                "increasing_line_color": "#16a34a",
+                "decreasing_line_color": "#dc2626",
+                "increasing_fillcolor": "#16a34a",
+                "decreasing_fillcolor": "#dc2626",
+            }
+        else:
+            candle_open = df["Open"]
+            candle_high = df["High"]
+            candle_low = df["Low"]
+            candle_close = df["Close"]
+            candle_name = "Price"
+            candle_colors = {
+                "increasing_line_color": "#16a34a",
+                "decreasing_line_color": "#dc2626",
+                "increasing_fillcolor": "#16a34a",
+                "decreasing_fillcolor": "#dc2626",
+            }
         fig.add_trace(
             go.Candlestick(
                 x=df["Date"],
-                open=df["Open"],
-                high=df["High"],
-                low=df["Low"],
-                close=df["Close"],
-                name="Price",
-                increasing_line_color="#16a34a",
-                decreasing_line_color="#dc2626",
-                increasing_fillcolor="#16a34a",
-                decreasing_fillcolor="#dc2626",
+                open=candle_open,
+                high=candle_high,
+                low=candle_low,
+                close=candle_close,
+                name=candle_name,
+                **candle_colors,
             ),
             row=1,
             col=1,
@@ -1407,22 +1505,19 @@ class InteractivePlotter:
 
         # Add only EMA curves that are explicitly referenced by the active strategy.
         ema_periods = ema_periods_for_chart
+        ema_specs = chart_params.get("ema_overlay_specs_resolved") or [(period, "close") for period in ema_periods]
         ema_colors = ["#f59e0b", "#3b82f6", "#10b981", "#ef4444", "#8b5cf6", "#14b8a6"]
-        for idx, period in enumerate(ema_periods):
-            lower_col = f"ema_{period}"
-            upper_col = f"EMA_{period}"
-            ema_col = (
-                lower_col
-                if lower_col in df.columns
-                else (upper_col if upper_col in df.columns else None)
-            )
+        for idx, (period, source) in enumerate(ema_specs):
+            ema_col = f"EMA_{period}_{source}"
+            if ema_col not in df.columns and source == "close":
+                ema_col = f"ema_{period}" if f"ema_{period}" in df.columns else f"EMA_{period}"
             if not ema_col:
                 continue
             fig.add_trace(
                 go.Scatter(
                     x=df["Date"],
                     y=df[ema_col],
-                    name=f"EMA {period}",
+                    name=f"EMA {period} HA {source.title()}" if candle_mode == "heikin_ashi" else f"EMA {period} {source.title()}",
                     line=dict(color=ema_colors[idx % len(ema_colors)], width=1.2),
                 ),
                 row=1,
@@ -1749,7 +1844,7 @@ class InteractivePlotter:
         fig.add_annotation(
             xref="paper",
             yref="paper",
-            x=left_gutter_x,
+            x=panel_label_x,
             y=(agg_domain[0] + agg_domain[1]) / 2,
             xanchor="left",
             yanchor="middle",
@@ -1766,8 +1861,61 @@ class InteractivePlotter:
         fig_dict = fig.to_dict()
         layout = fig_dict["layout"]
 
+        # Label the main chart panes in the left gutter.  Ribbon labels use the
+        # farther-left anchor so their longer condition summaries remain clear.
+        panel_labels = [(1, "Price")]
+        panel_labels.extend(
+            (strategy_row_start + index, str(panel["title"]))
+            for index, panel in enumerate(strategy_panel_groups)
+        )
+        # Aggregated already has a colored annotation added with its lane.
+        panel_labels.append((volume_row, "Volume"))
+        annotations = layout.setdefault("annotations", [])
+        for row, label in panel_labels:
+            yaxis_key = "yaxis" if row == 1 else f"yaxis{row}"
+            y_domain = layout[yaxis_key]["domain"]
+            annotations.append(
+                {
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": panel_label_x,
+                    "y": (y_domain[0] + y_domain[1]) / 2,
+                    "xanchor": "left",
+                    "yanchor": "middle",
+                    "text": f"<b>{label}</b>",
+                    "showarrow": False,
+                    "font": {"size": 10, "color": "#475569"},
+                    "align": "left",
+                }
+            )
+
+        # Give each pane a restrained frame so adjacent indicators are easy to
+        # distinguish, including charts with several ribbon lanes.
+        panel_border_color = "#e2e8f0"
+        shapes = layout.setdefault("shapes", [])
+        for row in range(1, bottom_row + 1):
+            xaxis_key = "xaxis" if row == 1 else f"xaxis{row}"
+            yaxis_key = "yaxis" if row == 1 else f"yaxis{row}"
+            x_domain = layout[xaxis_key]["domain"]
+            y_domain = layout[yaxis_key]["domain"]
+            shapes.append(
+                {
+                    "type": "rect",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x0": x_domain[0],
+                    "x1": x_domain[1],
+                    "y0": y_domain[0],
+                    "y1": y_domain[1],
+                    "fillcolor": "rgba(0,0,0,0)",
+                    "line": {"color": panel_border_color, "width": 1},
+                    "layer": "above",
+                }
+            )
+
         # Shared x-axis: show date tick labels only on the bottom pane.
         bottom_axis_key = "xaxis" if bottom_row == 1 else f"xaxis{bottom_row}"
+        rangebreaks = self._non_trading_day_rangebreaks(df["Date"])
 
         # Enforce axis visibility and formatting on EVERY possible x-axis key in the layout
         for key in list(layout.keys()):
@@ -1776,6 +1924,7 @@ class InteractivePlotter:
                 layout[key]["showticklabels"] = is_bottom
                 layout[key]["visible"] = True
                 layout[key]["type"] = "date"
+                layout[key]["rangebreaks"] = rangebreaks
                 layout[key]["tickformat"] = "%b %Y"
                 row_num = 1 if key == "xaxis" else int(key.replace("xaxis", ""))
                 is_ribbon_axis = bool(num_ribbons) and row_num >= ribbon_row_start

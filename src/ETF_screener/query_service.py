@@ -896,8 +896,6 @@ class ETFQueryService:
         signal: str,
     ) -> dict[str, Any] | None:
         close_series = pd.to_numeric(frame.get("close"), errors="coerce")
-        low_series = pd.to_numeric(frame.get("low"), errors="coerce")
-        high_series = pd.to_numeric(frame.get("high"), errors="coerce")
         ema_50_series = pd.to_numeric(frame.get("ema_50"), errors="coerce")
 
         if event_index >= len(close_series):

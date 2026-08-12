@@ -495,6 +495,7 @@
 
     .screen-timeline-step-header {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 0.55rem;
       min-width: 0;
@@ -512,18 +513,35 @@
       color: #64748b;
     }
 
+    .screen-timeline-step.is-disabled {
+      border-color: rgba(148, 163, 184, 0.3);
+      background: rgba(241, 245, 249, 0.78);
+      filter: grayscale(1);
+      opacity: 0.52;
+    }
+
     .screen-timeline-step.is-disabled .screen-timeline-step-controls {
-      display: none;
+      opacity: 0.65;
+      pointer-events: none;
     }
 
     .screen-timeline-step-header .screen-timeline-step-label,
     .screen-timeline-step-header .screen-timeline-step-title,
     .screen-timeline-step-header .screen-timeline-step-mode {
       margin-top: 0;
+      min-width: 0;
       white-space: nowrap;
     }
 
     .screen-timeline-step-header .screen-timeline-step-title {
+      flex: 1 1 10rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .screen-timeline-step-header .screen-timeline-step-mode,
+    .screen-timeline-step-header > [id$="readout"] {
+      max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
     }
@@ -556,6 +574,25 @@
     .screen-timeline-step-move button:disabled {
       cursor: not-allowed;
       opacity: 0.3;
+    }
+
+    .screen-timeline-step-remove {
+      width: 1.55rem;
+      height: 1.45rem;
+      flex: 0 0 auto;
+      margin-left: auto;
+      border: 1px solid rgba(251, 113, 133, 0.35);
+      border-radius: 0.4rem;
+      background: #fff1f2;
+      color: #be123c;
+      font-size: 1rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .screen-timeline-step-remove:hover {
+      border-color: #e11d48;
+      background: #ffe4e6;
     }
 
     .screen-relative-age-track {
@@ -741,6 +778,48 @@
       flex: 0 0 auto;
     }
 
+    .decimal-spinner {
+      display: flex;
+      align-items: stretch;
+      margin-top: 0.25rem;
+    }
+
+    .decimal-spinner input {
+      min-width: 0;
+      flex: 1 1 auto;
+      margin-top: 0 !important;
+      border-radius: 0.25rem 0 0 0.25rem;
+    }
+
+    .decimal-spinner-buttons {
+      display: flex;
+      flex-direction: column;
+      width: 1.5rem;
+    }
+
+    .decimal-spinner-buttons button {
+      flex: 1 1 50%;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #475569;
+      font-size: 0.65rem;
+      line-height: 1;
+    }
+
+    .decimal-spinner-buttons button:first-child {
+      border-radius: 0 0.25rem 0 0;
+      border-bottom: 0;
+    }
+
+    .decimal-spinner-buttons button:last-child {
+      border-radius: 0 0 0.25rem 0;
+    }
+
+    .decimal-spinner-buttons button:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+
   </style>
 </head>
 
@@ -760,6 +839,7 @@
             <button type="button" id="scan-source-xetra" class="scan-source-btn" data-scope="xetra" onclick="setScanSource('xetra')">Xetra</button>
             <button type="button" id="scan-source-nasdaq" class="scan-source-btn" data-scope="nasdaq" onclick="setScanSource('nasdaq')">Nasdaq</button>
             <button type="button" id="scan-source-sweden" class="scan-source-btn" data-scope="sweden" onclick="setScanSource('sweden')">Sweden</button>
+            <button type="button" id="scan-source-all" class="scan-source-btn" data-scope="all" onclick="setScanSource('all')">All Markets</button>
             <button type="button" id="scan-source-list" class="scan-source-btn" data-scope="list" onclick="setScanSource('list')">List</button>
           </div>
           <div id="scan-source-list-picker">
@@ -940,6 +1020,7 @@
       <div id="playbook-content" class="hidden">
         <div class="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-950">
           <span class="font-bold">Hard rules:</span> above `EMA 50`, above `Supertrend`, RSI between `45` and `65`, recent signal within `5` days, 20-day average volume above `250k`, and pullback between `2%` and `8%`.
+          <span class="ml-2 text-violet-800"><span class="font-bold">Trade</span> means all six pass; <span class="font-bold">Watch</span> shows a fresh setup with at least four.</span>
         </div>
         <div class="overflow-hidden rounded-xl bg-white shadow border border-slate-200">
           <div class="overflow-x-auto">
@@ -950,6 +1031,7 @@
                   <th class="px-4 py-3 text-left">Decision</th>
                   <th class="px-4 py-3 text-left">Entry</th>
                   <th class="px-4 py-3 text-left">Stop</th>
+                  <th class="px-4 py-3 text-left">Target</th>
                   <th class="px-4 py-3 text-left">Risk</th>
                   <th class="px-4 py-3 text-left">Basis</th>
                   <th class="px-4 py-3 text-left">Notes</th>
@@ -972,6 +1054,12 @@
             <h2 class="mt-2 text-2xl font-bold text-slate-900">Tune the sequence, then scan the universe.</h2>
             <p class="mt-1 text-sm text-slate-500">The screener focuses on recent MACD, RSI, and StochRSI events from the last 30 days.</p>
           </div>
+          <button type="button" onclick="showTab('playbook')"
+            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-bold text-violet-800 shadow-sm transition hover:border-violet-300 hover:bg-violet-100"
+            title="Open the ranked trade-idea view with entry, stop, and risk details">
+            <span aria-hidden="true">↗</span>
+            Find Trade Ideas
+          </button>
           <div class="grid gap-3 sm:grid-cols-[minmax(0,220px)_minmax(0,180px)_auto_auto]">
             <label class="block">
               <span class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Preset</span>
@@ -1003,8 +1091,9 @@
           </div>
         </div>
         <div id="screen-ta-controls-slot" class="mt-5"></div>
-        <div class="mt-5 grid gap-4 xl:grid-cols-3 xl:grid-rows-[max-content_max-content] md:grid-cols-2">
-          <div class="screen-range-shell xl:col-start-1 xl:row-start-1 xl:self-start">
+        <div class="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.9fr)_minmax(14rem,0.58fr)] xl:items-start md:grid-cols-2">
+          <div class="flex min-w-0 flex-col gap-4 xl:col-start-2 xl:row-start-1">
+          <div class="screen-range-shell min-w-0">
             <div class="screen-filter-header">
               <div>
                 <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Volume Filter</div>
@@ -1018,7 +1107,7 @@
             </div>
             <div class="screen-range-axis"><span>0</span><span>20M</span></div>
           </div>
-          <div class="screen-range-shell xl:col-start-2 xl:row-start-1 xl:self-start">
+          <div class="screen-range-shell min-w-0">
             <div class="screen-filter-header">
               <div>
                 <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">EMA Trend</div>
@@ -1028,20 +1117,17 @@
             </div>
             <p class="mt-2 text-[11px] leading-4 text-slate-500">Compares the EMA at the latest available bar with its value the selected number of bars earlier.</p>
             <div class="mt-2 grid grid-cols-3 gap-2">
-              <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA 20
-                <select id="screen-ema-20-slope" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-                  <option value="any">Any</option><option value="positive">Positive</option><option value="flat">Flat</option><option value="negative">Negative</option>
-                </select>
+              <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA period 1
+                <input id="screen-ema-slope-period-1" type="number" min="2" max="500" value="20" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+                <select id="screen-ema-slope-1" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"><option value="any">Any</option><option value="positive">Positive</option><option value="flat">Flat</option><option value="negative">Negative</option></select>
               </label>
-              <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA 50
-                <select id="screen-ema-50-slope" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-                  <option value="any">Any</option><option value="positive">Positive</option><option value="flat">Flat</option><option value="negative">Negative</option>
-                </select>
+              <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA period 2
+                <input id="screen-ema-slope-period-2" type="number" min="2" max="500" value="50" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+                <select id="screen-ema-slope-2" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"><option value="any">Any</option><option value="positive">Positive</option><option value="flat">Flat</option><option value="negative">Negative</option></select>
               </label>
-              <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA 200
-                <select id="screen-ema-200-slope" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-                  <option value="any">Any</option><option value="positive">Positive</option><option value="flat">Flat</option><option value="negative">Negative</option>
-                </select>
+              <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA period 3
+                <input id="screen-ema-slope-period-3" type="number" min="2" max="500" value="200" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+                <select id="screen-ema-slope-3" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"><option value="any">Any</option><option value="positive">Positive</option><option value="flat">Flat</option><option value="negative">Negative</option></select>
               </label>
             </div>
             <div class="mt-2 grid grid-cols-2 gap-2">
@@ -1053,7 +1139,25 @@
               </label>
             </div>
           </div>
-          <div class="screen-timeline-stack xl:col-start-1 xl:row-start-2 xl:col-span-2 xl:self-start">
+          <div class="screen-range-shell min-w-0">
+            <div class="screen-filter-header">
+              <div>
+                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">RSI Filter</div>
+                <div class="mt-1 text-base font-bold text-slate-900">Minimum RSI on latest candle</div>
+              </div>
+              <label class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <input id="screen-rsi-filter-enabled" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                Use
+              </label>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-xs font-bold text-sky-700">
+              <span>Minimum</span><span id="screen-rsi-filter-min-readout">50</span>
+            </div>
+            <input id="screen-rsi-filter-min" type="range" min="0" max="100" step="1" value="50" class="mt-2 w-full">
+            <div class="screen-range-axis"><span>0</span><span>100</span></div>
+          </div>
+          </div>
+          <div class="screen-timeline-stack xl:col-start-1 xl:row-start-1">
             <div class="flex items-start justify-between gap-3">
               <div>
                 <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-500">Timeline Stack</div>
@@ -1063,7 +1167,14 @@
             </div>
             <p class="text-sm text-slate-500">Each row has one blue event marker. The left side is further back in time, the right side is today, and the event may happen once or many times anywhere in that span.</p>
             <div id="screen-sequence-badges" class="flex flex-wrap gap-2"></div>
-            <div id="screen-rsi-event-step" class="screen-timeline-step">
+            <div id="screen-rule-library" class="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2">
+              <span class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Rule Library</span>
+              <select id="screen-rule-library-select" aria-label="Add a Timeline Rule"
+                class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 outline-none focus:border-rose-400">
+                <option value="">Add a Timeline Rule...</option>
+              </select>
+            </div>
+            <div id="screen-rsi-event-step" class="screen-timeline-step hidden">
               <div class="screen-timeline-step-header">
                 <label class="screen-timeline-step-toggle">
                   <input id="screen-rsi-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
@@ -1077,6 +1188,7 @@
                   <button type="button" data-screen-event-move="rsi" data-direction="up" aria-label="Move RSI event up">↑</button>
                   <button type="button" data-screen-event-move="rsi" data-direction="down" aria-label="Move RSI event down">↓</button>
                 </div>
+                <button type="button" class="screen-timeline-step-remove" data-screen-event-remove="rsi" aria-label="Remove RSI rule from timeline">×</button>
               </div>
               <div class="screen-timeline-step-controls">
                 <label class="screen-timeline-trigger">
@@ -1097,7 +1209,7 @@
                 <div class="screen-range-axis"><span id="screen-rsi-axis-left">30d ago</span><span>Today</span></div>
               </div>
             </div>
-            <div id="screen-macd-event-step" class="screen-timeline-step">
+            <div id="screen-macd-event-step" class="screen-timeline-step hidden">
               <div class="screen-timeline-step-header">
                 <label class="screen-timeline-step-toggle">
                   <input id="screen-macd-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
@@ -1111,6 +1223,7 @@
                   <button type="button" data-screen-event-move="macd" data-direction="up" aria-label="Move MACD event up">↑</button>
                   <button type="button" data-screen-event-move="macd" data-direction="down" aria-label="Move MACD event down">↓</button>
                 </div>
+                <button type="button" class="screen-timeline-step-remove" data-screen-event-remove="macd" aria-label="Remove MACD rule from timeline">×</button>
               </div>
               <div class="screen-timeline-step-controls">
                 <label class="screen-timeline-type screen-macd-type block">
@@ -1133,7 +1246,7 @@
                 <div class="screen-range-axis"><span id="screen-macd-axis-left">30d ago</span><span>Today</span></div>
               </div>
             </div>
-            <div id="screen-stoch-event-step" class="screen-timeline-step">
+            <div id="screen-stoch-event-step" class="screen-timeline-step hidden">
               <div class="screen-timeline-step-header">
                 <label class="screen-timeline-step-toggle">
                   <input id="screen-stoch-event-enabled" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
@@ -1147,6 +1260,7 @@
                   <button type="button" data-screen-event-move="stoch" data-direction="up" aria-label="Move StochRSI event up">↑</button>
                   <button type="button" data-screen-event-move="stoch" data-direction="down" aria-label="Move StochRSI event down">↓</button>
                 </div>
+                <button type="button" class="screen-timeline-step-remove" data-screen-event-remove="stoch" aria-label="Remove StochRSI rule from timeline">×</button>
               </div>
               <div class="screen-timeline-step-controls">
                 <label class="screen-timeline-trigger">
@@ -1173,7 +1287,7 @@
                 <div class="screen-range-axis"><span id="screen-stoch-axis-left">30d ago</span><span>Today</span></div>
               </div>
             </div>
-            <div id="screen-supertrend-event-step" class="screen-timeline-step">
+            <div id="screen-supertrend-event-step" class="screen-timeline-step hidden">
               <div class="screen-timeline-step-header">
                 <label class="screen-timeline-step-toggle">
                   <input id="screen-supertrend-event-enabled" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
@@ -1187,6 +1301,7 @@
                   <button type="button" data-screen-event-move="supertrend" data-direction="up" aria-label="Move Supertrend event up">↑</button>
                   <button type="button" data-screen-event-move="supertrend" data-direction="down" aria-label="Move Supertrend event down">↓</button>
                 </div>
+                <button type="button" class="screen-timeline-step-remove" data-screen-event-remove="supertrend" aria-label="Remove Supertrend rule from timeline">×</button>
               </div>
               <div class="screen-timeline-step-controls">
                 <label class="screen-timeline-type block">
@@ -1203,29 +1318,166 @@
                 <div class="screen-range-axis"><span id="screen-supertrend-axis-left">30d ago</span><span>Today</span></div>
               </div>
             </div>
-            <div id="screen-ema-relationship-event-step" class="screen-timeline-step">
+            <div id="screen-ema-relationship-event-step" class="screen-timeline-step hidden">
               <div class="screen-timeline-step-header">
                 <label class="screen-timeline-step-toggle"><input id="screen-ema-relationship-event-enabled" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"> Use</label>
                 <div class="screen-timeline-step-label">EMA Cross Event</div>
                 <div class="screen-timeline-step-title text-sm font-bold text-slate-900">Fast EMA crossed slow EMA</div>
                 <div id="screen-ema-relationship-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">10 / 20 · positive</div>
-                <div id="screen-ema-relationship-event-readout" class="text-right text-xs font-bold text-sky-700">Cross within last 30d</div>
+                <div id="screen-ema-relationship-event-readout" class="text-right text-xs font-bold text-sky-700">30d ago</div>
                 <div class="screen-timeline-step-move" aria-label="Move EMA event in timeline">
                   <button type="button" data-screen-event-move="ema_relationship" data-direction="up" aria-label="Move EMA event up">↑</button>
                   <button type="button" data-screen-event-move="ema_relationship" data-direction="down" aria-label="Move EMA event down">↓</button>
                 </div>
+                <button type="button" class="screen-timeline-step-remove" data-screen-event-remove="ema_relationship" aria-label="Remove EMA rule from timeline">×</button>
               </div>
               <div class="screen-timeline-step-controls grid grid-cols-2 gap-2">
                 <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Fast EMA<input id="screen-ema-relationship-fast" type="number" min="2" max="200" value="10" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
                 <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Slow EMA<input id="screen-ema-relationship-slow" type="number" min="3" max="400" value="20" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
-                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Slope<select id="screen-ema-relationship-slope" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"><option value="positive" selected>Positive</option><option value="negative">Negative</option><option value="any">Either</option></select></label>
-                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Divergence allowance<input id="screen-ema-relationship-allowance" type="number" min="0" max="5" step="0.05" value="0.10" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
-                <div class="screen-range-track col-span-2"><input id="screen-ema-relationship-age" type="range" min="0" max="180" step="1" value="30" aria-label="EMA cross window"></div>
-                <div class="screen-range-axis col-span-2"><span id="screen-ema-relationship-axis-left">Earlier</span><span>Today</span></div>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Fast EMA slope<select id="screen-ema-relationship-fast-slope" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"><option value="positive" selected>Positive</option><option value="negative">Negative</option><option value="flat">Flat</option><option value="any">Any</option></select></label>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Slow EMA slope<select id="screen-ema-relationship-slow-slope" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"><option value="positive" selected>Positive</option><option value="negative">Negative</option><option value="flat">Flat</option><option value="any">Any</option></select></label>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Cross direction<select id="screen-ema-relationship-cross-mode" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"><option value="cross_up" selected>Cross up</option><option value="cross_down">Cross down</option></select></label>
+                <div class="screen-range-track"><input id="screen-ema-relationship-age" type="range" min="0" max="180" step="1" value="30" aria-label="EMA cross window"></div>
+                <div class="screen-range-axis"><span id="screen-ema-relationship-axis-left">30d ago</span><span>Today</span></div>
+              </div>
+            </div>
+            <div id="screen-price-ema-event-step" class="screen-timeline-step hidden">
+              <div class="screen-timeline-step-header">
+                <label class="screen-timeline-step-toggle"><input id="screen-price-ema-event-enabled" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"> Use</label>
+                <div class="screen-timeline-step-label">Price / EMA Event</div>
+                <div class="screen-timeline-step-title text-sm font-bold text-slate-900">Price crossed EMA</div>
+                <div id="screen-price-ema-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">Price up EMA 20</div>
+                <div id="screen-price-ema-event-readout" class="text-right text-xs font-bold text-sky-700">30d ago</div>
+                <div class="screen-timeline-step-move" aria-label="Move price EMA event in timeline">
+                  <button type="button" data-screen-event-move="price_ema" data-direction="up" aria-label="Move price EMA event up">↑</button>
+                  <button type="button" data-screen-event-move="price_ema" data-direction="down" aria-label="Move price EMA event down">↓</button>
+                </div>
+                <button type="button" class="screen-timeline-step-remove" data-screen-event-remove="price_ema" aria-label="Remove price EMA rule from timeline">×</button>
+              </div>
+              <div class="screen-timeline-step-controls grid grid-cols-2 gap-2">
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA period<input id="screen-price-ema-period" type="number" min="2" max="500" value="20" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Price sources<select id="screen-price-ema-source" multiple size="4" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"><option value="close" selected>Close</option><option value="open">Open</option><option value="high">High</option><option value="low">Low</option></select><span class="mt-1 block text-[9px] normal-case tracking-normal text-slate-400">Ctrl/Cmd-click to select multiple</span></label>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Cross direction<select id="screen-price-ema-cross-mode" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"><option value="cross_up" selected>Cross up</option><option value="cross_down">Cross down</option></select></label>
+                <div class="screen-range-track"><input id="screen-price-ema-cross-age" type="range" min="0" max="180" step="1" value="30" aria-label="Price EMA crossing window"></div>
+                <div class="screen-range-axis"><span id="screen-price-ema-axis-left">30d ago</span><span>Today</span></div>
+              </div>
+            </div>
+            <div id="screen-ha-ema-volume-event-step" class="screen-timeline-step hidden">
+              <div class="screen-timeline-step-header">
+                <label class="screen-timeline-step-toggle"><input id="screen-ha-ema-volume-event-enabled" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"> Use</label>
+                <div class="screen-timeline-step-label">HA EMA + Volume Event</div>
+                <div class="screen-timeline-step-title text-sm font-bold text-slate-900">Find the candle</div>
+                <div id="screen-ha-ema-volume-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">HA High/Low above EMA High/Low + volume</div>
+                <div id="screen-ha-ema-volume-event-readout" class="text-right text-xs font-bold text-sky-700">30d ago</div>
+                <div class="screen-timeline-step-move" aria-label="Move HA EMA and volume event in timeline">
+                  <button type="button" data-screen-event-move="ha_ema_volume" data-direction="up" aria-label="Move HA EMA and volume event up">↑</button>
+                  <button type="button" data-screen-event-move="ha_ema_volume" data-direction="down" aria-label="Move HA EMA and volume event down">↓</button>
+                </div>
+                <button type="button" class="screen-timeline-step-remove" data-screen-event-remove="ha_ema_volume" aria-label="Remove HA EMA and volume rule from timeline">×</button>
+              </div>
+              <div class="mb-2 rounded-lg border border-rose-100 bg-rose-50/70 px-3 py-2 text-[11px] text-slate-600">
+                <div class="font-bold uppercase tracking-[0.12em] text-rose-700">One candle · all conditions must agree</div>
+                <div class="mt-1">The same Heikin Ashi candle must satisfy both line relationships and the volume spike.</div>
+              </div>
+              <div class="screen-timeline-step-controls grid grid-cols-2 gap-2">
+                <div class="col-span-2 rounded-lg border border-sky-100 bg-sky-50/70 p-2">
+                  <div class="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-sky-700">1 · Define the two EMA lines</div>
+                  <div class="space-y-2">
+                    <div class="grid grid-cols-[5rem_1fr] items-center gap-2">
+                      <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA 1<input id="screen-ha-ema-volume-ema1-period" type="number" min="2" max="500" value="20" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                      <div class="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-slate-600"><span class="uppercase tracking-wide text-slate-400">Use</span><label><input id="screen-ha-ema-volume-ema1-source-open" type="radio" name="screen-ha-ema-volume-ema1-source" value="open"> Open</label><label><input id="screen-ha-ema-volume-ema1-source-high" type="radio" name="screen-ha-ema-volume-ema1-source" value="high"> High</label><label><input id="screen-ha-ema-volume-ema1-source-low" type="radio" name="screen-ha-ema-volume-ema1-source" value="low"> Low</label><label><input id="screen-ha-ema-volume-ema1-source-close" type="radio" name="screen-ha-ema-volume-ema1-source" value="close" checked> Close</label></div>
+                    </div>
+                    <div class="grid grid-cols-[5rem_1fr] items-center gap-2">
+                      <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA 2<input id="screen-ha-ema-volume-ema2-period" type="number" min="2" max="500" value="50" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                      <div class="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-slate-600"><span class="uppercase tracking-wide text-slate-400">Use</span><label><input id="screen-ha-ema-volume-ema2-source-open" type="radio" name="screen-ha-ema-volume-ema2-source" value="open"> Open</label><label><input id="screen-ha-ema-volume-ema2-source-high" type="radio" name="screen-ha-ema-volume-ema2-source" value="high"> High</label><label><input id="screen-ha-ema-volume-ema2-source-low" type="radio" name="screen-ha-ema-volume-ema2-source" value="low"> Low</label><label><input id="screen-ha-ema-volume-ema2-source-close" type="radio" name="screen-ha-ema-volume-ema2-source" value="close" checked> Close</label></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-span-2 rounded-lg border border-amber-100 bg-amber-50/70 p-2">
+                  <div class="mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700">2 · Define the candle zones</div>
+                  <div class="mb-2 text-[11px] text-slate-600">Enable any OHLC rows you want. All enabled rows must be true on the same Heikin Ashi candle.</div>
+                  <div class="space-y-1">
+                    {% for field in ['high', 'close', 'open', 'low'] %}
+                    <label class="grid grid-cols-[auto_4rem_1fr] items-center gap-2 rounded-md border border-amber-100/80 bg-white/60 p-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      <input id="screen-ha-ema-volume-condition-{{ field }}-enabled" type="checkbox" {% if field == 'close' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                      <span>HA {{ field }}</span>
+                      <select id="screen-ha-ema-volume-condition-{{ field }}-zone" class="block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs font-semibold normal-case tracking-normal text-slate-800">
+                        <option value="above_ema1">Above EMA 1</option>
+                        <option value="between_ema1_ema2">Between EMA 1 and EMA 2</option>
+                        <option value="below_ema2">Below EMA 2</option>
+                      </select>
+                    </label>
+                    {% endfor %}
+                  </div>
+                  <div id="screen-ha-ema-volume-validation" class="mt-2 hidden rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700"></div>
+                  <label class="mt-2 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Candle color
+                    <select id="screen-ha-ema-volume-candle-color" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs font-semibold normal-case tracking-normal text-slate-800">
+                      <option value="green" selected>Green only</option>
+                      <option value="red">Red only</option>
+                      <option value="any">Any color</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="col-span-2 rounded-lg border border-emerald-100 bg-emerald-50/70 p-2">
+                  <div class="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700">3 · Require the volume spike</div>
+                  <div class="grid grid-cols-2 gap-2">
+                    <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Volume EMA period<input id="screen-ha-ema-volume-period" type="number" min="2" max="100" value="20" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                    <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Same-candle volume ≥ X × EMA
+                      <span class="decimal-spinner">
+                        <input id="screen-ha-ema-volume-multiplier" type="text" inputmode="decimal" value="2.5" class="block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+                        <span class="decimal-spinner-buttons" aria-label="Adjust volume multiplier">
+                          <button type="button" onclick="stepDecimalInput('screen-ha-ema-volume-multiplier', 0.1)" aria-label="Increase volume multiplier">▲</button>
+                          <button type="button" onclick="stepDecimalInput('screen-ha-ema-volume-multiplier', -0.1)" aria-label="Decrease volume multiplier">▼</button>
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+                <div class="screen-range-track"><input id="screen-ha-ema-volume-event-age" type="range" min="0" max="180" step="1" value="30" aria-label="HA EMA and volume event window"></div>
+                <div class="screen-range-axis"><span id="screen-ha-ema-volume-axis-left">30d ago</span><span>Today</span></div>
+              </div>
+            </div>
+            <div id="screen-ema-flatten-event-step" class="screen-timeline-step hidden">
+              <div class="screen-timeline-step-header">
+                <label class="screen-timeline-step-toggle"><input id="screen-ema-flatten-event-enabled" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"> Use</label>
+                <div class="screen-timeline-step-label">EMA Flatten Event</div>
+                <div class="screen-timeline-step-title text-sm font-bold text-slate-900">EMA curve flattened at a top or bottom</div>
+                <div id="screen-ema-flatten-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">EMA 20 · either</div>
+                <div id="screen-ema-flatten-event-readout" class="text-right text-xs font-bold text-sky-700">30d ago</div>
+                <div class="screen-timeline-step-move" aria-label="Move EMA flatten event in timeline"><button type="button" data-screen-event-move="ema_flatten" data-direction="up">↑</button><button type="button" data-screen-event-move="ema_flatten" data-direction="down">↓</button></div>
+                <button type="button" class="screen-timeline-step-remove" data-screen-event-remove="ema_flatten" aria-label="Remove EMA flatten rule from timeline">×</button>
+              </div>
+              <div class="screen-timeline-step-controls grid grid-cols-2 gap-2">
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA period<input id="screen-ema-flatten-period" type="number" min="2" max="500" value="20" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Classify<select id="screen-ema-flatten-mode" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"><option value="either">Top or bottom</option><option value="top">Top only</option><option value="bottom">Bottom only</option></select></label>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Slope lookback<input id="screen-ema-flatten-lookback" type="number" min="1" max="30" value="5" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Flat tolerance %<input id="screen-ema-flatten-tolerance" type="number" min="0" max="5" step="0.05" value="0.1" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                <div class="screen-range-track"><input id="screen-ema-flatten-age" type="range" min="0" max="180" step="1" value="30" aria-label="EMA flattening window"></div>
+                <div class="screen-range-axis"><span id="screen-ema-flatten-axis-left">30d ago</span><span>Today</span></div>
+              </div>
+            </div>
+            <div id="screen-volume-spike-event-step" class="screen-timeline-step hidden">
+              <div class="screen-timeline-step-header">
+                <label class="screen-timeline-step-toggle"><input id="screen-volume-spike-event-enabled" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"> Use</label>
+                <div class="screen-timeline-step-label">Volume Spike Event</div>
+                <div class="screen-timeline-step-title text-sm font-bold text-slate-900">Volume crossed its EMA baseline</div>
+                <div id="screen-volume-spike-readout" class="screen-timeline-step-mode text-[11px] font-bold uppercase tracking-[0.14em] text-rose-600">2.0x EMA 20</div>
+                <div id="screen-volume-spike-cross-readout" class="text-right text-xs font-bold text-sky-700">5d ago</div>
+                <div class="screen-timeline-step-move" aria-label="Move volume spike event in timeline">
+                  <button type="button" data-screen-event-move="volume_spike" data-direction="up" aria-label="Move volume spike event up">↑</button>
+                  <button type="button" data-screen-event-move="volume_spike" data-direction="down" aria-label="Move volume spike event down">↓</button>
+                </div>
+                <button type="button" class="screen-timeline-step-remove" data-screen-event-remove="volume_spike" aria-label="Remove volume spike rule from timeline">×</button>
+              </div>
+              <div class="screen-timeline-step-controls grid grid-cols-2 gap-2">
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">EMA period<input id="screen-volume-spike-period" type="number" min="2" max="100" value="20" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Spike multiple<input id="screen-volume-spike-multiplier" type="text" inputmode="decimal" value="2.0" class="mt-1 block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800"></label>
+                <div class="screen-range-track"><input id="screen-volume-spike-cross-age" type="range" min="0" max="180" step="1" value="5" aria-label="Volume spike window"></div>
+                <div class="screen-range-axis"><span id="screen-volume-spike-axis-left">30d ago</span><span>Today</span></div>
               </div>
             </div>
           </div>
-          <div class="screen-results-column xl:col-start-3 xl:row-start-1 xl:row-span-2 min-h-0 flex flex-col gap-4 overflow-hidden">
+          <div class="screen-results-column xl:col-start-3 xl:row-start-1 min-h-0 flex flex-col gap-4 overflow-hidden">
             <div id="screener-results-panel" class="flex-1 min-h-0 bg-white shadow-xl rounded-xl p-4 overflow-hidden border-t-4 border-indigo-500 flex flex-col">
               <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
                 Top Matches
@@ -1331,6 +1583,12 @@
             <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Supertrend Multiplier
               <input id="chart-supertrend-multiplier" type="number" min="0.5" max="10" step="0.1" value="3.0" class="mt-1 w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
             </label>
+            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Candles
+              <select id="chart-candle-mode" class="mt-1 w-28 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
+                <option value="regular">Regular</option>
+                <option value="heikin_ashi" selected>Heikin Ashi</option>
+              </select>
+            </label>
             <button id="chart-ta-apply-btn" type="button" onclick="applyChartTAParameters()"
               class="rounded bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-indigo-600"
               disabled>
@@ -1340,6 +1598,7 @@
           <div id="plotly-tools-dock">
             <div id="plotly-tools-box"><span id="plotly-tools-label">Tools</span><div id="plotly-tools-actions"></div></div>
           </div>
+          <div id="chart-ema-legend" class="mb-2 flex flex-wrap items-center gap-2"></div>
           <div id="plotly-chart" class="flex-grow w-full bg-slate-50 rounded-lg border border-dashed border-indigo-200 overflow-hidden">
             <div class="flex flex-col items-center justify-center h-full text-indigo-300">
               <svg class="w-16 h-16 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">

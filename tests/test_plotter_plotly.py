@@ -108,6 +108,59 @@ END
     assert fig.layout.legend.xanchor == "left"
 
 
+def test_chart_labels_indicator_panels_in_left_gutter_and_frames_each_panel():
+    dates = pd.date_range(start="2024-01-01", periods=20)
+    close = np.linspace(100.0, 110.0, len(dates))
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.full(len(dates), 1000.0),
+            "RSI": np.linspace(35.0, 65.0, len(dates)),
+            "MACD": np.linspace(-1.0, 1.0, len(dates)),
+            "MACD_Signal": np.linspace(-0.5, 0.5, len(dates)),
+        }
+    )
+
+    fig = InteractivePlotter(show_ribbons=False).create_plot(
+        df,
+        "TEST",
+        strategy_content="FILTER: RSI > 50\nFILTER: MACD > MACD_Signal",
+    )
+
+    panel_labels = {
+        getattr(annotation, "text", ""): annotation
+        for annotation in fig.layout.annotations
+        if getattr(annotation, "text", "") in {
+            "<b>Price</b>",
+            "<b>MACD</b>",
+            "<b>RSI</b>",
+            "<b>Volume</b>",
+            "<b>Aggregated</b>",
+        }
+    }
+    assert set(panel_labels) == {
+        "<b>Price</b>",
+        "<b>MACD</b>",
+        "<b>RSI</b>",
+        "<b>Volume</b>",
+        "<b>Aggregated</b>",
+    }
+    assert all(annotation.xref == "paper" for annotation in panel_labels.values())
+    assert all(float(annotation.x) == -0.08 for annotation in panel_labels.values())
+
+    expected_rows = len(
+        [key for key in fig.layout if str(key).startswith("yaxis")]
+    )
+    border_shapes = [shape for shape in fig.layout.shapes if shape.type == "rect"]
+    assert len(border_shapes) == expected_rows
+    assert all(shape.line.width == 1 for shape in border_shapes)
+    assert all(shape.line.color == "#e2e8f0" for shape in border_shapes)
+
+
 def test_prepare_eval_columns_supports_supertrend_flat():
     dates = pd.date_range(start="2024-01-01", periods=5)
     close = np.array([100.0, 100.0, 100.0, 101.0, 101.0])
@@ -343,6 +396,53 @@ END
         showline = getattr(fig.layout[k], "showline", None)
         assert (ticks == "outside") == is_bottom
         assert bool(showline) == is_bottom
+
+
+def test_xaxes_hide_weekends_and_missing_weekday_trading_days():
+    dates = pd.to_datetime(
+        ["2024-01-04", "2024-01-05", "2024-01-08", "2024-01-10"]
+    )
+    close = np.array([100.0, 101.0, 102.0, 103.0])
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": [1000.0] * len(close),
+        }
+    )
+
+    fig = InteractivePlotter().create_plot(df, "TEST")
+    xaxis = fig.layout.xaxis
+    rangebreaks = [item.to_plotly_json() for item in xaxis.rangebreaks]
+
+    assert {"bounds": ["sat", "mon"]} in rangebreaks
+    assert {"values": ["2024-01-09"]} in rangebreaks
+
+
+def test_heikin_ashi_is_default_and_uses_transformed_ohlc():
+    df = pd.DataFrame(
+        {
+            "Date": pd.to_datetime(["2024-01-04", "2024-01-05"]),
+            "Open": [10.0, 20.0],
+            "High": [14.0, 24.0],
+            "Low": [8.0, 18.0],
+            "Close": [12.0, 22.0],
+            "Volume": [1000.0, 1200.0],
+        }
+    )
+
+    fig = InteractivePlotter().create_plot(df, "TEST")
+    candles = next(trace for trace in fig.data if trace.type == "candlestick")
+    ha_open, ha_high, ha_low, ha_close = InteractivePlotter._heikin_ashi_ohlc(df)
+
+    assert candles.name == "Heikin Ashi"
+    assert ha_close.tolist() == [11.0, 21.0]
+    assert ha_open.tolist() == [11.0, 11.0]
+    assert ha_high.tolist() == [14.0, 24.0]
+    assert ha_low.tolist() == [8.0, 11.0]
 
 
 def test_simplified_dsl_does_not_fallback_to_default_ribbons():

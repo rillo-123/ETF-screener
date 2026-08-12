@@ -590,6 +590,12 @@ def test_dashboard_js_playbook_tab_loads_rows_and_renders_table():
           setAttribute(name, value) {{ this[name] = value; }}
           appendChild(child) {{ this.children.push(child); return child; }}
           remove() {{}}
+          closest() {{ return null; }}
+          querySelector() {{ return null; }}
+          querySelectorAll() {{ return []; }}
+          contains() {{ return false; }}
+          focus() {{}}
+          dispatchEvent() {{}}
           get innerHTML() {{ return this._innerHTML; }}
           set innerHTML(value) {{ this._innerHTML = value; this.children = []; }}
           getBoundingClientRect() {{
@@ -657,6 +663,7 @@ def test_dashboard_js_playbook_tab_loads_rows_and_renders_table():
         global.window.addEventListener = () => {{}};
         global.document = {{
           body: new Element("body"),
+          documentElement: new Element("html"),
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
@@ -695,6 +702,9 @@ def test_dashboard_js_playbook_tab_loads_rows_and_renders_table():
                     label: "Buy",
                     entry: 100,
                     stop: 99,
+                    target: 102,
+                    target_basis: "2R minimum",
+                    reward_risk_ratio: 2,
                     support_basis: "20D low",
                     support_level: 99,
                     max_loss_pct: 1,
@@ -711,6 +721,9 @@ def test_dashboard_js_playbook_tab_loads_rows_and_renders_table():
                     label: "Buy",
                     entry: 90,
                     stop: 85.5,
+                    target: 99,
+                    target_basis: "2R minimum",
+                    reward_risk_ratio: 2,
                     support_basis: "EMA 50",
                     support_level: 84,
                     max_loss_pct: 5,
@@ -768,6 +781,9 @@ def test_dashboard_js_playbook_tab_loads_rows_and_renders_table():
           }}
           if (!String(body.children[0].innerHTML || "").includes("Trade")) {{
             throw new Error("Playbook did not render the trade decision");
+          }}
+          if (!String(body.children[0].innerHTML || "").includes("102.00")) {{
+            throw new Error("Playbook did not render the target price");
           }}
           if (!String(body.children[1].innerHTML || "").includes("Trade With Tight Cap")) {{
             throw new Error("Playbook did not render the risk-capped trade decision");

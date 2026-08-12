@@ -54,7 +54,11 @@
               url: window.location.href,
               line: "",
             }),
-          }).finally(() => { _sending = false; });
+          })
+            // Logging must never create an unhandled rejection when the
+            // dashboard is restarting or briefly unavailable.
+            .catch(() => {})
+            .finally(() => { _sending = false; });
         } catch (_) {
           _sending = false;
         }

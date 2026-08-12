@@ -1,9 +1,10 @@
 {
-  "active_name": "rsi-down-nasdaq",
+  "active_name": "rsi-crossup",
   "presets": [
     {
       "filters": {
         "chart_ta": {
+          "candle_mode": "regular",
           "macd_fast": 12,
           "macd_signal": 9,
           "macd_slow": 26,
@@ -18,23 +19,43 @@
         },
         "ema_relationship_age": 30,
         "ema_relationship_allowance": 0.1,
+        "ema_relationship_cross_mode": "cross_up",
         "ema_relationship_enabled": false,
         "ema_relationship_fast": 10,
+        "ema_relationship_fast_slope": "positive",
         "ema_relationship_slope": "positive",
         "ema_relationship_slow": 20,
+        "ema_relationship_slow_slope": "positive",
+        "ema_slope_1": "any",
+        "ema_slope_2": "any",
         "ema_slope_20": "any",
         "ema_slope_200": "any",
+        "ema_slope_3": "any",
         "ema_slope_50": "any",
         "ema_slope_flat_tolerance": 0.1,
         "ema_slope_lookback": 5,
+        "ema_slope_period_1": 20,
+        "ema_slope_period_2": 50,
+        "ema_slope_period_3": 200,
         "lookback_days": 30,
         "macd_cross_mode": "low_cross_buy",
         "macd_event_age": 30,
         "macd_event_enabled": true,
+        "price_ema_cross_mode": "cross_up",
+        "price_ema_event_age": 30,
+        "price_ema_event_enabled": false,
+        "price_ema_period": 20,
         "rsi_cross_mode": "cross_up",
         "rsi_cross_value": 50.0,
         "rsi_event_age": 30,
         "rsi_event_enabled": true,
+        "rsi_events": [
+          {
+            "rsi_cross_mode": "cross_up",
+            "rsi_cross_value": 50.0,
+            "rsi_event_age": 30
+          }
+        ],
         "stoch_cross_mode": "cross_up",
         "stoch_cross_region": "below",
         "stoch_cross_value": 20.0,
@@ -43,16 +64,28 @@
         "supertrend_cross_mode": "red_to_green",
         "supertrend_event_age": 30,
         "supertrend_event_enabled": false,
+        "timeline_order": [
+          "rsi",
+          "macd",
+          "stoch",
+          "supertrend",
+          "ema_relationship"
+        ],
         "volume_range": {
           "max": 20000000.0,
           "min": 0.0
-        }
+        },
+        "volume_spike_age": 5,
+        "volume_spike_enabled": false,
+        "volume_spike_multiplier": 2.0,
+        "volume_spike_period": 20
       },
       "name": "Sequence Default"
     },
     {
       "filters": {
         "chart_ta": {
+          "candle_mode": "regular",
           "macd_fast": 12,
           "macd_signal": 9,
           "macd_slow": 26,
@@ -67,23 +100,43 @@
         },
         "ema_relationship_age": 30,
         "ema_relationship_allowance": 0.1,
+        "ema_relationship_cross_mode": "cross_up",
         "ema_relationship_enabled": false,
         "ema_relationship_fast": 10,
+        "ema_relationship_fast_slope": "positive",
         "ema_relationship_slope": "positive",
         "ema_relationship_slow": 20,
+        "ema_relationship_slow_slope": "positive",
+        "ema_slope_1": "any",
+        "ema_slope_2": "any",
         "ema_slope_20": "any",
         "ema_slope_200": "any",
+        "ema_slope_3": "any",
         "ema_slope_50": "any",
         "ema_slope_flat_tolerance": 0.1,
         "ema_slope_lookback": 5,
+        "ema_slope_period_1": 20,
+        "ema_slope_period_2": 50,
+        "ema_slope_period_3": 200,
         "lookback_days": 30,
         "macd_cross_mode": "low_cross_buy",
         "macd_event_age": 30,
         "macd_event_enabled": false,
+        "price_ema_cross_mode": "cross_up",
+        "price_ema_event_age": 30,
+        "price_ema_event_enabled": false,
+        "price_ema_period": 20,
         "rsi_cross_mode": "cross_down",
         "rsi_cross_value": 30.0,
         "rsi_event_age": 3,
         "rsi_event_enabled": true,
+        "rsi_events": [
+          {
+            "rsi_cross_mode": "cross_down",
+            "rsi_cross_value": 30.0,
+            "rsi_event_age": 3
+          }
+        ],
         "stoch_cross_mode": "cross_up",
         "stoch_cross_region": "below",
         "stoch_cross_value": 20.0,
@@ -92,16 +145,28 @@
         "supertrend_cross_mode": "red_to_green",
         "supertrend_event_age": 30,
         "supertrend_event_enabled": false,
+        "timeline_order": [
+          "rsi",
+          "macd",
+          "stoch",
+          "supertrend",
+          "ema_relationship"
+        ],
         "volume_range": {
           "max": 20000000.0,
           "min": 0.0
-        }
+        },
+        "volume_spike_age": 5,
+        "volume_spike_enabled": false,
+        "volume_spike_multiplier": 2.0,
+        "volume_spike_period": 20
       },
       "name": "RSI-LT-30"
     },
     {
       "filters": {
         "chart_ta": {
+          "candle_mode": "regular",
           "macd_fast": 12,
           "macd_signal": 9,
           "macd_slow": 26,
@@ -116,23 +181,43 @@
         },
         "ema_relationship_age": 30,
         "ema_relationship_allowance": 0.1,
+        "ema_relationship_cross_mode": "cross_up",
         "ema_relationship_enabled": false,
         "ema_relationship_fast": 10,
+        "ema_relationship_fast_slope": "positive",
         "ema_relationship_slope": "positive",
         "ema_relationship_slow": 20,
+        "ema_relationship_slow_slope": "positive",
+        "ema_slope_1": "any",
+        "ema_slope_2": "any",
         "ema_slope_20": "any",
         "ema_slope_200": "any",
+        "ema_slope_3": "any",
         "ema_slope_50": "any",
         "ema_slope_flat_tolerance": 0.1,
         "ema_slope_lookback": 5,
+        "ema_slope_period_1": 20,
+        "ema_slope_period_2": 50,
+        "ema_slope_period_3": 200,
         "lookback_days": 30,
         "macd_cross_mode": "low_cross_buy",
         "macd_event_age": 30,
         "macd_event_enabled": false,
+        "price_ema_cross_mode": "cross_up",
+        "price_ema_event_age": 30,
+        "price_ema_event_enabled": false,
+        "price_ema_period": 20,
         "rsi_cross_mode": "cross_down",
         "rsi_cross_value": 30.0,
         "rsi_event_age": 3,
         "rsi_event_enabled": false,
+        "rsi_events": [
+          {
+            "rsi_cross_mode": "cross_down",
+            "rsi_cross_value": 30.0,
+            "rsi_event_age": 3
+          }
+        ],
         "stoch_cross_mode": "cross_up",
         "stoch_cross_region": "below",
         "stoch_cross_value": 20.0,
@@ -141,16 +226,28 @@
         "supertrend_cross_mode": "red_to_green",
         "supertrend_event_age": 5,
         "supertrend_event_enabled": true,
+        "timeline_order": [
+          "rsi",
+          "macd",
+          "stoch",
+          "supertrend",
+          "ema_relationship"
+        ],
         "volume_range": {
           "max": 20000000.0,
           "min": 0.0
-        }
+        },
+        "volume_spike_age": 5,
+        "volume_spike_enabled": false,
+        "volume_spike_multiplier": 2.0,
+        "volume_spike_period": 20
       },
       "name": "supertrend"
     },
     {
       "filters": {
         "chart_ta": {
+          "candle_mode": "regular",
           "macd_fast": 12,
           "macd_signal": 9,
           "macd_slow": 26,
@@ -165,23 +262,43 @@
         },
         "ema_relationship_age": 30,
         "ema_relationship_allowance": 0.1,
+        "ema_relationship_cross_mode": "cross_up",
         "ema_relationship_enabled": false,
         "ema_relationship_fast": 10,
+        "ema_relationship_fast_slope": "positive",
         "ema_relationship_slope": "positive",
         "ema_relationship_slow": 20,
+        "ema_relationship_slow_slope": "positive",
+        "ema_slope_1": "any",
+        "ema_slope_2": "any",
         "ema_slope_20": "any",
         "ema_slope_200": "any",
+        "ema_slope_3": "any",
         "ema_slope_50": "any",
         "ema_slope_flat_tolerance": 0.1,
         "ema_slope_lookback": 5,
+        "ema_slope_period_1": 20,
+        "ema_slope_period_2": 50,
+        "ema_slope_period_3": 200,
         "lookback_days": 30,
         "macd_cross_mode": "low_cross_buy",
         "macd_event_age": 30,
         "macd_event_enabled": false,
+        "price_ema_cross_mode": "cross_up",
+        "price_ema_event_age": 30,
+        "price_ema_event_enabled": false,
+        "price_ema_period": 20,
         "rsi_cross_mode": "cross_down",
         "rsi_cross_value": 30.0,
         "rsi_event_age": 3,
         "rsi_event_enabled": false,
+        "rsi_events": [
+          {
+            "rsi_cross_mode": "cross_down",
+            "rsi_cross_value": 30.0,
+            "rsi_event_age": 3
+          }
+        ],
         "stoch_cross_mode": "cross_up",
         "stoch_cross_region": "below",
         "stoch_cross_value": 20.0,
@@ -190,16 +307,28 @@
         "supertrend_cross_mode": "red_to_green",
         "supertrend_event_age": 9,
         "supertrend_event_enabled": false,
+        "timeline_order": [
+          "rsi",
+          "macd",
+          "stoch",
+          "supertrend",
+          "ema_relationship"
+        ],
         "volume_range": {
           "max": 20000000.0,
           "min": 0.0
-        }
+        },
+        "volume_spike_age": 5,
+        "volume_spike_enabled": false,
+        "volume_spike_multiplier": 2.0,
+        "volume_spike_period": 20
       },
       "name": "stoch"
     },
     {
       "filters": {
         "chart_ta": {
+          "candle_mode": "regular",
           "macd_fast": 12,
           "macd_signal": 9,
           "macd_slow": 26,
@@ -214,23 +343,43 @@
         },
         "ema_relationship_age": 9,
         "ema_relationship_allowance": 0.1,
+        "ema_relationship_cross_mode": "cross_up",
         "ema_relationship_enabled": true,
         "ema_relationship_fast": 10,
+        "ema_relationship_fast_slope": "positive",
         "ema_relationship_slope": "positive",
         "ema_relationship_slow": 20,
+        "ema_relationship_slow_slope": "positive",
+        "ema_slope_1": "any",
+        "ema_slope_2": "any",
         "ema_slope_20": "any",
         "ema_slope_200": "any",
+        "ema_slope_3": "any",
         "ema_slope_50": "any",
         "ema_slope_flat_tolerance": 0.1,
         "ema_slope_lookback": 5,
+        "ema_slope_period_1": 20,
+        "ema_slope_period_2": 50,
+        "ema_slope_period_3": 200,
         "lookback_days": 30,
         "macd_cross_mode": "low_cross_buy",
         "macd_event_age": 30,
         "macd_event_enabled": false,
+        "price_ema_cross_mode": "cross_up",
+        "price_ema_event_age": 30,
+        "price_ema_event_enabled": false,
+        "price_ema_period": 20,
         "rsi_cross_mode": "cross_down",
         "rsi_cross_value": 30.0,
         "rsi_event_age": 3,
         "rsi_event_enabled": false,
+        "rsi_events": [
+          {
+            "rsi_cross_mode": "cross_down",
+            "rsi_cross_value": 30.0,
+            "rsi_event_age": 3
+          }
+        ],
         "stoch_cross_mode": "cross_up",
         "stoch_cross_region": "below",
         "stoch_cross_value": 20.0,
@@ -239,16 +388,28 @@
         "supertrend_cross_mode": "red_to_green",
         "supertrend_event_age": 9,
         "supertrend_event_enabled": false,
+        "timeline_order": [
+          "rsi",
+          "macd",
+          "stoch",
+          "supertrend",
+          "ema_relationship"
+        ],
         "volume_range": {
           "max": 20000000.0,
           "min": 0.0
-        }
+        },
+        "volume_spike_age": 5,
+        "volume_spike_enabled": false,
+        "volume_spike_multiplier": 2.0,
+        "volume_spike_period": 20
       },
       "name": "ema"
     },
     {
       "filters": {
         "chart_ta": {
+          "candle_mode": "regular",
           "macd_fast": 12,
           "macd_signal": 9,
           "macd_slow": 26,
@@ -263,23 +424,43 @@
         },
         "ema_relationship_age": 3,
         "ema_relationship_allowance": 0.1,
+        "ema_relationship_cross_mode": "cross_up",
         "ema_relationship_enabled": false,
         "ema_relationship_fast": 10,
+        "ema_relationship_fast_slope": "positive",
         "ema_relationship_slope": "positive",
         "ema_relationship_slow": 20,
+        "ema_relationship_slow_slope": "positive",
+        "ema_slope_1": "any",
+        "ema_slope_2": "any",
         "ema_slope_20": "any",
         "ema_slope_200": "any",
+        "ema_slope_3": "any",
         "ema_slope_50": "any",
         "ema_slope_flat_tolerance": 0.1,
         "ema_slope_lookback": 5,
+        "ema_slope_period_1": 20,
+        "ema_slope_period_2": 50,
+        "ema_slope_period_3": 200,
         "lookback_days": 30,
         "macd_cross_mode": "low_cross_buy",
         "macd_event_age": 3,
         "macd_event_enabled": false,
+        "price_ema_cross_mode": "cross_up",
+        "price_ema_event_age": 30,
+        "price_ema_event_enabled": false,
+        "price_ema_period": 20,
         "rsi_cross_mode": "cross_down",
         "rsi_cross_value": 30.0,
         "rsi_event_age": 3,
         "rsi_event_enabled": true,
+        "rsi_events": [
+          {
+            "rsi_cross_mode": "cross_down",
+            "rsi_cross_value": 30.0,
+            "rsi_event_age": 3
+          }
+        ],
         "stoch_cross_mode": "cross_up",
         "stoch_cross_region": "below",
         "stoch_cross_value": 20.0,
@@ -288,14 +469,184 @@
         "supertrend_cross_mode": "red_to_green",
         "supertrend_event_age": 3,
         "supertrend_event_enabled": false,
+        "timeline_order": [
+          "rsi",
+          "macd",
+          "stoch",
+          "supertrend",
+          "ema_relationship"
+        ],
         "volume_range": {
           "max": 20000000.0,
           "min": 2100000.0
-        }
+        },
+        "volume_spike_age": 5,
+        "volume_spike_enabled": false,
+        "volume_spike_multiplier": 2.0,
+        "volume_spike_period": 20
       },
       "name": "rsi-down-nasdaq"
+    },
+    {
+      "filters": {
+        "chart_ta": {
+          "candle_mode": "regular",
+          "macd_fast": 12,
+          "macd_signal": 9,
+          "macd_slow": 26,
+          "rsi_period": 14,
+          "rsi_trigger": 40,
+          "stoch_rsi_d": 3,
+          "stoch_rsi_k": 3,
+          "stoch_rsi_period": 14,
+          "stoch_trigger": 20,
+          "supertrend_multiplier": 3,
+          "supertrend_period": 10
+        },
+        "ema_relationship_age": 3,
+        "ema_relationship_allowance": 0.1,
+        "ema_relationship_cross_mode": "cross_up",
+        "ema_relationship_enabled": false,
+        "ema_relationship_fast": 10,
+        "ema_relationship_fast_slope": "positive",
+        "ema_relationship_slope": "positive",
+        "ema_relationship_slow": 20,
+        "ema_relationship_slow_slope": "positive",
+        "ema_slope_1": "any",
+        "ema_slope_2": "any",
+        "ema_slope_20": "any",
+        "ema_slope_200": "any",
+        "ema_slope_3": "any",
+        "ema_slope_50": "any",
+        "ema_slope_flat_tolerance": 0.1,
+        "ema_slope_lookback": 5,
+        "ema_slope_period_1": 20,
+        "ema_slope_period_2": 50,
+        "ema_slope_period_3": 200,
+        "lookback_days": 30,
+        "macd_cross_mode": "bullish_cross",
+        "macd_event_age": 3,
+        "macd_event_enabled": false,
+        "price_ema_cross_mode": "cross_up",
+        "price_ema_event_age": 30,
+        "price_ema_event_enabled": false,
+        "price_ema_period": 20,
+        "rsi_cross_mode": "cross_down",
+        "rsi_cross_value": 40.0,
+        "rsi_event_age": 30,
+        "rsi_event_enabled": true,
+        "rsi_events": [
+          {
+            "rsi_cross_mode": "cross_down",
+            "rsi_cross_value": 40.0,
+            "rsi_event_age": 30
+          }
+        ],
+        "stoch_cross_mode": "cross_up",
+        "stoch_cross_region": "below",
+        "stoch_cross_value": 20.0,
+        "stoch_event_age": 3,
+        "stoch_event_enabled": false,
+        "supertrend_cross_mode": "red_to_green",
+        "supertrend_event_age": 3,
+        "supertrend_event_enabled": false,
+        "timeline_order": [
+          "rsi",
+          "macd",
+          "stoch",
+          "supertrend",
+          "ema_relationship"
+        ],
+        "volume_range": {
+          "max": 20000000.0,
+          "min": 0.0
+        },
+        "volume_spike_age": 5,
+        "volume_spike_enabled": false,
+        "volume_spike_multiplier": 2.0,
+        "volume_spike_period": 20
+      },
+      "name": "rsi-crossdown"
+    },
+    {
+      "filters": {
+        "chart_ta": {
+          "candle_mode": "regular",
+          "macd_fast": 12,
+          "macd_signal": 9,
+          "macd_slow": 26,
+          "rsi_period": 14,
+          "rsi_trigger": 30,
+          "stoch_rsi_d": 3,
+          "stoch_rsi_k": 3,
+          "stoch_rsi_period": 14,
+          "stoch_trigger": 20,
+          "supertrend_multiplier": 3,
+          "supertrend_period": 10
+        },
+        "ema_relationship_age": 3,
+        "ema_relationship_allowance": 0.1,
+        "ema_relationship_cross_mode": "cross_up",
+        "ema_relationship_enabled": false,
+        "ema_relationship_fast": 10,
+        "ema_relationship_fast_slope": "positive",
+        "ema_relationship_slope": "positive",
+        "ema_relationship_slow": 20,
+        "ema_relationship_slow_slope": "positive",
+        "ema_slope_1": "any",
+        "ema_slope_2": "any",
+        "ema_slope_20": "any",
+        "ema_slope_200": "any",
+        "ema_slope_3": "positive",
+        "ema_slope_50": "any",
+        "ema_slope_flat_tolerance": 0.1,
+        "ema_slope_lookback": 3,
+        "ema_slope_period_1": 20,
+        "ema_slope_period_2": 50,
+        "ema_slope_period_3": 200,
+        "lookback_days": 30,
+        "macd_cross_mode": "bullish_cross",
+        "macd_event_age": 4,
+        "macd_event_enabled": false,
+        "price_ema_cross_mode": "cross_down",
+        "price_ema_event_age": 10,
+        "price_ema_event_enabled": false,
+        "price_ema_period": 30,
+        "rsi_cross_mode": "cross_up",
+        "rsi_cross_value": 30.0,
+        "rsi_event_age": 4,
+        "rsi_event_enabled": true,
+        "rsi_events": [
+          {
+            "rsi_cross_mode": "cross_up",
+            "rsi_cross_value": 30.0,
+            "rsi_event_age": 4,
+            "rsi_event_id": "rsi"
+          }
+        ],
+        "stoch_cross_mode": "cross_up",
+        "stoch_cross_region": "below",
+        "stoch_cross_value": 20.0,
+        "stoch_event_age": 3,
+        "stoch_event_enabled": false,
+        "supertrend_cross_mode": "red_to_green",
+        "supertrend_event_age": 3,
+        "supertrend_event_enabled": false,
+        "timeline_order": [
+          "rsi"
+        ],
+        "volume_range": {
+          "max": 20000000.0,
+          "min": 900000.0
+        },
+        "volume_spike_age": 5,
+        "volume_spike_enabled": false,
+        "volume_spike_multiplier": 2.0,
+        "volume_spike_period": 20
+      },
+      "name": "rsi-crossup"
     }
   ],
   "schema_version": "screen_presets_v1",
-  "updated_at": "2026-07-25T10:58:56.546550+00:00"
+  "updated_at": "2026-08-09T17:21:05.664045+00:00"
 }

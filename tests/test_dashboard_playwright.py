@@ -1,4 +1,5 @@
 import os
+import json
 import socket
 import subprocess
 import sys
@@ -838,7 +839,7 @@ EXIT: close < ema_20</textarea>
     assert page.locator("#bt-best-structure").inner_text() == "7.10"
 
 
-def test_backtest_exclude_checkbox_renders_in_live_dashboard_shell(page):
+def test_live_dashboard_shell_omits_removed_backtest_surface(page):
     with _run_dashboard_server() as base_url:
         page.route(
             "**/api/**",
@@ -855,51 +856,208 @@ def test_backtest_exclude_checkbox_renders_in_live_dashboard_shell(page):
             ),
         )
         page.goto(f"{base_url}/", wait_until="domcontentloaded")
-        page.wait_for_function(
-            "() => typeof window.prepareBacktestLiveResults === 'function' && !!window.dashboardReadyPromise"
-        )
+        page.wait_for_function("() => !!window.dashboardReadyPromise")
         page.evaluate("""
             async () => {
               await window.dashboardReadyPromise;
-              window.showTab("backtest");
-              window.prepareBacktestLiveResults("Running...");
-              window.mergeBacktestScatterRows([
-                {
-                  strategy: "Alpha",
-                  ticker: "AAA.DE",
-                  trades: 3,
-                  return_pct: 12,
-                  win_rate_pct: 66,
-                  profit_factor: 1.8,
-                  sharpe: 1.4,
-                  max_dd_pct: 5,
-                  quality_score: 18,
-                },
-                {
-                  strategy: "Beta",
-                  ticker: "BBB.ST",
-                  trades: 2,
-                  return_pct: 7,
-                  win_rate_pct: 55,
-                  profit_factor: 1.2,
-                  sharpe: 0.8,
-                  max_dd_pct: 4,
-                  quality_score: 9,
-                },
-              ]);
-              await new Promise((resolve) => setTimeout(resolve, 250));
             }
             """)
+        assert page.locator("#backtest-table-body").count() == 0
+        assert page.get_by_text("Backtester", exact=True).count() == 0
 
-        exclude_header = page.locator("th", has_text="Exclude")
-        first_row_last_cell = (
-            page.locator("#backtest-table-body tr").first.locator("td").last
+
+def test_playbook_trade_ideas_render_target_and_watch_context(page):
+    with _run_dashboard_server() as base_url:
+        playbook_payload = {
+            "as_of_date": "2026-07-24",
+            "risk_pct": 5,
+            "summary": {"trade_count": 1, "watch_count": 1, "risk_capped_count": 0},
+            "rows": [
+                {
+                    "ticker": "AAA.DE",
+                    "name": "Alpha ETF",
+                    "decision": "Trade",
+                    "label": "Buy",
+                    "entry": 100,
+                    "stop": 99,
+                    "target": 104,
+                    "target_basis": "20D resistance",
+                    "reward_risk_ratio": 4,
+                    "max_loss_pct": 1,
+                    "stop_basis": "technical",
+                    "recent_entry_days": 1,
+                    "final_score": 6,
+                    "reasons": ["All six rules pass"],
+                },
+                {
+                    "ticker": "BBB.DE",
+                    "name": "Beta ETF",
+                    "decision": "Watch",
+                    "label": "Watch",
+                    "entry": 90,
+                    "stop": 85.5,
+                    "target": 99,
+                    "target_basis": "2R minimum",
+                    "reward_risk_ratio": 2,
+                    "max_loss_pct": 5,
+                    "stop_basis": "risk_cap",
+                    "recent_entry_days": 2,
+                    "final_score": 5,
+                    "reasons": ["Missing Pullback 2-8%"],
+                },
+            ],
+        }
+
+        def handle_api(route):
+            url = route.request.url
+            if "/api/playbook" in url:
+                route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=json.dumps(playbook_payload),
+                )
+            elif "/api/market-status" in url:
+                route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body='{"is_stale":false,"latest_market_date":"2026-07-24",'
+                    '"tracked_tickers":2,"fresh_tickers":2}',
+                )
+            else:
+                route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body='{"items":[],"tickers":[],"lists":[]}',
+                )
+
+        page.route("**/api/**", handle_api)
+        page.goto(f"{base_url}/", wait_until="domcontentloaded")
+        page.wait_for_function(
+            "() => typeof window.showTab === 'function' && !!window.dashboardReadyPromise"
+        )
+        page.evaluate("() => window.showTab('playbook')")
+        page.wait_for_function(
+            "() => document.querySelectorAll('#playbook-table-body tr').length === 2"
         )
 
-        assert exclude_header.is_visible()
-        assert page.locator("#backtest-table-body tr").count() == 2
-        assert first_row_last_cell.locator("input[type='checkbox']").is_visible()
-        assert first_row_last_cell.inner_text().strip().upper() == "EXCLUDE"
+        assert page.locator("#playbook-trade-count").inner_text() == "1"
+        assert page.locator("#playbook-watch-count").inner_text() == "1"
+        assert "104.00" in page.locator("#playbook-table-body tr").first.inner_text()
+        assert "4.0R upside" in page.locator("#playbook-table-body tr").first.inner_text()
+        assert "Rules 5/6" in page.locator("#playbook-table-body tr").nth(1).inner_text()
+
+
+def test_timeline_stack_can_remove_and_add_rules(page):
+    with _run_dashboard_server() as base_url:
+        def handle_api(route):
+            url = route.request.url
+            if "/api/market-status" in url:
+                body = '{"is_stale":false,"latest_market_date":"2026-07-24",'
+                body += '"tracked_tickers":0,"fresh_tickers":0}'
+            elif "/api/screen/presets" in url:
+                body = '{"active_name":"","default_filters":{},"presets":[]}'
+            else:
+                body = '{"items":[],"tickers":[],"lists":[]}'
+            route.fulfill(status=200, content_type="application/json", body=body)
+
+        page.route("**/api/**", handle_api)
+        page.goto(f"{base_url}/", wait_until="domcontentloaded")
+        page.wait_for_function(
+            "() => typeof window.showTab === 'function' && !!window.dashboardReadyPromise"
+        )
+        page.evaluate("() => window.dashboardReadyPromise")
+
+        rsi_step = page.locator("#screen-rsi-event-step")
+        rule_library = page.locator("#screen-rule-library-select")
+        assert rsi_step.is_visible()
+        assert not page.locator("#screen-supertrend-event-step").is_visible()
+        assert rule_library.locator('option[value="rsi_2"]').inner_text() == "Add RSI"
+        page.locator('[data-screen-event-remove="rsi"]').click()
+        assert not rsi_step.is_visible()
+        assert rule_library.locator('option[value="rsi"]').count() == 1
+
+        rule_library.select_option("rsi")
+        assert rsi_step.is_visible()
+        assert rule_library.locator('option[value="rsi"]').count() == 0
+
+        rule_library.select_option("rsi_2")
+        rsi_second_step = page.locator("#screen-rsi-2-event-step")
+        assert rsi_second_step.is_visible()
+        assert rule_library.locator('option[value="rsi_2"]').count() == 0
+        assert page.locator("#screen-rsi-2-cross-value").input_value() == "50"
+        page.locator("#screen-rsi-2-cross-value").evaluate(
+            "(node) => { node.value = '40'; node.dispatchEvent(new Event('input', { bubbles: true })); }"
+        )
+        assert page.locator("#screen-rsi-2-cross-value-readout").inner_text() == "40"
+        assert rule_library.locator('option[value="rsi_3"]').inner_text() == "Add RSI"
+        rule_library.select_option("rsi_3")
+        assert page.locator("#screen-rsi-3-event-step").is_visible()
+        page.locator("#screen-rsi-3-cross-value").evaluate(
+            "(node) => { node.value = '30'; node.dispatchEvent(new Event('input', { bubbles: true })); }"
+        )
+        assert page.locator("#screen-rsi-3-cross-value-readout").inner_text() == "30"
+        assert page.locator("#screen-rsi-2-event-step").evaluate(
+            "(node) => { const ids = [...node.parentElement.querySelectorAll(':scope > .screen-timeline-step')].map((item) => item.id); return ids.indexOf('screen-rsi-2-event-step') === ids.indexOf('screen-rsi-event-step') + 1 && ids.indexOf('screen-rsi-3-event-step') === ids.indexOf('screen-rsi-2-event-step') + 1; }"
+        )
+
+        assert rule_library.locator('option[value="price_ema"]').inner_text() == "Add Price / EMA"
+        rule_library.select_option("price_ema")
+        price_ema_step = page.locator("#screen-price-ema-event-step")
+        assert price_ema_step.is_visible()
+        page.locator("#screen-price-ema-period").fill("50")
+        page.locator("#screen-price-ema-cross-mode").select_option("cross_down")
+        assert page.locator("#screen-price-ema-readout").inner_text() == "PRICE DOWN EMA 50"
+
+        rule_library.select_option("volume_spike")
+        volume_step = page.locator("#screen-volume-spike-event-step")
+        assert volume_step.is_visible()
+        assert page.locator("#screen-volume-spike-period").input_value() == "20"
+        assert page.locator("#screen-volume-spike-multiplier").input_value() == "2"
+        assert rule_library.locator('option[value="volume_spike"]').count() == 0
+
+
+def test_saved_price_ema_event_missing_from_old_order_is_restored_to_stack(page):
+    with _run_dashboard_server() as base_url:
+        def handle_api(route):
+            url = route.request.url
+            if "/api/market-status" in url:
+                body = '{"is_stale":false,"latest_market_date":"2026-07-24",'
+                body += '"tracked_tickers":0,"fresh_tickers":0}'
+            elif "/api/screen/presets" in url:
+                body = json.dumps(
+                    {
+                        "active_name": "",
+                        "default_filters": {
+                            "price_ema_event_enabled": True,
+                            "price_ema_period": 50,
+                            "price_ema_cross_mode": "cross_down",
+                            "timeline_order": [
+                                "rsi",
+                                "macd",
+                                "stoch",
+                                "supertrend",
+                                "ema_relationship",
+                            ],
+                        },
+                        "presets": [],
+                    }
+                )
+            else:
+                body = '{"items":[],"tickers":[],"lists":[]}'
+            route.fulfill(status=200, content_type="application/json", body=body)
+
+        page.route("**/api/**", handle_api)
+        page.goto(f"{base_url}/", wait_until="domcontentloaded")
+        page.wait_for_function(
+            "() => typeof window.showTab === 'function' && !!window.dashboardReadyPromise"
+        )
+        page.evaluate("() => window.dashboardReadyPromise")
+
+        price_ema_step = page.locator("#screen-price-ema-event-step")
+        assert price_ema_step.is_visible()
+        assert page.locator("#screen-price-ema-period").input_value() == "50"
+        assert page.locator("#screen-price-ema-cross-mode").input_value() == "cross_down"
+        assert page.locator('#screen-rule-library-select option[value="price_ema"]').count() == 0
 
 
 def test_backtest_all_strategies_requests_all_strategies_flag(page):

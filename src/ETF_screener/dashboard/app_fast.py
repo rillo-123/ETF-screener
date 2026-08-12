@@ -4,9 +4,9 @@
 
 import inspect
 import asyncio
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import os
-import random
 import re
 import json
 import logging as _logging_mod
@@ -49,6 +49,10 @@ from ETF_screener.query_service import ETFQueryService
 from ETF_screener.shortlist_engine import ETFShortlistEngine
 from ETF_screener.screener_controls import (
     DEFAULT_MACD_CROSS_MODE,
+    DEFAULT_PRICE_EMA_CROSS_MODE,
+    DEFAULT_PRICE_EMA_EVENT_AGE,
+    DEFAULT_PRICE_EMA_PERIOD,
+    DEFAULT_PRICE_EMA_SOURCE,
     DEFAULT_RSI_CROSS_MODE,
     DEFAULT_SCREEN_FILTERS,
     DEFAULT_RSI_CROSS_VALUE,
@@ -141,6 +145,7 @@ PLAYBOOK_MAX_RSI = 65.0
 PLAYBOOK_MAX_SIGNAL_AGE_DAYS = 5
 PLAYBOOK_MIN_PULLBACK_PCT = 2.0
 PLAYBOOK_MAX_PULLBACK_PCT = 8.0
+PLAYBOOK_MIN_WATCH_RULES = 4
 
 
 def _safe_float(val, default=None):
@@ -209,9 +214,9 @@ def _recent_liquidity_snapshot(df: pd.DataFrame, bars: int = 20) -> dict[str, fl
     closes = pd.to_numeric(close_source, errors="coerce").fillna(0.0)
     return {
         "recent_avg_volume": float(volumes.mean()) if len(volumes) else 0.0,
-        "recent_avg_dollar_volume": float((volumes * closes).mean())
-        if len(volumes)
-        else 0.0,
+        "recent_avg_dollar_volume": (
+            float((volumes * closes).mean()) if len(volumes) else 0.0
+        ),
         "recent_zero_volume_rows": float((volumes <= 0).sum()),
     }
 
@@ -265,9 +270,13 @@ def _ticker_profitability_snapshot(ticker: str) -> dict[str, object]:
     quote_type = str(
         info.get("quoteType") or info.get("quote_type") or info.get("type") or ""
     ).upper()
-    is_fund = quote_type in {"ETF", "MUTUALFUND", "FUND", "INDEX", "MONEYMARKET"} or bool(
-        info.get("fundFamily") or info.get("category")
-    )
+    is_fund = quote_type in {
+        "ETF",
+        "MUTUALFUND",
+        "FUND",
+        "INDEX",
+        "MONEYMARKET",
+    } or bool(info.get("fundFamily") or info.get("category"))
     profit_margins = _safe_float(info.get("profitMargins"))
     net_income = _extract_ticker_net_income(info)
     is_profitable: bool | None = None
@@ -293,8 +302,8 @@ def _match_is_disqualified(
 ) -> bool:
     """Apply optional hard vetoes after a candidate match is found."""
     if disqualifiers.get("exclude_overbought"):
-        rsi_value = _safe_float(match.get("rsi"))
-        if rsi_value is not None and rsi_value > SCREEN_OVERBOUGHT_RSI_THRESHOLD:
+        rsi = _safe_float(match.get("rsi"))
+        if rsi is not None and rsi > SCREEN_OVERBOUGHT_RSI_THRESHOLD:
             return True
 
     if disqualifiers.get("exclude_weak_liquidity") and _match_is_weak_liquidity(df):
@@ -1348,9 +1357,7 @@ def _export_top_matches_to_google_drive(
         exchange=exchange,
         ticker_list=ticker_list,
     )
-    normalized_disqualifiers = _normalize_screen_disqualifiers(
-        **(disqualifiers or {})
-    )
+    normalized_disqualifiers = _normalize_screen_disqualifiers(**(disqualifiers or {}))
     exported_at = datetime.now()
     title = build_screen_google_sheet_title(
         strategy_name=strategy_name,
@@ -1367,7 +1374,10 @@ def _export_top_matches_to_google_drive(
         ["exchange", str(exchange or "")],
         ["ticker_list", str(ticker_list or "")],
         ["match_count", int(len(matches))],
-        ["exclude_overbought", bool(normalized_disqualifiers["exclude_overbought"])],
+        [
+            "exclude_overbought",
+            bool(normalized_disqualifiers["exclude_overbought"]),
+        ],
         [
             "exclude_weak_liquidity",
             bool(normalized_disqualifiers["exclude_weak_liquidity"]),
@@ -1424,7 +1434,9 @@ def _normalize_market_source(value: object | None) -> str:
         return "list"
     if cleaned in {"all_lists", "alllists", "all list", "all lists"}:
         return "list"
-    if cleaned in {"xetra", "germany", "de", "exchange", "all"}:
+    if cleaned in {"all", "all_markets", "all-markets", "all_markets"}:
+        return "all"
+    if cleaned in {"xetra", "germany", "de", "exchange"}:
         return "xetra"
     return "xetra"
 
@@ -1579,7 +1591,9 @@ def _playbook_stop_plan(frame: pd.DataFrame, risk_pct: float) -> dict[str, objec
     risk_stop = entry * (1.0 - (float(risk_pct) / 100.0))
     stop = risk_stop
     stop_basis = "risk_cap"
-    note = f"Using the {risk_pct:.1f}% risk cap because no nearby support was available."
+    note = (
+        f"Using the {risk_pct:.1f}% risk cap because no nearby support was available."
+    )
 
     if support_level is not None and support_level >= risk_stop:
         stop = support_level
@@ -1607,6 +1621,49 @@ def _playbook_stop_plan(frame: pd.DataFrame, risk_pct: float) -> dict[str, objec
         ),
         "max_loss_pct": round(float(max_loss_pct), 2),
         "note": note,
+    }
+
+
+def _playbook_target_plan(
+    frame: pd.DataFrame, stop_plan: dict[str, object]
+) -> dict[str, object]:
+    """Estimate a first upside target and its reward relative to the planned stop."""
+    entry = _safe_float(stop_plan.get("entry"), 0.0) or 0.0
+    stop = _safe_float(stop_plan.get("stop"), 0.0) or 0.0
+    risk_per_unit = entry - stop
+    if entry <= 0 or risk_per_unit <= 0:
+        return {
+            "target": None,
+            "target_basis": None,
+            "reward_pct": None,
+            "reward_risk_ratio": None,
+        }
+
+    resistance_candidates = pd.to_numeric(
+        _frame_series(frame, "High", "high"), errors="coerce"
+    ).dropna()
+    nearby_resistance = None
+    if not resistance_candidates.empty:
+        above_entry = resistance_candidates.tail(20)
+        above_entry = above_entry[above_entry > entry * 1.005]
+        if not above_entry.empty:
+            nearby_resistance = float(above_entry.min())
+
+    minimum_target = entry + (2.0 * risk_per_unit)
+    if nearby_resistance is not None and nearby_resistance >= minimum_target:
+        target = nearby_resistance
+        target_basis = "20D resistance"
+    else:
+        target = minimum_target
+        target_basis = "2R minimum"
+
+    reward_pct = ((target - entry) / entry) * 100.0
+    reward_risk_ratio = (target - entry) / risk_per_unit
+    return {
+        "target": round(float(target), 4),
+        "target_basis": target_basis,
+        "reward_pct": round(float(reward_pct), 2),
+        "reward_risk_ratio": round(float(reward_risk_ratio), 2),
     }
 
 
@@ -1676,7 +1733,9 @@ def _evaluate_playbook_rules(frame: pd.DataFrame) -> dict[str, object]:
             "key": "above_ema_50",
             "label": "Above EMA 50",
             "passed": (
-                entry is not None and ema_50 is not None and float(entry) > float(ema_50)
+                entry is not None
+                and ema_50 is not None
+                and float(entry) > float(ema_50)
             ),
             "detail": (
                 f"Close {entry:.2f} vs EMA 50 {ema_50:.2f}"
@@ -1704,11 +1763,7 @@ def _evaluate_playbook_rules(frame: pd.DataFrame) -> dict[str, object]:
             "passed": (
                 rsi is not None and PLAYBOOK_MIN_RSI <= float(rsi) <= PLAYBOOK_MAX_RSI
             ),
-            "detail": (
-                f"RSI {rsi:.2f}"
-                if rsi is not None
-                else "RSI unavailable"
-            ),
+            "detail": (f"RSI {rsi:.2f}" if rsi is not None else "RSI unavailable"),
         },
         {
             "key": "recent_signal",
@@ -1761,6 +1816,32 @@ def _evaluate_playbook_rules(frame: pd.DataFrame) -> dict[str, object]:
         "failed_checks": failed_checks,
         "metrics": metrics,
     }
+
+
+def _prefilter_playbook_tickers(
+    db: ETFDatabase,
+    tickers: list[str],
+    latest_market_date: str | None,
+) -> list[str] | None:
+    """Use the persisted signal column to avoid loading the whole universe."""
+    getter = getattr(db, "_get_connection", None)
+    if not callable(getter) or not latest_market_date:
+        return None
+    try:
+        cutoff = (
+            pd.to_datetime(latest_market_date, errors="coerce")
+            - pd.Timedelta(days=PLAYBOOK_MAX_SIGNAL_AGE_DAYS + 3)
+        ).strftime("%Y-%m-%d")
+        connection = getter()
+        rows = connection.execute(
+            "SELECT DISTINCT ticker FROM etf_data WHERE signal = 1 AND date >= ?",
+            (cutoff,),
+        ).fetchall()
+        candidates = {str(row[0]).upper() for row in rows if row[0]}
+        return [ticker for ticker in tickers if str(ticker).upper() in candidates]
+    except Exception:
+        logger.debug("Playbook signal prefilter unavailable", exc_info=True)
+        return None
 
 
 def _resolve_shortlist_universe(
@@ -1824,7 +1905,7 @@ def _is_stale_date(raw_date: object, threshold_days: int = 0) -> bool:
     return (date.today() - latest_day).days > max(0, int(threshold_days))
 
 
-SCREEN_RESULT_CACHE_VERSION = "screen_result_v2"
+SCREEN_RESULT_CACHE_VERSION = "screen_result_v3"
 
 
 def _screen_cache_dir() -> Path:
@@ -1845,6 +1926,7 @@ def _screen_request_signature(
     tickers: list[str],
     fallback_mode: bool,
     disqualifiers: dict[str, bool] | None = None,
+    database_mtime_ns: int = 0,
 ) -> str:
     universe_blob = "|".join(str(ticker).upper() for ticker in tickers)
     payload = {
@@ -1852,6 +1934,7 @@ def _screen_request_signature(
         "strategy_name": strategy_name,
         "strategy_text_sha": hashlib.sha256(strategy_text.encode("utf-8")).hexdigest(),
         "latest_market_date": latest_market_date or "",
+        "database_mtime_ns": int(database_mtime_ns),
         "scan_scope": str(scan_scope or "").strip().lower(),
         "exchange": str(exchange or "").strip().lower(),
         "ticker_list_sha": hashlib.sha256(
@@ -1859,9 +1942,7 @@ def _screen_request_signature(
         ).hexdigest(),
         "universe_sha": hashlib.sha256(universe_blob.encode("utf-8")).hexdigest(),
         "fallback_mode": bool(fallback_mode),
-        "disqualifiers": dict(
-            _normalize_screen_disqualifiers(**(disqualifiers or {}))
-        ),
+        "disqualifiers": dict(_normalize_screen_disqualifiers(**(disqualifiers or {}))),
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -2227,7 +2308,7 @@ async def index(request: Request):
             int(
                 (Path(__file__).parent / "static" / "js" / "dashboard.js")
                 .stat()
-                .st_mtime
+                .st_mtime_ns
             )
         )
     except Exception:
@@ -2237,7 +2318,7 @@ async def index(request: Request):
             int(
                 (Path(__file__).parent / "static" / "js" / "browser-log-relay.js")
                 .stat()
-                .st_mtime
+                .st_mtime_ns
             )
         )
     except Exception:
@@ -2559,6 +2640,25 @@ def _refresh_market_data_for_gui(
     rebuild_shortlist: bool = True,
 ) -> dict[str, object] | None:
     """Top up market data for GUI-driven actions when a user asks for it."""
+    if _normalize_market_source(source) == "all":
+        # Refresh both maintained source lists. The screen itself uses the
+        # union of tracked database tickers, so this grows the usable universe
+        # without requiring a fictional complete company/ETF master list.
+        results = []
+        for child_source in ("xetra", "nasdaq", "sweden"):
+            result = _refresh_market_data_for_gui(
+                source=child_source,
+                ticker_list=ticker_list,
+                rebuild_shortlist=False,
+            )
+            if result:
+                results.append(result)
+        return {
+            "requested": sum(int(item.get("requested", 0)) for item in results),
+            "refreshed": sum(int(item.get("refreshed", 0)) for item in results),
+            "failed": sum(int(item.get("failed", 0)) for item in results),
+            "shortlist_rebuilt": False,
+        }
     metadata_path, collection_mode = _market_source_config(source)
     tracked_tickers_override = None
     if _normalize_market_source(source) == "list" and str(ticker_list or "").strip():
@@ -2640,7 +2740,9 @@ async def shortlist(
     engine = ETFShortlistEngine(
         db_path=str(db.db_path),
         metadata_path=str(_market_source_config(normalized_scope)[0]),
-        metadata_map_override=_cached_etf_metadata_map() if is_scoped_shortlist else None,
+        metadata_map_override=(
+            _cached_etf_metadata_map() if is_scoped_shortlist else None
+        ),
     )
     try:
         if is_scoped_shortlist:
@@ -2668,7 +2770,9 @@ async def shortlist(
                     limit=safe_limit,
                 )
         else:
-            df = engine.get_shortlist(limit=safe_limit, label=safe_label, refresh=refresh)
+            df = engine.get_shortlist(
+                limit=safe_limit, label=safe_label, refresh=refresh
+            )
     except Exception as e:
         logger.error("Shortlist endpoint failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -2762,7 +2866,9 @@ async def playbook(
     engine = ETFShortlistEngine(
         db_path=str(db.db_path),
         metadata_path=str(_market_source_config(normalized_scope)[0]),
-        metadata_map_override=_cached_etf_metadata_map() if is_scoped_playbook else None,
+        metadata_map_override=(
+            _cached_etf_metadata_map() if is_scoped_playbook else None
+        ),
     )
     try:
         playbook_universe = (
@@ -2773,6 +2879,12 @@ async def playbook(
     except Exception as exc:
         logger.error("Playbook universe build failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
+
+    prefiltered_tickers = _prefilter_playbook_tickers(
+        db, playbook_universe, latest_market_date
+    )
+    if prefiltered_tickers is not None:
+        playbook_universe = prefiltered_tickers
 
     if not playbook_universe:
         return {
@@ -2792,90 +2904,118 @@ async def playbook(
 
     rows: list[dict[str, object]] = []
     stale_excluded_count = 0
-    for ticker in playbook_universe:
-        normalized_frame = engine._load_frame(ticker)
-        if normalized_frame.empty or len(normalized_frame) < 60:
-            continue
-        candidate_as_of_date = None
-        if "Date" in normalized_frame.columns:
-            candidate_as_of_date = (
-                pd.to_datetime(normalized_frame["Date"].iloc[-1], errors="coerce")
-                .strftime("%Y-%m-%d")
-            )
-        candidate_ts = (
-            pd.to_datetime(candidate_as_of_date, errors="coerce")
-            if candidate_as_of_date
-            else pd.NaT
-        )
-        if (
-            pd.notna(latest_market_ts)
-            and pd.notna(candidate_ts)
-            and (latest_market_ts.normalize() - candidate_ts.normalize()).days > 3
-        ):
-            stale_excluded_count += 1
-            continue
-        rule_eval = _evaluate_playbook_rules(normalized_frame)
-        if not bool(rule_eval["passed"]):
-            continue
-        stop_plan = _playbook_stop_plan(normalized_frame, safe_risk_pct)
-        decision = "Trade"
-        if stop_plan["stop_basis"] == "risk_cap":
-            decision = "Trade With Tight Cap"
-        meta = engine._build_metadata(ticker)
-        metrics = rule_eval["metrics"]
-        matched_rules = [
-            f"{check['label']}: {check['detail']}"
-            for check in rule_eval["passed_checks"]
-        ]
-        rule_score = len(rule_eval["passed_checks"])
 
-        rows.append(
-            {
-                "ticker": ticker,
-                "name": meta.get("name", ticker),
-                "label": "Buy",
-                "decision": decision,
-                "entry": stop_plan["entry"],
-                "stop": stop_plan["stop"],
-                "max_loss_pct": stop_plan["max_loss_pct"],
-                "stop_basis": stop_plan["stop_basis"],
-                "support_level": stop_plan["support_level"],
-                "support_basis": stop_plan["support_basis"],
-                "technical_risk_pct": stop_plan["technical_risk_pct"],
-                "note": stop_plan["note"],
-                "final_score": float(rule_score),
-                "recent_entry_days": (
-                    int(metrics["signal_age_days"])
-                    if metrics["signal_age_days"] is not None
-                    else None
-                ),
-                "close": round(float(metrics["entry"] or 0.0), 4),
-                "volume": int(metrics["avg_volume_20"] or 0),
-                "reasons": matched_rules[:6],
-                "data_source": "playbook_rules",
-                "rsi": round(float(metrics["rsi"]), 2) if metrics["rsi"] is not None else None,
-                "pullback_pct": (
-                    round(float(metrics["pullback_pct"]), 2)
-                    if metrics["pullback_pct"] is not None
-                    else None
-                ),
-                "as_of_date": candidate_as_of_date,
-            }
-        )
+    def load_candidate(ticker: str) -> tuple[str, pd.DataFrame]:
+        return ticker, engine._load_frame(ticker)
+
+    worker_count = min(12, max(4, os.cpu_count() or 4))
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        candidate_futures = {
+            executor.submit(load_candidate, ticker): ticker
+            for ticker in playbook_universe
+        }
+        for future in as_completed(candidate_futures):
+            ticker, normalized_frame = future.result()
+            if normalized_frame.empty or len(normalized_frame) < 60:
+                continue
+            candidate_as_of_date = None
+            if "Date" in normalized_frame.columns:
+                candidate_as_of_date = pd.to_datetime(
+                    normalized_frame["Date"].iloc[-1], errors="coerce"
+                ).strftime("%Y-%m-%d")
+            candidate_ts = (
+                pd.to_datetime(candidate_as_of_date, errors="coerce")
+                if candidate_as_of_date
+                else pd.NaT
+            )
+            if (
+                pd.notna(latest_market_ts)
+                and pd.notna(candidate_ts)
+                and (latest_market_ts.normalize() - candidate_ts.normalize()).days > 3
+            ):
+                stale_excluded_count += 1
+                continue
+            rule_eval = _evaluate_playbook_rules(normalized_frame)
+            rule_score = len(rule_eval["passed_checks"])
+            if rule_score < PLAYBOOK_MIN_WATCH_RULES:
+                continue
+            stop_plan = _playbook_stop_plan(normalized_frame, safe_risk_pct)
+            target_plan = _playbook_target_plan(normalized_frame, stop_plan)
+            is_trade = bool(rule_eval["passed"])
+            decision = "Trade" if is_trade else "Watch"
+            if is_trade and stop_plan["stop_basis"] == "risk_cap":
+                decision = "Trade With Tight Cap"
+            meta = engine._build_metadata(ticker)
+            metrics = rule_eval["metrics"]
+            passed_rules = [
+                f"{check['label']}: {check['detail']}"
+                for check in rule_eval["passed_checks"]
+            ]
+            failed_rules = [
+                f"Missing {check['label']}" for check in rule_eval["failed_checks"]
+            ]
+            matched_rules = (passed_rules + failed_rules)[:6]
+
+            rows.append(
+                {
+                    "ticker": ticker,
+                    "name": meta.get("name", ticker),
+                    "label": "Buy" if is_trade else "Watch",
+                    "decision": decision,
+                    "entry": stop_plan["entry"],
+                    "stop": stop_plan["stop"],
+                    "target": target_plan["target"],
+                    "target_basis": target_plan["target_basis"],
+                    "reward_pct": target_plan["reward_pct"],
+                    "reward_risk_ratio": target_plan["reward_risk_ratio"],
+                    "max_loss_pct": stop_plan["max_loss_pct"],
+                    "stop_basis": stop_plan["stop_basis"],
+                    "support_level": stop_plan["support_level"],
+                    "support_basis": stop_plan["support_basis"],
+                    "technical_risk_pct": stop_plan["technical_risk_pct"],
+                    "note": stop_plan["note"],
+                    "final_score": float(rule_score),
+                    "recent_entry_days": (
+                        int(metrics["signal_age_days"])
+                        if metrics["signal_age_days"] is not None
+                        else None
+                    ),
+                    "close": round(float(metrics["entry"] or 0.0), 4),
+                    "volume": int(metrics["avg_volume_20"] or 0),
+                    "reasons": matched_rules,
+                    "data_source": "playbook_rules",
+                    "rsi": (
+                        round(float(metrics["rsi"]), 2)
+                        if metrics["rsi"] is not None
+                        else None
+                    ),
+                    "pullback_pct": (
+                        round(float(metrics["pullback_pct"]), 2)
+                        if metrics["pullback_pct"] is not None
+                        else None
+                    ),
+                    "as_of_date": candidate_as_of_date,
+                }
+            )
     rows = sorted(
         rows,
         key=lambda item: (
-            int(item["recent_entry_days"]) if item["recent_entry_days"] is not None else 999,
+            0 if str(item["decision"]).startswith("Trade") else 1,
+            (
+                int(item["recent_entry_days"])
+                if item["recent_entry_days"] is not None
+                else 999
+            ),
+            -float(item["final_score"] or 0.0),
+            -float(item["reward_risk_ratio"] or 0.0),
             -float(item["volume"] or 0),
             str(item["ticker"] or ""),
         ),
     )[:safe_limit]
 
-    trade_count = len(rows)
-    watch_count = 0
-    risk_capped_count = sum(
-        1 for item in rows if str(item["stop_basis"]) == "risk_cap"
-    )
+    trade_count = sum(1 for item in rows if str(item["decision"]).startswith("Trade"))
+    watch_count = sum(1 for item in rows if str(item["decision"]) == "Watch")
+    risk_capped_count = sum(1 for item in rows if str(item["stop_basis"]) == "risk_cap")
     return {
         "as_of_date": latest_market_date or (rows[0]["as_of_date"] if rows else None),
         "count": len(rows),
@@ -2933,11 +3073,14 @@ async def screen(
     volume_max: float = DEFAULT_VOLUME_MAX,
     macd_event_enabled: bool = True,
     rsi_event_enabled: bool = True,
+    rsi_filter_enabled: bool = False,
+    rsi_filter_min: float = DEFAULT_RSI_CROSS_VALUE,
     stoch_event_enabled: bool = True,
     rsi_min: float = 35.0,
     rsi_max: float = 70.0,
     rsi_cross_value: float = DEFAULT_RSI_CROSS_VALUE,
     rsi_cross_mode: str = DEFAULT_RSI_CROSS_MODE,
+    rsi_events: Optional[str] = None,
     stoch_cross_value: float = DEFAULT_STOCH_CROSS_VALUE,
     stoch_cross_mode: str = DEFAULT_STOCH_CROSS_MODE,
     stoch_cross_region: str = DEFAULT_STOCH_CROSS_REGION,
@@ -2953,12 +3096,55 @@ async def screen(
     ema_relationship_slow: int = 20,
     ema_relationship_slope: str = "positive",
     ema_relationship_allowance: float = 0.1,
+    ema_relationship_fast_slope: str = "positive",
+    ema_relationship_slow_slope: str = "positive",
+    ema_relationship_cross_mode: str = "cross_up",
     ema_relationship_age: int = 30,
+    price_ema_event_enabled: bool = False,
+    price_ema_period: int = DEFAULT_PRICE_EMA_PERIOD,
+    price_ema_source: str = DEFAULT_PRICE_EMA_SOURCE,
+    price_ema_cross_mode: str = DEFAULT_PRICE_EMA_CROSS_MODE,
+    price_ema_event_age: int = DEFAULT_PRICE_EMA_EVENT_AGE,
+    price_ema_events: str | None = None,
+    price_ema_sources: str | None = None,
+    ema_flatten_enabled: bool = False,
+    ema_flatten_period: int = 20,
+    ema_flatten_lookback: int = 5,
+    ema_flatten_tolerance: float = 0.1,
+    ema_flatten_mode: str = "either",
+    ema_flatten_event_age: int = 30,
+    volume_spike_enabled: bool = False,
+    volume_spike_period: int = 20,
+    volume_spike_multiplier: float = 2.0,
+    volume_spike_age: int = 5,
+    ha_ema_volume_enabled: bool = False,
+    ha_ema_volume_ema1_period: int = 20,
+    ha_ema_volume_ema1_source: str = "close",
+    ha_ema_volume_ema2_period: int = 50,
+    ha_ema_volume_ema2_source: str = "close",
+    ha_ema_volume_start_field: str = "open",
+    ha_ema_volume_start_line: str = "ema2",
+    ha_ema_volume_start_relation: str = "above",
+    ha_ema_volume_end_field: str = "close",
+    ha_ema_volume_end_line: str = "ema1",
+    ha_ema_volume_end_relation: str = "above",
+    ha_ema_volume_conditions: str | None = None,
+    ha_ema_volume_candle_color: str = "green",
+    ha_ema_volume_period: int = 20,
+    ha_ema_volume_multiplier: float = 2.5,
+    ha_ema_volume_event_age: int = 30,
+    timeline_order: str | None = None,
     supertrend_period: int = 10,
     supertrend_multiplier: float = 3.0,
     ema_slope_20: str = "any",
     ema_slope_50: str = "any",
     ema_slope_200: str = "any",
+    ema_slope_period_1: int = 20,
+    ema_slope_period_2: int = 50,
+    ema_slope_period_3: int = 200,
+    ema_slope_1: str = "any",
+    ema_slope_2: str = "any",
+    ema_slope_3: str = "any",
     ema_slope_lookback: int = 5,
     ema_slope_flat_tolerance: float = 0.1,
 ):
@@ -2995,15 +3181,54 @@ async def screen(
             )
             latest_market_date = _latest_market_date_for(db)
 
+        parsed_rsi_events = None
+        if rsi_events:
+            try:
+                candidate_rsi_events = json.loads(rsi_events)
+                if isinstance(candidate_rsi_events, list):
+                    parsed_rsi_events = candidate_rsi_events
+            except (TypeError, ValueError, json.JSONDecodeError):
+                logger.warning("Ignoring malformed rsi_events query parameter")
+
+        parsed_price_ema_events = None
+        if price_ema_events:
+            try:
+                candidate_price_ema_events = json.loads(price_ema_events)
+                if isinstance(candidate_price_ema_events, list):
+                    parsed_price_ema_events = candidate_price_ema_events
+            except (TypeError, ValueError, json.JSONDecodeError):
+                logger.warning("Ignoring malformed price_ema_events query parameter")
+
+        parsed_price_ema_sources = None
+        if price_ema_sources:
+            try:
+                candidate_price_ema_sources = json.loads(price_ema_sources)
+                if isinstance(candidate_price_ema_sources, list):
+                    parsed_price_ema_sources = candidate_price_ema_sources
+            except (TypeError, ValueError, json.JSONDecodeError):
+                logger.warning("Ignoring malformed price_ema_sources query parameter")
+
+        parsed_timeline_order = None
+        if timeline_order:
+            try:
+                candidate_timeline_order = json.loads(timeline_order)
+                if isinstance(candidate_timeline_order, list):
+                    parsed_timeline_order = candidate_timeline_order
+            except (TypeError, ValueError, json.JSONDecodeError):
+                logger.warning("Ignoring malformed timeline_order query parameter")
+
         control_filters = normalize_screen_filters(
             {
                 "lookback_days": lookback_days,
                 "volume_range": {"min": volume_min, "max": volume_max},
                 "macd_event_enabled": macd_event_enabled,
                 "rsi_event_enabled": rsi_event_enabled,
+                "rsi_filter_enabled": rsi_filter_enabled,
+                "rsi_filter_min": rsi_filter_min,
                 "stoch_event_enabled": stoch_event_enabled,
                 "rsi_cross_value": rsi_cross_value,
                 "rsi_cross_mode": rsi_cross_mode,
+                "rsi_events": parsed_rsi_events,
                 "stoch_cross_value": stoch_cross_value,
                 "stoch_cross_mode": stoch_cross_mode,
                 "stoch_cross_region": stoch_cross_region,
@@ -3019,7 +3244,44 @@ async def screen(
                 "ema_relationship_slow": ema_relationship_slow,
                 "ema_relationship_slope": ema_relationship_slope,
                 "ema_relationship_allowance": ema_relationship_allowance,
+                "ema_relationship_fast_slope": ema_relationship_fast_slope,
+                "ema_relationship_slow_slope": ema_relationship_slow_slope,
+                "ema_relationship_cross_mode": ema_relationship_cross_mode,
                 "ema_relationship_age": ema_relationship_age,
+                "price_ema_event_enabled": price_ema_event_enabled,
+                "price_ema_period": price_ema_period,
+                "price_ema_source": price_ema_source,
+                "price_ema_sources": parsed_price_ema_sources,
+                "price_ema_cross_mode": price_ema_cross_mode,
+                "price_ema_event_age": price_ema_event_age,
+                "price_ema_events": parsed_price_ema_events,
+                "ema_flatten_enabled": ema_flatten_enabled,
+                "ema_flatten_period": ema_flatten_period,
+                "ema_flatten_lookback": ema_flatten_lookback,
+                "ema_flatten_tolerance": ema_flatten_tolerance,
+                "ema_flatten_mode": ema_flatten_mode,
+                "ema_flatten_event_age": ema_flatten_event_age,
+                "volume_spike_enabled": volume_spike_enabled,
+                "volume_spike_period": volume_spike_period,
+                "volume_spike_multiplier": volume_spike_multiplier,
+                "volume_spike_age": volume_spike_age,
+                "ha_ema_volume_enabled": ha_ema_volume_enabled,
+                "ha_ema_volume_ema1_period": ha_ema_volume_ema1_period,
+                "ha_ema_volume_ema1_source": ha_ema_volume_ema1_source,
+                "ha_ema_volume_ema2_period": ha_ema_volume_ema2_period,
+                "ha_ema_volume_ema2_source": ha_ema_volume_ema2_source,
+                "ha_ema_volume_start_field": ha_ema_volume_start_field,
+                "ha_ema_volume_start_line": ha_ema_volume_start_line,
+                "ha_ema_volume_start_relation": ha_ema_volume_start_relation,
+                "ha_ema_volume_end_field": ha_ema_volume_end_field,
+                "ha_ema_volume_end_line": ha_ema_volume_end_line,
+                "ha_ema_volume_end_relation": ha_ema_volume_end_relation,
+                "ha_ema_volume_conditions": ha_ema_volume_conditions,
+                "ha_ema_volume_candle_color": ha_ema_volume_candle_color,
+                "ha_ema_volume_period": ha_ema_volume_period,
+                "ha_ema_volume_multiplier": ha_ema_volume_multiplier,
+                "ha_ema_volume_event_age": ha_ema_volume_event_age,
+                "timeline_order": parsed_timeline_order,
                 "chart_ta": {
                     "supertrend_period": supertrend_period,
                     "supertrend_multiplier": supertrend_multiplier,
@@ -3027,6 +3289,12 @@ async def screen(
                 "ema_slope_20": ema_slope_20,
                 "ema_slope_50": ema_slope_50,
                 "ema_slope_200": ema_slope_200,
+                "ema_slope_period_1": ema_slope_period_1,
+                "ema_slope_period_2": ema_slope_period_2,
+                "ema_slope_period_3": ema_slope_period_3,
+                "ema_slope_1": ema_slope_1,
+                "ema_slope_2": ema_slope_2,
+                "ema_slope_3": ema_slope_3,
                 "ema_slope_lookback": ema_slope_lookback,
                 "ema_slope_flat_tolerance": ema_slope_flat_tolerance,
             }
@@ -3074,6 +3342,7 @@ async def screen(
                 tickers=tickers,
                 fallback_mode=False,
                 disqualifiers=disqualifiers,
+                database_mtime_ns=Path(db_path).stat().st_mtime_ns,
             )
             cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
             if not refresh and cache_path.exists():
@@ -3118,17 +3387,8 @@ async def screen(
             for match in payload.get("matches", []):
                 if not isinstance(match, dict):
                     continue
-                if disqualifiers.get("exclude_overbought"):
-                    rsi_value = _safe_float(match.get("rsi"))
-                    if (
-                        rsi_value is not None
-                        and rsi_value > SCREEN_OVERBOUGHT_RSI_THRESHOLD
-                    ):
-                        continue
                 if disqualifiers.get("exclude_weak_liquidity"):
-                    recent_avg_volume = _safe_float(
-                        match.get("recent_avg_volume"), 0.0
-                    )
+                    recent_avg_volume = _safe_float(match.get("recent_avg_volume"), 0.0)
                     close_value = _safe_float(match.get("close"), 0.0)
                     if (
                         recent_avg_volume < SCREEN_MIN_RECENT_AVG_VOLUME
@@ -3214,6 +3474,7 @@ async def screen(
             tickers=tickers,
             fallback_mode=False,
             disqualifiers=disqualifiers,
+            database_mtime_ns=Path(db_path).stat().st_mtime_ns,
         )
         cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
         if not refresh and cache_path.exists():
@@ -4667,12 +4928,18 @@ async def get_chart(
     stoch_rsi_d: int = 3,
     supertrend_period: int = 10,
     supertrend_multiplier: float = 3.0,
+    candle_mode: str = "heikin_ashi",
     rsi_trigger: float = 50.0,
     stoch_trigger: float = 20.0,
     ema_relationship_enabled: bool = False,
     ema_relationship_fast: int = 10,
     ema_relationship_slow: int = 20,
     supertrend_event_enabled: bool = False,
+    ema_slope_period_1: int = 20,
+    ema_slope_period_2: int = 50,
+    ema_slope_period_3: int = 200,
+    ema_overlay_periods: str | None = None,
+    ema_overlay_specs: str | None = None,
 ):
     """Generate and return an interactive chart for a ticker. Fetches if missing."""
     db = get_db()
@@ -4816,6 +5083,27 @@ async def get_chart(
                     ticker,
                 )
 
+    overlay_periods = [ema_slope_period_1, ema_slope_period_2, ema_slope_period_3]
+    if ema_overlay_periods:
+        try:
+            parsed_overlay_periods = json.loads(ema_overlay_periods)
+            if isinstance(parsed_overlay_periods, list):
+                overlay_periods = parsed_overlay_periods
+        except (TypeError, ValueError, json.JSONDecodeError):
+            logger.warning("Ignoring malformed ema_overlay_periods query parameter")
+    overlay_periods = list(dict.fromkeys(
+        int(period) for period in overlay_periods
+        if str(period).strip().isdigit() and 2 <= int(period) <= 500
+    ))
+    overlay_specs = None
+    if ema_overlay_specs:
+        try:
+            parsed_overlay_specs = json.loads(ema_overlay_specs)
+            if isinstance(parsed_overlay_specs, list):
+                overlay_specs = parsed_overlay_specs
+        except (TypeError, ValueError, json.JSONDecodeError):
+            logger.warning("Ignoring malformed ema_overlay_specs query parameter")
+
     def _fallback_plot_payload(frame: pd.DataFrame) -> dict:
         """Build a minimal chart payload when Plotly is unavailable."""
         local_df = frame.copy()
@@ -4887,10 +5175,11 @@ async def get_chart(
                 "stoch_rsi_d": stoch_rsi_d,
                 "supertrend_period": supertrend_period,
                 "supertrend_multiplier": supertrend_multiplier,
+                "candle_mode": candle_mode,
                 "rsi_trigger": rsi_trigger,
                 "stoch_trigger": stoch_trigger,
-                "ema_overlay_periods": [ema_relationship_fast, ema_relationship_slow]
-                if ema_relationship_enabled else [],
+                "ema_overlay_periods": overlay_periods,
+                "ema_overlay_specs": overlay_specs,
                 "show_supertrend_overlay": supertrend_event_enabled,
             },
         )

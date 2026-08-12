@@ -44,7 +44,6 @@
     let backtestProgressStartedAt = 0;
     let currentDays = 365 * 2;
     let screenDisqualifiers = {
-      exclude_overbought: false,
       exclude_weak_liquidity: false,
       exclude_unprofitable: false,
     };
@@ -59,14 +58,22 @@
     const LAST_CUSTOM_LIST_NAME_KEY = "etf-discovery:last-custom-list-name";
     const LAST_DASHBOARD_TAB_KEY = "etf-discovery:last-dashboard-tab";
     const LAST_SCREEN_PRESET_KEY = "etf-discovery:last-screen-preset";
+    const LAST_SCREEN_FILTERS_KEY = "etf-discovery:last-screen-filters";
     const LAST_PLAYBOOK_RISK_PCT_KEY = "etf-discovery:last-playbook-risk-pct";
     const LAST_BACKTEST_RACE_KEY = "etf-discovery:last-backtest-race";
     const LAST_BACKTEST_RACE_FUEL_KEY = "etf-discovery:last-backtest-race-fuel";
+    const EMA_OVERLAY_VISIBILITY_KEY = "etf-discovery:ema-overlay-visibility";
+    const DEFAULT_TIMELINE_ORDER = ["rsi", "macd", "stoch", "supertrend", "ema_relationship"];
+    const RSI_TIMELINE_KEYS = ["rsi", "rsi_2", "rsi_3"];
+    const REPEATABLE_TIMELINE_BASE_KEYS = ["macd", "stoch", "supertrend", "ema_relationship", "price_ema", "volume_spike", "ema_flatten"];
+    const REPEATABLE_TIMELINE_KEYS = REPEATABLE_TIMELINE_BASE_KEYS.flatMap((key) => [key, `${key}_2`, `${key}_3`]);
     const SCREEN_DEFAULT_FILTERS = {
       lookback_days: 30,
       volume_range: { min: 0, max: 20000000 },
       macd_event_enabled: true,
       rsi_event_enabled: true,
+      rsi_filter_enabled: false,
+      rsi_filter_min: 50,
       stoch_event_enabled: true,
       supertrend_event_enabled: false,
       rsi_cross_value: 50,
@@ -84,13 +91,60 @@
       ema_relationship_slow: 20,
       ema_relationship_slope: "positive",
       ema_relationship_allowance: 0.1,
+      ema_relationship_fast_slope: "positive",
+      ema_relationship_slow_slope: "positive",
+      ema_relationship_cross_mode: "cross_up",
       ema_relationship_age: 30,
+      price_ema_event_enabled: false,
+      price_ema_period: 20,
+      price_ema_source: "close",
+      price_ema_sources: ["close"],
+      price_ema_cross_mode: "cross_up",
+      price_ema_event_age: 30,
+      ema_flatten_enabled: false,
+      ema_flatten_period: 20,
+      ema_flatten_lookback: 5,
+      ema_flatten_tolerance: 0.1,
+      ema_flatten_mode: "either",
+      ema_flatten_event_age: 30,
+      volume_spike_enabled: false,
+      volume_spike_period: 20,
+      volume_spike_multiplier: 2.0,
+      volume_spike_age: 5,
+      ha_ema_volume_enabled: false,
+      ha_ema_volume_ema1_period: 20,
+      ha_ema_volume_ema1_source: "close",
+      ha_ema_volume_ema2_period: 50,
+      ha_ema_volume_ema2_source: "close",
+      ha_ema_volume_start_field: "open",
+      ha_ema_volume_start_line: "ema2",
+      ha_ema_volume_start_relation: "above",
+      ha_ema_volume_end_field: "close",
+      ha_ema_volume_end_line: "ema1",
+      ha_ema_volume_end_relation: "above",
+      ha_ema_volume_conditions: [
+        { field: "open", enabled: false, zone: "above_ema1" },
+        { field: "high", enabled: false, zone: "above_ema1" },
+        { field: "low", enabled: false, zone: "below_ema2" },
+        { field: "close", enabled: true, zone: "above_ema1" },
+      ],
+      ha_ema_volume_candle_color: "green",
+      ha_ema_volume_period: 20,
+      ha_ema_volume_multiplier: 2.5,
+      ha_ema_volume_event_age: 30,
       supertrend_cross_mode: "red_to_green",
       ema_slope_20: "any",
       ema_slope_50: "any",
       ema_slope_200: "any",
+      ema_slope_period_1: 20,
+      ema_slope_period_2: 50,
+      ema_slope_period_3: 200,
+      ema_slope_1: "any",
+      ema_slope_2: "any",
+      ema_slope_3: "any",
       ema_slope_lookback: 5,
       ema_slope_flat_tolerance: 0.1,
+      timeline_order: [...DEFAULT_TIMELINE_ORDER],
     };
     const CHART_TA_DEFAULTS = {
       macd_fast: 12,
@@ -102,6 +156,7 @@
       stoch_rsi_d: 3,
       supertrend_period: 10,
       supertrend_multiplier: 3.0,
+      candle_mode: "heikin_ashi",
       rsi_trigger: 50,
       stoch_trigger: 20,
     };
@@ -109,6 +164,7 @@
       "macd_fast", "macd_slow", "macd_signal", "rsi_period",
       "stoch_rsi_period", "stoch_rsi_k", "stoch_rsi_d",
       "supertrend_period", "supertrend_multiplier",
+      "candle_mode",
     ];
     const BACKTEST_RACE_FUEL_METRICS = [
       { key: "return_pct", label: "Profitability", kind: "percent" },
@@ -177,6 +233,17 @@
         localStorage.setItem(key, String(value ?? ""));
       } catch (err) {
         // Ignore storage failures in restricted environments.
+      }
+    }
+
+    function readSavedScreenFilters() {
+      try {
+        const raw = localStorage.getItem(LAST_SCREEN_FILTERS_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch (err) {
+        return null;
       }
     }
 
@@ -252,6 +319,9 @@
       }
       if (["sweden", "stockholm", "stockholms", "se", "ss", "st"].includes(cleaned)) {
         return "sweden";
+      }
+      if (["all", "all_markets", "all-markets"].includes(cleaned)) {
+        return "all";
       }
       if (["xetra", "germany", "de", "exchange", "all"].includes(cleaned)) {
         return "xetra";
@@ -782,6 +852,9 @@
       if (normalized === "nasdaq") {
         return "Nasdaq universe";
       }
+      if (normalized === "all") {
+        return "All tracked markets";
+      }
       return "Xetra universe";
     }
 
@@ -800,6 +873,9 @@
       }
       if (normalized === "nasdaq") {
         return "Nasdaq";
+      }
+      if (normalized === "all") {
+        return "All Markets";
       }
       return "Xetra";
     }
@@ -1357,7 +1433,6 @@
     function normalizeScreenDisqualifiers(raw = null) {
       const source = raw && typeof raw === "object" ? raw : {};
       return {
-        exclude_overbought: Boolean(source.exclude_overbought),
         exclude_weak_liquidity: Boolean(source.exclude_weak_liquidity),
         exclude_unprofitable: Boolean(source.exclude_unprofitable),
       };
@@ -1388,7 +1463,6 @@
 
     function syncScreenDisqualifierChrome() {
       const checkboxMap = {
-        exclude_overbought: document.getElementById("disqualify-overbought"),
         exclude_weak_liquidity: document.getElementById("disqualify-weak-liquidity"),
         exclude_unprofitable: document.getElementById("disqualify-unprofitable"),
       };
@@ -2710,16 +2784,20 @@
           </td>
           <td class="px-4 py-3 align-top">
             <span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${getPlaybookDecisionClasses(row.decision)}">${row.decision || ""}</span>
-            <div class="mt-1 text-xs text-slate-500">Rules ${Array.isArray(row.reasons) ? row.reasons.length : 0}/6 • ${row.label || ""}</div>
+            <div class="mt-1 text-xs text-slate-500">Rules ${Number(row.final_score || 0).toFixed(0)}/6 • ${row.label || ""}</div>
           </td>
           <td class="px-4 py-3 align-top font-mono text-slate-800">${Number(row.entry || 0).toFixed(2)}</td>
           <td class="px-4 py-3 align-top font-mono text-slate-800">
             ${Number(row.stop || 0).toFixed(2)}
             <div class="mt-1 text-xs text-slate-500">${row.support_basis ? `${row.support_basis} ${Number(row.support_level || 0).toFixed(2)}` : "No nearby support"}</div>
           </td>
+          <td class="px-4 py-3 align-top font-mono text-slate-800">
+            ${row.target !== null && row.target !== undefined ? Number(row.target).toFixed(2) : "-"}
+            <div class="mt-1 text-xs text-slate-500">${row.target_basis || "No target"}</div>
+          </td>
           <td class="px-4 py-3 align-top">
             <div class="font-semibold text-slate-800">${Number(row.max_loss_pct || 0).toFixed(2)}%</div>
-            <div class="mt-1 text-xs text-slate-500">${row.technical_risk_pct !== null && row.technical_risk_pct !== undefined ? `Technical ${Number(row.technical_risk_pct).toFixed(2)}%` : "Technical n/a"}</div>
+            <div class="mt-1 text-xs text-slate-500">${row.reward_risk_ratio !== null && row.reward_risk_ratio !== undefined ? `${Number(row.reward_risk_ratio).toFixed(1)}R upside` : "R/R n/a"}</div>
           </td>
           <td class="px-4 py-3 align-top">
             <div class="font-semibold text-slate-800">${row.stop_basis === "technical" ? "Technical" : "Risk Cap"}</div>
@@ -2822,14 +2900,29 @@
       const lookbackDays = Math.round(clampNumber(raw.lookback_days, 30, 365, SCREEN_DEFAULT_FILTERS.lookback_days));
       const volumeMin = clampNumber(raw?.volume_range?.min, 0, 100000000, SCREEN_DEFAULT_FILTERS.volume_range.min);
       const volumeMax = clampNumber(raw?.volume_range?.max, 0, 100000000, SCREEN_DEFAULT_FILTERS.volume_range.max);
+      const rawTimelineOrder = Array.isArray(raw.timeline_order) ? raw.timeline_order : DEFAULT_TIMELINE_ORDER;
+      const timelineOrder = rawTimelineOrder.map((key) => String(key)).filter((key) => [...DEFAULT_TIMELINE_ORDER, ...REPEATABLE_TIMELINE_KEYS, ...RSI_TIMELINE_KEYS, "ha_ema_volume"].includes(key));
+      const rawConditions = Array.isArray(raw.ha_ema_volume_conditions) ? raw.ha_ema_volume_conditions : SCREEN_DEFAULT_FILTERS.ha_ema_volume_conditions;
+      const haConditions = ["open", "high", "low", "close"].map((field) => {
+        const fallback = SCREEN_DEFAULT_FILTERS.ha_ema_volume_conditions.find((item) => item.field === field);
+        const item = rawConditions.find((candidate) => candidate?.field === field) || fallback;
+        const zone = ["above_ema1", "between_ema1_ema2", "below_ema2"].includes(String(item?.zone)) ? String(item.zone) : fallback.zone;
+        return { field, enabled: coerceFilterBoolean(item?.enabled, fallback.enabled), zone };
+      });
       const normalized = {
         lookback_days: lookbackDays,
         volume_range: {
           min: Math.min(volumeMin, volumeMax),
           max: Math.max(volumeMin, volumeMax),
         },
+        ha_ema_volume_conditions: haConditions,
+        ha_ema_volume_candle_color: ["any", "green", "red"].includes(String(raw.ha_ema_volume_candle_color || "").toLowerCase())
+          ? String(raw.ha_ema_volume_candle_color).toLowerCase()
+          : SCREEN_DEFAULT_FILTERS.ha_ema_volume_candle_color,
         macd_event_enabled: coerceFilterBoolean(raw.macd_event_enabled, SCREEN_DEFAULT_FILTERS.macd_event_enabled),
         rsi_event_enabled: coerceFilterBoolean(raw.rsi_event_enabled, SCREEN_DEFAULT_FILTERS.rsi_event_enabled),
+        rsi_filter_enabled: coerceFilterBoolean(raw.rsi_filter_enabled, SCREEN_DEFAULT_FILTERS.rsi_filter_enabled),
+        rsi_filter_min: clampNumber(raw.rsi_filter_min, 0, 100, SCREEN_DEFAULT_FILTERS.rsi_filter_min),
         stoch_event_enabled: coerceFilterBoolean(raw.stoch_event_enabled, SCREEN_DEFAULT_FILTERS.stoch_event_enabled),
         supertrend_event_enabled: coerceFilterBoolean(raw.supertrend_event_enabled, SCREEN_DEFAULT_FILTERS.supertrend_event_enabled),
         ema_relationship_enabled: coerceFilterBoolean(raw.ema_relationship_enabled, SCREEN_DEFAULT_FILTERS.ema_relationship_enabled),
@@ -2837,6 +2930,23 @@
         ema_relationship_slow: Math.round(clampNumber(raw.ema_relationship_slow, 3, 400, SCREEN_DEFAULT_FILTERS.ema_relationship_slow)),
         ema_relationship_slope: ["any", "positive", "negative"].includes(String(raw.ema_relationship_slope || "").trim()) ? String(raw.ema_relationship_slope).trim() : SCREEN_DEFAULT_FILTERS.ema_relationship_slope,
         ema_relationship_allowance: clampNumber(raw.ema_relationship_allowance, 0, 5, SCREEN_DEFAULT_FILTERS.ema_relationship_allowance),
+        ema_relationship_fast_slope: ["any", "positive", "negative", "flat"].includes(String(raw.ema_relationship_fast_slope || "").trim()) ? String(raw.ema_relationship_fast_slope).trim() : (String(raw.ema_relationship_slope || "").trim() || SCREEN_DEFAULT_FILTERS.ema_relationship_fast_slope),
+        ema_relationship_slow_slope: ["any", "positive", "negative", "flat"].includes(String(raw.ema_relationship_slow_slope || "").trim()) ? String(raw.ema_relationship_slow_slope).trim() : (String(raw.ema_relationship_slope || "").trim() || SCREEN_DEFAULT_FILTERS.ema_relationship_slow_slope),
+        ema_relationship_cross_mode: ["cross_up", "cross_down"].includes(String(raw.ema_relationship_cross_mode || "").trim()) ? String(raw.ema_relationship_cross_mode).trim() : SCREEN_DEFAULT_FILTERS.ema_relationship_cross_mode,
+        price_ema_event_enabled: coerceFilterBoolean(raw.price_ema_event_enabled, SCREEN_DEFAULT_FILTERS.price_ema_event_enabled),
+        price_ema_period: Math.round(clampNumber(raw.price_ema_period, 2, 500, SCREEN_DEFAULT_FILTERS.price_ema_period)),
+        price_ema_source: ["open", "high", "low", "close"].includes(String(raw.price_ema_source || "").trim().toLowerCase()) ? String(raw.price_ema_source).trim().toLowerCase() : SCREEN_DEFAULT_FILTERS.price_ema_source,
+        price_ema_sources: Array.isArray(raw.price_ema_sources) && raw.price_ema_sources.length
+          ? [...new Set(raw.price_ema_sources.map((source) => String(source).trim().toLowerCase()).filter((source) => ["open", "high", "low", "close"].includes(source)))]
+          : [String(raw.price_ema_source || SCREEN_DEFAULT_FILTERS.price_ema_source).trim().toLowerCase()],
+        price_ema_cross_mode: ["cross_up", "cross_down"].includes(String(raw.price_ema_cross_mode || "").trim()) ? String(raw.price_ema_cross_mode).trim() : SCREEN_DEFAULT_FILTERS.price_ema_cross_mode,
+        price_ema_event_age: Math.round(clampNumber(raw.price_ema_event_age, 0, lookbackDays, SCREEN_DEFAULT_FILTERS.price_ema_event_age)),
+        ema_flatten_enabled: coerceFilterBoolean(raw.ema_flatten_enabled, SCREEN_DEFAULT_FILTERS.ema_flatten_enabled),
+        ema_flatten_period: Math.round(clampNumber(raw.ema_flatten_period, 2, 500, SCREEN_DEFAULT_FILTERS.ema_flatten_period)),
+        ema_flatten_lookback: Math.round(clampNumber(raw.ema_flatten_lookback, 1, 30, SCREEN_DEFAULT_FILTERS.ema_flatten_lookback)),
+        ema_flatten_tolerance: clampNumber(raw.ema_flatten_tolerance, 0, 5, SCREEN_DEFAULT_FILTERS.ema_flatten_tolerance),
+        ema_flatten_mode: ["top", "bottom", "either"].includes(String(raw.ema_flatten_mode || "")) ? String(raw.ema_flatten_mode) : SCREEN_DEFAULT_FILTERS.ema_flatten_mode,
+        ema_flatten_event_age: Math.round(clampNumber(raw.ema_flatten_event_age, 0, lookbackDays, SCREEN_DEFAULT_FILTERS.ema_flatten_event_age)),
         rsi_cross_value: clampNumber(raw.rsi_cross_value, 0, 100, SCREEN_DEFAULT_FILTERS.rsi_cross_value),
         rsi_cross_mode: ["cross_up", "cross_down"].includes(String(raw.rsi_cross_mode || "").trim())
           ? String(raw.rsi_cross_mode).trim()
@@ -2871,14 +2981,39 @@
         )),
         supertrend_event_age: Math.round(clampNumber(raw.supertrend_event_age, 0, lookbackDays, SCREEN_DEFAULT_FILTERS.supertrend_event_age)),
         ema_relationship_age: Math.round(clampNumber(raw.ema_relationship_age, 0, lookbackDays, SCREEN_DEFAULT_FILTERS.ema_relationship_age)),
+        volume_spike_enabled: coerceFilterBoolean(raw.volume_spike_enabled, SCREEN_DEFAULT_FILTERS.volume_spike_enabled),
+        volume_spike_period: Math.round(clampNumber(raw.volume_spike_period, 2, 100, SCREEN_DEFAULT_FILTERS.volume_spike_period)),
+        volume_spike_multiplier: clampNumber(raw.volume_spike_multiplier, 1.1, 10, SCREEN_DEFAULT_FILTERS.volume_spike_multiplier),
+      volume_spike_age: Math.round(clampNumber(raw.volume_spike_age, 0, lookbackDays, SCREEN_DEFAULT_FILTERS.volume_spike_age)),
+        ha_ema_volume_enabled: coerceFilterBoolean(raw.ha_ema_volume_enabled, SCREEN_DEFAULT_FILTERS.ha_ema_volume_enabled),
+        ha_ema_volume_ema1_period: Math.round(clampNumber(raw.ha_ema_volume_ema1_period, 2, 500, SCREEN_DEFAULT_FILTERS.ha_ema_volume_ema1_period)),
+        ha_ema_volume_ema1_source: ["open", "high", "low", "close"].includes(String(raw.ha_ema_volume_ema1_source || "").toLowerCase()) ? String(raw.ha_ema_volume_ema1_source).toLowerCase() : SCREEN_DEFAULT_FILTERS.ha_ema_volume_ema1_source,
+        ha_ema_volume_ema2_period: Math.round(clampNumber(raw.ha_ema_volume_ema2_period, 2, 500, SCREEN_DEFAULT_FILTERS.ha_ema_volume_ema2_period)),
+        ha_ema_volume_ema2_source: ["open", "high", "low", "close"].includes(String(raw.ha_ema_volume_ema2_source || "").toLowerCase()) ? String(raw.ha_ema_volume_ema2_source).toLowerCase() : SCREEN_DEFAULT_FILTERS.ha_ema_volume_ema2_source,
+        ha_ema_volume_start_field: ["open", "high", "low", "close"].includes(String(raw.ha_ema_volume_start_field || "").toLowerCase()) ? String(raw.ha_ema_volume_start_field).toLowerCase() : SCREEN_DEFAULT_FILTERS.ha_ema_volume_start_field,
+        ha_ema_volume_start_line: ["ema1", "ema2"].includes(String(raw.ha_ema_volume_start_line || "")) ? String(raw.ha_ema_volume_start_line) : SCREEN_DEFAULT_FILTERS.ha_ema_volume_start_line,
+        ha_ema_volume_start_relation: ["above", "below"].includes(String(raw.ha_ema_volume_start_relation || "")) ? String(raw.ha_ema_volume_start_relation) : SCREEN_DEFAULT_FILTERS.ha_ema_volume_start_relation,
+        ha_ema_volume_end_field: ["open", "high", "low", "close"].includes(String(raw.ha_ema_volume_end_field || "").toLowerCase()) ? String(raw.ha_ema_volume_end_field).toLowerCase() : SCREEN_DEFAULT_FILTERS.ha_ema_volume_end_field,
+        ha_ema_volume_end_line: ["ema1", "ema2"].includes(String(raw.ha_ema_volume_end_line || "")) ? String(raw.ha_ema_volume_end_line) : SCREEN_DEFAULT_FILTERS.ha_ema_volume_end_line,
+        ha_ema_volume_end_relation: ["above", "below"].includes(String(raw.ha_ema_volume_end_relation || "")) ? String(raw.ha_ema_volume_end_relation) : SCREEN_DEFAULT_FILTERS.ha_ema_volume_end_relation,
+        ha_ema_volume_period: Math.round(clampNumber(raw.ha_ema_volume_period, 2, 100, SCREEN_DEFAULT_FILTERS.ha_ema_volume_period)),
+        ha_ema_volume_multiplier: clampNumber(raw.ha_ema_volume_multiplier, 1.1, 10, SCREEN_DEFAULT_FILTERS.ha_ema_volume_multiplier),
+        ha_ema_volume_event_age: Math.round(clampNumber(raw.ha_ema_volume_event_age, 0, lookbackDays, SCREEN_DEFAULT_FILTERS.ha_ema_volume_event_age)),
         supertrend_cross_mode: ["green_to_red", "red_to_green"].includes(String(raw.supertrend_cross_mode || "").trim())
           ? String(raw.supertrend_cross_mode).trim()
           : SCREEN_DEFAULT_FILTERS.supertrend_cross_mode,
         ema_slope_20: ["any", "positive", "flat", "negative"].includes(String(raw.ema_slope_20 || "").trim()) ? String(raw.ema_slope_20).trim() : "any",
         ema_slope_50: ["any", "positive", "flat", "negative"].includes(String(raw.ema_slope_50 || "").trim()) ? String(raw.ema_slope_50).trim() : "any",
         ema_slope_200: ["any", "positive", "flat", "negative"].includes(String(raw.ema_slope_200 || "").trim()) ? String(raw.ema_slope_200).trim() : "any",
+        ema_slope_period_1: Math.round(clampNumber(raw.ema_slope_period_1, 2, 500, SCREEN_DEFAULT_FILTERS.ema_slope_period_1)),
+        ema_slope_period_2: Math.round(clampNumber(raw.ema_slope_period_2, 2, 500, SCREEN_DEFAULT_FILTERS.ema_slope_period_2)),
+        ema_slope_period_3: Math.round(clampNumber(raw.ema_slope_period_3, 2, 500, SCREEN_DEFAULT_FILTERS.ema_slope_period_3)),
+        ema_slope_1: ["any", "positive", "flat", "negative"].includes(String(raw.ema_slope_1 || "").trim()) ? String(raw.ema_slope_1).trim() : (raw.ema_slope_20 || "any"),
+        ema_slope_2: ["any", "positive", "flat", "negative"].includes(String(raw.ema_slope_2 || "").trim()) ? String(raw.ema_slope_2).trim() : (raw.ema_slope_50 || "any"),
+        ema_slope_3: ["any", "positive", "flat", "negative"].includes(String(raw.ema_slope_3 || "").trim()) ? String(raw.ema_slope_3).trim() : (raw.ema_slope_200 || "any"),
         ema_slope_lookback: Math.round(clampNumber(raw.ema_slope_lookback, 1, 30, SCREEN_DEFAULT_FILTERS.ema_slope_lookback)),
         ema_slope_flat_tolerance: clampNumber(raw.ema_slope_flat_tolerance, 0, 5, SCREEN_DEFAULT_FILTERS.ema_slope_flat_tolerance),
+        timeline_order: timelineOrder,
         chart_ta: {
           macd_fast: Math.round(clampNumber(raw?.chart_ta?.macd_fast, 2, 100, CHART_TA_DEFAULTS.macd_fast)),
           macd_slow: Math.round(clampNumber(raw?.chart_ta?.macd_slow, 3, 200, CHART_TA_DEFAULTS.macd_slow)),
@@ -2889,10 +3024,40 @@
           stoch_rsi_d: Math.round(clampNumber(raw?.chart_ta?.stoch_rsi_d, 1, 30, CHART_TA_DEFAULTS.stoch_rsi_d)),
           supertrend_period: Math.round(clampNumber(raw?.chart_ta?.supertrend_period, 2, 100, CHART_TA_DEFAULTS.supertrend_period)),
           supertrend_multiplier: clampNumber(raw?.chart_ta?.supertrend_multiplier, 0.5, 10, CHART_TA_DEFAULTS.supertrend_multiplier),
+          candle_mode: (
+            Number(raw?.chart_ta?.candle_mode_default_version || 0) < 2
+              && String(raw?.chart_ta?.candle_mode || "") === "regular"
+          )
+            ? CHART_TA_DEFAULTS.candle_mode
+            : (["regular", "heikin_ashi"].includes(String(raw?.chart_ta?.candle_mode || ""))
+              ? String(raw.chart_ta.candle_mode)
+              : CHART_TA_DEFAULTS.candle_mode),
+          candle_mode_default_version: 2,
           rsi_trigger: clampNumber(raw?.chart_ta?.rsi_trigger, 0, 100, raw.rsi_cross_value ?? CHART_TA_DEFAULTS.rsi_trigger),
           stoch_trigger: clampNumber(raw?.chart_ta?.stoch_trigger, 0, 100, raw.stoch_cross_value ?? CHART_TA_DEFAULTS.stoch_trigger),
         },
       };
+      const rawRsiEvents = Array.isArray(raw.rsi_events) && raw.rsi_events.length
+        ? raw.rsi_events.slice(0, RSI_TIMELINE_KEYS.length)
+        : [raw];
+      normalized.rsi_events = rawRsiEvents.map((event) => ({
+        rsi_cross_value: clampNumber(event?.rsi_cross_value ?? event?.cross_value, 0, 100, normalized.rsi_cross_value),
+        rsi_cross_mode: ["cross_up", "cross_down"].includes(String(event?.rsi_cross_mode ?? event?.cross_mode ?? normalized.rsi_cross_mode))
+          ? String(event?.rsi_cross_mode ?? event?.cross_mode ?? normalized.rsi_cross_mode)
+          : normalized.rsi_cross_mode,
+        rsi_event_age: Math.round(clampNumber(event?.rsi_event_age ?? event?.event_age, 0, lookbackDays, normalized.rsi_event_age)),
+        rsi_event_id: event?.rsi_event_id ?? event?.id ?? null,
+      }));
+      normalized.price_ema_source = normalized.price_ema_sources[0] || SCREEN_DEFAULT_FILTERS.price_ema_source;
+      const primaryRsi = normalized.rsi_events.find((event) => event.rsi_event_id === "rsi") || normalized.rsi_events[0];
+      normalized.rsi_cross_value = primaryRsi.rsi_cross_value;
+      normalized.rsi_cross_mode = primaryRsi.rsi_cross_mode;
+      normalized.rsi_event_age = primaryRsi.rsi_event_age;
+      RSI_TIMELINE_KEYS.slice(1).forEach((key, index) => {
+        normalized[`${key}_event_enabled`] = normalized.rsi_event_enabled
+          && (normalized.rsi_events.some((event) => event.rsi_event_id === key)
+            || normalized.rsi_events.length > index + 1 && !normalized.rsi_events.some((event) => event.rsi_event_id));
+      });
       return normalized;
     }
 
@@ -3046,10 +3211,127 @@
       };
     }
 
+    function getChartEmaCandidatePeriods(filters = screenFilters) {
+      return [...new Set(getChartEmaCandidateSpecs(filters).map((spec) => spec.period))].sort((a, b) => a - b);
+    }
+
+    function getChartEmaCandidateSpecs(filters = screenFilters) {
+      const specs = [filters.ema_slope_period_1, filters.ema_slope_period_2, filters.ema_slope_period_3].map((period) => ({ period: Math.round(Number(period)), source: "close" }));
+      if (filters.ema_relationship_enabled) {
+        specs.push({ period: Math.round(Number(filters.ema_relationship_fast)), source: "close" }, { period: Math.round(Number(filters.ema_relationship_slow)), source: "close" });
+      }
+      if (filters.price_ema_sources?.length || filters.price_ema_source) {
+        (filters.price_ema_sources || [filters.price_ema_source || "close"]).forEach((source) => specs.push({ period: Math.round(Number(filters.price_ema_period)), source: String(source).toLowerCase() }));
+      }
+      if (filters.ema_flatten_enabled) {
+        specs.push({ period: Math.round(Number(filters.ema_flatten_period)), source: "close" });
+      }
+      if (filters.ha_ema_volume_enabled) {
+        specs.push(
+          { period: Math.round(Number(filters.ha_ema_volume_ema1_period)), source: String(filters.ha_ema_volume_ema1_source || "close") },
+          { period: Math.round(Number(filters.ha_ema_volume_ema2_period)), source: String(filters.ha_ema_volume_ema2_source || "close") },
+        );
+      }
+      document.querySelectorAll('.screen-timeline-step input[id$="-period"]').forEach((node) => {
+        if (!node.closest(".screen-timeline-step")?.classList.contains("hidden")) {
+          specs.push({ period: Math.round(Number(node.value)), source: "close" });
+        }
+      });
+      return [...new Map(specs.filter((spec) => Number.isFinite(spec.period) && spec.period >= 2 && spec.period <= 500 && ["open", "high", "low", "close"].includes(spec.source)).map((spec) => [`${spec.period}:${spec.source}`, spec])).values()].sort((a, b) => a.period - b.period || a.source.localeCompare(b.source));
+    }
+
+    function getChartEmaVisibility() {
+      try {
+        const parsed = JSON.parse(readStickyValue(EMA_OVERLAY_VISIBILITY_KEY, "{}") || "{}");
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch (error) {
+        return {};
+      }
+    }
+
+    function getVisibleChartEmaPeriods(filters = screenFilters) {
+      const visibility = getChartEmaVisibility();
+      return getChartEmaCandidatePeriods(filters).filter((period) => visibility[String(period)] !== false);
+    }
+
+    function getVisibleChartEmaSpecs(filters = screenFilters) {
+      const visibility = getChartEmaVisibility();
+      return getChartEmaCandidateSpecs(filters).filter((spec) => visibility[`${spec.period}:${spec.source}`] !== false && visibility[String(spec.period)] !== false);
+    }
+
+    function renderEmaOverlayControls(filters = screenFilters) {
+      const container = document.getElementById("screen-ema-overlay-controls");
+      if (!container) return;
+      const specs = getChartEmaCandidateSpecs(filters);
+      const visibility = getChartEmaVisibility();
+      container.innerHTML = '<span class="w-full text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Chart EMA overlays</span>';
+      specs.forEach((spec) => {
+        const period = spec.period;
+        const visibilityKey = `${period}:${spec.source}`;
+        const label = document.createElement("label");
+        label.className = "inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-600";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = visibility[visibilityKey] !== false && visibility[String(period)] !== false;
+        checkbox.className = "h-3 w-3 rounded border-slate-300 text-rose-600 focus:ring-rose-500";
+        checkbox.addEventListener("change", () => {
+          const next = getChartEmaVisibility();
+          next[visibilityKey] = checkbox.checked;
+          writeStickyValue(EMA_OVERLAY_VISIBILITY_KEY, JSON.stringify(next));
+          if (currentTicker) loadChart(currentTicker);
+        });
+        label.appendChild(checkbox);
+        const text = document.createElement("span");
+        text.textContent = `EMA ${period} ${String(spec.source).charAt(0).toUpperCase()}${String(spec.source).slice(1)}`;
+        label.appendChild(text);
+        container.appendChild(label);
+      });
+    }
+
+    function renderChartEmaLegend(figData, chartDiv) {
+      const container = document.getElementById("chart-ema-legend");
+      if (!container) return;
+      container.innerHTML = "";
+      const traces = (figData?.data || []).map((trace, index) => ({ trace, index }))
+        .filter(({ trace }) => /^EMA\s+\d+(?:\s+(?:Open|High|Low|Close))?$/i.test(String(trace?.name || "")));
+      if (!traces.length) return;
+
+      const heading = document.createElement("span");
+      heading.className = "mr-1 text-[10px] font-bold uppercase tracking-wide text-slate-400";
+      heading.textContent = "EMA";
+      container.appendChild(heading);
+
+      traces.forEach(({ trace, index }) => {
+        const label = document.createElement("label");
+        label.className = "inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = trace.visible !== "legendonly" && trace.visible !== false;
+        checkbox.className = "h-3 w-3 rounded border-slate-300 text-rose-600 focus:ring-rose-500";
+        checkbox.addEventListener("change", () => {
+          Plotly.restyle(chartDiv, { visible: checkbox.checked ? true : "legendonly" }, [index]);
+          const visibility = getChartEmaVisibility();
+          const match = String(trace.name || "").match(/^EMA\s+(\d+)(?:\s+(Open|High|Low|Close))?$/i);
+          if (match) {
+            const key = `${match[1]}:${String(match[2] || "Close").toLowerCase()}`;
+            visibility[key] = checkbox.checked;
+            writeStickyValue(EMA_OVERLAY_VISIBILITY_KEY, JSON.stringify(visibility));
+          }
+        });
+        label.appendChild(checkbox);
+        const text = document.createElement("span");
+        text.textContent = String(trace.name);
+        if (trace.line?.color) text.style.color = trace.line.color;
+        label.appendChild(text);
+        container.appendChild(label);
+      });
+    }
+
     function getScreenEventReadiness(filters = screenFilters) {
+      const primaryRsi = filters.rsi_events?.find((event) => event.rsi_event_id === "rsi") || filters.rsi_events?.[0];
       const eventDefinitions = {
         rsi: filters.rsi_event_enabled
-          ? { label: `RSI ${getRsiModeShortLabel(filters.rsi_cross_mode)}`, age: Number(filters.rsi_event_age || 0) }
+          ? { label: `RSI ${getRsiModeShortLabel(primaryRsi?.rsi_cross_mode || filters.rsi_cross_mode)}`, age: Number(primaryRsi?.rsi_event_age ?? filters.rsi_event_age ?? 0) }
           : null,
         macd: filters.macd_event_enabled
           ? { label: `MACD ${getMacdModeShortLabel(filters.macd_cross_mode)}`, age: Number(filters.macd_event_age || 0) }
@@ -3063,37 +3345,249 @@
         ema_relationship: filters.ema_relationship_enabled
           ? { label: `EMA ${filters.ema_relationship_fast}/${filters.ema_relationship_slow} cross`, age: Number(filters.ema_relationship_age || 0) }
           : null,
+        price_ema: filters.price_ema_event_enabled
+          ? { label: `${String(filters.price_ema_source || "close").toUpperCase()} ${filters.price_ema_cross_mode === "cross_down" ? "down" : "up"} EMA ${filters.price_ema_period}`, age: Number(filters.price_ema_event_age || 0) }
+          : null,
+        ema_flatten: filters.ema_flatten_enabled
+          ? { label: `EMA ${filters.ema_flatten_period} ${filters.ema_flatten_mode} flatten`, age: Number(filters.ema_flatten_event_age || 0) }
+          : null,
+        volume_spike: filters.volume_spike_enabled
+          ? { label: `Volume ${Number(filters.volume_spike_multiplier).toFixed(1)}x EMA${filters.volume_spike_period}`, age: Number(filters.volume_spike_age || 0) }
+          : null,
+        ha_ema_volume: filters.ha_ema_volume_enabled
+          ? { label: `HA ${String(filters.ha_ema_volume_start_field).toUpperCase()} ${filters.ha_ema_volume_start_relation === "above" ? "GT" : "LT"} ${String(filters.ha_ema_volume_start_line).toUpperCase()} + ${String(filters.ha_ema_volume_end_field).toUpperCase()} ${filters.ha_ema_volume_end_relation === "above" ? "GT" : "LT"} ${String(filters.ha_ema_volume_end_line).toUpperCase()}`, age: Number(filters.ha_ema_volume_event_age || 0) }
+          : null,
       };
+      (filters.rsi_events || []).forEach((event, index) => {
+        const key = event.rsi_event_id || (index === 0 ? "rsi" : `rsi_${index + 1}`);
+        if (key === "rsi") return;
+        const number = key.replace("rsi_", "");
+        eventDefinitions[key] = {
+          label: `RSI ${number} ${getRsiModeShortLabel(event.rsi_cross_mode)}`,
+          age: Number(event.rsi_event_age || 0),
+        };
+      });
       return screenEventOrder
         .map((key) => eventDefinitions[key] ? { key, ...eventDefinitions[key] } : null)
         .filter(Boolean);
     }
 
+    function getTimelineRuleDefinitions() {
+      const definitions = [
+        { key: "rsi", label: "RSI" },
+        { key: "rsi_2", label: "RSI 2" },
+        { key: "rsi_3", label: "RSI 3" },
+        { key: "macd", label: "MACD" },
+        { key: "stoch", label: "StochRSI" },
+        { key: "supertrend", label: "Supertrend" },
+        { key: "ema_relationship", label: "EMA Cross" },
+        { key: "price_ema", label: "Price / EMA" },
+        { key: "volume_spike", label: "Volume Spike" },
+        { key: "ema_flatten", label: "EMA Flatten" },
+        { key: "ha_ema_volume", label: "HA EMA + Volume" },
+      ];
+      REPEATABLE_TIMELINE_BASE_KEYS.forEach((key) => {
+        const base = definitions.find((definition) => definition.key === key);
+        if (!base) return;
+        definitions.push({ key: `${key}_2`, label: `${base.label} 2` });
+        definitions.push({ key: `${key}_3`, label: `${base.label} 3` });
+      });
+      return definitions;
+    }
+
+    function getTimelineDomKey(key) {
+      if (key === "ema_relationship") return "ema-relationship";
+      if (key === "volume_spike") return "volume-spike";
+      if (key === "ema_flatten") return "ema-flatten";
+      if (key === "price_ema") return "price-ema";
+      if (key === "ha_ema_volume") return "ha-ema-volume";
+      if (key === "rsi_2") return "rsi-2";
+      if (key === "rsi_3") return "rsi-3";
+      const repeatedMatch = String(key).match(/^(.+)_(2|3)$/);
+      if (repeatedMatch) return `${getTimelineDomKey(repeatedMatch[1])}-${repeatedMatch[2]}`;
+      return key;
+    }
+
+    function ensureRepeatedRsiStep() {
+      const first = document.getElementById("screen-rsi-event-step");
+      if (!first) return;
+      [2, 3].forEach((index) => {
+        const key = `rsi_${index}`;
+        const stepId = `screen-rsi-${index}-event-step`;
+        if (document.getElementById(stepId)) return;
+        const repeated = first.cloneNode(true);
+        repeated.id = stepId;
+        repeated.innerHTML = repeated.innerHTML
+          .replaceAll("screen-rsi-", `screen-rsi-${index}-`)
+          .replaceAll('data-screen-event-remove="rsi"', `data-screen-event-remove="${key}"`)
+          .replaceAll('data-screen-event-move="rsi"', `data-screen-event-move="${key}"`)
+          .replace("RSI Event", `RSI Event #${index}`);
+        repeated.classList.add("hidden");
+        first.parentElement?.appendChild(repeated);
+      });
+    }
+
+    function ensureRepeatedEventSteps() {
+      REPEATABLE_TIMELINE_BASE_KEYS.forEach((key) => {
+        const first = document.getElementById(getTimelineStepId(key));
+        if (!first) return;
+        [2, 3].forEach((index) => {
+          const repeatedKey = `${key}_${index}`;
+          const stepId = getTimelineStepId(repeatedKey);
+          if (document.getElementById(stepId)) return;
+          const repeated = first.cloneNode(true);
+          repeated.id = stepId;
+          const domKey = getTimelineDomKey(key);
+          const repeatedDomKey = getTimelineDomKey(repeatedKey);
+          repeated.innerHTML = repeated.innerHTML
+            .replaceAll(`screen-${domKey}-`, `screen-${repeatedDomKey}-`)
+            .replaceAll(`data-screen-event-remove="${key}"`, `data-screen-event-remove="${repeatedKey}"`)
+            .replaceAll(`data-screen-event-move="${key}"`, `data-screen-event-move="${repeatedKey}"`)
+            .replace(new RegExp(`${baseLabelForEvent(key)}(?![0-9])`, "g"), `${baseLabelForEvent(key)} #${index}`);
+          repeated.classList.add("hidden");
+          first.parentElement?.appendChild(repeated);
+        });
+      });
+    }
+
+    function baseLabelForEvent(key) {
+      return {
+        macd: "MACD Event",
+        stoch: "StochRSI Event",
+        supertrend: "Supertrend Event",
+        ema_relationship: "EMA Cross Event",
+        price_ema: "Price / EMA Event",
+        volume_spike: "Volume Spike Event",
+        ema_flatten: "EMA Flatten Event",
+        ha_ema_volume: "HA EMA + Volume Event",
+      }[key] || key;
+    }
+
+    function getTimelineStepId(key) {
+      return `screen-${getTimelineDomKey(key)}-event-step`;
+    }
+
+    function renderTimelineRuleLibrary() {
+      const select = document.getElementById("screen-rule-library-select");
+      if (!select) {
+        return;
+      }
+      const available = getTimelineRuleDefinitions().filter(
+        (definition) => {
+          if (definition.key.startsWith("rsi")) {
+            const rsiCount = screenEventOrder.filter((key) => RSI_TIMELINE_KEYS.includes(key)).length;
+            if (definition.key === "rsi") return rsiCount === 0;
+            const nextRsiKey = `rsi_${rsiCount + 1}`;
+            return rsiCount < RSI_TIMELINE_KEYS.length && definition.key === nextRsiKey && !screenEventOrder.includes(definition.key);
+          }
+          const repeatedMatch = definition.key.match(/^(.+)_(2|3)$/);
+          if (repeatedMatch && REPEATABLE_TIMELINE_BASE_KEYS.includes(repeatedMatch[1])) {
+            const instanceCount = screenEventOrder.filter((key) => key === repeatedMatch[1] || key.startsWith(`${repeatedMatch[1]}_`)).length;
+            return instanceCount < 3 && definition.key === `${repeatedMatch[1]}_${instanceCount + 1}` && !screenEventOrder.includes(definition.key);
+          }
+          return !screenEventOrder.includes(definition.key);
+        }
+      );
+      select.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      if (available.length === 0) {
+        placeholder.textContent = "All rules are in the stack";
+        select.disabled = true;
+      } else {
+        placeholder.textContent = "Add a Timeline Rule...";
+        select.disabled = false;
+      }
+      select.appendChild(placeholder);
+      available.forEach((definition) => {
+        const option = document.createElement("option");
+        option.value = definition.key;
+         const baseKey = definition.key.replace(/_(2|3)$/, "");
+         const baseDefinition = getTimelineRuleDefinitions().find((item) => item.key === baseKey);
+         option.textContent = `Add ${definition.key.startsWith("rsi") ? "RSI" : (baseDefinition?.label || definition.label)}`;
+        select.appendChild(option);
+      });
+      if (select.dataset.timelineLibraryBound !== "1") {
+        select.dataset.timelineLibraryBound = "1";
+        select.addEventListener("change", (event) => {
+          const key = event.target.value;
+          if (key) {
+            addTimelineStep(key);
+          }
+          event.target.value = "";
+        });
+      }
+    }
+
     function reorderTimelineSteps() {
       const stack = document.getElementById("screen-sequence-badges")?.parentElement;
       if (!stack) return;
+      getTimelineRuleDefinitions().forEach(({ key }) => {
+        const step = document.getElementById(getTimelineStepId(key));
+        if (step) {
+          step.classList.toggle("hidden", !screenEventOrder.includes(key));
+        }
+      });
       screenEventOrder.forEach((key) => {
-        const step = document.getElementById(`screen-${key === "ema_relationship" ? "ema-relationship" : key}-event-step`);
+        const step = document.getElementById(getTimelineStepId(key));
         if (step) stack.appendChild(step);
       });
+      renderTimelineRuleLibrary();
+    }
+
+    function addTimelineStep(key) {
+      const definition = getTimelineRuleDefinitions().find((item) => item.key === key);
+      if (!definition || screenEventOrder.includes(key)) {
+        return;
+      }
+      let insertAt = screenEventOrder.length;
+      if (key.startsWith("rsi")) {
+        const lastRsiIndex = screenEventOrder.reduce(
+          (last, item, index) => RSI_TIMELINE_KEYS.includes(item) ? index : last,
+          -1,
+        );
+        insertAt = lastRsiIndex >= 0 ? lastRsiIndex + 1 : Math.min(1, screenEventOrder.length);
+      }
+      screenEventOrder.splice(insertAt, 0, key);
+      const checkbox = document.getElementById(`screen-${getTimelineDomKey(key)}-event-enabled`);
+      if (checkbox) {
+        checkbox.checked = true;
+      }
+      screenActiveEventKey = key;
+      reorderTimelineSteps();
+      syncTimelineAgeConstraints();
+      syncScreenFilterStateFromDom();
+      selectTimelineEvent(key);
+    }
+
+    function removeTimelineStep(key) {
+      if (!screenEventOrder.includes(key)) {
+        return;
+      }
+      screenEventOrder = screenEventOrder.filter((item) => item !== key);
+      const checkbox = document.getElementById(`screen-${getTimelineDomKey(key)}-event-enabled`);
+      if (checkbox) {
+        checkbox.checked = false;
+      }
+      if (screenActiveEventKey === key) {
+        screenActiveEventKey = screenEventOrder[screenEventOrder.length - 1] || "";
+      }
+      reorderTimelineSteps();
+      syncTimelineAgeConstraints();
+      syncScreenFilterStateFromDom();
+      selectTimelineEvent(screenActiveEventKey);
     }
 
     function getTimelineSliderId(key) {
       return key === "ema_relationship"
         ? "screen-ema-relationship-age"
-        : `screen-${key}-cross-age`;
+        : key === "ema_flatten"
+          ? "screen-ema-flatten-age"
+        : `screen-${getTimelineDomKey(key)}-cross-age`;
     }
 
     function syncTimelineAgeConstraints({ clampValues = true } = {}) {
-      let previousSliderValue = 0;
-      screenEventOrder.forEach((key) => {
-        const slider = document.getElementById(getTimelineSliderId(key));
-        if (!slider) return;
-        if (clampValues && Number(slider.value) < previousSliderValue) {
-          slider.value = String(previousSliderValue);
-        }
-        previousSliderValue = Number(slider.value || 0);
-      });
+      // Event windows are independent for now; chronological ordering is intentionally disabled.
     }
 
     function syncTimelineMoveButtons() {
@@ -3112,7 +3606,7 @@
 
       screenEventOrder.forEach((key) => {
         const slider = document.getElementById(getTimelineSliderId(key));
-        const track = slider?.closest(".screen-range-track");
+        const track = slider?.closest?.(".screen-range-track");
         if (!slider || !track) return;
         const marker = track.querySelector(".screen-relative-age-marker");
         const relativeIndex = enabledOrder.indexOf(key);
@@ -3155,7 +3649,14 @@
     function getTimelineStepKey(step) {
       const id = String(step?.id || "");
       const match = id.match(/^screen-(.+)-event-step$/);
-      return match ? (match[1] === "ema-relationship" ? "ema_relationship" : match[1]) : "";
+      if (!match) return "";
+      if (match[1] === "ema-relationship") return "ema_relationship";
+      if (match[1] === "volume-spike") return "volume_spike";
+      if (match[1] === "ema-flatten") return "ema_flatten";
+      if (match[1] === "price-ema") return "price_ema";
+      if (match[1] === "ha-ema-volume") return "ha_ema_volume";
+      const rsiMatch = match[1].match(/^rsi-(\d+)$/);
+      return rsiMatch ? `rsi_${rsiMatch[1]}` : match[1];
     }
 
     function selectTimelineEvent(key) {
@@ -3193,7 +3694,7 @@
     }
 
     function updateTimelineTrackBounds(lookbackDays) {
-      ["screen-rsi-cross-age", "screen-macd-cross-age", "screen-stoch-cross-age", "screen-supertrend-cross-age", "screen-ema-relationship-age"].forEach((id) => {
+      ["screen-rsi-cross-age", "screen-rsi-2-cross-age", "screen-rsi-3-cross-age", "screen-macd-cross-age", "screen-stoch-cross-age", "screen-supertrend-cross-age", "screen-ema-relationship-age", "screen-ema-flatten-age", "screen-price-ema-cross-age", "screen-volume-spike-cross-age", "screen-ha-ema-volume-event-age"].forEach((id) => {
         const node = document.getElementById(id);
         if (node) {
           node.max = String(lookbackDays);
@@ -3209,7 +3710,19 @@
       });
       const emaLeftLabel = document.getElementById("screen-ema-relationship-axis-left");
       if (emaLeftLabel) {
-        emaLeftLabel.textContent = "Window start";
+        emaLeftLabel.textContent = leftLabel;
+      }
+      const priceEmaLeftLabel = document.getElementById("screen-price-ema-axis-left");
+      if (priceEmaLeftLabel) {
+        priceEmaLeftLabel.textContent = leftLabel;
+      }
+      const emaFlattenLeftLabel = document.getElementById("screen-ema-flatten-axis-left");
+      if (emaFlattenLeftLabel) {
+        emaFlattenLeftLabel.textContent = leftLabel;
+      }
+      const haEmaVolumeLeftLabel = document.getElementById("screen-ha-ema-volume-axis-left");
+      if (haEmaVolumeLeftLabel) {
+        haEmaVolumeLeftLabel.textContent = leftLabel;
       }
     }
 
@@ -3227,10 +3740,16 @@
     function syncScreenEventToggleChrome(filters = screenFilters) {
       [
         { key: "rsi_event_enabled", checkboxId: "screen-rsi-event-enabled", stepId: "screen-rsi-event-step" },
+        { key: "rsi_2_event_enabled", checkboxId: "screen-rsi-2-event-enabled", stepId: "screen-rsi-2-event-step" },
+        { key: "rsi_3_event_enabled", checkboxId: "screen-rsi-3-event-enabled", stepId: "screen-rsi-3-event-step" },
         { key: "macd_event_enabled", checkboxId: "screen-macd-event-enabled", stepId: "screen-macd-event-step" },
         { key: "stoch_event_enabled", checkboxId: "screen-stoch-event-enabled", stepId: "screen-stoch-event-step" },
         { key: "supertrend_event_enabled", checkboxId: "screen-supertrend-event-enabled", stepId: "screen-supertrend-event-step" },
         { key: "ema_relationship_enabled", checkboxId: "screen-ema-relationship-event-enabled", stepId: "screen-ema-relationship-event-step" },
+        { key: "price_ema_event_enabled", checkboxId: "screen-price-ema-event-enabled", stepId: "screen-price-ema-event-step" },
+        { key: "volume_spike_enabled", checkboxId: "screen-volume-spike-event-enabled", stepId: "screen-volume-spike-event-step" },
+        { key: "ema_flatten_enabled", checkboxId: "screen-ema-flatten-event-enabled", stepId: "screen-ema-flatten-event-step" },
+        { key: "ha_ema_volume_enabled", checkboxId: "screen-ha-ema-volume-event-enabled", stepId: "screen-ha-ema-volume-event-step" },
       ].forEach(({ key, checkboxId, stepId }) => {
         const enabled = Boolean(filters[key]);
         const checkbox = document.getElementById(checkboxId);
@@ -3239,14 +3758,37 @@
           checkbox.checked = enabled;
         }
         if (step) {
-          step.style.opacity = enabled ? "1" : "0.5";
-          step.style.filter = enabled ? "none" : "grayscale(0.2)";
           step.classList.toggle("is-disabled", !enabled);
+          step.setAttribute("aria-disabled", enabled ? "false" : "true");
         }
       });
     }
 
+    function validateHaEmaVolumeConditions(conditions) {
+      const rank = { below_ema2: 0, between_ema1_ema2: 1, above_ema1: 2 };
+      const active = Object.fromEntries((conditions || [])
+        .filter((item) => item.enabled)
+        .map((item) => [item.field, rank[item.zone]]));
+      const messages = [];
+      [["low", "open"], ["low", "close"], ["low", "high"], ["open", "high"], ["close", "high"]].forEach(([lower, upper]) => {
+        if (active[lower] !== undefined && active[upper] !== undefined && active[lower] > active[upper]) {
+          messages.push(`${lower.toUpperCase()} cannot be in a higher zone than ${upper.toUpperCase()}.`);
+        }
+      });
+      const node = document.getElementById("screen-ha-ema-volume-validation");
+      if (node) {
+        node.textContent = messages.join(" ");
+        node.classList.toggle("hidden", messages.length === 0);
+      }
+      return messages;
+    }
+
     function syncScreenFilterStateFromDom() {
+      const haEmaVolumeConditions = ["open", "high", "low", "close"].map((field) => ({
+        field,
+        enabled: Boolean(document.getElementById(`screen-ha-ema-volume-condition-${field}-enabled`)?.checked),
+        zone: document.getElementById(`screen-ha-ema-volume-condition-${field}-zone`)?.value || "above_ema1",
+      }));
       const nextFilters = normalizeScreenFiltersClient({
         lookback_days: screenFilters.lookback_days,
         volume_range: getRangePairValues(
@@ -3255,16 +3797,65 @@
           { min: 0, max: SCREEN_DEFAULT_FILTERS.volume_range.max }
         ),
         macd_event_enabled: document.getElementById("screen-macd-event-enabled")?.checked,
-        rsi_event_enabled: document.getElementById("screen-rsi-event-enabled")?.checked,
+        rsi_event_enabled: screenEventOrder.some((key) => RSI_TIMELINE_KEYS.includes(key)),
+        rsi_filter_enabled: document.getElementById("screen-rsi-filter-enabled")?.checked,
+        rsi_filter_min: document.getElementById("screen-rsi-filter-min")?.value,
         stoch_event_enabled: document.getElementById("screen-stoch-event-enabled")?.checked,
         supertrend_event_enabled: document.getElementById("screen-supertrend-event-enabled")?.checked,
         ema_relationship_enabled: document.getElementById("screen-ema-relationship-event-enabled")?.checked,
+        price_ema_event_enabled: document.getElementById("screen-price-ema-event-enabled")?.checked,
+        volume_spike_enabled: document.getElementById("screen-volume-spike-event-enabled")?.checked,
+        ha_ema_volume_enabled: document.getElementById("screen-ha-ema-volume-event-enabled")?.checked,
+        ha_ema_volume_conditions: haEmaVolumeConditions,
+        ha_ema_volume_candle_color: document.getElementById("screen-ha-ema-volume-candle-color")?.value,
+        ema_flatten_enabled: document.getElementById("screen-ema-flatten-event-enabled")?.checked,
+        volume_spike_period: document.getElementById("screen-volume-spike-period")?.value,
+        volume_spike_multiplier: document.getElementById("screen-volume-spike-multiplier")?.value,
+        ha_ema_volume_ema1_period: document.getElementById("screen-ha-ema-volume-ema1-period")?.value,
+        ha_ema_volume_ema1_source: ["open", "high", "low", "close"]
+          .map((source) => document.getElementById(`screen-ha-ema-volume-ema1-source-${source}`))
+          .find((node) => node?.checked)?.value,
+        ha_ema_volume_ema2_period: document.getElementById("screen-ha-ema-volume-ema2-period")?.value,
+        ha_ema_volume_ema2_source: ["open", "high", "low", "close"]
+          .map((source) => document.getElementById(`screen-ha-ema-volume-ema2-source-${source}`))
+          .find((node) => node?.checked)?.value,
+        ha_ema_volume_start_field: document.getElementById("screen-ha-ema-volume-start-field")?.value,
+        ha_ema_volume_start_line: document.getElementById("screen-ha-ema-volume-start-line")?.value,
+        ha_ema_volume_start_relation: document.getElementById("screen-ha-ema-volume-start-relation")?.value,
+        ha_ema_volume_end_field: document.getElementById("screen-ha-ema-volume-end-field")?.value,
+        ha_ema_volume_end_line: document.getElementById("screen-ha-ema-volume-end-line")?.value,
+        ha_ema_volume_end_relation: document.getElementById("screen-ha-ema-volume-end-relation")?.value,
+        ha_ema_volume_period: document.getElementById("screen-ha-ema-volume-period")?.value,
+        ha_ema_volume_multiplier: document.getElementById("screen-ha-ema-volume-multiplier")?.value,
+        ha_ema_volume_event_age: getEventSliderAge("screen-ha-ema-volume-event-age", screenFilters.lookback_days, screenFilters.ha_ema_volume_event_age),
+        ema_flatten_period: document.getElementById("screen-ema-flatten-period")?.value,
+        ema_flatten_lookback: document.getElementById("screen-ema-flatten-lookback")?.value,
+        ema_flatten_tolerance: document.getElementById("screen-ema-flatten-tolerance")?.value,
+        ema_flatten_mode: document.getElementById("screen-ema-flatten-mode")?.value,
         ema_relationship_fast: document.getElementById("screen-ema-relationship-fast")?.value,
         ema_relationship_slow: document.getElementById("screen-ema-relationship-slow")?.value,
         ema_relationship_slope: document.getElementById("screen-ema-relationship-slope")?.value,
         ema_relationship_allowance: document.getElementById("screen-ema-relationship-allowance")?.value,
+        ema_relationship_fast_slope: document.getElementById("screen-ema-relationship-fast-slope")?.value,
+        ema_relationship_slow_slope: document.getElementById("screen-ema-relationship-slow-slope")?.value,
+        ema_relationship_cross_mode: document.getElementById("screen-ema-relationship-cross-mode")?.value,
+        price_ema_period: document.getElementById("screen-price-ema-period")?.value,
+        price_ema_source: document.getElementById("screen-price-ema-source")?.value,
+        price_ema_sources: [...(document.getElementById("screen-price-ema-source")?.selectedOptions || [])].map((option) => option.value),
+        price_ema_cross_mode: document.getElementById("screen-price-ema-cross-mode")?.value,
         rsi_cross_value: document.getElementById("screen-rsi-cross-value")?.value,
         rsi_cross_mode: document.getElementById("screen-rsi-cross-mode")?.value,
+        rsi_events: screenEventOrder
+          .filter((key) => RSI_TIMELINE_KEYS.includes(key))
+          .map((key) => {
+            const domKey = getTimelineDomKey(key);
+            return {
+              rsi_event_id: key,
+              rsi_cross_value: document.getElementById(`screen-${domKey}-cross-value`)?.value,
+              rsi_cross_mode: document.getElementById(`screen-${domKey}-cross-mode`)?.value,
+              rsi_event_age: getEventSliderAge(`screen-${domKey}-cross-age`, screenFilters.lookback_days, screenFilters.rsi_event_age),
+            };
+          }),
         stoch_cross_value: document.getElementById("screen-stoch-cross-value")?.value,
         stoch_cross_mode: document.getElementById("screen-stoch-cross-mode")?.value,
         stoch_cross_region: ["below", "above", "any"].find((region) => document.getElementById(`screen-stoch-cross-region-${region}`)?.checked),
@@ -3275,20 +3866,71 @@
         supertrend_cross_mode: document.getElementById("screen-supertrend-cross-mode")?.value,
         supertrend_event_age: getEventSliderAge("screen-supertrend-cross-age", screenFilters.lookback_days, screenFilters.supertrend_event_age),
         ema_relationship_age: getEventSliderAge("screen-ema-relationship-age", screenFilters.lookback_days, screenFilters.ema_relationship_age),
+        price_ema_event_age: getEventSliderAge("screen-price-ema-cross-age", screenFilters.lookback_days, screenFilters.price_ema_event_age),
+        volume_spike_age: getEventSliderAge("screen-volume-spike-cross-age", screenFilters.lookback_days, screenFilters.volume_spike_age),
+        ema_flatten_event_age: getEventSliderAge("screen-ema-flatten-age", screenFilters.lookback_days, screenFilters.ema_flatten_event_age),
         ema_slope_20: document.getElementById("screen-ema-20-slope")?.value,
         ema_slope_50: document.getElementById("screen-ema-50-slope")?.value,
         ema_slope_200: document.getElementById("screen-ema-200-slope")?.value,
+        ema_slope_period_1: document.getElementById("screen-ema-slope-period-1")?.value,
+        ema_slope_period_2: document.getElementById("screen-ema-slope-period-2")?.value,
+        ema_slope_period_3: document.getElementById("screen-ema-slope-period-3")?.value,
+        ema_slope_1: document.getElementById("screen-ema-slope-1")?.value,
+        ema_slope_2: document.getElementById("screen-ema-slope-2")?.value,
+        ema_slope_3: document.getElementById("screen-ema-slope-3")?.value,
         ema_slope_lookback: document.getElementById("screen-ema-slope-lookback")?.value,
         ema_slope_flat_tolerance: document.getElementById("screen-ema-slope-tolerance")?.value,
+        timeline_order: [...screenEventOrder],
       });
+      validateHaEmaVolumeConditions(nextFilters.ha_ema_volume_conditions);
       screenFilters = nextFilters;
+      writeStickyValue(LAST_SCREEN_FILTERS_KEY, JSON.stringify(nextFilters));
       applyScreenFilters(nextFilters, { syncPreset: false });
       refreshScreenProjection();
       return nextFilters;
     }
 
+    function stepDecimalInput(inputId, delta) {
+      const node = document.getElementById(inputId);
+      if (!node) return;
+      const current = Number(String(node.value).replace(",", "."));
+      const next = Number.isFinite(current) ? current + delta : 2.5;
+      node.value = Math.min(10, Math.max(1.1, next)).toFixed(1);
+      node.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
     function applyScreenFilters(filters, { syncPreset = false } = {}) {
       screenFilters = normalizeScreenFiltersClient(filters);
+      const enabledTimelineKeys = new Set([
+        ...(screenFilters.rsi_event_enabled ? (screenFilters.rsi_events || []).map((event, index) => event.rsi_event_id || (index === 0 ? "rsi" : `rsi_${index + 1}`)) : []),
+        ...(screenFilters.macd_event_enabled ? ["macd"] : []),
+        ...(screenFilters.stoch_event_enabled ? ["stoch"] : []),
+        ...(screenFilters.supertrend_event_enabled ? ["supertrend"] : []),
+        ...(screenFilters.ema_relationship_enabled ? ["ema_relationship"] : []),
+        ...(screenFilters.price_ema_event_enabled ? ["price_ema"] : []),
+        ...(screenFilters.volume_spike_enabled ? ["volume_spike"] : []),
+        ...(screenFilters.ha_ema_volume_enabled ? ["ha_ema_volume"] : []),
+        ...(screenFilters.ema_flatten_enabled ? ["ema_flatten"] : []),
+        ...(Array.isArray(screenFilters.timeline_order)
+          ? screenFilters.timeline_order.filter((key) => REPEATABLE_TIMELINE_KEYS.includes(key) && key.includes("_"))
+          : []),
+      ]);
+      const savedTimelineOrder = (Array.isArray(screenFilters.timeline_order)
+        ? [...screenFilters.timeline_order]
+        : [...DEFAULT_TIMELINE_ORDER]
+      );
+      const previouslyVisibleTimelineKeys = new Set(screenEventOrder);
+      // Older saved filters may enable a rule that did not exist when their
+      // timeline_order was written. Keep those enabled rules visible by
+      // appending them after the remembered order.
+      enabledTimelineKeys.forEach((key) => {
+        if (!savedTimelineOrder.includes(key)) {
+          savedTimelineOrder.push(key);
+        }
+      });
+      screenEventOrder = savedTimelineOrder.filter((key) => (
+        enabledTimelineKeys.has(key) || previouslyVisibleTimelineKeys.has(key)
+      ));
       const chartTA = screenFilters.chart_ta || CHART_TA_DEFAULTS;
       Object.entries({
         macd_fast: "chart-macd-fast",
@@ -3300,6 +3942,7 @@
         stoch_rsi_d: "chart-stoch-rsi-d",
         supertrend_period: "chart-supertrend-period",
         supertrend_multiplier: "chart-supertrend-multiplier",
+        candle_mode: "chart-candle-mode",
       }).forEach(([key, id]) => {
         const node = document.getElementById(id);
         if (node && chartTA[key] !== undefined) {
@@ -3315,12 +3958,26 @@
       const volumeMaxNode = document.getElementById("screen-volume-max");
       if (volumeMinNode) volumeMinNode.value = String(screenFilters.volume_range.min);
       if (volumeMaxNode) volumeMaxNode.value = String(screenFilters.volume_range.max);
+      const rsiFilterEnabledNode = document.getElementById("screen-rsi-filter-enabled");
+      const rsiFilterMinNode = document.getElementById("screen-rsi-filter-min");
+      const rsiFilterReadout = document.getElementById("screen-rsi-filter-min-readout");
+      if (rsiFilterEnabledNode) rsiFilterEnabledNode.checked = Boolean(screenFilters.rsi_filter_enabled);
+      if (rsiFilterMinNode) rsiFilterMinNode.value = String(screenFilters.rsi_filter_min);
+      if (rsiFilterReadout) rsiFilterReadout.textContent = String(screenFilters.rsi_filter_min);
       updateTimelineTrackBounds(screenFilters.lookback_days);
       setEventSliderValue("screen-macd-cross-age", screenFilters.macd_event_age, screenFilters.lookback_days);
       setEventSliderValue("screen-rsi-cross-age", screenFilters.rsi_event_age, screenFilters.lookback_days);
+      (screenFilters.rsi_events || []).forEach((event, index) => {
+        const key = event.rsi_event_id || (index === 0 ? "rsi" : `rsi_${index + 1}`);
+        setEventSliderValue(`screen-${getTimelineDomKey(key)}-cross-age`, event.rsi_event_age, screenFilters.lookback_days);
+      });
       setEventSliderValue("screen-stoch-cross-age", screenFilters.stoch_event_age, screenFilters.lookback_days);
         setEventSliderValue("screen-supertrend-cross-age", screenFilters.supertrend_event_age, screenFilters.lookback_days);
       setEventSliderValue("screen-ema-relationship-age", screenFilters.ema_relationship_age, screenFilters.lookback_days);
+      setEventSliderValue("screen-price-ema-cross-age", screenFilters.price_ema_event_age, screenFilters.lookback_days);
+      setEventSliderValue("screen-volume-spike-cross-age", screenFilters.volume_spike_age, screenFilters.lookback_days);
+      setEventSliderValue("screen-ha-ema-volume-event-age", screenFilters.ha_ema_volume_event_age, screenFilters.lookback_days);
+      setEventSliderValue("screen-ema-flatten-age", screenFilters.ema_flatten_event_age, screenFilters.lookback_days);
       reorderTimelineSteps();
       syncTimelineAgeConstraints();
       [
@@ -3329,23 +3986,72 @@
         ["screen-ema-200-slope", screenFilters.ema_slope_200],
         ["screen-ema-slope-lookback", screenFilters.ema_slope_lookback],
         ["screen-ema-slope-tolerance", screenFilters.ema_slope_flat_tolerance],
+        ["screen-ema-slope-period-1", screenFilters.ema_slope_period_1],
+        ["screen-ema-slope-period-2", screenFilters.ema_slope_period_2],
+        ["screen-ema-slope-period-3", screenFilters.ema_slope_period_3],
+        ["screen-ema-slope-1", screenFilters.ema_slope_1],
+        ["screen-ema-slope-2", screenFilters.ema_slope_2],
+        ["screen-ema-slope-3", screenFilters.ema_slope_3],
         ["screen-ema-relationship-fast", screenFilters.ema_relationship_fast],
         ["screen-ema-relationship-slow", screenFilters.ema_relationship_slow],
         ["screen-ema-relationship-slope", screenFilters.ema_relationship_slope],
         ["screen-ema-relationship-allowance", screenFilters.ema_relationship_allowance],
+        ["screen-ema-relationship-fast-slope", screenFilters.ema_relationship_fast_slope],
+        ["screen-ema-relationship-slow-slope", screenFilters.ema_relationship_slow_slope],
+        ["screen-ema-relationship-cross-mode", screenFilters.ema_relationship_cross_mode],
+        ["screen-price-ema-period", screenFilters.price_ema_period],
+        ["screen-price-ema-cross-mode", screenFilters.price_ema_cross_mode],
+        ["screen-volume-spike-period", screenFilters.volume_spike_period],
+        ["screen-volume-spike-multiplier", screenFilters.volume_spike_multiplier],
+        ["screen-ha-ema-volume-ema1-period", screenFilters.ha_ema_volume_ema1_period],
+        ["screen-ha-ema-volume-ema2-period", screenFilters.ha_ema_volume_ema2_period],
+        ["screen-ha-ema-volume-candle-color", screenFilters.ha_ema_volume_candle_color],
+        ["screen-ha-ema-volume-start-field", screenFilters.ha_ema_volume_start_field],
+        ["screen-ha-ema-volume-start-line", screenFilters.ha_ema_volume_start_line],
+        ["screen-ha-ema-volume-start-relation", screenFilters.ha_ema_volume_start_relation],
+        ["screen-ha-ema-volume-end-field", screenFilters.ha_ema_volume_end_field],
+        ["screen-ha-ema-volume-end-line", screenFilters.ha_ema_volume_end_line],
+        ["screen-ha-ema-volume-end-relation", screenFilters.ha_ema_volume_end_relation],
+        ["screen-ha-ema-volume-period", screenFilters.ha_ema_volume_period],
+        ["screen-ha-ema-volume-multiplier", screenFilters.ha_ema_volume_multiplier],
+        ["screen-ema-flatten-period", screenFilters.ema_flatten_period],
+        ["screen-ema-flatten-lookback", screenFilters.ema_flatten_lookback],
+        ["screen-ema-flatten-tolerance", screenFilters.ema_flatten_tolerance],
+        ["screen-ema-flatten-mode", screenFilters.ema_flatten_mode],
       ].forEach(([id, value]) => {
         const node = document.getElementById(id);
         if (node) node.value = String(value);
       });
+      const priceEmaSourceNode = document.getElementById("screen-price-ema-source");
+      if (priceEmaSourceNode) {
+        const selectedSources = new Set(screenFilters.price_ema_sources || [screenFilters.price_ema_source]);
+        [...priceEmaSourceNode.options].forEach((option) => { option.selected = selectedSources.has(option.value); });
+      }
+      ["open", "high", "low", "close"].forEach((source) => {
+        const ema1Node = document.getElementById(`screen-ha-ema-volume-ema1-source-${source}`);
+        const ema2Node = document.getElementById(`screen-ha-ema-volume-ema2-source-${source}`);
+        if (ema1Node) ema1Node.checked = source === screenFilters.ha_ema_volume_ema1_source;
+        if (ema2Node) ema2Node.checked = source === screenFilters.ha_ema_volume_ema2_source;
+        const condition = (screenFilters.ha_ema_volume_conditions || []).find((item) => item.field === source);
+        const enabledNode = document.getElementById(`screen-ha-ema-volume-condition-${source}-enabled`);
+        const zoneNode = document.getElementById(`screen-ha-ema-volume-condition-${source}-zone`);
+        if (condition && enabledNode) enabledNode.checked = Boolean(condition.enabled);
+        if (condition && zoneNode) zoneNode.value = condition.zone;
+      });
+      validateHaEmaVolumeConditions(screenFilters.ha_ema_volume_conditions);
       syncScreenEventToggleChrome(screenFilters);
-      const rsiCrossNode = document.getElementById("screen-rsi-cross-value");
-      if (rsiCrossNode) {
-        rsiCrossNode.value = String(screenFilters.rsi_cross_value);
-      }
-      const rsiModeNode = document.getElementById("screen-rsi-cross-mode");
-      if (rsiModeNode) {
-        rsiModeNode.value = String(screenFilters.rsi_cross_mode || SCREEN_DEFAULT_FILTERS.rsi_cross_mode);
-      }
+      (screenFilters.rsi_events || []).forEach((event, index) => {
+        const key = event.rsi_event_id || (index === 0 ? "rsi" : `rsi_${index + 1}`);
+        const domKey = getTimelineDomKey(key);
+        const valueNode = document.getElementById(`screen-${domKey}-cross-value`);
+        const modeNode = document.getElementById(`screen-${domKey}-cross-mode`);
+        const valueReadout = document.getElementById(`screen-${domKey}-cross-value-readout`);
+        const modeReadout = document.getElementById(`screen-${domKey}-mode-readout`);
+        if (valueNode) valueNode.value = String(event.rsi_cross_value);
+        if (modeNode) modeNode.value = String(event.rsi_cross_mode);
+        if (valueReadout) valueReadout.textContent = `${Math.round(event.rsi_cross_value)}`;
+        if (modeReadout) modeReadout.textContent = getRsiModeLongLabel(event.rsi_cross_mode);
+      });
       const stochCrossNode = document.getElementById("screen-stoch-cross-value");
       if (stochCrossNode) {
         stochCrossNode.value = String(screenFilters.stoch_cross_value);
@@ -3401,6 +4107,11 @@
       if (rsiEventReadout) {
         rsiEventReadout.textContent = formatTimelinePosition(screenFilters.rsi_event_age, screenFilters.lookback_days);
       }
+      (screenFilters.rsi_events || []).forEach((event, index) => {
+        const key = event.rsi_event_id || (index === 0 ? "rsi" : `rsi_${index + 1}`);
+        const readout = document.getElementById(`screen-${getTimelineDomKey(key)}-cross-readout`);
+        if (readout) readout.textContent = formatTimelinePosition(event.rsi_event_age, screenFilters.lookback_days);
+      });
       const stochReadout = document.getElementById("screen-stoch-cross-readout");
       if (stochReadout) {
         stochReadout.textContent = formatTimelinePosition(screenFilters.stoch_event_age, screenFilters.lookback_days);
@@ -3408,11 +4119,33 @@
       const supertrendReadout = document.getElementById("screen-supertrend-cross-readout");
       if (supertrendReadout) supertrendReadout.textContent = formatTimelinePosition(screenFilters.supertrend_event_age, screenFilters.lookback_days);
       const emaRelationshipReadout = document.getElementById("screen-ema-relationship-event-readout");
-      if (emaRelationshipReadout) emaRelationshipReadout.textContent = `Cross within last ${screenFilters.ema_relationship_age}d`;
+      if (emaRelationshipReadout) emaRelationshipReadout.textContent = formatTimelinePosition(screenFilters.ema_relationship_age, screenFilters.lookback_days);
       const emaRelationshipLabel = document.getElementById("screen-ema-relationship-readout");
-      if (emaRelationshipLabel) emaRelationshipLabel.textContent = `${screenFilters.ema_relationship_fast} / ${screenFilters.ema_relationship_slow} · ${screenFilters.ema_relationship_slope} · ±${Number(screenFilters.ema_relationship_allowance).toFixed(2)}%`;
+      if (emaRelationshipLabel) emaRelationshipLabel.textContent = `${screenFilters.ema_relationship_fast} / ${screenFilters.ema_relationship_slow} · ${screenFilters.ema_relationship_cross_mode === "cross_down" ? "down" : "up"}`;
+      const priceEmaReadout = document.getElementById("screen-price-ema-event-readout");
+      if (priceEmaReadout) priceEmaReadout.textContent = formatTimelinePosition(screenFilters.price_ema_event_age, screenFilters.lookback_days);
+      const priceEmaLabel = document.getElementById("screen-price-ema-readout");
+      if (priceEmaLabel) priceEmaLabel.textContent = `${String(screenFilters.price_ema_source || "close").toUpperCase()} ${screenFilters.price_ema_cross_mode === "cross_down" ? "down" : "up"} EMA ${screenFilters.price_ema_period}`;
       const supertrendModeReadout = document.getElementById("screen-supertrend-mode-readout");
       if (supertrendModeReadout) supertrendModeReadout.textContent = screenFilters.supertrend_cross_mode === "green_to_red" ? "Green to red" : "Red to green";
+      const volumeSpikeLabel = document.getElementById("screen-volume-spike-readout");
+      if (volumeSpikeLabel) volumeSpikeLabel.textContent = `${Number(screenFilters.volume_spike_multiplier).toFixed(1)}x EMA ${screenFilters.volume_spike_period}`;
+      const volumeSpikeReadout = document.getElementById("screen-volume-spike-cross-readout");
+      if (volumeSpikeReadout) volumeSpikeReadout.textContent = formatTimelinePosition(screenFilters.volume_spike_age, screenFilters.lookback_days);
+      const haEmaVolumeReadout = document.getElementById("screen-ha-ema-volume-event-readout");
+      if (haEmaVolumeReadout) haEmaVolumeReadout.textContent = formatTimelinePosition(screenFilters.ha_ema_volume_event_age, screenFilters.lookback_days);
+      const haEmaVolumeLabel = document.getElementById("screen-ha-ema-volume-readout");
+      if (haEmaVolumeLabel) {
+        const zoneLabels = { above_ema1: "above EMA1", between_ema1_ema2: "between EMA1/EMA2", below_ema2: "below EMA2" };
+        const conditions = (screenFilters.ha_ema_volume_conditions || [])
+          .filter((condition) => condition.enabled)
+          .map((condition) => `${String(condition.field).toUpperCase()} ${zoneLabels[condition.zone] || condition.zone}`);
+        haEmaVolumeLabel.textContent = `${conditions.join(" + ") || "No OHLC condition"} + volume ${Number(screenFilters.ha_ema_volume_multiplier).toFixed(1)}x EMA ${screenFilters.ha_ema_volume_period}`;
+      }
+      const emaFlattenReadout = document.getElementById("screen-ema-flatten-event-readout");
+      if (emaFlattenReadout) emaFlattenReadout.textContent = formatTimelinePosition(screenFilters.ema_flatten_event_age, screenFilters.lookback_days);
+      const emaFlattenLabel = document.getElementById("screen-ema-flatten-readout");
+      if (emaFlattenLabel) emaFlattenLabel.textContent = `EMA ${screenFilters.ema_flatten_period} · ${screenFilters.ema_flatten_mode}`;
       updateTimelineStepPositions(screenFilters);
       updateScreenSequenceSummary(screenFilters);
       if (syncPreset) {
@@ -3432,9 +4165,12 @@
       params.set("volume_max", String(filters.volume_range.max));
       params.set("macd_event_enabled", filters.macd_event_enabled ? "true" : "false");
       params.set("rsi_event_enabled", filters.rsi_event_enabled ? "true" : "false");
+      params.set("rsi_filter_enabled", filters.rsi_filter_enabled ? "true" : "false");
+      params.set("rsi_filter_min", String(filters.rsi_filter_min));
       params.set("stoch_event_enabled", filters.stoch_event_enabled ? "true" : "false");
       params.set("rsi_cross_value", String(filters.rsi_cross_value));
       params.set("rsi_cross_mode", String(filters.rsi_cross_mode || SCREEN_DEFAULT_FILTERS.rsi_cross_mode));
+      params.set("rsi_events", JSON.stringify(filters.rsi_events || []));
       params.set("stoch_cross_value", String(filters.stoch_cross_value));
       params.set("stoch_cross_mode", String(filters.stoch_cross_mode || SCREEN_DEFAULT_FILTERS.stoch_cross_mode));
       params.set("stoch_cross_region", String(filters.stoch_cross_region || SCREEN_DEFAULT_FILTERS.stoch_cross_region));
@@ -3450,13 +4186,55 @@
       params.set("ema_relationship_slow", String(filters.ema_relationship_slow));
       params.set("ema_relationship_slope", String(filters.ema_relationship_slope));
       params.set("ema_relationship_allowance", String(filters.ema_relationship_allowance));
+      params.set("ema_relationship_fast_slope", String(filters.ema_relationship_fast_slope));
+      params.set("ema_relationship_slow_slope", String(filters.ema_relationship_slow_slope));
+      params.set("ema_relationship_cross_mode", String(filters.ema_relationship_cross_mode));
       params.set("ema_relationship_age", String(filters.ema_relationship_age));
+      params.set("price_ema_event_enabled", filters.price_ema_event_enabled ? "true" : "false");
+      params.set("price_ema_period", String(filters.price_ema_period));
+      params.set("price_ema_source", String(filters.price_ema_source || SCREEN_DEFAULT_FILTERS.price_ema_source));
+      params.set("price_ema_sources", JSON.stringify(filters.price_ema_sources || [filters.price_ema_source || SCREEN_DEFAULT_FILTERS.price_ema_source]));
+      params.set("price_ema_cross_mode", String(filters.price_ema_cross_mode || SCREEN_DEFAULT_FILTERS.price_ema_cross_mode));
+      params.set("price_ema_event_age", String(filters.price_ema_event_age));
+      params.set("ema_flatten_enabled", filters.ema_flatten_enabled ? "true" : "false");
+      params.set("ema_flatten_period", String(filters.ema_flatten_period));
+      params.set("ema_flatten_lookback", String(filters.ema_flatten_lookback));
+      params.set("ema_flatten_tolerance", String(filters.ema_flatten_tolerance));
+      params.set("ema_flatten_mode", String(filters.ema_flatten_mode));
+      params.set("ema_flatten_event_age", String(filters.ema_flatten_event_age));
+      params.set("volume_spike_enabled", filters.volume_spike_enabled ? "true" : "false");
+      params.set("volume_spike_period", String(filters.volume_spike_period));
+      params.set("volume_spike_multiplier", String(filters.volume_spike_multiplier));
+        params.set("volume_spike_age", String(filters.volume_spike_age));
+      params.set("ha_ema_volume_enabled", filters.ha_ema_volume_enabled ? "true" : "false");
+      params.set("ha_ema_volume_ema1_period", String(filters.ha_ema_volume_ema1_period));
+      params.set("ha_ema_volume_ema1_source", String(filters.ha_ema_volume_ema1_source));
+      params.set("ha_ema_volume_ema2_period", String(filters.ha_ema_volume_ema2_period));
+      params.set("ha_ema_volume_ema2_source", String(filters.ha_ema_volume_ema2_source));
+      params.set("ha_ema_volume_start_field", String(filters.ha_ema_volume_start_field));
+      params.set("ha_ema_volume_start_line", String(filters.ha_ema_volume_start_line));
+      params.set("ha_ema_volume_start_relation", String(filters.ha_ema_volume_start_relation));
+      params.set("ha_ema_volume_end_field", String(filters.ha_ema_volume_end_field));
+      params.set("ha_ema_volume_end_line", String(filters.ha_ema_volume_end_line));
+      params.set("ha_ema_volume_end_relation", String(filters.ha_ema_volume_end_relation));
+      params.set("ha_ema_volume_conditions", JSON.stringify(filters.ha_ema_volume_conditions || []));
+      params.set("ha_ema_volume_candle_color", String(filters.ha_ema_volume_candle_color || "green"));
+      params.set("ha_ema_volume_period", String(filters.ha_ema_volume_period));
+      params.set("ha_ema_volume_multiplier", String(filters.ha_ema_volume_multiplier));
+      params.set("ha_ema_volume_event_age", String(filters.ha_ema_volume_event_age));
+      params.set("timeline_order", JSON.stringify(filters.timeline_order || []));
       const chartTA = getChartTAParameters();
       params.set("supertrend_period", String(chartTA.supertrend_period));
       params.set("supertrend_multiplier", String(chartTA.supertrend_multiplier));
       params.set("ema_slope_20", String(filters.ema_slope_20 || "any"));
       params.set("ema_slope_50", String(filters.ema_slope_50 || "any"));
       params.set("ema_slope_200", String(filters.ema_slope_200 || "any"));
+      params.set("ema_slope_period_1", String(filters.ema_slope_period_1));
+      params.set("ema_slope_period_2", String(filters.ema_slope_period_2));
+      params.set("ema_slope_period_3", String(filters.ema_slope_period_3));
+      params.set("ema_slope_1", String(filters.ema_slope_1 || "any"));
+      params.set("ema_slope_2", String(filters.ema_slope_2 || "any"));
+      params.set("ema_slope_3", String(filters.ema_slope_3 || "any"));
       params.set("ema_slope_lookback", String(filters.ema_slope_lookback));
       params.set("ema_slope_flat_tolerance", String(filters.ema_slope_flat_tolerance));
       const presetSelect = document.getElementById("screen-preset-select");
@@ -3519,6 +4297,10 @@
       } else {
         applyScreenFilters(screenPresetCatalog.default_filters || SCREEN_DEFAULT_FILTERS);
       }
+      const savedFilters = readSavedScreenFilters();
+      if (savedFilters) {
+        applyScreenFilters(savedFilters);
+      }
       return screenPresetCatalog;
     }
 
@@ -3535,6 +4317,7 @@
       }
       writeStickyValue(LAST_SCREEN_PRESET_KEY, preset.name);
       applyScreenFilters(preset.filters);
+      writeStickyValue(LAST_SCREEN_FILTERS_KEY, JSON.stringify(preset.filters));
       const nameNode = document.getElementById("screen-preset-name");
       if (nameNode) {
         nameNode.value = preset.name;
@@ -3596,9 +4379,17 @@
       [
         "screen-volume-min",
         "screen-volume-max",
+        "screen-rsi-filter-enabled",
+        "screen-rsi-filter-min",
         "screen-rsi-cross-value",
         "screen-rsi-event-enabled",
         "screen-rsi-cross-mode",
+        "screen-rsi-2-cross-value",
+        "screen-rsi-2-event-enabled",
+        "screen-rsi-2-cross-mode",
+        "screen-rsi-3-cross-value",
+        "screen-rsi-3-event-enabled",
+        "screen-rsi-3-cross-mode",
         "screen-stoch-cross-value",
         "screen-stoch-event-enabled",
         "screen-stoch-cross-mode",
@@ -3608,19 +4399,70 @@
         "screen-macd-cross-mode",
         "screen-macd-cross-age",
         "screen-rsi-cross-age",
+        "screen-rsi-2-cross-age",
+        "screen-rsi-3-cross-age",
         "screen-stoch-cross-age",
         "screen-supertrend-cross-age",
         "screen-ema-relationship-age",
+        "screen-ema-flatten-age",
         "screen-ema-relationship-event-enabled",
         "screen-ema-relationship-fast",
         "screen-ema-relationship-slow",
-        "screen-ema-relationship-mode",
         "screen-ema-relationship-slope",
-        "screen-ema-relationship-lookback",
-        "screen-ema-relationship-tolerance",
-        "screen-ema-20-slope",
-        "screen-ema-50-slope",
-        "screen-ema-200-slope",
+        "screen-ema-relationship-fast-slope",
+        "screen-ema-relationship-slow-slope",
+        "screen-ema-relationship-cross-mode",
+        "screen-price-ema-event-enabled",
+        "screen-price-ema-period",
+        "screen-price-ema-source",
+        "screen-price-ema-cross-mode",
+        "screen-price-ema-cross-age",
+        "screen-volume-spike-event-enabled",
+        "screen-volume-spike-period",
+        "screen-volume-spike-multiplier",
+        "screen-volume-spike-cross-age",
+        "screen-ha-ema-volume-event-enabled",
+        "screen-ha-ema-volume-condition-open-enabled",
+        "screen-ha-ema-volume-condition-high-enabled",
+        "screen-ha-ema-volume-condition-low-enabled",
+        "screen-ha-ema-volume-condition-close-enabled",
+        "screen-ha-ema-volume-condition-open-zone",
+        "screen-ha-ema-volume-condition-high-zone",
+        "screen-ha-ema-volume-condition-low-zone",
+        "screen-ha-ema-volume-condition-close-zone",
+        "screen-ha-ema-volume-candle-color",
+        "screen-ha-ema-volume-ema1-period",
+        "screen-ha-ema-volume-ema2-period",
+        "screen-ha-ema-volume-ema1-source-open",
+        "screen-ha-ema-volume-ema1-source-high",
+        "screen-ha-ema-volume-ema1-source-low",
+        "screen-ha-ema-volume-ema1-source-close",
+        "screen-ha-ema-volume-ema2-source-open",
+        "screen-ha-ema-volume-ema2-source-high",
+        "screen-ha-ema-volume-ema2-source-low",
+        "screen-ha-ema-volume-ema2-source-close",
+        "screen-ha-ema-volume-start-field",
+        "screen-ha-ema-volume-start-line",
+        "screen-ha-ema-volume-start-relation",
+        "screen-ha-ema-volume-end-field",
+        "screen-ha-ema-volume-end-line",
+        "screen-ha-ema-volume-end-relation",
+        "screen-ha-ema-volume-period",
+        "screen-ha-ema-volume-multiplier",
+        "screen-ha-ema-volume-event-age",
+        "screen-ha-ema-volume-rsi-enabled",
+        "screen-ha-ema-volume-rsi-min",
+        "screen-ema-flatten-event-enabled",
+        "screen-ema-flatten-period",
+        "screen-ema-flatten-lookback",
+        "screen-ema-flatten-tolerance",
+        "screen-ema-flatten-mode",
+        "screen-ema-slope-period-1",
+        "screen-ema-slope-period-2",
+        "screen-ema-slope-period-3",
+        "screen-ema-slope-1",
+        "screen-ema-slope-2",
+        "screen-ema-slope-3",
         "screen-ema-slope-lookback",
         "screen-ema-slope-tolerance",
       ].forEach((id) => {
@@ -3630,18 +4472,47 @@
         }
         node.dataset.bound = "1";
         node.addEventListener("input", () => {
+          if (id === "screen-volume-spike-multiplier" || id === "screen-ha-ema-volume-multiplier") {
+            node.value = node.value.replace(",", ".");
+          }
           const shouldRestoreFocus = document.activeElement === node;
+          if (node.type === "checkbox" && node.id.endsWith("-event-enabled")) {
+            const toggleKey = getTimelineStepKey(node.closest(".screen-timeline-step"));
+            if (toggleKey) {
+              if (node.checked && !screenEventOrder.includes(toggleKey)) {
+                addTimelineStep(toggleKey);
+                return;
+              }
+              // Keep an unchecked step in the stack so it can be visibly
+              // greyed out and re-enabled. The remove button removes it.
+              if (!node.checked && screenEventOrder.includes(toggleKey)) {
+                reorderTimelineSteps();
+              }
+            }
+          }
           syncTimelineAgeConstraints();
           const readoutIdBySlider = {
+            "screen-rsi-filter-min": "screen-rsi-filter-min-readout",
             "screen-macd-cross-age": "screen-macd-cross-readout",
             "screen-rsi-cross-age": "screen-rsi-cross-readout",
+            "screen-rsi-2-cross-age": "screen-rsi-2-cross-readout",
+            "screen-rsi-3-cross-age": "screen-rsi-3-cross-readout",
             "screen-stoch-cross-age": "screen-stoch-cross-readout",
             "screen-supertrend-cross-age": "screen-supertrend-cross-readout",
             "screen-ema-relationship-age": "screen-ema-relationship-event-readout",
+            "screen-ema-flatten-age": "screen-ema-flatten-event-readout",
+            "screen-price-ema-cross-age": "screen-price-ema-event-readout",
+            "screen-volume-spike-cross-age": "screen-volume-spike-cross-readout",
+            "screen-ha-ema-volume-event-age": "screen-ha-ema-volume-event-readout",
           };
           const readoutId = readoutIdBySlider[id];
           if (readoutId) {
-            updateEventAgeReadoutFromSlider(id, readoutId);
+            if (id === "screen-rsi-filter-min") {
+              const readout = document.getElementById(readoutId);
+              if (readout) readout.textContent = String(node.value);
+            } else {
+              updateEventAgeReadoutFromSlider(id, readoutId);
+            }
           }
           syncScreenFilterStateFromDom();
           if (shouldRestoreFocus) {
@@ -3660,10 +4531,36 @@
           }
         }
       });
+      document.querySelectorAll(".screen-timeline-step input[type=range]").forEach((node) => {
+        if (node.dataset.bound === "1") return;
+        node.dataset.bound = "1";
+        node.addEventListener("input", () => {
+          const shouldRestoreFocus = document.activeElement === node;
+          const step = node.closest(".screen-timeline-step");
+          const readout = step?.querySelector('[id$="-cross-readout"], [id$="-event-readout"]');
+          if (readout) {
+            const age = getEventSliderAge(node.id, screenFilters.lookback_days, 0);
+            readout.textContent = formatTimelinePosition(age, screenFilters.lookback_days);
+          }
+          syncScreenFilterStateFromDom();
+          if (shouldRestoreFocus) {
+            node.focus({ preventScroll: true });
+            requestAnimationFrame(() => node.focus({ preventScroll: true }));
+          }
+        });
+      });
       document.querySelectorAll("[data-screen-event-move]").forEach((button) => {
         if (button.dataset.screenMoveBound === "1") return;
         button.dataset.screenMoveBound = "1";
         button.addEventListener("click", () => moveScreenEvent(button.dataset.screenEventMove, button.dataset.direction));
+      });
+      document.querySelectorAll("[data-screen-event-remove]").forEach((button) => {
+        if (button.dataset.screenRemoveBound === "1") return;
+        button.dataset.screenRemoveBound = "1";
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          removeTimelineStep(button.dataset.screenEventRemove);
+        });
       });
       document.querySelectorAll(".screen-timeline-step").forEach((step) => {
         if (step.dataset.timelineSelectionBound === "1") return;
@@ -3678,11 +4575,13 @@
         });
         step.addEventListener("focusin", () => selectTimelineEvent(key));
       });
-      if (document.documentElement.dataset.timelineKeyboardBound !== "1") {
-        document.documentElement.dataset.timelineKeyboardBound = "1";
+      if (document.documentElement?.dataset?.timelineKeyboardBound !== "1") {
+        if (document.documentElement?.dataset) {
+          document.documentElement.dataset.timelineKeyboardBound = "1";
+        }
         document.addEventListener("keydown", (event) => {
           if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-          const activeStep = document.getElementById(`screen-${screenActiveEventKey === "ema_relationship" ? "ema-relationship" : screenActiveEventKey}-event-step`);
+          const activeStep = document.getElementById(`screen-${getTimelineDomKey(screenActiveEventKey)}-event-step`);
           const target = event.target;
           if (!activeStep || (target !== document.body && target !== activeStep && !activeStep.contains(target))) return;
           event.preventDefault();
@@ -3711,6 +4610,7 @@
         "chart-stoch-rsi-d",
         "chart-supertrend-period",
         "chart-supertrend-multiplier",
+        "chart-candle-mode",
       ].forEach((id) => {
         const node = document.getElementById(id);
         if (!node || node.dataset.taApplyBound === "1") {
@@ -4740,11 +5640,40 @@
       }
     }
 
+    function ensureBacktestTableHeader(body) {
+      const table = body?.closest?.("table");
+      if (!table) {
+        return;
+      }
+      let thead = table.querySelector("thead");
+      if (!thead) {
+        thead = document.createElement("thead");
+        thead.className = "bg-slate-100 text-[10px] font-bold uppercase tracking-wide text-slate-500";
+        thead.innerHTML = "<tr></tr>";
+        table.insertBefore(thead, body);
+      }
+      const headerRow = thead.querySelector("tr");
+      if (!headerRow || Array.from(headerRow.children).some((cell) => cell.textContent.trim().toLowerCase() === "exclude")) {
+        return;
+      }
+      const headers = getBacktestTableSortConfig()
+        .map((entry) => `<th class="px-4 py-3 text-left"><button id="backtest-sort-${entry.key}" type="button" onclick="setBacktestTableSort('${entry.key}')">${entry.label}</button></th>`)
+        .join("");
+      if (!headerRow.children.length) {
+        headerRow.innerHTML = headers;
+      }
+      const excludeHeader = document.createElement("th");
+      excludeHeader.className = "px-4 py-3 text-left";
+      excludeHeader.textContent = "Exclude";
+      headerRow.appendChild(excludeHeader);
+    }
+
     function renderBacktestTable(rows) {
       const body = document.getElementById("backtest-table-body");
       if (!body) {
         return;
       }
+      ensureBacktestTableHeader(body);
       updateBacktestTableHeaderState();
       const strategyNames = uniqueBacktestStrategyNames(
         (Array.isArray(rows) ? rows : []).map((row) => row.strategy)
@@ -5528,7 +6457,7 @@
       presets: [],
     };
     let screenFilters = JSON.parse(JSON.stringify(SCREEN_DEFAULT_FILTERS));
-    let screenEventOrder = ["rsi", "macd", "stoch", "supertrend", "ema_relationship"];
+    let screenEventOrder = [...DEFAULT_TIMELINE_ORDER];
     let screenActiveEventKey = "rsi";
     let appliedChartTAParameters = null;
     let chartTriggerRefreshTimer = null;
@@ -5937,9 +6866,10 @@
         if (avgVolume < Number(filters.volume_range?.min || 0) || avgVolume > Number(filters.volume_range?.max || 0)) {
           return false;
         }
-        for (const [period, key] of [[20, "ema_slope_20"], [50, "ema_slope_50"], [200, "ema_slope_200"]]) {
-          const selected = String(filters[key] || "any");
-          if (selected !== "any" && selected !== String(item[`ema_slope_${period}_state`] || "unknown")) {
+        for (const index of [1, 2, 3]) {
+          const selected = String(filters[`ema_slope_${index}`] || "any");
+          const state = String(item[`ema_slope_${index}_state`] || "unknown");
+          if (selected !== "any" && selected !== state) {
             return false;
           }
         }
@@ -5977,10 +6907,12 @@
 
     function canProjectScreenFiltersLocally(filters = screenFilters) {
       if (!lastScreenScanFilters) return false;
+      if (Array.isArray(filters.rsi_events) && filters.rsi_events.length > 1) return false;
       const localKeys = [
         "volume_range", "macd_event_enabled", "rsi_event_enabled", "stoch_event_enabled",
         "supertrend_event_enabled", "macd_event_age", "rsi_event_age", "stoch_event_age", "supertrend_event_age",
-        "ema_slope_20", "ema_slope_50", "ema_slope_200",
+        "ema_slope_period_1", "ema_slope_period_2", "ema_slope_period_3",
+        "ema_slope_1", "ema_slope_2", "ema_slope_3",
       ];
       const comparable = (value) => JSON.stringify(value);
       const scan = lastScreenScanFilters;
@@ -6410,6 +7342,12 @@
         return;
       }
 
+      syncScreenFilterStateFromDom();
+      if (validateHaEmaVolumeConditions(screenFilters.ha_ema_volume_conditions).length) {
+        showToast("Fix the contradictory HA OHLC conditions before scanning.", true);
+        return;
+      }
+
       // Set up abortion
       scanAbortController = new AbortController();
 
@@ -6532,7 +7470,7 @@
         let resp = null;
         let rawData = null;
         try {
-          resp = await fetch(url, { signal: scanAbortController.signal });
+          resp = await fetch(url, { signal: scanAbortController.signal, cache: "no-store" });
           console.log("Fetch response status:", resp.status, "URL:", url);
 
           rawData = await resp.json();
@@ -6731,6 +7669,7 @@
         stoch_rsi_d: read("chart-stoch-rsi-d", 3),
         supertrend_period: read("chart-supertrend-period", 10),
         supertrend_multiplier: Number(document.getElementById("chart-supertrend-multiplier")?.value || 3),
+        candle_mode: document.getElementById("chart-candle-mode")?.value || "heikin_ashi",
         rsi_trigger: read("screen-rsi-cross-value", 50),
         stoch_trigger: read("screen-stoch-cross-value", 20),
       };
@@ -6778,6 +7717,7 @@
           stoch_rsi_d: "chart-stoch-rsi-d",
           supertrend_period: "chart-supertrend-period",
           supertrend_multiplier: "chart-supertrend-multiplier",
+          candle_mode: "chart-candle-mode",
         };
         Object.entries(fields).forEach(([key, id]) => {
           const node = document.getElementById(id);
@@ -6809,6 +7749,30 @@
         chartTriggerRefreshTimer = null;
         loadChart(currentTicker);
       }, 250);
+    }
+
+    function convertCandlesToHeikinAshi(trace) {
+      if (!trace || trace.type !== "candlestick" || !Array.isArray(trace.open)) {
+        return trace;
+      }
+      const open = [], high = [], low = [], close = [];
+      trace.open.forEach((rawOpen, index) => {
+        const o = Number(rawOpen), h = Number(trace.high?.[index]), l = Number(trace.low?.[index]), c = Number(trace.close?.[index]);
+        if (![o, h, l, c].every(Number.isFinite)) return;
+        const haClose = (o + h + l + c) / 4;
+        const haOpen = index === 0 ? (o + c) / 2 : (open[index - 1] + close[index - 1]) / 2;
+        open.push(haOpen);
+        close.push(haClose);
+        high.push(Math.max(h, haOpen, haClose));
+        low.push(Math.min(l, haOpen, haClose));
+      });
+      return {
+        ...trace,
+        open, high, low, close,
+        name: "Heikin Ashi",
+        increasing: { line: { color: "#16a34a" }, fillcolor: "#16a34a" },
+        decreasing: { line: { color: "#dc2626" }, fillcolor: "#dc2626" },
+      };
     }
 
     async function loadChart(ticker, strategyOverride = "") {
@@ -6848,6 +7812,11 @@
         chartQuery.set("ema_relationship_fast", String(screenFilters.ema_relationship_fast));
         chartQuery.set("ema_relationship_slow", String(screenFilters.ema_relationship_slow));
         chartQuery.set("supertrend_event_enabled", screenFilters.supertrend_event_enabled ? "true" : "false");
+        chartQuery.set("ema_slope_period_1", String(screenFilters.ema_slope_period_1));
+        chartQuery.set("ema_slope_period_2", String(screenFilters.ema_slope_period_2));
+        chartQuery.set("ema_slope_period_3", String(screenFilters.ema_slope_period_3));
+        chartQuery.set("ema_overlay_periods", JSON.stringify(getVisibleChartEmaPeriods(screenFilters)));
+        chartQuery.set("ema_overlay_specs", JSON.stringify(getVisibleChartEmaSpecs(screenFilters)));
         if (strategyName) {
           chartQuery.set("strategy", strategyName);
         }
@@ -6919,6 +7888,11 @@
           figData.layout[key].spikethickness = 1;
           figData.layout[key].spikecolor = "#64748b";
         }
+        if (taParams.candle_mode === "heikin_ashi") {
+          figData.data = figData.data.map((trace) => (
+            trace?.name === "Heikin Ashi" ? trace : convertCandlesToHeikinAshi(trace)
+          ));
+        }
       });
       figData.layout.hovermode = "x unified";
       figData.layout.hoverdistance = -1;
@@ -6931,6 +7905,7 @@
           displaylogo: false,
           scrollZoom: true,
         });
+        renderChartEmaLegend(figData, chartDiv);
 
         const toolsActions = document.getElementById("plotly-tools-actions");
         if (toolsActions) {
@@ -7040,6 +8015,8 @@
       renderBacktestRace();
       updateBacktestStrategyCount();
       syncBacktestStrategyCheckboxChrome();
+      ensureRepeatedRsiStep();
+      ensureRepeatedEventSteps();
       bindScreenControlInputs();
       updateScanActionButtonsState();
       updateBacktestRunButtonState();
@@ -7098,6 +8075,7 @@
       setListBuilderList,
       toggleListBuilderSelectedOnly,
       setScanSource,
+      stepDecimalInput,
       setScreenAutoExportEnabled,
       setScreenDisqualifier,
       setRange,

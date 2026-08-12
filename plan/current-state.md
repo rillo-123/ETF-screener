@@ -1,5 +1,10 @@
 # Current state
 
+- Added explicit HA candle-color enforcement with Green only as the default, plus Red only and Any color options.
+- Aligned HA condition EMA calculations and chart EMA overlays to the same Heikin-Ashi OHLC series, eliminating raw-price/HA comparison mismatches.
+- Added bounded TA history warm-up based on the longest configured indicator period, including reliable EMA 200 support.
+- Added regression tests for HA OHLC conditions, candle color, history warm-up, chart behavior, and dashboard integration.
+
 ## Event-stack timeline milestone — 2026-07-25
 
 - The Screener timeline stack now supports explicit up/down event ordering, chronological slider constraints, relative event markers, active-row highlighting, and repeated Left/Right keyboard adjustment.

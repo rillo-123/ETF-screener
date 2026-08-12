@@ -1,6 +1,14 @@
 
 # Progress
 
+## 2026-08-12 22:26:58 +02:00
+
+- Added explicit HA candle-color enforcement with Green only as the default, plus Red only and Any color options.
+- Aligned HA condition EMA calculations and chart EMA overlays to the same Heikin-Ashi OHLC series, eliminating raw-price/HA comparison mismatches.
+- Added bounded TA history warm-up based on the longest configured indicator period, including reliable EMA 200 support.
+- Added regression tests for HA OHLC conditions, candle color, history warm-up, chart behavior, and dashboard integration.
+- Next resume point: Review the HA screener milestone against live Investing.com candles and continue with data-source reconciliation if discrepancies remain.
+
 ## 2026-07-25 — Event-stack timeline milestone
 
 - Added up/down controls to every screener event-stack member so users can explicitly define chronological event order.
