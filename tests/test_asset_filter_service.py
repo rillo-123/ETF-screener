@@ -111,4 +111,3 @@ def test_get_filtered_assets_rejects_unknown_filter(tmp_path):
 
     with pytest.raises(ValueError, match="Unsupported asset filter"):
         service.get_filtered_assets("xetra", ["not_a_real_filter"])
-

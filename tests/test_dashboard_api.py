@@ -1,5 +1,5 @@
 ﻿import json
-import sqlite3
+import os
 import threading
 import time
 from datetime import datetime
@@ -122,7 +122,7 @@ def test_tab_bar_visible():
     assert "/api/market-status?" in dashboard_source
     assert 'statusParams.set("stale_after_days", "0")' in dashboard_source
     assert "/api/market-data/refresh?" in dashboard_source
-    assert 'refreshParams.set("force", "true")' in dashboard_source
+    assert 'refreshParams.set("force", "false")' in dashboard_source
     assert "/static/js/dashboard-loader.js" not in html
     assert "supertrend_continuation" in html
     assert "SWARM_DNA_SCHEMA_VERSION" not in dashboard_source
@@ -497,6 +497,29 @@ def test_screen_with_controls_reuses_indicator_history_cache(monkeypatch, tmp_pa
         "macd": 1,
         "stoch": 1,
     }
+
+
+def test_indicator_history_cache_key_changes_when_database_changes(tmp_path):
+    db_path = tmp_path / "etfs.db"
+    db_path.write_bytes(b"initial")
+    first = screener_controls._indicator_history_cache_key(
+        str(db_path),
+        ["AAA.DE"],
+        latest_market_date="2026-08-12",
+        history_days=365,
+    )
+
+    changed_mtime_ns = db_path.stat().st_mtime_ns + 1_000_000
+    db_path.write_bytes(b"refreshed")
+    os.utime(db_path, ns=(changed_mtime_ns, changed_mtime_ns))
+    second = screener_controls._indicator_history_cache_key(
+        str(db_path),
+        ["AAA.DE"],
+        latest_market_date="2026-08-12",
+        history_days=365,
+    )
+
+    assert first != second
 
 
 def test_cached_screen_universe_uses_db_backed_tickers_only(monkeypatch):

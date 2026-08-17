@@ -56,7 +56,9 @@ def test_rsi_cross_mask_detects_both_directions():
 
 def test_rsi_event_sequence_requires_distinct_consecutive_crossings():
     dates = pd.Series(pd.date_range("2026-01-01", periods=12, freq="D"))
-    rsi = pd.Series([50.0, 39.0, 45.0, 55.0, 61.0, 49.0, 42.0, 55.0, 65.0, 35.0, 45.0, 50.0])
+    rsi = pd.Series(
+        [50.0, 39.0, 45.0, 55.0, 61.0, 49.0, 42.0, 55.0, 65.0, 35.0, 45.0, 50.0]
+    )
     events = [
         {"rsi_cross_value": 50.0, "rsi_cross_mode": "cross_down", "rsi_event_age": 8},
         {"rsi_cross_value": 40.0, "rsi_cross_mode": "cross_down", "rsi_event_age": 3},
@@ -69,7 +71,9 @@ def test_rsi_event_sequence_requires_distinct_consecutive_crossings():
 
 def test_rsi_event_sequence_accepts_each_window_boundary():
     dates = pd.Series(pd.date_range("2026-01-01", periods=12, freq="D"))
-    rsi = pd.Series([50.0, 39.0, 45.0, 55.0, 61.0, 49.0, 42.0, 55.0, 65.0, 35.0, 45.0, 50.0])
+    rsi = pd.Series(
+        [50.0, 39.0, 45.0, 55.0, 61.0, 49.0, 42.0, 55.0, 65.0, 35.0, 45.0, 50.0]
+    )
     events = [
         {"rsi_cross_value": 50.0, "rsi_cross_mode": "cross_down", "rsi_event_age": 6},
         {"rsi_cross_value": 40.0, "rsi_cross_mode": "cross_down", "rsi_event_age": 2},
@@ -95,14 +99,16 @@ def test_rsi_event_sequence_traces_three_chronological_crossdowns():
 def test_rsi_event_sequence_normalization_preserves_two_steps():
     from ETF_screener.screener_controls import normalize_screen_filters
 
-    filters = normalize_screen_filters({
-        "lookback_days": 30,
-        "rsi_event_enabled": True,
-        "rsi_events": [
-            {"cross_value": 40, "cross_mode": "cross_down", "event_age": 5},
-            {"cross_value": 50, "cross_mode": "cross_up", "event_age": 12},
-        ],
-    })
+    filters = normalize_screen_filters(
+        {
+            "lookback_days": 30,
+            "rsi_event_enabled": True,
+            "rsi_events": [
+                {"cross_value": 40, "cross_mode": "cross_down", "event_age": 5},
+                {"cross_value": 50, "cross_mode": "cross_up", "event_age": 12},
+            ],
+        }
+    )
 
     assert filters["rsi_events"] == [
         {"rsi_cross_value": 40.0, "rsi_cross_mode": "cross_down", "rsi_event_age": 5},
@@ -114,7 +120,9 @@ def test_rsi_filter_normalization_supports_optional_minimum():
     from ETF_screener.screener_controls import normalize_screen_filters
 
     defaults = normalize_screen_filters({})
-    enabled = normalize_screen_filters({"rsi_filter_enabled": True, "rsi_filter_min": 62})
+    enabled = normalize_screen_filters(
+        {"rsi_filter_enabled": True, "rsi_filter_min": 62}
+    )
 
     assert defaults["rsi_filter_enabled"] is False
     assert defaults["rsi_filter_min"] == 50.0
@@ -125,13 +133,18 @@ def test_rsi_filter_normalization_supports_optional_minimum():
 def test_price_ema_normalization_supports_multiple_price_sources():
     from ETF_screener.screener_controls import normalize_screen_filters
 
-    filters = normalize_screen_filters({
-        "price_ema_event_enabled": True,
-        "price_ema_sources": ["high", "low", "high"],
-    })
+    filters = normalize_screen_filters(
+        {
+            "price_ema_event_enabled": True,
+            "price_ema_sources": ["high", "low", "high"],
+        }
+    )
 
     assert filters["price_ema_sources"] == ["high", "low"]
-    assert [event["price_ema_source"] for event in filters["price_ema_events"]] == ["high", "low"]
+    assert [event["price_ema_source"] for event in filters["price_ema_events"]] == [
+        "high",
+        "low",
+    ]
 
 
 def test_rsi_events_are_instantiable_and_serialize_at_the_api_boundary():
@@ -223,15 +236,21 @@ def test_price_ema_cross_mask_detects_both_directions():
 def test_ema_flatten_mask_classifies_top_and_bottom():
     close = pd.Series([100.0, 120.0, 120.0, 120.0, 100.0])
 
-    top, top_states = _ema_flatten_mask(close, period=2, lookback=1, tolerance=5.0, mode="top")
-    bottom, bottom_states = _ema_flatten_mask(close, period=2, lookback=1, tolerance=5.0, mode="bottom")
+    top, top_states = _ema_flatten_mask(
+        close, period=2, lookback=1, tolerance=5.0, mode="top"
+    )
+    bottom, bottom_states = _ema_flatten_mask(
+        close, period=2, lookback=1, tolerance=5.0, mode="bottom"
+    )
 
     assert top.any()
     assert top_states[top].eq("top").all()
     assert not bottom.any()
 
     bottom_close = pd.Series([100.0, 80.0, 80.0, 80.0, 100.0])
-    bottom, bottom_states = _ema_flatten_mask(bottom_close, period=2, lookback=1, tolerance=5.0, mode="bottom")
+    bottom, bottom_states = _ema_flatten_mask(
+        bottom_close, period=2, lookback=1, tolerance=5.0, mode="bottom"
+    )
     assert bottom.any()
     assert bottom_states[bottom].eq("bottom").all()
 
@@ -239,7 +258,9 @@ def test_ema_flatten_mask_classifies_top_and_bottom():
 def test_ema_flatten_filter_normalizes_top_bottom_options():
     from ETF_screener.screener_controls import normalize_screen_filters
 
-    filters = normalize_screen_filters({"lookback_days": 10, "ema_flatten_mode": "top", "ema_flatten_period": 40})
+    filters = normalize_screen_filters(
+        {"lookback_days": 10, "ema_flatten_mode": "top", "ema_flatten_period": 40}
+    )
 
     assert filters["ema_flatten_mode"] == "top"
     assert filters["ema_flatten_period"] == 40
@@ -258,12 +279,14 @@ def test_volume_spike_mask_detects_fresh_threshold_crossing():
 def _ha_volume_fixture(*, baseline_price=10.0, final_price=20.0, final_volume=500.0):
     prices = [baseline_price] * 6 + [final_price]
     volumes = [100.0] * 6 + [final_volume]
-    frame = pd.DataFrame({
-        "open": prices,
-        "high": prices,
-        "low": prices,
-        "close": prices,
-    })
+    frame = pd.DataFrame(
+        {
+            "open": prices,
+            "high": prices,
+            "low": prices,
+            "close": prices,
+        }
+    )
     return frame, pd.Series(volumes)
 
 
@@ -288,12 +311,14 @@ def _run_ha_volume_mask(frame, volume, **overrides):
 
 
 def test_heikin_ashi_ohlc_uses_recursive_open_and_transformed_extremes():
-    frame = pd.DataFrame({
-        "open": [10.0, 12.0],
-        "high": [14.0, 16.0],
-        "low": [8.0, 10.0],
-        "close": [12.0, 14.0],
-    })
+    frame = pd.DataFrame(
+        {
+            "open": [10.0, 12.0],
+            "high": [14.0, 16.0],
+            "low": [8.0, 10.0],
+            "close": [12.0, 14.0],
+        }
+    )
 
     ha_open, ha_high, ha_low, ha_close = _heikin_ashi_ohlc(frame)
 
@@ -400,14 +425,19 @@ def test_ha_ema_volume_mask_applies_four_ohlc_zone_conditions():
     assert matched.iloc[6]
 
 
-
-
 def test_latest_event_age_uses_calendar_days_and_includes_boundary():
     dates = _dates()
     mask = pd.Series([False, False, False, False, True, False, False, False])
 
     assert _latest_event_age_days(mask, dates, lookback_days=2) is None
     assert _latest_event_age_days(mask, dates, lookback_days=4) == 3
+
+
+def test_latest_event_age_supports_today_as_zero_days():
+    dates = _dates()
+    mask = pd.Series([False] * (len(dates) - 1) + [True])
+
+    assert _latest_event_age_days(mask, dates, lookback_days=30) == 0
 
 
 def test_indicator_presets_are_isolated_and_event_ages_fit_their_lookback():

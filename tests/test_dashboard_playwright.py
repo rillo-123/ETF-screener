@@ -943,12 +943,17 @@ def test_playbook_trade_ideas_render_target_and_watch_context(page):
         assert page.locator("#playbook-trade-count").inner_text() == "1"
         assert page.locator("#playbook-watch-count").inner_text() == "1"
         assert "104.00" in page.locator("#playbook-table-body tr").first.inner_text()
-        assert "4.0R upside" in page.locator("#playbook-table-body tr").first.inner_text()
-        assert "Rules 5/6" in page.locator("#playbook-table-body tr").nth(1).inner_text()
+        assert (
+            "4.0R upside" in page.locator("#playbook-table-body tr").first.inner_text()
+        )
+        assert (
+            "Rules 5/6" in page.locator("#playbook-table-body tr").nth(1).inner_text()
+        )
 
 
 def test_timeline_stack_can_remove_and_add_rules(page):
     with _run_dashboard_server() as base_url:
+
         def handle_api(route):
             url = route.request.url
             if "/api/market-status" in url:
@@ -1000,13 +1005,19 @@ def test_timeline_stack_can_remove_and_add_rules(page):
             "(node) => { const ids = [...node.parentElement.querySelectorAll(':scope > .screen-timeline-step')].map((item) => item.id); return ids.indexOf('screen-rsi-2-event-step') === ids.indexOf('screen-rsi-event-step') + 1 && ids.indexOf('screen-rsi-3-event-step') === ids.indexOf('screen-rsi-2-event-step') + 1; }"
         )
 
-        assert rule_library.locator('option[value="price_ema"]').inner_text() == "Add Price / EMA"
+        assert (
+            rule_library.locator('option[value="price_ema"]').inner_text()
+            == "Add Price / EMA"
+        )
         rule_library.select_option("price_ema")
         price_ema_step = page.locator("#screen-price-ema-event-step")
         assert price_ema_step.is_visible()
         page.locator("#screen-price-ema-period").fill("50")
         page.locator("#screen-price-ema-cross-mode").select_option("cross_down")
-        assert page.locator("#screen-price-ema-readout").inner_text() == "PRICE DOWN EMA 50"
+        assert (
+            page.locator("#screen-price-ema-readout").inner_text()
+            == "PRICE DOWN EMA 50"
+        )
 
         rule_library.select_option("volume_spike")
         volume_step = page.locator("#screen-volume-spike-event-step")
@@ -1018,6 +1029,7 @@ def test_timeline_stack_can_remove_and_add_rules(page):
 
 def test_saved_price_ema_event_missing_from_old_order_is_restored_to_stack(page):
     with _run_dashboard_server() as base_url:
+
         def handle_api(route):
             url = route.request.url
             if "/api/market-status" in url:
@@ -1056,8 +1068,15 @@ def test_saved_price_ema_event_missing_from_old_order_is_restored_to_stack(page)
         price_ema_step = page.locator("#screen-price-ema-event-step")
         assert price_ema_step.is_visible()
         assert page.locator("#screen-price-ema-period").input_value() == "50"
-        assert page.locator("#screen-price-ema-cross-mode").input_value() == "cross_down"
-        assert page.locator('#screen-rule-library-select option[value="price_ema"]').count() == 0
+        assert (
+            page.locator("#screen-price-ema-cross-mode").input_value() == "cross_down"
+        )
+        assert (
+            page.locator(
+                '#screen-rule-library-select option[value="price_ema"]'
+            ).count()
+            == 0
+        )
 
 
 def test_backtest_all_strategies_requests_all_strategies_flag(page):

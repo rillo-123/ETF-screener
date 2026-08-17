@@ -11,7 +11,13 @@ from plotly.subplots import make_subplots
 import logging
 
 from ETF_screener.dsl_parser import parse_strategy_blocks, resolve_block
-from ETF_screener.indicators import calculate_ema, calculate_macd, calculate_rsi, calculate_stoch_rsi, calculate_supertrend
+from ETF_screener.indicators import (
+    calculate_ema,
+    calculate_macd,
+    calculate_rsi,
+    calculate_stoch_rsi,
+    calculate_supertrend,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,19 +99,19 @@ class InteractivePlotter:
         ha_high = np.full(len(df), np.nan, dtype=float)
         ha_low = np.full(len(df), np.nan, dtype=float)
         ha_close = np.full(len(df), np.nan, dtype=float)
-        for index, (o, h, l, c) in enumerate(
+        for index, (o, h, low, c) in enumerate(
             zip(raw_open, raw_high, raw_low, raw_close)
         ):
-            if not all(np.isfinite(value) for value in (o, h, l, c)):
+            if not all(np.isfinite(value) for value in (o, h, low, c)):
                 continue
-            ha_close[index] = (o + h + l + c) / 4.0
+            ha_close[index] = (o + h + low + c) / 4.0
             ha_open[index] = (
                 (o + c) / 2.0
                 if index == 0 or not np.isfinite(ha_open[index - 1])
                 else (ha_open[index - 1] + ha_close[index - 1]) / 2.0
             )
             ha_high[index] = max(h, ha_open[index], ha_close[index])
-            ha_low[index] = min(l, ha_open[index], ha_close[index])
+            ha_low[index] = min(low, ha_open[index], ha_close[index])
 
         return tuple(
             pd.Series(values, index=df.index)
@@ -465,7 +471,41 @@ class InteractivePlotter:
             int(m.group(1))
             for m in re.finditer(r"\bema_(\d+)\b", strategy_content.lower())
         }
+        periods.update(
+            int(m.group(2))
+            for m in re.finditer(
+                r"\bema_(open|high|low|close)\s*\(\s*(\d+)\s*\)",
+                strategy_content.lower(),
+            )
+        )
         return sorted(periods)
+
+    def _extract_ema_specs(self, strategy_content: str | None) -> list[tuple[int, str]]:
+        """Extract EMA period/source pairs from the DSL.
+
+        Function-style references such as ``ema_high(20)`` are kept source-aware;
+        plain ``ema_20`` continues to mean an EMA of close.
+        """
+        if not strategy_content:
+            return []
+
+        specs: list[tuple[int, str]] = []
+        seen: set[tuple[int, str]] = set()
+
+        def add(period: int, source: str) -> None:
+            spec = (int(period), str(source).lower())
+            if spec not in seen:
+                seen.add(spec)
+                specs.append(spec)
+
+        text = strategy_content.lower()
+        for source, period in re.findall(
+            r"\bema_(open|high|low|close)\s*\(\s*(\d+)\s*\)", text
+        ):
+            add(int(period), source)
+        for period in re.findall(r"\bema_(\d+)\b", text):
+            add(int(period), "close")
+        return specs
 
     def _extract_supertrend_specs(
         self, strategy_content: str | None
@@ -530,6 +570,11 @@ class InteractivePlotter:
 
         for period in re.findall(r"\bema_(\d+)\b", s):
             add(f"ema_{period}")
+
+        for source, period in re.findall(
+            r"\bema_(open|high|low|close)\s*\(\s*(\d+)\s*\)", s
+        ):
+            add(f"ema_{source}_{period}")
 
         for period in re.findall(r"\brsi_(\d+)\b", s):
             add(f"rsi_{period}")
@@ -1050,9 +1095,11 @@ class InteractivePlotter:
         return s
 
     @staticmethod
-    def _chart_period(value: object, default: int, minimum: int = 1, maximum: int = 200) -> int:
+    def _chart_period(
+        value: object, default: int, minimum: int = 1, maximum: int = 200
+    ) -> int:
         try:
-            parsed = int(float(value))
+            parsed = int(float(str(value)))
         except (TypeError, ValueError):
             parsed = default
         return max(minimum, min(maximum, parsed))
@@ -1060,7 +1107,7 @@ class InteractivePlotter:
     @staticmethod
     def _chart_level(value: object, default: float) -> float:
         try:
-            parsed = float(value)
+            parsed = float(str(value))
         except (TypeError, ValueError):
             parsed = default
         return max(0.0, min(100.0, parsed))
@@ -1081,7 +1128,9 @@ class InteractivePlotter:
         stoch_d = self._chart_period(raw.get("stoch_rsi_d"), 3, 1, 30)
         supertrend_period = self._chart_period(raw.get("supertrend_period"), 10, 2, 100)
         try:
-            supertrend_multiplier = max(0.5, min(10.0, float(raw.get("supertrend_multiplier", 3.0))))
+            supertrend_multiplier = max(
+                0.5, min(10.0, float(raw.get("supertrend_multiplier", 3.0)))
+            )
         except (TypeError, ValueError):
             supertrend_multiplier = 3.0
         rsi_trigger = self._chart_level(raw.get("rsi_trigger"), 50.0)
@@ -1146,21 +1195,32 @@ class InteractivePlotter:
         )
         requested_ema_periods = chart_params.get("ema_overlay_periods")
         requested_ema_specs = chart_params.get("ema_overlay_specs")
-        if requested_ema_periods is None:
-            ema_periods_for_chart = self._extract_ema_periods(strategy_content)
+        derive_dsl_ema_overlays = requested_ema_periods is None or (
+            strategy_content
+            and strategy_content.strip()
+            and requested_ema_periods == []
+        )
+        if derive_dsl_ema_overlays:
+            ema_specs_for_chart = self._extract_ema_specs(strategy_content)
+            ema_periods_for_chart = sorted(
+                {period for period, _ in ema_specs_for_chart}
+            )
+            close = df["Close"] if "Close" in df.columns else df["close"]
+            for period, source in ema_specs_for_chart:
+                source_column = self._find_column_case_insensitive(
+                    df, source.title()
+                ) or self._find_column_case_insensitive(df, source)
+                source_series = df[source_column] if source_column else close
+                df[f"EMA_{period}_{source}"] = calculate_ema(
+                    source_series, period=period
+                )
+            chart_params["ema_overlay_specs_resolved"] = ema_specs_for_chart
         else:
-            ema_periods_for_chart = [int(period) for period in requested_ema_periods]
+            ema_periods_for_chart = [
+                int(str(period)) for period in (requested_ema_periods or [])
+            ]
             close = df["Close"] if "Close" in df.columns else df["close"]
             ema_specs_for_chart = []
-            ema_source_overrides = {}
-            if candle_mode == "heikin_ashi":
-                ha_open, ha_high, ha_low, ha_close = self._heikin_ashi_ohlc(df)
-                ema_source_overrides = {
-                    "open": ha_open,
-                    "high": ha_high,
-                    "low": ha_low,
-                    "close": ha_close,
-                }
             if isinstance(requested_ema_specs, list) and requested_ema_specs:
                 for spec in requested_ema_specs:
                     if not isinstance(spec, dict):
@@ -1170,21 +1230,25 @@ class InteractivePlotter:
                     if period >= 2 and source in {"open", "high", "low", "close"}:
                         ema_specs_for_chart.append((period, source))
             if not ema_specs_for_chart:
-                ema_specs_for_chart = [(period, "close") for period in ema_periods_for_chart if period >= 2]
+                ema_specs_for_chart = [
+                    (period, "close") for period in ema_periods_for_chart if period >= 2
+                ]
             for period, source in ema_specs_for_chart:
-                source_column = self._find_column_case_insensitive(df, source.title()) or self._find_column_case_insensitive(df, source)
-                source_series = (
-                    ema_source_overrides.get(source)
-                    if source in ema_source_overrides
-                    else (df[source_column] if source_column else close)
-                )
+                source_column = self._find_column_case_insensitive(
+                    df, source.title()
+                ) or self._find_column_case_insensitive(df, source)
+                source_series = df[source_column] if source_column else close
                 ema_column = f"EMA_{period}_{source}"
                 df[ema_column] = calculate_ema(source_series, period=period)
             chart_params["ema_overlay_specs_resolved"] = ema_specs_for_chart
         overlay_names = {
+            *[f"ema_{period}" for period in ema_periods_for_chart],
             *[
-                f"ema_{period}"
-                for period in ema_periods_for_chart
+                f"ema_{source}_{period}"
+                for period, source in (
+                    chart_params.get("ema_overlay_specs_resolved")
+                    or [(period, "close") for period in ema_periods_for_chart]
+                )
             ],
             *[
                 f"supertrend_{period}_{mult}"
@@ -1233,11 +1297,21 @@ class InteractivePlotter:
                 if items:
                     strategy_panel_groups.append({"title": title, "items": items})
 
-        fixed_panel_columns = {
-            "MACD": ["MACD", "MACD_Signal"],
-            "RSI": ["RSI"],
-            "StochRSI": ["StochRSI_K", "StochRSI_D"],
-        }
+        if strategy_content and strategy_content.strip():
+            strategy_text = strategy_content.lower()
+            fixed_panel_columns = {}
+            if re.search(r"\bmacd(?:_signal|_hist)?\b", strategy_text):
+                fixed_panel_columns["MACD"] = ["MACD", "MACD_Signal"]
+            if re.search(r"\brsi(?:_ema)?(?:_\d+)?\b|\brsi\s*\(", strategy_text):
+                fixed_panel_columns["RSI"] = ["RSI"]
+            if re.search(r"\bstoch(?:_rsi)?(?:_k|_d)?\b", strategy_text):
+                fixed_panel_columns["StochRSI"] = ["StochRSI_K", "StochRSI_D"]
+        else:
+            fixed_panel_columns = {
+                "MACD": ["MACD", "MACD_Signal"],
+                "RSI": ["RSI"],
+                "StochRSI": ["StochRSI_K", "StochRSI_D"],
+            }
         fixed_panel_groups = [
             {
                 "title": title,
@@ -1276,14 +1350,21 @@ class InteractivePlotter:
             for ribbon in self.ribbon_config.get("ribbons", []):
                 condition = str(ribbon.get("condition", "")).lower().strip()
                 layers = ribbon.get("layers", [])
-                candidates = ([condition] if condition else [
-                    str(layer.get("condition", "")).lower()
-                    for layer in layers
-                ])
-                if any(
-                    any(word in available_cols for word in re.findall(r"[a-z_][a-z0-9_]*", candidate))
-                    for candidate in candidates
-                ) or "supertrend" in str(ribbon.get("label", "")).lower():
+                candidates = (
+                    [condition]
+                    if condition
+                    else [str(layer.get("condition", "")).lower() for layer in layers]
+                )
+                if (
+                    any(
+                        any(
+                            word in available_cols
+                            for word in re.findall(r"[a-z_][a-z0-9_]*", candidate)
+                        )
+                        for candidate in candidates
+                    )
+                    or "supertrend" in str(ribbon.get("label", "")).lower()
+                ):
                     active_ribbons.append(ribbon)
 
         ribbon_render_data: list[dict] = []
@@ -1467,8 +1548,8 @@ class InteractivePlotter:
 
         # 1. Price Chart (Candlestick)
         if candle_mode == "heikin_ashi":
-            candle_open, candle_high, candle_low, candle_close = (
-                self._heikin_ashi_ohlc(df)
+            candle_open, candle_high, candle_low, candle_close = self._heikin_ashi_ohlc(
+                df
             )
             candle_name = "Heikin Ashi"
             candle_colors = {
@@ -1505,19 +1586,25 @@ class InteractivePlotter:
 
         # Add only EMA curves that are explicitly referenced by the active strategy.
         ema_periods = ema_periods_for_chart
-        ema_specs = chart_params.get("ema_overlay_specs_resolved") or [(period, "close") for period in ema_periods]
+        ema_specs = chart_params.get("ema_overlay_specs_resolved") or [
+            (period, "close") for period in ema_periods
+        ]
         ema_colors = ["#f59e0b", "#3b82f6", "#10b981", "#ef4444", "#8b5cf6", "#14b8a6"]
         for idx, (period, source) in enumerate(ema_specs):
             ema_col = f"EMA_{period}_{source}"
             if ema_col not in df.columns and source == "close":
-                ema_col = f"ema_{period}" if f"ema_{period}" in df.columns else f"EMA_{period}"
+                ema_col = (
+                    f"ema_{period}"
+                    if f"ema_{period}" in df.columns
+                    else f"EMA_{period}"
+                )
             if not ema_col:
                 continue
             fig.add_trace(
                 go.Scatter(
                     x=df["Date"],
                     y=df[ema_col],
-                    name=f"EMA {period} HA {source.title()}" if candle_mode == "heikin_ashi" else f"EMA {period} {source.title()}",
+                    name=f"EMA {period} {source.title()}",
                     line=dict(color=ema_colors[idx % len(ema_colors)], width=1.2),
                 ),
                 row=1,
@@ -1601,7 +1688,9 @@ class InteractivePlotter:
                     row=row,
                     col=1,
                 )
-                lower_band, upper_band = (20, 80) if panel_title == "stochrsi" else (30, 70)
+                lower_band, upper_band = (
+                    (20, 80) if panel_title == "stochrsi" else (30, 70)
+                )
                 fig.add_hline(
                     y=upper_band,
                     line=dict(color="#cbd5e1", width=1, dash="dot"),
@@ -1679,7 +1768,11 @@ class InteractivePlotter:
             is_green_regime = valid & (close_values > st_active)
 
         show_supertrend_overlay = chart_params.get("show_supertrend_overlay", True)
-        if show_supertrend_overlay and st_active is not None and is_green_regime is not None:
+        if (
+            show_supertrend_overlay
+            and st_active is not None
+            and is_green_regime is not None
+        ):
             valid_mask = ~np.isnan(st_active)
 
             # Split into contiguous same-color runs and draw one trace per run.

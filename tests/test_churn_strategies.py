@@ -37,6 +37,71 @@ END
     assert parsed["exit"] == "(close < ema_50)"
 
 
+def test_parse_compact_dsl_preserves_all_conditions_as_one_and_trigger():
+    parsed = parse_dsl_content("""DAYS: 5
+ha_close GT ema_high(20)
+AND
+ha_open GT ema_low(20)
+AND
+rsi(14) GT 50
+AND
+ema_close(200)_slope GT 0
+""")
+
+    assert parsed["max_days"] == 5
+    assert parsed["trigger"] == (
+        "(ha_close GT ema_high(20) and ha_open GT ema_low(20) "
+        "and rsi(14) GT 50 and ema_close(200)_slope GT 0)"
+    )
+    assert parsed["entry"] == parsed["trigger"]
+
+
+def test_compact_dsl_and_requires_conditions_on_the_same_candle():
+    # Each clause is true somewhere, but never all on the same row.
+    df = pd.DataFrame(
+        {
+            "open": [1.0, 1.0, 1.0, 1.0],
+            "high": [2.0, 2.0, 2.0, 2.0],
+            "low": [0.0, 0.0, 0.0, 0.0],
+            "close": [1.0, 1.0, 1.0, 1.0],
+            "ha_close": [2.0, 0.0, 0.0, 0.0],
+            "ema_high_20": [1.0, 1.0, 1.0, 1.0],
+            "ha_open": [0.0, 2.0, 0.0, 0.0],
+            "ema_low_20": [1.0, 1.0, 1.0, 1.0],
+            "rsi_14": [40.0, 40.0, 60.0, 40.0],
+            "ema_close_200_slope": [-1.0, -1.0, -1.0, 1.0],
+            "exit_condition": [False, False, False, False],
+        }
+    )
+    trigger = (
+        "(ha_close > ema_high_20 and ha_open > ema_low_20 "
+        "and rsi_14 > 50 and ema_close_200_slope > 0)"
+    )
+
+    assert (
+        find_recent_entry_days(
+            df,
+            {"trigger": trigger, "filter": None, "exit": "False"},
+            max_days=3,
+        )
+        is None
+    )
+
+
+def test_compact_dsl_days_includes_boundary_and_excludes_older_signal():
+    df = pd.DataFrame(
+        {
+            "condition": [True, False, False, False, False, False],
+            "exit_condition": [False] * 6,
+        }
+    )
+    strategy = {"trigger": "condition", "filter": None, "exit": "False"}
+
+    # The true condition is five bars old: included by DAYS: 5, excluded by DAYS: 4.
+    assert find_recent_entry_days(df, strategy, max_days=5) == 5
+    assert find_recent_entry_days(df, strategy, max_days=4) is None
+
+
 def test_ema_breakout_fanout_strategy_requires_widening_gaps():
     bt = Backtester()
     strategy_path = "strategies/ema_breakout_fanout.dsl"

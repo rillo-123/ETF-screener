@@ -1,5 +1,7 @@
 # Current state
 
+- -Summary
+
 - Added explicit HA candle-color enforcement with Green only as the default, plus Red only and Any color options.
 - Aligned HA condition EMA calculations and chart EMA overlays to the same Heikin-Ashi OHLC series, eliminating raw-price/HA comparison mismatches.
 - Added bounded TA history warm-up based on the longest configured indicator period, including reliable EMA 200 support.

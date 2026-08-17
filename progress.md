@@ -1,6 +1,11 @@
 
 # Progress
 
+## 2026-08-17 21:53:56 +02:00
+
+- -Summary
+- Next resume point: Review the latest commit and pick up the next implementation task.
+
 ## 2026-08-12 22:26:58 +02:00
 
 - Added explicit HA candle-color enforcement with Green only as the default, plus Red only and Any color options.

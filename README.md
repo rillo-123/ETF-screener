@@ -242,6 +242,14 @@ Choose based on your workflow:
 
 The project includes an auto-refresh system designed to run at logon (via Task Scheduler).
 
+To start the quiet refresh worker manually in the background, run:
+
+```bat
+scripts\run-background-refresh.bat
+```
+
+It uses the project virtual environment, refreshes Xetra, Sweden, and Nasdaq data, and prunes market-data rows older than 365 days. Progress is written to `logs\startup-refresh.log`.
+
 - **`auto-refresh.ps1`**: The main PowerShell script that runs a shallow refresh (last 30 days) and generates a swing trading hotlist.
 - **`auto-refresh.bat`**: A launcher for the PowerShell script.
 - **Progress Tracking**: The script displays a live progress bar in a terminal window and logs detailed output to `logs/auto-refresh.log`.

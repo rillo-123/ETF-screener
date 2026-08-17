@@ -2249,6 +2249,13 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "FBYDP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: FBYDP",
+    "status": "invalid"
+  },
   "FCEU.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
@@ -2700,6 +2707,90 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "IBRX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBRX",
+    "status": "invalid"
+  },
+  "IBTG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBTG",
+    "status": "invalid"
+  },
+  "IBTH": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBTH",
+    "status": "invalid"
+  },
+  "IBTI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBTI",
+    "status": "invalid"
+  },
+  "IBTJ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBTJ",
+    "status": "invalid"
+  },
+  "IBTK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBTK",
+    "status": "invalid"
+  },
+  "IBTL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBTL",
+    "status": "invalid"
+  },
+  "IBTM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBTM",
+    "status": "invalid"
+  },
+  "IBTO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBTO",
+    "status": "invalid"
+  },
+  "IBTP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBTP",
+    "status": "invalid"
+  },
+  "IBTQ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBTQ",
+    "status": "invalid"
+  },
+  "IBTR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IBTR",
+    "status": "invalid"
+  },
   "IC1H.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
@@ -2708,12 +2799,208 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "ICCC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICCC",
+    "status": "invalid"
+  },
+  "ICCM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICCM",
+    "status": "invalid"
+  },
+  "ICFI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICFI",
+    "status": "invalid"
+  },
+  "ICG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICG",
+    "status": "invalid"
+  },
+  "ICHR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICHR",
+    "status": "invalid"
+  },
+  "ICLN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICLN",
+    "status": "invalid"
+  },
+  "ICLR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICLR",
+    "status": "invalid"
+  },
+  "ICMB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICMB",
+    "status": "invalid"
+  },
+  "ICON": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICON",
+    "status": "invalid"
+  },
+  "ICOP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICOP",
+    "status": "invalid"
+  },
+  "ICU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICU",
+    "status": "invalid"
+  },
+  "ICUCW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICUCW",
+    "status": "invalid"
+  },
+  "ICUI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ICUI",
+    "status": "invalid"
+  },
   "IDA.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "IDAC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IDAC",
+    "status": "invalid"
+  },
+  "IDACU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IDACU",
+    "status": "invalid"
+  },
+  "IDACW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IDACW",
+    "status": "invalid"
+  },
+  "IDAI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IDAI",
+    "status": "invalid"
+  },
+  "IDCC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IDCC",
+    "status": "invalid"
+  },
   "IDD.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "IDEF": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IDEF",
+    "status": "invalid"
+  },
+  "IDN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IDN",
+    "status": "invalid"
+  },
+  "IDVY": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IDVY",
+    "status": "invalid"
+  },
+  "IDXX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IDXX",
+    "status": "invalid"
+  },
+  "IDYA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IDYA",
+    "status": "invalid"
+  },
+  "IEAG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IEAG",
+    "status": "invalid"
+  },
+  "IEAGR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IEAGR",
+    "status": "invalid"
+  },
+  "IEAGU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IEAGU",
+    "status": "invalid"
+  },
+  "IEF": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IEF",
+    "status": "invalid"
+  },
+  "IEI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IEI",
     "status": "invalid"
   },
   "IEO.AS": {
@@ -2744,8 +3031,64 @@
     "reason": "No data found for symbol: IEO.MI",
     "status": "invalid"
   },
+  "IEP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IEP",
+    "status": "invalid"
+  },
+  "IESC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IESC",
+    "status": "invalid"
+  },
+  "IEUS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IEUS",
+    "status": "invalid"
+  },
+  "IFBD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IFBD",
+    "status": "invalid"
+  },
+  "IFGL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IFGL",
+    "status": "invalid"
+  },
+  "IFLO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IFLO",
+    "status": "invalid"
+  },
   "IFLX.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "IFRX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IFRX",
+    "status": "invalid"
+  },
+  "IFV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IFV",
     "status": "invalid"
   },
   "IG31.DE": {
@@ -2772,28 +3115,630 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "IGAC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IGAC",
+    "status": "invalid"
+  },
+  "IGACR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IGACR",
+    "status": "invalid"
+  },
+  "IGACU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IGACU",
+    "status": "invalid"
+  },
+  "IGF": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IGF",
+    "status": "invalid"
+  },
+  "IGIB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IGIB",
+    "status": "invalid"
+  },
+  "IGIC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IGIC",
+    "status": "invalid"
+  },
+  "IGOV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IGOV",
+    "status": "invalid"
+  },
+  "IGSB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IGSB",
+    "status": "invalid"
+  },
+  "IHRT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IHRT",
+    "status": "invalid"
+  },
+  "III": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: III",
+    "status": "invalid"
+  },
+  "IIIV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IIIV",
+    "status": "invalid"
+  },
+  "IJT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IJT",
+    "status": "invalid"
+  },
+  "IKT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IKT",
+    "status": "invalid"
+  },
+  "ILAG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ILAG",
+    "status": "invalid"
+  },
+  "ILIT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ILIT",
+    "status": "invalid"
+  },
+  "ILLR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ILLR",
+    "status": "invalid"
+  },
+  "ILLRW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ILLRW",
+    "status": "invalid"
+  },
+  "ILLU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ILLU",
+    "status": "invalid"
+  },
+  "ILLUU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ILLUU",
+    "status": "invalid"
+  },
+  "ILLUW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ILLUW",
+    "status": "invalid"
+  },
+  "ILMN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ILMN",
+    "status": "invalid"
+  },
+  "ILPT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ILPT",
+    "status": "invalid"
+  },
+  "IMA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMA",
+    "status": "invalid"
+  },
+  "IMCR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMCR",
+    "status": "invalid"
+  },
+  "IMCV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMCV",
+    "status": "invalid"
+  },
+  "IMDX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMDX",
+    "status": "invalid"
+  },
+  "IMKTA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMKTA",
+    "status": "invalid"
+  },
+  "IMMR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMMR",
+    "status": "invalid"
+  },
+  "IMMX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMMX",
+    "status": "invalid"
+  },
+  "IMNM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMNM",
+    "status": "invalid"
+  },
+  "IMNN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMNN",
+    "status": "invalid"
+  },
+  "IMOM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMOM",
+    "status": "invalid"
+  },
+  "IMOS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMOS",
+    "status": "invalid"
+  },
+  "IMPP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMPP",
+    "status": "invalid"
+  },
+  "IMPPP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMPPP",
+    "status": "invalid"
+  },
+  "IMRN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMRN",
+    "status": "invalid"
+  },
+  "IMRX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMRX",
+    "status": "invalid"
+  },
+  "IMSR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMSR",
+    "status": "invalid"
+  },
+  "IMSRW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMSRW",
+    "status": "invalid"
+  },
+  "IMTX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMTX",
+    "status": "invalid"
+  },
+  "IMUX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMUX",
+    "status": "invalid"
+  },
+  "IMVT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMVT",
+    "status": "invalid"
+  },
+  "IMXI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IMXI",
+    "status": "invalid"
+  },
+  "INAB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INAB",
+    "status": "invalid"
+  },
+  "INAC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INAC",
+    "status": "invalid"
+  },
+  "INACR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INACR",
+    "status": "invalid"
+  },
+  "INACU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INACU",
+    "status": "invalid"
+  },
+  "INBK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INBK",
+    "status": "invalid"
+  },
+  "INBKZ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INBKZ",
+    "status": "invalid"
+  },
+  "INBS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INBS",
+    "status": "invalid"
+  },
+  "INBX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INBX",
+    "status": "invalid"
+  },
   "INCU.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "INCY": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INCY",
+    "status": "invalid"
+  },
+  "IND": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IND",
     "status": "invalid"
   },
   "INDA.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "INDB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INDB",
+    "status": "invalid"
+  },
   "INDB.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "INDH": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INDH",
+    "status": "invalid"
+  },
+  "INDI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INDI",
+    "status": "invalid"
+  },
+  "INDP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INDP",
+    "status": "invalid"
+  },
+  "INDQ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INDQ",
     "status": "invalid"
   },
   "INDU.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "INDV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INDV",
+    "status": "invalid"
+  },
+  "INDY": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INDY",
+    "status": "invalid"
+  },
   "INGE.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "INGN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INGN",
+    "status": "invalid"
+  },
   "INGU.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "INHD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INHD",
+    "status": "invalid"
+  },
+  "INIO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INIO",
+    "status": "invalid"
+  },
+  "INKT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INKT",
+    "status": "invalid"
+  },
+  "INLF": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INLF",
+    "status": "invalid"
+  },
+  "INM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INM",
+    "status": "invalid"
+  },
+  "INMB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INMB",
+    "status": "invalid"
+  },
+  "INMD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INMD",
+    "status": "invalid"
+  },
+  "INNV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INNV",
+    "status": "invalid"
+  },
+  "INO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INO",
+    "status": "invalid"
+  },
+  "INOD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INOD",
+    "status": "invalid"
+  },
+  "INRO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INRO",
+    "status": "invalid"
+  },
+  "INSE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INSE",
+    "status": "invalid"
+  },
+  "INSG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INSG",
+    "status": "invalid"
+  },
+  "INSM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INSM",
+    "status": "invalid"
+  },
+  "INTA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INTA",
+    "status": "invalid"
+  },
+  "INTC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INTC",
+    "status": "invalid"
+  },
+  "INTG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INTG",
+    "status": "invalid"
+  },
+  "INTJ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INTJ",
+    "status": "invalid"
+  },
+  "INTR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INTR",
+    "status": "invalid"
+  },
+  "INTS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INTS",
+    "status": "invalid"
+  },
+  "INTU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INTU",
+    "status": "invalid"
+  },
+  "INTW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INTW",
+    "status": "invalid"
+  },
+  "INV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INV",
+    "status": "invalid"
+  },
+  "INVA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INVA",
+    "status": "invalid"
+  },
+  "INVE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: INVE",
     "status": "invalid"
   },
   "INX.DE": {
@@ -2802,6 +3747,237 @@
   },
   "INY0.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "IOND": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IOND",
+    "status": "invalid"
+  },
+  "IONL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IONL",
+    "status": "invalid"
+  },
+  "IONR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IONR",
+    "status": "invalid"
+  },
+  "IONS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IONS",
+    "status": "invalid"
+  },
+  "IONX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IONX",
+    "status": "invalid"
+  },
+  "IONZ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IONZ",
+    "status": "invalid"
+  },
+  "IOSP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IOSP",
+    "status": "invalid"
+  },
+  "IOTR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IOTR",
+    "status": "invalid"
+  },
+  "IOVA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IOVA",
+    "status": "invalid"
+  },
+  "IOYY": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IOYY",
+    "status": "invalid"
+  },
+  "IPAR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPAR",
+    "status": "invalid"
+  },
+  "IPCX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPCX",
+    "status": "invalid"
+  },
+  "IPCXR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPCXR",
+    "status": "invalid"
+  },
+  "IPCXU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPCXU",
+    "status": "invalid"
+  },
+  "IPEX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPEX",
+    "status": "invalid"
+  },
+  "IPEXR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPEXR",
+    "status": "invalid"
+  },
+  "IPEXU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPEXU",
+    "status": "invalid"
+  },
+  "IPFX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPFX",
+    "status": "invalid"
+  },
+  "IPFXU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPFXU",
+    "status": "invalid"
+  },
+  "IPFXW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPFXW",
+    "status": "invalid"
+  },
+  "IPGP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPGP",
+    "status": "invalid"
+  },
+  "IPHA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPHA",
+    "status": "invalid"
+  },
+  "IPKW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPKW",
+    "status": "invalid"
+  },
+  "IPM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPM",
+    "status": "invalid"
+  },
+  "IPSC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPSC",
+    "status": "invalid"
+  },
+  "IPST": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPST",
+    "status": "invalid"
+  },
+  "IPVV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPVV",
+    "status": "invalid"
+  },
+  "IPVVU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPVVU",
+    "status": "invalid"
+  },
+  "IPVVW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPVVW",
+    "status": "invalid"
+  },
+  "IPW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPW",
+    "status": "invalid"
+  },
+  "IPWR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPWR",
+    "status": "invalid"
+  },
+  "IPX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IPX",
+    "status": "invalid"
+  },
+  "IQ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IQ",
     "status": "invalid"
   },
   "IQGA.DE": {
@@ -2816,40 +3992,397 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "IQMX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IQMX",
+    "status": "invalid"
+  },
+  "IQMXW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IQMXW",
+    "status": "invalid"
+  },
+  "IQQ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IQQ",
+    "status": "invalid"
+  },
+  "IQQQ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IQQQ",
+    "status": "invalid"
+  },
+  "IQST": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IQST",
+    "status": "invalid"
+  },
   "IQUA.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "IRD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IRD",
+    "status": "invalid"
+  },
+  "IRDM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IRDM",
+    "status": "invalid"
+  },
+  "IREG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IREG",
+    "status": "invalid"
+  },
+  "IREN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IREN",
     "status": "invalid"
   },
   "IRFT.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "IRHO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IRHO",
+    "status": "invalid"
+  },
+  "IRHOR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IRHOR",
+    "status": "invalid"
+  },
+  "IRHOU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IRHOU",
+    "status": "invalid"
+  },
+  "IRIX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IRIX",
+    "status": "invalid"
+  },
+  "IRMD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IRMD",
+    "status": "invalid"
+  },
+  "IRON": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IRON",
+    "status": "invalid"
+  },
+  "IRTC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IRTC",
+    "status": "invalid"
+  },
+  "IRWD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IRWD",
+    "status": "invalid"
+  },
   "IS20.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "ISBA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISBA",
     "status": "invalid"
   },
   "ISFX.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "ISHG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISHG",
+    "status": "invalid"
+  },
+  "ISHP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISHP",
+    "status": "invalid"
+  },
+  "ISNR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISNR",
+    "status": "invalid"
+  },
+  "ISNRU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISNRU",
+    "status": "invalid"
+  },
+  "ISNRW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISNRW",
+    "status": "invalid"
+  },
+  "ISPR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISPR",
+    "status": "invalid"
+  },
+  "ISRG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISRG",
+    "status": "invalid"
+  },
+  "ISSC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISSC",
+    "status": "invalid"
+  },
+  "ISTB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISTB",
+    "status": "invalid"
+  },
+  "ISTM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISTM",
+    "status": "invalid"
+  },
+  "ISTR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISTR",
+    "status": "invalid"
+  },
+  "ISUL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ISUL",
+    "status": "invalid"
+  },
+  "ITG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ITG",
+    "status": "invalid"
+  },
+  "ITHA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ITHA",
+    "status": "invalid"
+  },
+  "ITHAU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ITHAU",
+    "status": "invalid"
+  },
+  "ITHAW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ITHAW",
+    "status": "invalid"
+  },
+  "ITIC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ITIC",
+    "status": "invalid"
+  },
+  "ITRI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ITRI",
+    "status": "invalid"
+  },
+  "ITRN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: ITRN",
+    "status": "invalid"
+  },
+  "IUS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IUS",
+    "status": "invalid"
+  },
+  "IUSB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IUSB",
+    "status": "invalid"
+  },
+  "IUSG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IUSG",
+    "status": "invalid"
+  },
+  "IUSV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IUSV",
+    "status": "invalid"
+  },
+  "IVA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IVA",
+    "status": "invalid"
+  },
   "IVAI.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "IVAL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IVAL",
     "status": "invalid"
   },
   "IVCS.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "IVDAW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IVDAW",
+    "status": "invalid"
+  },
   "IVDF.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "IVF": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IVF",
+    "status": "invalid"
+  },
+  "IVSI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IVSI",
+    "status": "invalid"
+  },
+  "IVSS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IVSS",
+    "status": "invalid"
+  },
+  "IVSX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IVSX",
     "status": "invalid"
   },
   "IX1.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "IXHL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IXHL",
+    "status": "invalid"
+  },
   "IXUA.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "IXUS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IXUS",
+    "status": "invalid"
+  },
+  "IZEA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: IZEA",
     "status": "invalid"
   },
   "J590.DE": {
@@ -2860,8 +4393,127 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "JAB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JAB",
+    "status": "invalid"
+  },
+  "JABRR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JABRR",
+    "status": "invalid"
+  },
+  "JABRU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JABRU",
+    "status": "invalid"
+  },
+  "JABRW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JABRW",
+    "status": "invalid"
+  },
+  "JACK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JACK",
+    "status": "invalid"
+  },
+  "JAGX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JAGX",
+    "status": "invalid"
+  },
+  "JAKK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JAKK",
+    "status": "invalid"
+  },
+  "JANX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JANX",
+    "status": "invalid"
+  },
+  "JAPN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JAPN",
+    "status": "invalid"
+  },
+  "JATT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JATT",
+    "status": "invalid"
+  },
   "JAUH.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "JAZZ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JAZZ",
+    "status": "invalid"
+  },
+  "JBDI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JBDI",
+    "status": "invalid"
+  },
+  "JBHT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JBHT",
+    "status": "invalid"
+  },
+  "JBIO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JBIO",
+    "status": "invalid"
+  },
+  "JBLU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JBLU",
+    "status": "invalid"
+  },
+  "JBSS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JBSS",
+    "status": "invalid"
+  },
+  "JCAP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JCAP",
     "status": "invalid"
   },
   "JCEU.DE": {
@@ -2878,6 +4530,41 @@
   },
   "JCPN.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "JCSE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JCSE",
+    "status": "invalid"
+  },
+  "JCTC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JCTC",
+    "status": "invalid"
+  },
+  "JD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JD",
+    "status": "invalid"
+  },
+  "JDOC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JDOC",
+    "status": "invalid"
+  },
+  "JDZG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JDZG",
     "status": "invalid"
   },
   "JEAA.DE": {
@@ -2912,6 +4599,27 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "JEM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JEM",
+    "status": "invalid"
+  },
+  "JEMA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JEMA",
+    "status": "invalid"
+  },
+  "JEPQ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JEPQ",
+    "status": "invalid"
+  },
   "JEQA.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
@@ -2944,6 +4652,41 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "JF": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JF",
+    "status": "invalid"
+  },
+  "JFB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JFB",
+    "status": "invalid"
+  },
+  "JFIN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JFIN",
+    "status": "invalid"
+  },
+  "JFU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JFU",
+    "status": "invalid"
+  },
+  "JG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JG",
+    "status": "invalid"
+  },
   "JGAD.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
@@ -2958,6 +4701,13 @@
   },
   "JGIE.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "JGLO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JGLO",
     "status": "invalid"
   },
   "JGLP.DE": {
@@ -2984,6 +4734,13 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "JHAI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JHAI",
+    "status": "invalid"
+  },
   "JHED.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
@@ -3004,12 +4761,54 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "JIVE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JIVE",
+    "status": "invalid"
+  },
+  "JJSF": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JJSF",
+    "status": "invalid"
+  },
+  "JKHY": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JKHY",
+    "status": "invalid"
+  },
+  "JL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JL",
+    "status": "invalid"
+  },
+  "JLHL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JLHL",
+    "status": "invalid"
+  },
   "JLOC.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
   "JLOD.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "JLVP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JLVP",
     "status": "invalid"
   },
   "JM2.DE": {
@@ -3032,16 +4831,72 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "JMID": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JMID",
+    "status": "invalid"
+  },
+  "JMSB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JMSB",
+    "status": "invalid"
+  },
   "JOGS.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "JONEU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JONEU",
+    "status": "invalid"
+  },
+  "JOUT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JOUT",
+    "status": "invalid"
+  },
+  "JOYT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JOYT",
+    "status": "invalid"
+  },
+  "JOYY": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JOYY",
     "status": "invalid"
   },
   "JPEC.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "JPEF": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JPEF",
+    "status": "invalid"
+  },
   "JPEY.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "JPFP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JPFP",
     "status": "invalid"
   },
   "JPGH.DE": {
@@ -3068,6 +4923,13 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "JPY": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JPY",
+    "status": "invalid"
+  },
   "JQPD.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
@@ -3078,6 +4940,20 @@
   },
   "JRIN.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "JRSH": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JRSH",
+    "status": "invalid"
+  },
+  "JRVR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JRVR",
     "status": "invalid"
   },
   "JRWA.DE": {
@@ -3100,20 +4976,251 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "JSM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JSM",
+    "status": "invalid"
+  },
+  "JSMD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JSMD",
+    "status": "invalid"
+  },
+  "JSML": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JSML",
+    "status": "invalid"
+  },
+  "JSPRW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JSPRW",
+    "status": "invalid"
+  },
+  "JTAI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JTAI",
+    "status": "invalid"
+  },
+  "JTEK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JTEK",
+    "status": "invalid"
+  },
   "JUIE.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "JVA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JVA",
+    "status": "invalid"
+  },
+  "JWEL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JWEL",
+    "status": "invalid"
+  },
+  "JXG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JXG",
+    "status": "invalid"
+  },
+  "JYD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JYD",
+    "status": "invalid"
+  },
+  "JYNT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JYNT",
     "status": "invalid"
   },
   "JYS1.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "JZ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JZ",
+    "status": "invalid"
+  },
+  "JZXN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: JZXN",
+    "status": "invalid"
+  },
   "KA1.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "KALA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KALA",
+    "status": "invalid"
+  },
+  "KALU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KALU",
+    "status": "invalid"
+  },
+  "KARD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KARD",
+    "status": "invalid"
+  },
+  "KARO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KARO",
+    "status": "invalid"
+  },
+  "KAT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KAT",
+    "status": "invalid"
+  },
+  "KAZR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KAZR",
+    "status": "invalid"
+  },
+  "KBAB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KBAB",
+    "status": "invalid"
+  },
+  "KBDU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KBDU",
+    "status": "invalid"
+  },
+  "KBON": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KBON",
+    "status": "invalid"
+  },
+  "KBONU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KBONU",
+    "status": "invalid"
+  },
+  "KBONW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KBONW",
+    "status": "invalid"
+  },
   "KBOT.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "KBSX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KBSX",
+    "status": "invalid"
+  },
+  "KBWB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KBWB",
+    "status": "invalid"
+  },
+  "KBWD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KBWD",
+    "status": "invalid"
+  },
+  "KBWP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KBWP",
+    "status": "invalid"
+  },
+  "KBWY": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KBWY",
+    "status": "invalid"
+  },
+  "KC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KC",
+    "status": "invalid"
+  },
+  "KCHV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KCHV",
+    "status": "invalid"
+  },
+  "KCHVR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KCHVR",
+    "status": "invalid"
+  },
+  "KCHVU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KCHVU",
     "status": "invalid"
   },
   "KCO0.DE": {
@@ -3124,48 +5231,804 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "KDK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KDK",
+    "status": "invalid"
+  },
+  "KDKRW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KDKRW",
+    "status": "invalid"
+  },
+  "KDP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KDP",
+    "status": "invalid"
+  },
+  "KE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KE",
+    "status": "invalid"
+  },
+  "KEAT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KEAT",
+    "status": "invalid"
+  },
+  "KEEL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KEEL",
+    "status": "invalid"
+  },
+  "KELYA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KELYA",
+    "status": "invalid"
+  },
+  "KELYB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KELYB",
+    "status": "invalid"
+  },
+  "KEQU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KEQU",
+    "status": "invalid"
+  },
   "KEY.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "KEYY": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KEYY",
+    "status": "invalid"
+  },
+  "KEYYU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KEYYU",
+    "status": "invalid"
+  },
+  "KEYYW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KEYYW",
+    "status": "invalid"
+  },
+  "KFFB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KFFB",
+    "status": "invalid"
+  },
+  "KFII": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KFII",
+    "status": "invalid"
+  },
+  "KFIIR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KFIIR",
+    "status": "invalid"
+  },
+  "KFIIU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KFIIU",
+    "status": "invalid"
+  },
+  "KG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KG",
+    "status": "invalid"
+  },
+  "KGEI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KGEI",
+    "status": "invalid"
+  },
+  "KHC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KHC",
+    "status": "invalid"
+  },
+  "KIDS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KIDS",
+    "status": "invalid"
+  },
+  "KIDZ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KIDZ",
+    "status": "invalid"
+  },
+  "KIDZW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KIDZW",
+    "status": "invalid"
+  },
+  "KINS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KINS",
+    "status": "invalid"
+  },
+  "KIQQ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KIQQ",
+    "status": "invalid"
+  },
+  "KJD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KJD",
+    "status": "invalid"
+  },
+  "KLAC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KLAC",
+    "status": "invalid"
+  },
+  "KLAG": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KLAG",
+    "status": "invalid"
+  },
+  "KLIC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KLIC",
+    "status": "invalid"
+  },
+  "KLRA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KLRA",
+    "status": "invalid"
+  },
+  "KLRS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KLRS",
+    "status": "invalid"
+  },
+  "KLTR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KLTR",
+    "status": "invalid"
+  },
+  "KLXE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KLXE",
+    "status": "invalid"
+  },
+  "KMB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KMB",
+    "status": "invalid"
+  },
+  "KMDA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KMDA",
+    "status": "invalid"
+  },
+  "KMLI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KMLI",
+    "status": "invalid"
+  },
+  "KMRK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KMRK",
+    "status": "invalid"
+  },
+  "KMTS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KMTS",
     "status": "invalid"
   },
   "KNG.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "KNGZ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KNGZ",
+    "status": "invalid"
+  },
   "KNIA.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "KNSA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KNSA",
+    "status": "invalid"
+  },
+  "KOD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KOD",
+    "status": "invalid"
+  },
+  "KOID": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KOID",
+    "status": "invalid"
+  },
+  "KOPN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KOPN",
+    "status": "invalid"
+  },
+  "KOSS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KOSS",
+    "status": "invalid"
+  },
+  "KOYN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KOYN",
+    "status": "invalid"
+  },
+  "KOYNU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KOYNU",
+    "status": "invalid"
+  },
+  "KOYNW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KOYNW",
+    "status": "invalid"
+  },
+  "KPDD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KPDD",
+    "status": "invalid"
+  },
+  "KPLT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KPLT",
     "status": "invalid"
   },
   "KPN.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "KPRX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KPRX",
+    "status": "invalid"
+  },
+  "KPTI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KPTI",
+    "status": "invalid"
+  },
+  "KQQQ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KQQQ",
+    "status": "invalid"
+  },
+  "KRAQ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KRAQ",
+    "status": "invalid"
+  },
+  "KRAQU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KRAQU",
+    "status": "invalid"
+  },
+  "KRAQW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KRAQW",
+    "status": "invalid"
+  },
   "KRBN.DE": {
     "reason": "No data found during refresh",
+    "status": "invalid"
+  },
+  "KRKR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KRKR",
+    "status": "invalid"
+  },
+  "KRMD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KRMD",
+    "status": "invalid"
+  },
+  "KRNT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KRNT",
+    "status": "invalid"
+  },
+  "KRNY": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KRNY",
+    "status": "invalid"
+  },
+  "KROP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KROP",
+    "status": "invalid"
+  },
+  "KROS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KROS",
+    "status": "invalid"
+  },
+  "KRRO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KRRO",
+    "status": "invalid"
+  },
+  "KRT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KRT",
+    "status": "invalid"
+  },
+  "KRUS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KRUS",
     "status": "invalid"
   },
   "KRX.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "KRYS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KRYS",
+    "status": "invalid"
+  },
   "KSAB.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "KSCP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KSCP",
+    "status": "invalid"
+  },
+  "KSPI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KSPI",
+    "status": "invalid"
+  },
+  "KTCC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KTCC",
+    "status": "invalid"
+  },
+  "KTOS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KTOS",
+    "status": "invalid"
+  },
+  "KTTAW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KTTAW",
+    "status": "invalid"
+  },
+  "KTWO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KTWO",
+    "status": "invalid"
+  },
+  "KTWOR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KTWOR",
+    "status": "invalid"
+  },
+  "KTWOU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KTWOU",
+    "status": "invalid"
+  },
+  "KURA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KURA",
+    "status": "invalid"
+  },
+  "KUST": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KUST",
+    "status": "invalid"
+  },
+  "KVHI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KVHI",
+    "status": "invalid"
+  },
+  "KWMWW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KWMWW",
+    "status": "invalid"
+  },
+  "KXIN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KXIN",
+    "status": "invalid"
+  },
+  "KYIV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KYIV",
+    "status": "invalid"
+  },
+  "KYIVW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KYIVW",
+    "status": "invalid"
+  },
+  "KYMR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KYMR",
+    "status": "invalid"
+  },
+  "KYTX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KYTX",
+    "status": "invalid"
+  },
+  "KZIA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: KZIA",
     "status": "invalid"
   },
   "LAAA.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "LABT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LABT",
+    "status": "invalid"
+  },
+  "LAES": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LAES",
+    "status": "invalid"
+  },
+  "LAFA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LAFA",
+    "status": "invalid"
+  },
+  "LAFAR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LAFAR",
+    "status": "invalid"
+  },
+  "LAFAU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LAFAU",
+    "status": "invalid"
+  },
+  "LAKE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LAKE",
+    "status": "invalid"
+  },
+  "LAMR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LAMR",
+    "status": "invalid"
+  },
+  "LAND": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LAND",
+    "status": "invalid"
+  },
+  "LANDO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LANDO",
+    "status": "invalid"
+  },
+  "LANDP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LANDP",
+    "status": "invalid"
+  },
   "LAR0.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "LARK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LARK",
+    "status": "invalid"
+  },
+  "LASE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LASE",
+    "status": "invalid"
+  },
+  "LASR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LASR",
+    "status": "invalid"
+  },
+  "LATA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LATA",
+    "status": "invalid"
+  },
+  "LATAU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LATAU",
+    "status": "invalid"
+  },
+  "LATAW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LATAW",
+    "status": "invalid"
+  },
+  "LAUR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LAUR",
+    "status": "invalid"
+  },
+  "LAWR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LAWR",
+    "status": "invalid"
+  },
+  "LBGJ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LBGJ",
     "status": "invalid"
   },
   "LBNK.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "LBRDA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LBRDA",
+    "status": "invalid"
+  },
+  "LBRDK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LBRDK",
+    "status": "invalid"
+  },
+  "LBRDP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LBRDP",
+    "status": "invalid"
+  },
   "LBRE.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "LBRX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LBRX",
+    "status": "invalid"
+  },
+  "LBTYA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LBTYA",
+    "status": "invalid"
+  },
+  "LBTYB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LBTYB",
+    "status": "invalid"
+  },
+  "LBTYK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LBTYK",
     "status": "invalid"
   },
   "LC30.DE": {
@@ -3184,12 +6047,82 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "LCCC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LCCC",
+    "status": "invalid"
+  },
+  "LCCCR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LCCCR",
+    "status": "invalid"
+  },
+  "LCCCU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LCCCU",
+    "status": "invalid"
+  },
+  "LCDS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LCDS",
+    "status": "invalid"
+  },
+  "LCFY": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LCFY",
+    "status": "invalid"
+  },
+  "LCFYW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LCFYW",
+    "status": "invalid"
+  },
   "LCHM.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "LCID": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LCID",
+    "status": "invalid"
+  },
+  "LCNB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LCNB",
+    "status": "invalid"
+  },
   "LCR.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "LCUT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LCUT",
+    "status": "invalid"
+  },
+  "LDEM": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LDEM",
     "status": "invalid"
   },
   "LDGA.DE": {
@@ -3200,16 +6133,254 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "LDRX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LDRX",
+    "status": "invalid"
+  },
+  "LDSF": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LDSF",
+    "status": "invalid"
+  },
+  "LE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LE",
+    "status": "invalid"
+  },
+  "LECO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LECO",
+    "status": "invalid"
+  },
+  "LEDS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LEDS",
+    "status": "invalid"
+  },
+  "LEE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LEE",
+    "status": "invalid"
+  },
+  "LEGH": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LEGH",
+    "status": "invalid"
+  },
+  "LEGN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LEGN",
+    "status": "invalid"
+  },
+  "LEGR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LEGR",
+    "status": "invalid"
+  },
   "LEMA.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "LEND": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LEND",
+    "status": "invalid"
+  },
+  "LENZ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LENZ",
+    "status": "invalid"
+  },
+  "LESL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LESL",
+    "status": "invalid"
+  },
+  "LEXI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LEXI",
+    "status": "invalid"
+  },
+  "LFAC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFAC",
+    "status": "invalid"
+  },
+  "LFACU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFACU",
+    "status": "invalid"
+  },
+  "LFACW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFACW",
+    "status": "invalid"
+  },
+  "LFCR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFCR",
+    "status": "invalid"
+  },
+  "LFMD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFMD",
+    "status": "invalid"
+  },
+  "LFMDP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFMDP",
     "status": "invalid"
   },
   "LFOD.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "LFS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFS",
+    "status": "invalid"
+  },
+  "LFSC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFSC",
+    "status": "invalid"
+  },
+  "LFST": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFST",
+    "status": "invalid"
+  },
+  "LFTO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFTO",
+    "status": "invalid"
+  },
+  "LFUS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFUS",
+    "status": "invalid"
+  },
+  "LFVN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFVN",
+    "status": "invalid"
+  },
+  "LFWD": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LFWD",
+    "status": "invalid"
+  },
+  "LGCF": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LGCF",
+    "status": "invalid"
+  },
+  "LGCL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LGCL",
+    "status": "invalid"
+  },
+  "LGDS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LGDS",
+    "status": "invalid"
+  },
+  "LGHL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LGHL",
+    "status": "invalid"
+  },
   "LGI.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "LGIH": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LGIH",
+    "status": "invalid"
+  },
+  "LGN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LGN",
+    "status": "invalid"
+  },
+  "LGND": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LGND",
+    "status": "invalid"
+  },
+  "LGRO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LGRO",
     "status": "invalid"
   },
   "LGWS.DE": {
@@ -3220,16 +6391,240 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "LHSW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LHSW",
+    "status": "invalid"
+  },
   "LHTC.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "LI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LI",
+    "status": "invalid"
+  },
+  "LICN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LICN",
+    "status": "invalid"
+  },
+  "LIDR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LIDR",
+    "status": "invalid"
+  },
+  "LIDRW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LIDRW",
+    "status": "invalid"
+  },
+  "LIEN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LIEN",
+    "status": "invalid"
+  },
+  "LIF": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LIF",
+    "status": "invalid"
+  },
+  "LIFE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LIFE",
     "status": "invalid"
   },
   "LIGS.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "LILA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LILA",
+    "status": "invalid"
+  },
+  "LILAK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LILAK",
+    "status": "invalid"
+  },
+  "LILAP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LILAP",
+    "status": "invalid"
+  },
+  "LIME": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LIME",
+    "status": "invalid"
+  },
+  "LIMNW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LIMNW",
+    "status": "invalid"
+  },
+  "LIN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LIN",
+    "status": "invalid"
+  },
+  "LINC": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LINC",
+    "status": "invalid"
+  },
+  "LIND": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LIND",
+    "status": "invalid"
+  },
+  "LINE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LINE",
+    "status": "invalid"
+  },
+  "LINK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LINK",
+    "status": "invalid"
+  },
+  "LINT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LINT",
+    "status": "invalid"
+  },
   "LIRU.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "LITE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LITE",
+    "status": "invalid"
+  },
+  "LITP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LITP",
+    "status": "invalid"
+  },
+  "LITS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LITS",
+    "status": "invalid"
+  },
+  "LIVE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LIVE",
+    "status": "invalid"
+  },
+  "LIVN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LIVN",
+    "status": "invalid"
+  },
+  "LKFN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LKFN",
+    "status": "invalid"
+  },
+  "LKFT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LKFT",
+    "status": "invalid"
+  },
+  "LKQ": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LKQ",
+    "status": "invalid"
+  },
+  "LKSP": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LKSP",
+    "status": "invalid"
+  },
+  "LKSPR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LKSPR",
+    "status": "invalid"
+  },
+  "LKSPU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LKSPU",
+    "status": "invalid"
+  },
+  "LLYVA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LLYVA",
+    "status": "invalid"
+  },
+  "LLYVK": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LLYVK",
     "status": "invalid"
   },
   "LM9A.DE": {
@@ -3256,6 +6651,90 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "LMAT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LMAT",
+    "status": "invalid"
+  },
+  "LMB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LMB",
+    "status": "invalid"
+  },
+  "LMBS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LMBS",
+    "status": "invalid"
+  },
+  "LMNR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LMNR",
+    "status": "invalid"
+  },
+  "LMNX": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LMNX",
+    "status": "invalid"
+  },
+  "LMRI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LMRI",
+    "status": "invalid"
+  },
+  "LMTL": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LMTL",
+    "status": "invalid"
+  },
+  "LNAI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LNAI",
+    "status": "invalid"
+  },
+  "LNKS": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LNKS",
+    "status": "invalid"
+  },
+  "LNSR": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LNSR",
+    "status": "invalid"
+  },
+  "LNT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LNT",
+    "status": "invalid"
+  },
+  "LNTH": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LNTH",
+    "status": "invalid"
+  },
   "LNXB.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
@@ -3264,8 +6743,176 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "LNZA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LNZA",
+    "status": "invalid"
+  },
+  "LNZAW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LNZAW",
+    "status": "invalid"
+  },
+  "LOAN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LOAN",
+    "status": "invalid"
+  },
+  "LOCO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LOCO",
+    "status": "invalid"
+  },
+  "LOGI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LOGI",
+    "status": "invalid"
+  },
+  "LOGI-A.ST": {
+    "first_missing": "2026-08-12",
+    "missing_days": 1,
+    "promoted_on": "2026-08-13",
+    "reason": "No data found for symbol: LOGI-A.ST",
+    "status": "invalid"
+  },
+  "LOGO": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LOGO",
+    "status": "invalid"
+  },
   "LOGS.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "LONA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LONA",
+    "status": "invalid"
+  },
+  "LOPE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LOPE",
+    "status": "invalid"
+  },
+  "LOT": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LOT",
+    "status": "invalid"
+  },
+  "LOTI": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LOTI",
+    "status": "invalid"
+  },
+  "LOTWW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LOTWW",
+    "status": "invalid"
+  },
+  "LOVE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LOVE",
+    "status": "invalid"
+  },
+  "LPAA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LPAA",
+    "status": "invalid"
+  },
+  "LPAAU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LPAAU",
+    "status": "invalid"
+  },
+  "LPAAW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LPAAW",
+    "status": "invalid"
+  },
+  "LPBB": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LPBB",
+    "status": "invalid"
+  },
+  "LPBBU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LPBBU",
+    "status": "invalid"
+  },
+  "LPBBW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LPBBW",
+    "status": "invalid"
+  },
+  "LPCN": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LPCN",
+    "status": "invalid"
+  },
+  "LPCV": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LPCV",
+    "status": "invalid"
+  },
+  "LPCVU": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LPCVU",
+    "status": "invalid"
+  },
+  "LPCVW": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LPCVW",
+    "status": "invalid"
+  },
+  "LPLA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: LPLA",
     "status": "invalid"
   },
   "LRC.DE": {
@@ -3354,6 +7001,13 @@
   },
   "M44.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "MAHA-A.ST": {
+    "first_missing": "2026-08-12",
+    "missing_days": 1,
+    "promoted_on": "2026-08-13",
+    "reason": "No data found for symbol: MAHA-A.ST",
     "status": "invalid"
   },
   "MANG.ST": {
@@ -3599,6 +7253,13 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "NYF.ST": {
+    "first_missing": "2026-08-12",
+    "missing_days": 1,
+    "promoted_on": "2026-08-13",
+    "reason": "No data found for symbol: NYF.ST",
+    "status": "invalid"
+  },
   "NZM2.DE": {
     "reason": "Max depth reached",
     "status": "invalid"
@@ -3842,6 +7503,13 @@
   },
   "PNP.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "POH1.DE": {
+    "first_missing": "2026-08-13",
+    "missing_days": 0,
+    "promoted_on": "2026-08-13",
+    "reason": "No data found for symbol: POH1.DE",
     "status": "invalid"
   },
   "POWA.DE": {
@@ -4247,6 +7915,13 @@
     "reason": "Max depth reached",
     "status": "invalid"
   },
+  "SVA": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: SVA",
+    "status": "invalid"
+  },
   "SVOL-A.ST": {
     "reason": "no Yahoo data",
     "status": "invalid"
@@ -4321,6 +7996,13 @@
   },
   "TQI.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "TRAD.ST": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: TRAD.ST",
     "status": "invalid"
   },
   "TW10.DE": {
@@ -4737,6 +8419,13 @@
   },
   "WNUC.DE": {
     "reason": "Max depth reached",
+    "status": "invalid"
+  },
+  "WO6.DE": {
+    "first_missing": "2026-08-15",
+    "missing_days": 0,
+    "promoted_on": "2026-08-15",
+    "reason": "No data found for symbol: WO6.DE",
     "status": "invalid"
   },
   "WOEE.DE": {

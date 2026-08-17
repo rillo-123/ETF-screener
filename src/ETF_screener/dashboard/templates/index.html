@@ -475,8 +475,9 @@
     @media (min-width: 1280px) {
       .screen-results-column {
         align-self: stretch;
-        /* Do not let the ticker cards participate in sizing the event row. */
-        contain: size;
+        /* The legacy control column is hidden; keep the results column
+           participating in layout so its minimum height remains visible. */
+        contain: none;
       }
     }
 
@@ -869,6 +870,16 @@
             <div id="scan-source-list-preview-title">{{ custom_ticker_lists.get('active_name', 'My List') }} · {{ custom_ticker_lists.get('count', 0) }} tickers</div>
             <div id="scan-source-list-preview-body"></div>
           </div>
+          <div class="mt-2 flex items-center gap-2">
+            <button id="shortlist-refresh-btn" type="button" onclick="refreshMarketData()"
+              class="scan-source-btn" style="min-width:124px"
+              title="Refresh the selected market data before scanning">
+              Refresh Universe
+            </button>
+            <div id="shortlist-market-status" class="text-[10px] font-semibold text-slate-300" aria-live="polite">
+              Market data status loading...
+            </div>
+          </div>
         </div>
         <div class="rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 min-w-[280px]">
           <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">Auto Export</div>
@@ -876,38 +887,12 @@
             <input id="auto-export-google-drive" type="checkbox"
               class="h-4 w-4 rounded border-slate-500 bg-slate-800 text-emerald-500 focus:ring-emerald-400"
               onchange="setScreenAutoExportEnabled(this.checked)">
-            <span>Send screen results to Google Sheets</span>
+            <span>Download screen results as CSV</span>
           </label>
-          <div class="mt-2 text-[11px] text-slate-400">Exports the current matches into your Drive folder named Auto Exports after each successful screen run when backend Google credentials are configured.</div>
+          <div class="mt-2 text-[11px] text-slate-400">Downloads the current matches to your browser’s normal Downloads folder after each successful screen run.</div>
         </div>
         <div id="nav-chart-range-controls" class="flex items-center gap-3">
-        <div class="flex rounded-md shadow-sm" role="group">
-          <button id="range-btn-1m" type="button" onclick="setRange(21)"
-            class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border border-slate-700 rounded-s-lg hover:bg-slate-700">
-            1M
-          </button>
-          <button id="range-btn-3m" type="button" onclick="setRange(63)"
-            class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border-y border-x border-slate-700 hover:bg-slate-700">
-            3M
-          </button>
-          <button id="range-btn-6m" type="button" onclick="setRange(126)"
-            class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border-y border-x border-slate-700 hover:bg-slate-700">
-            6M
-          </button>
-          <button id="range-btn-1y" type="button" onclick="setRange(365)"
-            class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border-y border-x border-slate-700 hover:bg-slate-700">
-            1Y
-          </button>
-          <button id="range-btn-2y" type="button" onclick="setRange(365 * 2)"
-            class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border-y border-x border-slate-700 hover:bg-slate-700">
-            2Y
-          </button>
-          <button id="range-btn-3y" type="button" onclick="setRange(365 * 3)"
-            class="px-4 py-2 text-sm font-medium text-white bg-slate-800 border border-slate-700 rounded-e-lg hover:bg-slate-700">
-            3Y
-          </button>
-        </div>
-        <span id="chart-range-label" class="text-xs font-bold uppercase tracking-[0.18em] text-slate-300">2Y chart</span>
+        <span id="chart-range-label" class="text-xs font-bold uppercase tracking-[0.18em] text-slate-300">90D chart</span>
         </div>
         </div>
       </div>
@@ -1050,9 +1035,9 @@
       <section class="rounded-[1.6rem] border border-slate-200 bg-white/95 shadow-xl shadow-slate-200/70 p-5">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div class="text-[11px] font-bold uppercase tracking-[0.22em] text-rose-500">Graphical Screener</div>
-            <h2 class="mt-2 text-2xl font-bold text-slate-900">Tune the sequence, then scan the universe.</h2>
-            <p class="mt-1 text-sm text-slate-500">The screener focuses on recent MACD, RSI, and StochRSI events from the last 30 days.</p>
+            <div class="text-[11px] font-bold uppercase tracking-[0.22em] text-rose-500">DSL Screener</div>
+            <h2 class="mt-2 text-2xl font-bold text-slate-900">Write the conditions, then scan the universe.</h2>
+            <p class="mt-1 text-sm text-slate-500">Use readable indicator expressions to describe exactly what the selected universe must satisfy.</p>
           </div>
           <button type="button" onclick="showTab('playbook')"
             class="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-bold text-violet-800 shadow-sm transition hover:border-violet-300 hover:bg-violet-100"
@@ -1090,9 +1075,40 @@
             </button>
           </div>
         </div>
-        <div id="screen-ta-controls-slot" class="mt-5"></div>
+        <div id="screen-ta-controls-slot" class="mt-5">
+          <div class="rounded-xl border border-indigo-200 bg-slate-950 p-4 shadow-inner">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-300">Condition DSL</div>
+                <div class="mt-1 text-sm font-semibold text-white">Write the entry and exit conditions</div>
+              </div>
+              <span class="rounded-full border border-indigo-400/30 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-indigo-300">Entry / Exit</span>
+            </div>
+            <div class="mt-3 grid gap-3 md:grid-cols-2">
+              <div>
+                <label for="screen-dsl-editor" class="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Entry condition</label>
+                <textarea id="screen-dsl-editor" spellcheck="false"
+                  class="min-h-[170px] w-full resize-y rounded-lg border border-emerald-400/30 bg-emerald-950/35 px-3 py-3 font-mono text-sm leading-6 text-emerald-50 outline-none focus:border-emerald-300">candle_age LTE 30
+period_1d
+ha_close GT ema_high(20)
+AND
+ha_open GT ema_low(20)
+AND
+rsi(14) GT 50
+AND
+ema_close(200)_slope GT 0</textarea>
+              </div>
+              <div>
+                <label for="screen-exit-editor" class="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-rose-300">Exit condition</label>
+                <textarea id="screen-exit-editor" spellcheck="false"
+                  class="min-h-[170px] w-full resize-y rounded-lg border border-rose-400/30 bg-rose-950/35 px-3 py-3 font-mono text-sm leading-6 text-rose-50 outline-none focus:border-rose-300"
+                  placeholder="Optional exit condition"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.9fr)_minmax(14rem,0.58fr)] xl:items-start md:grid-cols-2">
-          <div class="flex min-w-0 flex-col gap-4 xl:col-start-2 xl:row-start-1">
+          <div class="hidden">
           <div class="screen-range-shell min-w-0">
             <div class="screen-filter-header">
               <div>
@@ -1477,33 +1493,7 @@
               </div>
             </div>
           </div>
-          <div class="screen-results-column xl:col-start-3 xl:row-start-1 min-h-0 flex flex-col gap-4 overflow-hidden">
-            <div id="screener-results-panel" class="flex-1 min-h-0 bg-white shadow-xl rounded-xl p-4 overflow-hidden border-t-4 border-indigo-500 flex flex-col">
-              <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
-                Top Matches
-                <div class="flex items-center gap-2">
-                  <button id="export-matches-btn" type="button" onclick="exportTopMatches()"
-                    class="text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-600 text-white border border-emerald-500/60 hover:bg-emerald-500 transition-colors"
-                    title="Create and download a CSV of the current top matches">
-                    Export CSV
-                  </button>
-                  <span id="match-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">0</span>
-                </div>
-              </h2>
-              <div id="ticker-list" class="space-y-2 pb-6 overflow-y-auto flex-1 min-h-0">
-                <div class="text-sm text-slate-400 italic">
-                  No matches... run screen
-                </div>
-              </div>
-            </div>
-
-            <div id="error-section" class="hidden bg-white shadow-lg rounded-xl p-4 border-t-4 border-red-400 flex flex-col flex-1 overflow-hidden min-h-[10rem] max-h-[16rem]">
-              <h3 class="text-sm font-bold text-red-600 mb-2 flex justify-between">
-                Failed to Load
-                <span id="error-count" class="bg-red-50 text-red-600 px-1.5 rounded">0</span>
-              </h3>
-              <div id="error-list" class="text-[10px] text-slate-500 overflow-y-auto font-mono"></div>
-            </div>
+          <!-- End the hidden legacy control column before showing results. -->
           </div>
         </div>
       </section>
@@ -1525,10 +1515,22 @@
                   placeholder="strategy_name">
               </div>
               <div class="flex-1 min-h-0 flex flex-col">
-                <label class="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">DSL Editor</label>
-                <textarea id="strategy-editor" spellcheck="false" oninput="updateBacktestRunButtonState()"
-                  class="flex-1 min-h-[260px] rounded border border-indigo-500/20 bg-slate-950 text-indigo-100 font-mono text-sm px-3 py-3 outline-none resize-none"
-                  placeholder="TRIGGER: close > ema_20&#10;EXIT: close < ema_20"></textarea>
+                <label class="block text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Strategy Conditions</label>
+                <div class="grid flex-1 min-h-0 grid-cols-2 gap-2">
+                  <div class="min-h-0 flex flex-col">
+                    <label for="strategy-entry-editor" class="mb-1 text-[10px] font-bold uppercase tracking-wide text-emerald-300">Entry condition</label>
+                    <textarea id="strategy-entry-editor" spellcheck="false" oninput="syncStrategyEditorFromParts(); updateBacktestRunButtonState()"
+                      class="flex-1 min-h-[260px] rounded border border-emerald-400/30 bg-emerald-950/30 text-emerald-50 font-mono text-sm px-3 py-3 outline-none resize-none"
+                      placeholder="candle_age LTE 5&#10;period_1d&#10;rsi(14) GT 50"></textarea>
+                  </div>
+                  <div class="min-h-0 flex flex-col">
+                    <label for="strategy-exit-editor" class="mb-1 text-[10px] font-bold uppercase tracking-wide text-rose-300">Exit condition</label>
+                    <textarea id="strategy-exit-editor" spellcheck="false" oninput="syncStrategyEditorFromParts(); updateBacktestRunButtonState()"
+                      class="flex-1 min-h-[260px] rounded border border-rose-400/30 bg-rose-950/30 text-rose-50 font-mono text-sm px-3 py-3 outline-none resize-none"
+                      placeholder="close LT ema_close_20"></textarea>
+                  </div>
+                </div>
+                <textarea id="strategy-editor" class="hidden" aria-hidden="true"></textarea>
               </div>
               <div class="grid grid-cols-2 gap-2">
                 <button onclick="applyDsl()"
@@ -1554,59 +1556,40 @@
               </div>
             </div>
           </div>
-          <div id="chart-ta-controls" class="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <span class="mr-1 pb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">TA Parameters</span>
-            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">MACD Fast
-              <input id="chart-macd-fast" type="number" min="2" max="100" value="12" class="mt-1 w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-            </label>
-            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Slow
-              <input id="chart-macd-slow" type="number" min="3" max="200" value="26" class="mt-1 w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-            </label>
-            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Signal
-              <input id="chart-macd-signal" type="number" min="1" max="100" value="9" class="mt-1 w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-            </label>
-            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">RSI
-              <input id="chart-rsi-period" type="number" min="2" max="100" value="14" class="mt-1 w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-            </label>
-            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Stoch Period
-              <input id="chart-stoch-rsi-period" type="number" min="2" max="100" value="14" class="mt-1 w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-            </label>
-            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">K
-              <input id="chart-stoch-rsi-k" type="number" min="1" max="30" value="3" class="mt-1 w-14 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-            </label>
-            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">D
-              <input id="chart-stoch-rsi-d" type="number" min="1" max="30" value="3" class="mt-1 w-14 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-            </label>
-            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Supertrend Period
-              <input id="chart-supertrend-period" type="number" min="2" max="100" value="10" class="mt-1 w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-            </label>
-            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Supertrend Multiplier
-              <input id="chart-supertrend-multiplier" type="number" min="0.5" max="10" step="0.1" value="3.0" class="mt-1 w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-            </label>
-            <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Candles
-              <select id="chart-candle-mode" class="mt-1 w-28 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800">
-                <option value="regular">Regular</option>
-                <option value="heikin_ashi" selected>Heikin Ashi</option>
-              </select>
-            </label>
-            <button id="chart-ta-apply-btn" type="button" onclick="applyChartTAParameters()"
-              class="rounded bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-indigo-600"
-              disabled>
-              Apply
-            </button>
-          </div>
-          <div id="plotly-tools-dock">
-            <div id="plotly-tools-box"><span id="plotly-tools-label">Tools</span><div id="plotly-tools-actions"></div></div>
-          </div>
-          <div id="chart-ema-legend" class="mb-2 flex flex-wrap items-center gap-2"></div>
-          <div id="plotly-chart" class="flex-grow w-full bg-slate-50 rounded-lg border border-dashed border-indigo-200 overflow-hidden">
-            <div class="flex flex-col items-center justify-center h-full text-indigo-300">
-              <svg class="w-16 h-16 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
-              </svg>
-              <p class="mt-4 font-medium italic">
-                Your interactive workspace is ready
-              </p>
+          <div id="chart-workspace" class="flex-1 min-h-0 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
+            <div id="chart-main" class="min-w-0 min-h-0 flex flex-col">
+              <div id="plotly-tools-dock">
+                <div id="plotly-tools-box"><span id="plotly-tools-label">Tools</span><div id="plotly-tools-actions"></div></div>
+              </div>
+              <div id="chart-ema-legend" class="mb-2 flex flex-wrap items-center gap-2"></div>
+              <div id="plotly-chart" class="flex-grow min-h-0 w-full bg-slate-50 rounded-lg border border-dashed border-indigo-200 overflow-hidden">
+                <div class="flex flex-col items-center justify-center h-full text-indigo-300">
+                  <svg class="w-16 h-16 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+                  </svg>
+                  <p class="mt-4 font-medium italic">Your interactive workspace is ready</p>
+                </div>
+              </div>
+            </div>
+            <div class="min-w-0 min-h-0 flex flex-col gap-4 overflow-hidden">
+              <div id="screener-results-panel" class="flex-1 min-h-0 bg-white shadow-xl rounded-xl p-4 overflow-hidden border-t-4 border-indigo-500 flex flex-col">
+                <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
+                  Top Matches
+                  <div class="flex items-center gap-2">
+                    <button id="export-matches-btn" type="button" onclick="exportTopMatches()"
+                      class="text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-600 text-white border border-emerald-500/60 hover:bg-emerald-500 transition-colors"
+                      title="Create and download a CSV of the current top matches">Export CSV</button>
+                    <span id="match-count" class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">0</span>
+                  </div>
+                </h2>
+                <div id="ticker-list" class="space-y-2 pb-6 overflow-y-auto flex-1 min-h-0">
+                  <div class="text-sm text-slate-400 italic">No matches... run screen</div>
+                </div>
+              </div>
+              <div id="error-section" class="hidden bg-white shadow-lg rounded-xl p-4 border-t-4 border-red-400 flex flex-col flex-1 overflow-hidden min-h-[10rem] max-h-[16rem]">
+                <h3 class="text-sm font-bold text-red-600 mb-2 flex justify-between">Failed to Load <span id="error-count" class="bg-red-50 text-red-600 px-1.5 rounded">0</span></h3>
+                <div id="error-list" class="text-[10px] text-slate-500 overflow-y-auto font-mono"></div>
+              </div>
             </div>
           </div>
         </div>

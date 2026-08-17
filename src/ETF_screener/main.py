@@ -211,6 +211,7 @@ def run_query_cli(
 
     print(rendered)
 
+
 def fetch_and_analyze(
     symbols: list[str],
     days: int = 365,
@@ -286,9 +287,7 @@ def fetch_and_analyze(
             )
 
         if source.lower() == "yfinance":
-            etf_data = fetcher.fetch_multiple_etfs(
-                symbols, days=days, quiet=quiet, interval=interval
-            )
+            etf_data = fetcher.fetch_multiple_etfs(symbols, days=days, quiet=quiet)
         else:
             etf_data = fetcher.fetch_multiple_etfs(symbols, days=days, quiet=quiet)
 

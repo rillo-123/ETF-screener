@@ -42,7 +42,8 @@
     let backtestRaceNextEventSeq = 1;
     let backtestRaceEventFetchInFlight = false;
     let backtestProgressStartedAt = 0;
-    let currentDays = 365 * 2;
+    const FIXED_CHART_WINDOW_DAYS = 90;
+    let currentDays = FIXED_CHART_WINDOW_DAYS;
     let screenDisqualifiers = {
       exclude_weak_liquidity: false,
       exclude_unprofitable: false,
@@ -197,7 +198,7 @@
       { key: "payoff_efficiency", label: "Profit Factor", max: 10 },
       { key: "drawdown_control", label: "Drawdown Control", max: 10 },
     ];
-    const DASHBOARD_TABS = ["screener", "playbook"];
+    const DASHBOARD_TABS = ["screener", "backtest", "playbook"];
 
     function getDashboardTabs() {
       return DASHBOARD_TABS
@@ -887,6 +888,7 @@
       const listPicker = document.getElementById("scan-source-list-picker");
       const listUniverseBadge = document.getElementById("list-select-universe-badge");
       tickerScanScope = normalized;
+      marketDataAutoRefreshAttempted = false;
       scopeButtons.forEach((button) => {
         if (!button) {
           return;
@@ -1561,6 +1563,7 @@
     function getRangeLabel(days) {
       const preset = RANGE_PRESETS.find((item) => item.days === days);
       if (preset) return preset.label;
+      if (days === FIXED_CHART_WINDOW_DAYS) return `${days}D`;
       if (days >= 365) return `${Math.round(days / 365)}Y`;
       if (days >= 30) return `${Math.round(days / 30)}M`;
       return `${days}D`;
@@ -1600,9 +1603,49 @@
       });
     }
 
+    function syncStrategyEditorFromParts() {
+      const combined = document.getElementById("strategy-editor");
+      if (!document.getElementById("strategy-entry-editor")) {
+        return combined ? combined.value : "";
+      }
+      const entry = String(document.getElementById("strategy-entry-editor")?.value || "").trim();
+      const exit = String(document.getElementById("strategy-exit-editor")?.value || "").trim();
+      if (!combined) return entry;
+      combined.value = exit ? `TRIGGER: ${entry}\nEXIT: ${exit}` : entry;
+      return combined.value;
+    }
+
+    function setStrategyEditorParts(content) {
+      const raw = String(content || "").trim();
+      const entryNode = document.getElementById("strategy-entry-editor");
+      const exitNode = document.getElementById("strategy-exit-editor");
+      const combined = document.getElementById("strategy-editor");
+      const entryMatch = raw.match(/(?:^|\n)\s*(?:TRIGGER|ENTRY)\s*:\s*([\s\S]*?)(?=\n\s*EXIT\s*:|$)/i);
+      const exitMatch = raw.match(/(?:^|\n)\s*EXIT\s*:\s*([\s\S]*)$/i);
+      if (entryNode) entryNode.value = entryMatch ? entryMatch[1].trim() : raw;
+      if (exitNode) exitNode.value = exitMatch ? exitMatch[1].trim() : "";
+      if (combined) combined.value = raw;
+      return raw;
+    }
+
     function getActiveEditorDsl() {
-      const strategyEditor = document.getElementById("strategy-editor");
-      return strategyEditor ? strategyEditor.value.trim() : "";
+      const entry = String(document.getElementById("screen-dsl-editor")?.value || "").trim();
+      const exit = String(document.getElementById("screen-exit-editor")?.value || "").trim();
+      if (!entry) {
+        const strategyEntry = document.getElementById("strategy-entry-editor");
+        return strategyEntry ? syncStrategyEditorFromParts().trim() : String(document.getElementById("strategy-editor")?.value || "").trim();
+      }
+      const lines = entry.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const metadata = lines.filter((line) => /^(?:candle_age\s+(?:LTE|LE|EQ)\s+\d+|period_1d)$/i.test(line));
+      const expression = lines.filter((line) => !metadata.includes(line)).join(" ");
+      const exitExpression = exit.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).join(" ");
+      return [...metadata, `ENTRY: ${expression}`, exitExpression ? `EXIT: ${exitExpression}` : ""].filter(Boolean).join("\n");
+    }
+
+    function getStrategyEntryDsl() {
+      const entryNode = document.getElementById("strategy-entry-editor");
+      if (entryNode) return String(entryNode.value || "").trim();
+      return String(document.getElementById("strategy-editor")?.value || "").trim();
     }
 
     function setBacktestEmptyState(message) {
@@ -3077,12 +3120,14 @@
 
     function eventAgeToSliderValue(age, lookbackDays) {
       const safeLookback = Math.max(1, Number(lookbackDays || SCREEN_DEFAULT_FILTERS.lookback_days));
+      // Event age is inclusive: 0 means the current trading day/intraday bar.
       const safeAge = clampNumber(age, 0, safeLookback, 0);
       return safeLookback - safeAge;
     }
 
     function sliderValueToEventAge(value, lookbackDays) {
       const safeLookback = Math.max(1, Number(lookbackDays || SCREEN_DEFAULT_FILTERS.lookback_days));
+      // The right-hand endpoint is deliberately 0d, not 1d.
       const safeValue = clampNumber(value, 0, safeLookback, safeLookback);
       return Math.round(safeLookback - safeValue);
     }
@@ -3293,7 +3338,7 @@
       if (!container) return;
       container.innerHTML = "";
       const traces = (figData?.data || []).map((trace, index) => ({ trace, index }))
-        .filter(({ trace }) => /^EMA\s+\d+(?:\s+(?:Open|High|Low|Close))?$/i.test(String(trace?.name || "")));
+        .filter(({ trace }) => /^EMA\s+\d+(?:\s+(?:HA\s+)?(?:Open|High|Low|Close))?$/i.test(String(trace?.name || "")));
       if (!traces.length) return;
 
       const heading = document.createElement("span");
@@ -3311,7 +3356,7 @@
         checkbox.addEventListener("change", () => {
           Plotly.restyle(chartDiv, { visible: checkbox.checked ? true : "legendonly" }, [index]);
           const visibility = getChartEmaVisibility();
-          const match = String(trace.name || "").match(/^EMA\s+(\d+)(?:\s+(Open|High|Low|Close))?$/i);
+          const match = String(trace.name || "").match(/^EMA\s+(\d+)(?:\s+(?:HA\s+)?(Open|High|Low|Close))?$/i);
           if (match) {
             const key = `${match[1]}:${String(match[2] || "Close").toLowerCase()}`;
             visibility[key] = checkbox.checked;
@@ -3902,7 +3947,11 @@
     function applyScreenFilters(filters, { syncPreset = false } = {}) {
       screenFilters = normalizeScreenFiltersClient(filters);
       const enabledTimelineKeys = new Set([
-        ...(screenFilters.rsi_event_enabled ? (screenFilters.rsi_events || []).map((event, index) => event.rsi_event_id || (index === 0 ? "rsi" : `rsi_${index + 1}`)) : []),
+        ...(screenFilters.rsi_event_enabled
+          ? ((screenFilters.rsi_events || []).length
+            ? screenFilters.rsi_events.map((event, index) => event.rsi_event_id || (index === 0 ? "rsi" : `rsi_${index + 1}`))
+            : ["rsi"])
+          : []),
         ...(screenFilters.macd_event_enabled ? ["macd"] : []),
         ...(screenFilters.stoch_event_enabled ? ["stoch"] : []),
         ...(screenFilters.supertrend_event_enabled ? ["supertrend"] : []),
@@ -3919,7 +3968,9 @@
         ? [...screenFilters.timeline_order]
         : [...DEFAULT_TIMELINE_ORDER]
       );
-      const previouslyVisibleTimelineKeys = new Set(screenEventOrder);
+      const previouslyVisibleTimelineKeys = new Set(
+        screenEventOrder.filter((key) => enabledTimelineKeys.has(key))
+      );
       // Older saved filters may enable a rule that did not exist when their
       // timeline_order was written. Keep those enabled rules visible by
       // appending them after the remembered order.
@@ -3931,6 +3982,11 @@
       screenEventOrder = savedTimelineOrder.filter((key) => (
         enabledTimelineKeys.has(key) || previouslyVisibleTimelineKeys.has(key)
       ));
+      enabledTimelineKeys.forEach((key) => {
+        if (!screenEventOrder.includes(key)) {
+          screenEventOrder.push(key);
+        }
+      });
       const chartTA = screenFilters.chart_ta || CHART_TA_DEFAULTS;
       Object.entries({
         macd_fast: "chart-macd-fast",
@@ -4025,7 +4081,7 @@
       const priceEmaSourceNode = document.getElementById("screen-price-ema-source");
       if (priceEmaSourceNode) {
         const selectedSources = new Set(screenFilters.price_ema_sources || [screenFilters.price_ema_source]);
-        [...priceEmaSourceNode.options].forEach((option) => { option.selected = selectedSources.has(option.value); });
+        Array.from(priceEmaSourceNode.options || []).forEach((option) => { option.selected = selectedSources.has(option.value); });
       }
       ["open", "high", "low", "close"].forEach((source) => {
         const ema1Node = document.getElementById(`screen-ha-ema-volume-ema1-source-${source}`);
@@ -4125,7 +4181,7 @@
       const priceEmaReadout = document.getElementById("screen-price-ema-event-readout");
       if (priceEmaReadout) priceEmaReadout.textContent = formatTimelinePosition(screenFilters.price_ema_event_age, screenFilters.lookback_days);
       const priceEmaLabel = document.getElementById("screen-price-ema-readout");
-      if (priceEmaLabel) priceEmaLabel.textContent = `${String(screenFilters.price_ema_source || "close").toUpperCase()} ${screenFilters.price_ema_cross_mode === "cross_down" ? "down" : "up"} EMA ${screenFilters.price_ema_period}`;
+      if (priceEmaLabel) priceEmaLabel.textContent = `PRICE ${screenFilters.price_ema_cross_mode === "cross_down" ? "down" : "up"} EMA ${screenFilters.price_ema_period}`;
       const supertrendModeReadout = document.getElementById("screen-supertrend-mode-readout");
       if (supertrendModeReadout) supertrendModeReadout.textContent = screenFilters.supertrend_cross_mode === "green_to_red" ? "Green to red" : "Red to green";
       const volumeSpikeLabel = document.getElementById("screen-volume-spike-readout");
@@ -4263,6 +4319,17 @@
       const hasRequested = requestedValue
         && Array.from(select.options || []).some((option) => option.value === requestedValue);
       select.value = hasRequested ? requestedValue : "";
+      const backtestSelect = document.getElementById("backtest-preset-select");
+      if (backtestSelect) {
+        backtestSelect.innerHTML = '<option value="">Choose preset</option>';
+        (Array.isArray(screenPresetCatalog.presets) ? screenPresetCatalog.presets : []).forEach((preset) => {
+          const option = document.createElement("option");
+          option.value = String(preset.name);
+          option.textContent = String(preset.name);
+          backtestSelect.appendChild(option);
+        });
+        backtestSelect.value = hasRequested ? requestedValue : "";
+      }
     }
 
     async function loadScreenPresets() {
@@ -4276,6 +4343,8 @@
         default_filters: normalizeScreenFiltersClient(payload?.default_filters || SCREEN_DEFAULT_FILTERS),
         presets: Array.isArray(payload?.presets) ? payload.presets.map((preset) => ({
           name: String(preset?.name || "").trim(),
+          dsl: String(preset?.dsl || "").trim(),
+          exit_dsl: String(preset?.exit_dsl || preset?.exit || "").trim(),
           filters: normalizeScreenFiltersClient(preset?.filters || SCREEN_DEFAULT_FILTERS),
         })).filter((preset) => preset.name) : [],
       };
@@ -4284,7 +4353,15 @@
       const preset = screenPresetCatalog.presets.find((entry) => entry.name === presetName)
         || screenPresetCatalog.presets.find((entry) => entry.name === screenPresetCatalog.active_name);
       if (preset) {
-        applyScreenFilters(preset.filters);
+        if (preset.dsl) {
+          const dslEditor = document.getElementById("screen-dsl-editor");
+          if (dslEditor) dslEditor.value = preset.dsl;
+          const exitEditor = document.getElementById("screen-exit-editor");
+          if (exitEditor) exitEditor.value = preset.exit_dsl || preset.exit || "";
+          updateScanActionButtonsState();
+        } else {
+          applyScreenFilters(preset.filters);
+        }
         const nameNode = document.getElementById("screen-preset-name");
         if (nameNode) {
           nameNode.value = preset.name;
@@ -4297,6 +4374,7 @@
       } else {
         applyScreenFilters(screenPresetCatalog.default_filters || SCREEN_DEFAULT_FILTERS);
       }
+      syncBacktestPresetPreview();
       const savedFilters = readSavedScreenFilters();
       if (savedFilters) {
         applyScreenFilters(savedFilters);
@@ -4316,12 +4394,51 @@
         return;
       }
       writeStickyValue(LAST_SCREEN_PRESET_KEY, preset.name);
-      applyScreenFilters(preset.filters);
+      if (preset.dsl) {
+        const dslEditor = document.getElementById("screen-dsl-editor");
+        if (dslEditor) dslEditor.value = preset.dsl;
+        const exitEditor = document.getElementById("screen-exit-editor");
+        if (exitEditor) exitEditor.value = preset.exit_dsl || preset.exit || "";
+        updateScanActionButtonsState();
+      } else {
+        applyScreenFilters(preset.filters);
+      }
       writeStickyValue(LAST_SCREEN_FILTERS_KEY, JSON.stringify(preset.filters));
       const nameNode = document.getElementById("screen-preset-name");
       if (nameNode) {
         nameNode.value = preset.name;
       }
+    }
+
+    async function applyBacktestPreset(name) {
+      const presetName = String(name || "").trim();
+      if (!presetName) return;
+      await applyScreenPreset(presetName);
+      setBacktestSourceMode("editor");
+      syncBacktestPresetPreview();
+      updateBacktestRunButtonState();
+    }
+
+    function syncBacktestPresetPreview() {
+      const entry = String(document.getElementById("screen-dsl-editor")?.value || "");
+      const exit = String(document.getElementById("screen-exit-editor")?.value || "");
+      const entryPreview = document.getElementById("backtest-entry-preview");
+      const exitPreview = document.getElementById("backtest-exit-preview");
+      if (entryPreview) entryPreview.value = entry;
+      if (exitPreview) exitPreview.value = exit;
+    }
+
+    async function saveBacktestPreset() {
+      const name = String(document.getElementById("backtest-preset-name")?.value || "").trim();
+      const screenName = document.getElementById("screen-preset-name");
+      if (!name) {
+        showToast("Enter a preset name first.", true);
+        return;
+      }
+      if (screenName) screenName.value = name;
+      await saveScreenPreset();
+      const select = document.getElementById("backtest-preset-select");
+      if (select) select.value = name;
     }
 
     async function saveScreenPreset() {
@@ -4331,19 +4448,23 @@
         showToast("Enter a preset name first.", true);
         return;
       }
-      const nextPreset = {
-        name: presetName,
-        filters: {
-          ...getScreenFiltersForRequest(),
-          chart_ta: {
-            ...getChartTAParameters(),
-            rsi_trigger: Number(document.getElementById("screen-rsi-cross-value")?.value || 50),
-            stoch_trigger: Number(document.getElementById("screen-stoch-cross-value")?.value || 20),
+      const dsl = String(document.getElementById("screen-dsl-editor")?.value || "").trim();
+      const exitDsl = String(document.getElementById("screen-exit-editor")?.value || "").trim();
+      const nextPreset = dsl
+        ? { name: presetName, dsl, ...(exitDsl ? { exit_dsl: exitDsl } : {}) }
+        : {
+          name: presetName,
+          filters: {
+            ...getScreenFiltersForRequest(),
+            chart_ta: {
+              ...getChartTAParameters(),
+              rsi_trigger: Number(document.getElementById("screen-rsi-cross-value")?.value || 50),
+              stoch_trigger: Number(document.getElementById("screen-stoch-cross-value")?.value || 20),
+            },
           },
-        },
-      };
+        };
       const nextPresets = Array.isArray(screenPresetCatalog.presets)
-        ? screenPresetCatalog.presets.filter((preset) => preset && preset.name !== presetName)
+        ? screenPresetCatalog.presets.filter((preset) => preset && preset.dsl && preset.name !== presetName)
         : [];
       nextPresets.push(nextPreset);
       const resp = await fetch("/api/screen/presets", {
@@ -4363,6 +4484,8 @@
         default_filters: normalizeScreenFiltersClient(payload?.default_filters || SCREEN_DEFAULT_FILTERS),
         presets: Array.isArray(payload?.presets) ? payload.presets.map((preset) => ({
           name: String(preset?.name || "").trim(),
+          dsl: String(preset?.dsl || "").trim(),
+          exit_dsl: String(preset?.exit_dsl || preset?.exit || "").trim(),
           filters: normalizeScreenFiltersClient(preset?.filters || SCREEN_DEFAULT_FILTERS),
         })).filter((preset) => preset.name) : [],
       };
@@ -4376,6 +4499,11 @@
     }
 
     function bindScreenControlInputs() {
+      const dslEditor = document.getElementById("screen-dsl-editor");
+      if (dslEditor && dslEditor.dataset.validationBound !== "1") {
+        dslEditor.dataset.validationBound = "1";
+        dslEditor.addEventListener("input", updateScanActionButtonsState);
+      }
       [
         "screen-volume-min",
         "screen-volume-max",
@@ -4684,6 +4812,7 @@
     }
     async function loadMarketStatus(source = tickerScanScope) {
       const marketStatus = document.getElementById("shortlist-market-status");
+      const refreshButton = document.getElementById("shortlist-refresh-btn");
       if (!marketStatus) {
         return null;
       }
@@ -4707,14 +4836,29 @@
         }
 
         if (data.is_stale) {
+          if (refreshButton) {
+            refreshButton.disabled = false;
+            refreshButton.textContent = "Refresh Universe";
+            refreshButton.title = "Refresh the stale data for the selected universe";
+          }
           marketStatus.className = "text-xs font-bold uppercase tracking-wide text-amber-600";
-          marketStatus.textContent = `${getActiveSourceLabel(normalizedSource)}: market data needs top-up · latest ${data.latest_market_date || "unknown"} · stale ${Number(data.stale_tickers || 0)} · missing ${Number(data.missing_tickers || 0)}`;
+          marketStatus.textContent = `${getActiveSourceLabel(normalizedSource)}: market data needs top-up · universe ${Number(data.tracked_tickers || 0)} · latest ${data.latest_market_date || "unknown"} · stale ${Number(data.stale_tickers || 0)} · missing ${Number(data.missing_tickers || 0)}`;
         } else {
+          if (refreshButton) {
+            refreshButton.disabled = true;
+            refreshButton.textContent = "Data Fresh";
+            refreshButton.title = "The selected universe is already fresh";
+          }
           marketStatus.className = "text-xs font-bold uppercase tracking-wide text-emerald-600";
-          marketStatus.textContent = `${getActiveSourceLabel(normalizedSource)}: market data fresh through ${data.latest_market_date || "unknown"} · ${Number(data.fresh_tickers || data.tracked_tickers || 0)} active tickers`;
+          marketStatus.textContent = `${getActiveSourceLabel(normalizedSource)}: market data fresh through ${data.latest_market_date || "unknown"} · universe ${Number(data.tracked_tickers || 0)} · ${Number(data.fresh_tickers || data.tracked_tickers || 0)} active tickers`;
         }
         return data;
       } catch (err) {
+        if (refreshButton) {
+          refreshButton.disabled = false;
+          refreshButton.textContent = "Refresh Universe";
+          refreshButton.title = "Refresh the selected market data";
+        }
         marketStatus.className = "text-xs font-bold uppercase tracking-wide text-rose-600";
         marketStatus.textContent = "Could not determine market data freshness";
         return null;
@@ -4801,10 +4945,11 @@
       const marketStatus = document.getElementById("shortlist-market-status");
       const shortlistStatus = document.getElementById("shortlist-status");
       const activeSourceLabel = getActiveSourceLabel(source);
+      let refreshSucceeded = false;
 
       if (shortlistRefreshBtn) {
         shortlistRefreshBtn.disabled = true;
-        shortlistRefreshBtn.textContent = `Refreshing ${activeSourceLabel}...`;
+        shortlistRefreshBtn.textContent = "Refreshing Universe...";
       }
       if (marketStatus) {
         marketStatus.className = "text-xs font-bold uppercase tracking-wide text-indigo-600";
@@ -4832,11 +4977,14 @@
           contextPct: 0,
           contextWorking: false,
         });
-        startJobProgressPolling("market-refresh", "Global");
+        startJobProgressPolling("market-refresh", "Market Refresh", "Preparing market refresh...");
         const refreshParams = new URLSearchParams();
         refreshParams.set("depth", "180");
         refreshParams.set("max_workers", "8");
-        refreshParams.set("force", "true");
+        // Refresh only stale/missing symbols. A manual click should not force
+        // a full-market refetch when the status already identifies a small
+        // stale subset.
+        refreshParams.set("force", "false");
         refreshParams.set("stale_after_days", "0");
         refreshParams.set("source", source);
         if (source === "list") {
@@ -4853,6 +5001,7 @@
         if (!resp.ok) {
           throw new Error(data.detail || "Market refresh failed");
         }
+        refreshSucceeded = true;
 
         setNavScanProgress({
           show: true,
@@ -4902,7 +5051,10 @@
           globalWorking: false,
         });
         if (shortlistRefreshBtn) {
-          shortlistRefreshBtn.disabled = false;
+          if (!refreshSucceeded) {
+            shortlistRefreshBtn.disabled = false;
+            shortlistRefreshBtn.textContent = "Refresh Universe";
+          }
         }
       }
     }
@@ -6085,10 +6237,6 @@
         setBacktestEmptyState("Select a saved strategy first, then open Backtester to score it.");
         return;
       }
-      if (backtestSourceMode === "editor" && !editorDsl) {
-        setBacktestEmptyState("Editor Draft is selected, but the Labs editor is empty.");
-        return;
-      }
       if (!tickerUniverseExplicitlyChosen) {
         setBacktestEmptyState("Choose a ticker universe first before running Backtester.");
         return;
@@ -6175,7 +6323,9 @@
       runBtn.dataset.running = "1";
 
       try {
-        await ensureGuiMarketBackbone({ allowRefresh: false });
+        // A scan must not silently use a stale market universe. The first
+        // scan for a stale scope tops up that scope; later scans reuse it.
+        await ensureGuiMarketBackbone({ allowRefresh: true });
         setNavScanProgress({
           show: true,
           contextLabel: "Backtest",
@@ -6225,7 +6375,20 @@
         const responsePromise = fetch(url, backtestRaceAbortController ? { signal: backtestRaceAbortController.signal } : undefined);
         startJobProgressPolling("backtest", "Global");
         const resp = await responsePromise;
-        const data = await resp.json();
+        let data = {};
+        if (typeof resp.text === "function") {
+          const responseText = await resp.text();
+          try {
+            data = responseText ? JSON.parse(responseText) : {};
+          } catch (_parseError) {
+            if (!resp.ok) {
+              throw new Error(responseText || "Backtest request failed");
+            }
+            throw new Error("Backtest returned an invalid response");
+          }
+        } else if (typeof resp.json === "function") {
+          data = await resp.json();
+        }
         if (!resp.ok) {
           throw new Error(data.detail || "Backtest request failed");
         }
@@ -6683,7 +6846,7 @@
       }
 
       if (!strategyName) {
-        strategyEditor.value = "";
+        setStrategyEditorParts("");
         strategyFilename.value = "";
         updateBacktestRunButtonState();
         return;
@@ -6694,7 +6857,7 @@
           throw new Error("Failed to load strategy content");
         }
         const data = await resp.json();
-        strategyEditor.value = data.content;
+        setStrategyEditorParts(data.content);
         strategyFilename.value = strategyName;
         updateBacktestRunButtonState();
       } catch (err) {
@@ -6788,7 +6951,7 @@
     // Save As â€” requires a name that differs from the source
     async function saveAsStrategy() {
       const name = document.getElementById("strategy-filename").value.trim();
-      const content = document.getElementById("strategy-editor").value;
+      const content = syncStrategyEditorFromParts();
       if (!name || !content) { showToast("Need both a name and DSL content!", true); return; }
       if (name === sourceStrategyName) {
         showToast(`Change the name first â€” "${name}" is the original.`, true);
@@ -6801,7 +6964,7 @@
     // Overwrite â€” saves back to the exact source file
     async function saveStrategy() {
       const name = document.getElementById("strategy-filename").value.trim();
-      const content = document.getElementById("strategy-editor").value;
+      const content = syncStrategyEditorFromParts();
       if (!name || !content) { showToast("Need both a name and DSL content!", true); return; }
       await _doSave(name, content, name);
     }
@@ -7046,7 +7209,7 @@
 
     async function applyDsl() {
       // Extract current DSL from editor and pass it to runScreen
-      const dsl = document.getElementById("strategy-editor").value;
+      const dsl = getStrategyEntryDsl();
       if (!dsl.trim()) {
         alert("Please enter strategy DSL before applying.");
         return;
@@ -7142,7 +7305,7 @@
       return !active && terminal;
     }
 
-    function startJobProgressPolling(expectedJob, fallbackLabel = "Global") {
+    function startJobProgressPolling(expectedJob, fallbackLabel = "Global", fallbackText = "Waiting...") {
       stopJobProgressPolling();
       navScanProgressJob = expectedJob;
 
@@ -7165,7 +7328,7 @@
       setNavScanProgress({
         show: true,
         globalLabel: fallbackLabel,
-        globalText: "Waiting...",
+        globalText: fallbackText,
         globalPct: 0,
         globalWorking: true,
       });
@@ -7278,14 +7441,84 @@
       runBtn.textContent = "Run Screener";
       runBtn.classList.remove("bg-emerald-500", "cursor-wait");
       runBtn.classList.add("bg-green-600", "hover:bg-green-500");
-      runBtn.disabled = !tickerUniverseExplicitlyChosen;
-      runBtn.title = tickerUniverseExplicitlyChosen ? "Run the control-based screener" : "Choose a ticker universe first";
+      updateScanActionButtonsState();
+    }
+
+    function getScreenDslReadiness(source = null) {
+      const node = document.getElementById("screen-dsl-editor");
+      if ((!node || !node.tagName) && (source === null || String(source || "").trim() === "")) {
+        // Keep lightweight test/embedded dashboard shells usable when the
+        // optional DSL editor is not rendered.
+        return { ready: true, reason: "Run the control-based screener" };
+      }
+      const text = String(source === null ? node?.value || "" : source).trim();
+      if (!text) {
+        return { ready: false, reason: "Enter a screening script first" };
+      }
+
+      const lines = text.split(/\r?\n/)
+        .map((line) => line.replace(/#.*$/, "").trim())
+        .filter(Boolean);
+      const conditionLines = [];
+      let previousWasCondition = false;
+      let pendingConnector = false;
+      let depth = 0;
+
+      for (const line of lines) {
+        for (const char of line) {
+          if (char === "(") depth += 1;
+          if (char === ")") depth -= 1;
+          if (depth < 0) {
+            return { ready: false, reason: "Fix unmatched parentheses in the script" };
+          }
+        }
+
+        if (/^(?:candle_age|days|max_days|max_signal_age_days|signal_max_days|since_days)\s*:\s*\d+$/i.test(line)
+          || /^candle_age\s+(?:LTE|LE|EQ)\s+\d+$/i.test(line)
+          || /^period_1d$/i.test(line)) {
+          continue;
+        }
+
+        if (/^(AND|OR)$/i.test(line)) {
+          if (!previousWasCondition || pendingConnector) {
+            return { ready: false, reason: "AND/OR must connect two conditions" };
+          }
+          pendingConnector = true;
+          previousWasCondition = false;
+          continue;
+        }
+
+        const section = line.match(/^(TRIGGER|FILTER|ENTRY|EXIT)\s*:\s*(.*)$/i);
+        const expression = section ? section[2].trim() : line;
+        if (!expression || /^(AND|OR)$/i.test(expression)) {
+          return { ready: false, reason: "Add a condition to the script" };
+        }
+        if (/\b(?:GT|GTE|LT|LTE|GE|LE|EQ|NE)\s*$/i.test(expression)
+          || /^(?:GT|GTE|LT|LTE|GE|LE|EQ|NE)\b/i.test(expression)) {
+          return { ready: false, reason: "Complete the comparison in the script" };
+        }
+        conditionLines.push(expression);
+        previousWasCondition = true;
+        pendingConnector = false;
+      }
+
+      if (depth !== 0) {
+        return { ready: false, reason: "Fix unmatched parentheses in the script" };
+      }
+      if (!conditionLines.length) {
+        return { ready: false, reason: "Add at least one screening condition" };
+      }
+      if (pendingConnector) {
+        return { ready: false, reason: "Finish the condition after AND/OR" };
+      }
+      return { ready: true, reason: "Run the screener" };
     }
 
     function updateScanActionButtonsState() {
-      const readiness = tickerUniverseExplicitlyChosen
-        ? { ready: true, reason: "Run the control-based screener" }
-        : { ready: false, reason: "Choose a ticker universe first" };
+      const dslReadiness = getScreenDslReadiness();
+      const readiness = !tickerUniverseExplicitlyChosen
+        ? { ready: false, reason: "Choose a ticker universe first" }
+        : dslReadiness;
       const scanBtn = document.getElementById("scan-btn");
       const runBtn = document.getElementById("run-btn");
 
@@ -7325,6 +7558,8 @@
     }
 
     async function runScreen(customDsl = null) {
+      const typedDsl = document.getElementById("screen-dsl-editor")?.value.trim() || "";
+      customDsl = String(customDsl || typedDsl).trim() || null;
       const list = document.getElementById("ticker-list");
       const spinner = document.getElementById("loading-spinner");
       const scanBtn = document.getElementById("scan-btn");
@@ -7342,8 +7577,17 @@
         return;
       }
 
-      syncScreenFilterStateFromDom();
-      if (validateHaEmaVolumeConditions(screenFilters.ha_ema_volume_conditions).length) {
+      const dslReadiness = getScreenDslReadiness(customDsl === null ? typedDsl : customDsl);
+      if (!dslReadiness.ready) {
+        showToast(dslReadiness.reason, true);
+        updateScanActionButtonsState();
+        return;
+      }
+
+      if (!customDsl) {
+        syncScreenFilterStateFromDom();
+      }
+      if (!customDsl && validateHaEmaVolumeConditions(screenFilters.ha_ema_volume_conditions).length) {
         showToast("Fix the contradictory HA OHLC conditions before scanning.", true);
         return;
       }
@@ -7380,7 +7624,9 @@
       if (list) list.style.opacity = "0.5";
 
       try {
-        await ensureGuiMarketBackbone({ allowRefresh: false });
+        // Top up stale data automatically before evaluating candle_age 0.
+        // The refresh helper is stale-aware, so fresh universes are not refetched.
+        await ensureGuiMarketBackbone({ allowRefresh: true });
         startJobProgressPolling("screen", "Global");
         setNavScanProgress({
           show: true,
@@ -7395,14 +7641,16 @@
         });
         let url = "/api/screen";
         const universeParams = getUniverseFilterParams();
-        const screenParams = getScreenDisqualifierParams();
-        const controlParams = buildScreenFilterParams();
-        screenParams.forEach((value, key) => {
-          universeParams.set(key, value);
-        });
-        controlParams.forEach((value, key) => {
-          universeParams.set(key, value);
-        });
+        if (!customDsl) {
+          const screenParams = getScreenDisqualifierParams();
+          const controlParams = buildScreenFilterParams();
+          screenParams.forEach((value, key) => {
+            universeParams.set(key, value);
+          });
+          controlParams.forEach((value, key) => {
+            universeParams.set(key, value);
+          });
+        }
         const screenQuery = universeParams.toString();
         if (screenQuery) {
           url += `?${screenQuery}`;
@@ -7527,9 +7775,9 @@
 
           if (screenAutoExportEnabled && matches.length > 0) {
             try {
-              await exportTopMatchesToGoogleDrive(true);
+              await exportTopMatches();
             } catch (autoExportErr) {
-              showToast(`Google auto-export failed: ${autoExportErr.message || autoExportErr}`, true);
+              showToast(`Automatic CSV download failed: ${autoExportErr.message || autoExportErr}`, true);
             }
           }
 
@@ -7566,7 +7814,20 @@
               '<div class="text-sm text-slate-400 italic p-4 text-center">No matching tickers found for the current screener controls.</div>';
           }
 
-          matches.forEach((item, idx) => {
+          // Keep the full response in lastScreenMatches for export, but do
+          // not create thousands of DOM nodes at once. Large universes can
+          // otherwise freeze the browser before the result panel becomes
+          // usable.
+          const maxVisibleMatches = 200;
+          const visibleMatches = matches.slice(0, maxVisibleMatches);
+          if (matches.length > maxVisibleMatches) {
+            const notice = document.createElement("div");
+            notice.className = "mb-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700";
+            notice.textContent = `Showing the first ${maxVisibleMatches} of ${matches.length} matches. Export CSV includes all matches.`;
+            list.appendChild(notice);
+          }
+
+          visibleMatches.forEach((item, idx) => {
             try {
               const card = document.createElement("div");
               card.className =
@@ -7820,6 +8081,13 @@
         if (strategyName) {
           chartQuery.set("strategy", strategyName);
         }
+        const activeDsl = String(document.getElementById("screen-dsl-editor")?.value || "").trim();
+        if (activeDsl) {
+          chartQuery.set("dsl_content", activeDsl);
+          // DSL charts derive overlays from the script, not legacy controls.
+          chartQuery.set("ema_overlay_periods", "[]");
+          chartQuery.set("ema_overlay_specs", "[]");
+        }
         const url = `/api/chart/${ticker}?${chartQuery.toString()}`;
         console.info("loadChart request URL", url);
         const resp = await fetch(url);
@@ -7887,11 +8155,6 @@
           figData.layout[key].spikesnap = "cursor";
           figData.layout[key].spikethickness = 1;
           figData.layout[key].spikecolor = "#64748b";
-        }
-        if (taParams.candle_mode === "heikin_ashi") {
-          figData.data = figData.data.map((trace) => (
-            trace?.name === "Heikin Ashi" ? trace : convertCandlesToHeikinAshi(trace)
-          ));
         }
       });
       figData.layout.hovermode = "x unified";
@@ -7971,8 +8234,8 @@
     }
 
     function setRange(days) {
-      currentDays = days;
-      saveChartRangeDays(days);
+      // The diagram intentionally uses one fixed context window.
+      currentDays = FIXED_CHART_WINDOW_DAYS;
       updateRangeChrome();
       if (currentTicker) loadChart(currentTicker);
     }
@@ -7994,21 +8257,14 @@
 
     // Initialize
     const dashboardReadyPromise = (async function initializeDashboard() {
-      const taControls = document.getElementById("chart-ta-controls");
-      const taSlot = document.getElementById("screen-ta-controls-slot");
-      if (taControls && taSlot) {
-        taSlot.appendChild(taControls);
-      }
       restoreChartTAParameters();
       const restoredStrategy = await restoreLastCompletedStrategy();
       if (restoredStrategy) {
         console.info("Restored last completed strategy", restoredStrategy);
       }
       restoreBacktestRaceStateFromStorage();
-      const restoredDays = readSavedChartRangeDays();
-      if (restoredDays !== null) {
-        currentDays = restoredDays;
-      }
+      // Keep the diagram context stable regardless of older saved range choices.
+      currentDays = FIXED_CHART_WINDOW_DAYS;
       populateBacktestAxisControls(backtestDefaultMetrics());
       bindBacktestStrategyChooserControls();
       bindBacktestRaceControls();
@@ -8061,6 +8317,8 @@
       ensureFreshMarketData,
       exportTopMatches,
       applyScreenPreset,
+      applyBacktestPreset,
+      saveBacktestPreset,
       resetDashboardTabPreference,
       runScreen,
       saveScreenPreset,

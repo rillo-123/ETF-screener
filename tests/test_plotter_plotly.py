@@ -134,7 +134,8 @@ def test_chart_labels_indicator_panels_in_left_gutter_and_frames_each_panel():
     panel_labels = {
         getattr(annotation, "text", ""): annotation
         for annotation in fig.layout.annotations
-        if getattr(annotation, "text", "") in {
+        if getattr(annotation, "text", "")
+        in {
             "<b>Price</b>",
             "<b>MACD</b>",
             "<b>RSI</b>",
@@ -152,9 +153,7 @@ def test_chart_labels_indicator_panels_in_left_gutter_and_frames_each_panel():
     assert all(annotation.xref == "paper" for annotation in panel_labels.values())
     assert all(float(annotation.x) == -0.08 for annotation in panel_labels.values())
 
-    expected_rows = len(
-        [key for key in fig.layout if str(key).startswith("yaxis")]
-    )
+    expected_rows = len([key for key in fig.layout if str(key).startswith("yaxis")])
     border_shapes = [shape for shape in fig.layout.shapes if shape.type == "rect"]
     assert len(border_shapes) == expected_rows
     assert all(shape.line.width == 1 for shape in border_shapes)
@@ -399,9 +398,7 @@ END
 
 
 def test_xaxes_hide_weekends_and_missing_weekday_trading_days():
-    dates = pd.to_datetime(
-        ["2024-01-04", "2024-01-05", "2024-01-08", "2024-01-10"]
-    )
+    dates = pd.to_datetime(["2024-01-04", "2024-01-05", "2024-01-08", "2024-01-10"])
     close = np.array([100.0, 101.0, 102.0, 103.0])
     df = pd.DataFrame(
         {

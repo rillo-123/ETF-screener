@@ -75,7 +75,7 @@ try {
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Write-LogLine "[$timestamp] Preparing market refresh"
-    Write-LogLine "[$timestamp] Refresh parameters: depth=365 stale_after_days=0 force=False max_workers=2 rebuild_shortlist=False"
+    Write-LogLine "[$timestamp] Refresh parameters: depth=365 stale_after_days=0 force=False max_workers=2 rebuild_shortlist=False retention_days=365"
 
     $refreshExitCode = Invoke-LoggedCommand -Command {
         $env:PYTHONPATH = "src"
@@ -83,20 +83,27 @@ try {
 import json
 from ETF_screener.config_loader import get_paths
 from ETF_screener.market_data_service import MarketDataRefresher
+from ETF_screener.database import ETFDatabase
 
 db_path = get_paths()["data"]["etf_db"]
+sources = ("config/xetra.json", "config/sweden.json", "config/nasdaq.json")
 print(f"[PYTHON] Using database: {db_path}")
-refresher = MarketDataRefresher(db_path=db_path)
-print("[PYTHON] Starting refresh_market_data(...)")
-status = refresher.refresh_market_data(
-    depth=365,
-    stale_after_days=0,
-    force=False,
-    max_workers=2,
-    rebuild_shortlist=False,
-)
+statuses = {}
+for source in sources:
+    print(f"[PYTHON] Refreshing {source}")
+    refresher = MarketDataRefresher(db_path=db_path, etfs_file=source)
+    statuses[source] = refresher.refresh_market_data(
+        depth=365,
+        stale_after_days=0,
+        force=False,
+        max_workers=2,
+        rebuild_shortlist=False,
+    )
+with ETFDatabase(db_path=db_path) as db:
+    deleted = db.prune_old_data(days_to_keep=365)
+print(f"[PYTHON] Pruned {deleted} rows older than 365 days")
 print("[PYTHON] Refresh complete")
-print(json.dumps(status, sort_keys=True))
+print(json.dumps({"sources": statuses, "pruned": deleted}, sort_keys=True))
 '@ | python -
     }
 

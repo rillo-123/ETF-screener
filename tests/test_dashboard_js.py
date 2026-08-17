@@ -185,6 +185,7 @@ def test_dashboard_js_exposes_core_tabs_and_helpers():
     )
     assert result.returncode == 0, result.stderr or result.stdout
 
+
 def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
     pytest.skip("Query tab was intentionally removed from the dashboard UI")
     node = shutil.which("node")
@@ -3888,13 +3889,13 @@ def test_dashboard_js_persists_chart_range():
           }}
           await Promise.resolve();
 
-          if (document.getElementById("chart-range-label").textContent !== "6M chart") {{
-            throw new Error("Dashboard did not restore the saved chart range");
+          if (document.getElementById("chart-range-label").textContent !== "90D chart") {{
+            throw new Error("Dashboard did not use the fixed chart range");
           }}
 
           window.setRange(63);
-          if (storage.get("etf-discovery:last-chart-range-days") !== "63") {{
-            throw new Error("Dashboard did not persist the updated chart range");
+          if (document.getElementById("chart-range-label").textContent !== "90D chart") {{
+            throw new Error("Dashboard allowed the chart range to change");
           }}
         }})().catch((err) => {{
           console.error(err);

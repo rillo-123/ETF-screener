@@ -85,9 +85,7 @@ class YFinanceFetcher:
         df = pd.DataFrame()
         attempts = 3
         for attempt in range(attempts):
-            df = self._fetch_yf(
-                symbol, resolved_start, resolved_end, interval=interval
-            )
+            df = self._fetch_yf(symbol, resolved_start, resolved_end, interval=interval)
             if not df.empty:
                 break
             if attempt < attempts - 1:

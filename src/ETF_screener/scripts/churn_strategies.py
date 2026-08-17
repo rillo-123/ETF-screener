@@ -5,7 +5,9 @@ import logging
 from ETF_screener.config_loader import get_paths
 from ETF_screener.backtester import (
     Backtester,
+    _heikin_ashi_ohlc,
 )
+from ETF_screener.indicators import calculate_rsi
 from ETF_screener.market_data_service import filter_low_vitality_nasdaq_tickers
 import pandas as pd
 import os
@@ -185,18 +187,30 @@ def parse_dsl_content(content: str | None) -> dict:
 
     current_block_raw: str | None = None
     max_days: int | None = None
+    candle_age_operator = "LTE"
+    saw_condition_section = False
+    bare_condition_lines: list[str] = []
     for raw in content.splitlines():
         line = _strip_dsl_comment(raw)
         if not line:
             continue
 
         directive = re.match(
-            r"^(MAX_DAYS|MAX_SIGNAL_AGE_DAYS|SIGNAL_MAX_DAYS|SINCE_DAYS)\s*:\s*(\d+)\s*$",
+            r"^(CANDLE_AGE|DAYS|MAX_DAYS|MAX_SIGNAL_AGE_DAYS|SIGNAL_MAX_DAYS|SINCE_DAYS)\s*:\s*(\d+)\s*$",
             line,
             re.IGNORECASE,
         )
         if directive:
             max_days = int(directive.group(2))
+            continue
+        age_condition = re.match(
+            r"^CANDLE_AGE\s+(LTE|LE|EQ)\s+(\d+)\s*$", line, re.IGNORECASE
+        )
+        if age_condition:
+            candle_age_operator = age_condition.group(1).upper()
+            max_days = int(age_condition.group(2))
+            continue
+        if re.match(r"^PERIOD_1D\s*$", line, re.IGNORECASE):
             continue
 
         if line.startswith("#"):
@@ -224,6 +238,7 @@ def parse_dsl_content(content: str | None) -> dict:
         expr = section.group(2).strip()
         if not expr:
             continue
+        saw_condition_section = True
 
         canonical_block = resolve_block(current_block_raw)
         wrapped = f"({expr})"
@@ -241,6 +256,32 @@ def parse_dsl_content(content: str | None) -> dict:
             scoped_terms[canonical_block].append(wrapped)
         else:
             scoped_terms["setup"].append(wrapped)
+
+    # Allow a compact condition-only document in addition to the traditional
+    # TRIGGER:/FILTER:/EXIT: sections. This keeps the editor pleasant for
+    # expressions such as one condition per line joined by AND.
+    if not saw_condition_section:
+        for raw in content.splitlines():
+            line = _strip_dsl_comment(raw)
+            if not line or re.match(
+                r"^(CANDLE_AGE|DAYS|MAX_DAYS|MAX_SIGNAL_AGE_DAYS|SIGNAL_MAX_DAYS|SINCE_DAYS)\s*:",
+                line,
+                re.IGNORECASE,
+            ):
+                continue
+            if re.match(
+                r"^(?:CANDLE_AGE\s+(?:LTE|LE|EQ)\s+\d+|PERIOD_1D)$",
+                line,
+                re.IGNORECASE,
+            ):
+                continue
+            if re.match(r"^(begin|end)\b", line, re.IGNORECASE):
+                continue
+            if line.upper() in {"AND", "OR"}:
+                continue
+            bare_condition_lines.append(line)
+        if bare_condition_lines:
+            scoped_terms["trigger"].append(f"({' and '.join(bare_condition_lines)})")
 
     entry_parts = (
         scoped_terms["context"]
@@ -266,6 +307,7 @@ def parse_dsl_content(content: str | None) -> dict:
         "exit": final_exit,
         "has_valid_exit": has_valid_exit,
         "max_days": max_days,
+        "candle_age_operator": candle_age_operator,
     }
 
 
@@ -286,6 +328,31 @@ def _prepare_scan_expression(expr: str) -> str:
         return "False"
     if s.lower() in {"true", "false"}:
         return s.title()
+
+    # Human-readable operator aliases are translated to the legacy expression
+    # operators used by the pandas evaluator.
+    operator_aliases = {
+        "GT": ">",
+        "GE": ">=",
+        "GTE": ">=",
+        "LT": "<",
+        "LE": "<=",
+        "LTE": "<=",
+        "EQ": "==",
+        "NE": "!=",
+    }
+    for alias, operator in operator_aliases.items():
+        s = re.sub(rf"\b{alias}\b", operator, s, flags=re.IGNORECASE)
+
+    # Function-style indicator names are syntax sugar for the existing
+    # materialized DSL columns: rsi(14) -> rsi_14 and
+    # ema_high(20) -> ema_high_20.
+    s = re.sub(
+        r"\b(rsi|ema_(?:open|high|low|close))\s*\(\s*(\d+)\s*\)",
+        lambda match: f"{match.group(1)}_{match.group(2)}",
+        s,
+        flags=re.IGNORECASE,
+    )
 
     def split_args(raw: str) -> list[str]:
         parts: list[str] = []
@@ -444,6 +511,60 @@ def _ensure_eval_helper_columns(
             alias_names.add(re.sub(r"_d\d+$", "", name))
 
     for name in list(alias_names):
+        if name in {"ha_open", "ha_high", "ha_low", "ha_close"}:
+            for ha_name, series in _heikin_ashi_ohlc(eval_df).items():
+                eval_df[ha_name] = series
+            continue
+
+        ema_match = re.fullmatch(
+            r"ema_(open|high|low|close|ha_open|ha_high|ha_low|ha_close)_(\d+)",
+            name,
+        )
+        if ema_match:
+            source_name, period_s = ema_match.groups()
+            if source_name.startswith("ha_"):
+                if source_name not in eval_df.columns:
+                    for ha_name, series in _heikin_ashi_ohlc(eval_df).items():
+                        eval_df[ha_name] = series
+                source = eval_df[source_name]
+            else:
+                source = eval_df[source_name]
+            eval_df[name] = source.ewm(
+                span=int(period_s), adjust=False, min_periods=int(period_s)
+            ).mean()
+            continue
+
+        rsi_match = re.fullmatch(r"rsi_(\d+)", name)
+        if rsi_match:
+            eval_df[name] = calculate_rsi(
+                eval_df["close"], period=int(rsi_match.group(1))
+            )
+            continue
+
+        slope_match = re.fullmatch(r"(.+)_slope", name)
+        if slope_match:
+            base_name = slope_match.group(1)
+            if base_name not in eval_df.columns:
+                base_ema = re.fullmatch(
+                    r"ema_(open|high|low|close|ha_open|ha_high|ha_low|ha_close)_(\d+)",
+                    base_name,
+                )
+                if base_ema:
+                    source_name, period_s = base_ema.groups()
+                    if source_name.startswith("ha_"):
+                        if source_name not in eval_df.columns:
+                            for ha_name, series in _heikin_ashi_ohlc(eval_df).items():
+                                eval_df[ha_name] = series
+                        source = eval_df[source_name]
+                    else:
+                        source = eval_df[source_name]
+                    eval_df[base_name] = source.ewm(
+                        span=int(period_s), adjust=False, min_periods=int(period_s)
+                    ).mean()
+            if base_name in eval_df.columns:
+                eval_df[name] = eval_df[base_name].diff().fillna(0)
+            continue
+
         match = re.fullmatch(r"((?:st|supertrend)_(\d+)_(\d+)_is_(green|red))", name)
         if match is None:
             continue

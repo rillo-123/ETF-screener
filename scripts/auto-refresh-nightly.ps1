@@ -25,17 +25,22 @@ $execution = Start-Job -ScriptBlock {
     @'
 from ETF_screener.config_loader import get_paths
 from ETF_screener.market_data_service import MarketDataRefresher
+from ETF_screener.database import ETFDatabase
 
 db_path = get_paths()["data"]["etf_db"]
-refresher = MarketDataRefresher(db_path=db_path)
-status = refresher.refresh_market_data(
-    depth=730,
-    stale_after_days=0,
-    force=True,
-    max_workers=8,
-    rebuild_shortlist=True,
-)
-print(status)
+statuses = {}
+for source in ("config/xetra.json", "config/sweden.json", "config/nasdaq.json"):
+    refresher = MarketDataRefresher(db_path=db_path, etfs_file=source)
+    statuses[source] = refresher.refresh_market_data(
+        depth=365,
+        stale_after_days=0,
+        force=True,
+        max_workers=8,
+        rebuild_shortlist=True,
+    )
+with ETFDatabase(db_path=db_path) as db:
+    deleted = db.prune_old_data(days_to_keep=365)
+print({"sources": statuses, "pruned": deleted})
 '@ | python -
 }
 

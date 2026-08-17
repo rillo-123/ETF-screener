@@ -1,10 +1,10 @@
 # Plan
 
-Last updated: 2026-08-12 22:26:58 +02:00
+Last updated: 2026-08-17 21:53:56 +02:00
 
 ## Current objective
 
-Milestone: reliable HA candle screening with consistent EMA data, explicit candle color, bounded TA warm-up history, and validated GUI conditions.
+Milestone workflow completed successfully with no auto-fixes required.
 
 ## Plan map
 

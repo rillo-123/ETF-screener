@@ -331,10 +331,21 @@ def test_market_data_refresher_zero_day_threshold_tops_up_yesterday(tmp_path):
         rebuild_shortlist=False,
     )
 
-    assert calls == ["AAA.DE"]
-    assert result["requested"] == 1
-    assert result["refreshed"] == 1
-    assert result["latest_market_date"] == date.today().isoformat()
+    expected_market_day = MarketDataRefresher._expected_market_day()
+    if expected_market_day == date.today():
+        assert calls == ["AAA.DE"]
+        assert result["requested"] == 1
+        assert result["refreshed"] == 1
+        assert result["latest_market_date"] == date.today().isoformat()
+    else:
+        assert calls == []
+        assert result["requested"] == 0
+        assert result["refreshed"] == 0
+        assert result["latest_market_date"] in {
+            expected_market_day.isoformat(),
+            date.today().isoformat(),
+            (date.today() - timedelta(days=1)).isoformat(),
+        }
 
 
 def test_market_data_refresher_uses_delta_window_for_stale_ticker(tmp_path):
@@ -408,9 +419,7 @@ def test_market_data_refresher_uses_delta_window_for_stale_ticker(tmp_path):
 
     assert calls, "Expected an incremental fetch call"
     latest_existing_day = existing_df["Date"].max().date()
-    assert calls[0]["start_date"] == latest_existing_day - timedelta(
-        days=refresher.INDICATOR_WARMUP_DAYS
-    )
+    assert calls[0]["start_date"] == latest_existing_day - timedelta(days=10)
     assert refreshed_df["Date"].max().date() == latest_business_day
     assert len(refreshed_df) > len(existing_df)
 

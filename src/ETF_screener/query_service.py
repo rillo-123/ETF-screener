@@ -314,11 +314,13 @@ class ETFQueryService:
 
         signal_meta = SIGNAL_PRESETS[normalized_signal]
         safe_limit = self._normalize_limit(limit, default=50)
-        safe_age_max = max(0, int(signal_age_max or signal_meta["default_age_max"]))
+        safe_age_max = max(
+            0, int(str(signal_age_max or signal_meta["default_age_max"]))
+        )
         safe_min_reliability = float(
-            min_reliability
+            str(min_reliability)
             if min_reliability is not None
-            else signal_meta["default_min_reliability"]
+            else str(signal_meta["default_min_reliability"])
         )
         tickers = self._load_universe_tickers(source)
         matches: list[dict[str, Any]] = []
@@ -869,7 +871,9 @@ class ETFQueryService:
         elif signal == "elusive_dip":
             high = pd.to_numeric(frame.get("high", frame.get("close")), errors="coerce")
             breakout_reference = high.shift(1).rolling(window=20, min_periods=10).max()
-            new_high_mask = (high >= breakout_reference).fillna(False) & breakout_reference.notna()
+            new_high_mask = (high >= breakout_reference).fillna(
+                False
+            ) & breakout_reference.notna()
             base_indices = [
                 idx for idx, value in enumerate(new_high_mask.tolist()) if value
             ]
@@ -1246,7 +1250,7 @@ class ETFQueryService:
             round(median_return_20d, 2) if median_return_20d is not None else None
         )
         enriched["historical_median_return_10d"] = (
-            round(float(stats.get("median_return_10d")), 2)
+            round(float(str(stats.get("median_return_10d"))), 2)
             if _safe_float(stats.get("median_return_10d")) is not None
             else None
         )
@@ -1747,7 +1751,9 @@ class ETFQueryService:
             float(trailing_high_20.max()) if not trailing_high_20.empty else close_now
         )
         recent_peak_idx = (
-            int(trailing_high_20.idxmax()) if not trailing_high_20.dropna().empty else current_idx
+            int(trailing_high_20.idxmax())
+            if not trailing_high_20.dropna().empty
+            else current_idx
         )
         recent_peak_age = current_idx - recent_peak_idx
         trailing_high_60 = high_series.tail(60)
@@ -1760,12 +1766,14 @@ class ETFQueryService:
             else 0.0
         )
         headroom_to_resistance_pct = (
-            ((resistance_high_60 - close_now) / close_now * 100.0)
-            if close_now
-            else 0.0
+            ((resistance_high_60 - close_now) / close_now * 100.0) if close_now else 0.0
         )
         above_ema50_days_20 = (
-            int((working.tail(20)["close"] > working.tail(20)["ema_50"]).fillna(False).sum())
+            int(
+                (working.tail(20)["close"] > working.tail(20)["ema_50"])
+                .fillna(False)
+                .sum()
+            )
             if not working.tail(20).empty
             else 0
         )
@@ -1983,8 +1991,8 @@ def render_query_result(
         return json.dumps(result, indent=2, ensure_ascii=False, default=str)
     if normalized == "csv":
         frame = pd.DataFrame(rows)
-        return frame.to_csv(index=False)
+        return str(frame.to_csv(index=False))
     if not rows:
         return "No rows returned."
     frame = pd.DataFrame(rows)
-    return frame.to_string(index=False)
+    return str(frame.to_string(index=False))

@@ -138,6 +138,10 @@ SCREEN_OVERBOUGHT_RSI_THRESHOLD = 70.0
 SCREEN_MIN_RECENT_AVG_VOLUME = 50_000.0
 SCREEN_MIN_RECENT_AVG_DOLLAR_VOLUME = 500_000.0
 SCREEN_MAX_RECENT_ZERO_VOLUME_ROWS = 1
+# A chart should not block on Yahoo for a normal one-to-three-day exchange
+# reporting gap. The explicit market-data refresh remains responsible for
+# deliberately topping up stale data.
+CHART_CACHE_STALE_AFTER_DAYS = 3
 PLAYBOOK_DEFAULT_RISK_PCT = 5.0
 PLAYBOOK_MIN_AVG_VOLUME_20 = 250_000.0
 PLAYBOOK_MIN_RSI = 45.0
@@ -1905,7 +1909,7 @@ def _is_stale_date(raw_date: object, threshold_days: int = 0) -> bool:
     return (date.today() - latest_day).days > max(0, int(threshold_days))
 
 
-SCREEN_RESULT_CACHE_VERSION = "screen_result_v3"
+SCREEN_RESULT_CACHE_VERSION = "screen_result_v5"
 
 
 def _screen_cache_dir() -> Path:
@@ -1986,6 +1990,13 @@ def _normalize_screen_preset_entry(
     """Normalize one saved screener preset."""
     raw = value if isinstance(value, dict) else {}
     name = _normalize_screen_preset_name(raw.get("name") or fallback_name)
+    dsl = str(raw.get("dsl") or raw.get("script") or "").strip()
+    exit_dsl = str(raw.get("exit_dsl") or raw.get("exit") or "").strip()
+    if dsl:
+        result: dict[str, object] = {"name": name, "dsl": dsl}
+        if exit_dsl:
+            result["exit_dsl"] = exit_dsl
+        return result
     filters = normalize_screen_filters(raw.get("filters", raw))
     return {
         "name": name,
@@ -2020,12 +2031,16 @@ def _normalize_screen_preset_payload(payload: object) -> dict[str, object]:
         if name in seen_names:
             continue
         seen_names.add(name)
-        deduped.append(
-            {
-                "name": name,
-                "filters": normalize_screen_filters(entry.get("filters")),
-            }
-        )
+        normalized_entry = {"name": name}
+        dsl = str(entry.get("dsl") or "").strip()
+        if dsl:
+            normalized_entry["dsl"] = dsl
+            exit_dsl = str(entry.get("exit_dsl") or "").strip()
+            if exit_dsl:
+                normalized_entry["exit_dsl"] = exit_dsl
+        else:
+            normalized_entry["filters"] = normalize_screen_filters(entry.get("filters"))
+        deduped.append(normalized_entry)
 
     if not deduped:
         deduped.append(
@@ -3448,6 +3463,7 @@ async def screen(
                 tickers=tickers,
             )
         logger.info("Ticker universe built: %d tickers to screen", len(tickers))
+        metadata_map = _cached_etf_metadata_map()
         if not tickers:
             _set_job_progress(
                 "screen",
@@ -3548,6 +3564,9 @@ async def screen(
                 last_row = df.iloc[-1]
                 latest_signal = last_row.get("signal", last_row.get("Signal", 0))
                 strategy_max_days = strategy_spec.get("max_days")
+                candle_age_operator = str(
+                    strategy_spec.get("candle_age_operator", "LTE")
+                ).upper()
                 recent_days = None
                 if strategy_max_days is not None:
                     recent_days = find_recent_entry_days(
@@ -3555,6 +3574,12 @@ async def screen(
                         strategy_spec,
                         max_days=int(strategy_max_days),
                     )
+                    if recent_days is not None and candle_age_operator == "EQ":
+                        recent_days = (
+                            recent_days
+                            if int(recent_days) == int(strategy_max_days)
+                            else None
+                        )
                     is_match = recent_days is not None
                 else:
                     is_match = latest_signal == 1
@@ -3594,12 +3619,26 @@ async def screen(
                         ((close_val / prev_close) - 1) * 100 if prev_close else 0, 0.0
                     )
                     ema_50_slope_val = _safe_float(last_row.get("ema_50_slope"), 0.0)
+                    # DSL expressions such as rsi(14) are materialised by
+                    # the backtester as rsi_14, while control screens use
+                    # the plain rsi column. Support both representations so
+                    # the match card shows the actual latest RSI value.
                     rsi_val = _safe_float(
-                        last_row.get("rsi", last_row.get("RSI")), None
+                        next(
+                            (
+                                last_row.get(column)
+                                for column in ("rsi", "RSI", "rsi_14", "RSI_14")
+                                if column in last_row.index
+                            ),
+                            None,
+                        ),
+                        None,
                     )
                     liquidity_snapshot = _recent_liquidity_snapshot(df)
+                    metadata = metadata_map.get(str(ticker).upper(), {})
                     candidate = {
                         "ticker": ticker,
+                        "name": str(metadata.get("name") or ticker).strip() or ticker,
                         "close": close_val,
                         "volume": vol_val,
                         "status": (
@@ -4916,7 +4955,7 @@ async def backtest_matrix_view(
 @app.get("/api/chart/{ticker}")
 async def get_chart(
     ticker: str,
-    days: int = 365 * 2,
+    days: int = 90,
     strategy: Optional[str] = None,
     dsl_content: Optional[str] = None,
     macd_fast: int = 12,
@@ -4950,7 +4989,10 @@ async def get_chart(
     # 1. Try to get data from database
     conn = db._get_connection()
     safe_days = max(1, min(days, 3650))
-    query = f"SELECT * FROM etf_data WHERE ticker = ? ORDER BY date DESC LIMIT {safe_days}"  # nosec B608 - safe_days is int-clamped
+    # Load a warm-up window for long indicators (especially EMA 200), then
+    # constrain the displayed x-axis back to the requested chart window.
+    indicator_warmup_days = max(safe_days, 420)
+    query = f"SELECT * FROM etf_data WHERE ticker = ? ORDER BY date DESC LIMIT {indicator_warmup_days}"  # nosec B608 - indicator_warmup_days is int-clamped
     df = pd.read_sql_query(query, conn, params=(ticker,))
 
     latest_cached_day = None
@@ -4961,10 +5003,15 @@ async def get_chart(
         except Exception:
             latest_cached_day = None
 
-    # 2. If data is missing, too sparse, or stale, fetch it.
+    # 2. If data is missing, too sparse, or genuinely stale, fetch it.
     # Keep at least 100 bars so indicator warmup stays reliable for EMA50 and ATR.
     if not is_blacklisted and (
-        df.empty or len(df) < 100 or _is_stale_date(latest_cached_day, threshold_days=0)
+        df.empty
+        or len(df) < 100
+        or _is_stale_date(
+            latest_cached_day,
+            threshold_days=CHART_CACHE_STALE_AFTER_DAYS,
+        )
     ):
         logger.info(
             "Cache refresh for %s (count=%d, latest=%s). Fetching from Yahoo Finance...",
@@ -4976,8 +5023,8 @@ async def get_chart(
             refresher = MarketDataRefresher(db_path=str(db.db_path))
             processed_df = refresher.refresh_ticker_data(
                 ticker=ticker,
-                depth=max(safe_days, 365),
-                min_existing_rows=max(100, min(safe_days, 365)),
+                depth=indicator_warmup_days,
+                min_existing_rows=max(100, min(indicator_warmup_days, 420)),
             )
 
             has_st = (
@@ -4992,7 +5039,7 @@ async def get_chart(
                 has_st,
             )
 
-            df = processed_df.sort_values("Date").tail(days)
+            df = processed_df.sort_values("Date").tail(indicator_warmup_days)
         except Exception as e:
             logger.warning("Failed to fetch %s on demand: %s", ticker, e)
             # Instead of crashing let's return a specific error that the UI can catch
@@ -5091,10 +5138,13 @@ async def get_chart(
                 overlay_periods = parsed_overlay_periods
         except (TypeError, ValueError, json.JSONDecodeError):
             logger.warning("Ignoring malformed ema_overlay_periods query parameter")
-    overlay_periods = list(dict.fromkeys(
-        int(period) for period in overlay_periods
-        if str(period).strip().isdigit() and 2 <= int(period) <= 500
-    ))
+    overlay_periods = list(
+        dict.fromkeys(
+            int(period)
+            for period in overlay_periods
+            if str(period).strip().isdigit() and 2 <= int(period) <= 500
+        )
+    )
     overlay_specs = None
     if ema_overlay_specs:
         try:
@@ -5183,6 +5233,12 @@ async def get_chart(
                 "show_supertrend_overlay": supertrend_event_enabled,
             },
         )
+        # Keep the long warm-up data for accurate indicators, but show only the
+        # fixed chart window requested by the dashboard.
+        display_end = pd.to_datetime(df["Date"], errors="coerce").max()
+        if pd.notna(display_end):
+            display_start = display_end - pd.Timedelta(days=safe_days)
+            fig.update_xaxes(range=[display_start, display_end])
         # Fastapi JSONResponse or direct dict return will handle this.
         # But we need to ensure it's a DICT, not a JSON string,
         # because the frontend is now expecting the un-wrapped object.

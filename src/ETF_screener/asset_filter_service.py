@@ -67,7 +67,9 @@ class AssetFilterService:
         """Return the currently supported named filters."""
         return [
             {"key": key, **meta}
-            for key, meta in sorted(self.FILTER_METADATA.items(), key=lambda item: item[0])
+            for key, meta in sorted(
+                self.FILTER_METADATA.items(), key=lambda item: item[0]
+            )
         ]
 
     def get_filtered_assets(
@@ -85,7 +87,9 @@ class AssetFilterService:
         rows: list[dict[str, Any]] = []
 
         for ticker in tickers:
-            raw_frame, data_source = self.query_service._load_price_history_frame(ticker)
+            raw_frame, data_source = self.query_service._load_price_history_frame(
+                ticker
+            )
             if raw_frame.empty:
                 continue
             frame = self.query_service._normalize_price_history_frame(raw_frame)
@@ -158,10 +162,13 @@ class AssetFilterService:
             if filter_name == "high_liquidity":
                 result = {
                     "matched": bool(
-                        avg_volume_20 is not None and avg_volume_20 >= LIQUIDITY_THRESHOLD
+                        avg_volume_20 is not None
+                        and avg_volume_20 >= LIQUIDITY_THRESHOLD
                     ),
                     "metric": "avg_volume_20",
-                    "value": round(avg_volume_20, 2) if avg_volume_20 is not None else None,
+                    "value": (
+                        round(avg_volume_20, 2) if avg_volume_20 is not None else None
+                    ),
                     "threshold": LIQUIDITY_THRESHOLD,
                 }
             elif filter_name == "oversold":
@@ -171,7 +178,9 @@ class AssetFilterService:
                         and latest_rsi_14 < OVERSOLD_RSI_THRESHOLD
                     ),
                     "metric": "rsi_14",
-                    "value": round(latest_rsi_14, 2) if latest_rsi_14 is not None else None,
+                    "value": (
+                        round(latest_rsi_14, 2) if latest_rsi_14 is not None else None
+                    ),
                     "threshold": OVERSOLD_RSI_THRESHOLD,
                 }
             else:
@@ -181,7 +190,9 @@ class AssetFilterService:
                         and latest_rsi_14 > OVERBOUGHT_RSI_THRESHOLD
                     ),
                     "metric": "rsi_14",
-                    "value": round(latest_rsi_14, 2) if latest_rsi_14 is not None else None,
+                    "value": (
+                        round(latest_rsi_14, 2) if latest_rsi_14 is not None else None
+                    ),
                     "threshold": OVERBOUGHT_RSI_THRESHOLD,
                 }
             filter_results[filter_name] = result
@@ -193,7 +204,9 @@ class AssetFilterService:
             "last_date": _safe_date_text(latest.get("date")),
             "close": latest_close,
             "volume": latest_volume,
-            "avg_volume_20": round(avg_volume_20, 2) if avg_volume_20 is not None else None,
+            "avg_volume_20": (
+                round(avg_volume_20, 2) if avg_volume_20 is not None else None
+            ),
             "rsi_14": round(latest_rsi_14, 2) if latest_rsi_14 is not None else None,
             "matched_filters": matched_filters,
             "filter_results": filter_results,
