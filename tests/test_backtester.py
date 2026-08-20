@@ -307,10 +307,10 @@ class TestBacktester:
                 self.futures.append(future)
                 return future
 
-            def shutdown(self, wait=False, cancel_futures=True):
+            def shutdown(self, wait=False, **_kwargs):
                 return None
 
-        def fake_wait(pending, timeout=None, return_when=None):
+        def fake_wait(pending, **_kwargs):
             if not pending:
                 return set(), set()
             first = next(iter(pending))

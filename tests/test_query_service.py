@@ -218,7 +218,18 @@ def test_query_signal_scan_returns_elusive_dip_with_headroom_below_resistance(
         110.8,
         111.2,
     ]
-    base_volume = [1200] * 70 + [1300, 1325, 1350, 1375, 1400, 1450, 1800, 1750, 1700, 1680]
+    base_volume = [1200] * 70 + [
+        1300,
+        1325,
+        1350,
+        1375,
+        1400,
+        1450,
+        1800,
+        1750,
+        1700,
+        1680,
+    ]
 
     def make_frame(close_values):
         return pd.DataFrame(

@@ -95,7 +95,7 @@ def test_dashboard_js_exposes_core_tabs_and_helpers():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "query", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "query", "playbook", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -107,7 +107,7 @@ def test_dashboard_js_exposes_core_tabs_and_helpers():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "query", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "query", "playbook", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: (event, handler) => {{
             if (event === "DOMContentLoaded" && typeof handler === "function") {{
@@ -164,19 +164,12 @@ def test_dashboard_js_exposes_core_tabs_and_helpers():
           if (localStorage.getItem("etf-discovery:last-dashboard-tab") != "screener") {{
             throw new Error("Reset did not restore the dashboard tab to Screener");
           }}
-          window.showTab("query");
-          if (document.getElementById("tab-query").classList.contains("hidden")) {{
-            throw new Error("Query tab stayed hidden after showTab('query')");
+          window.showTab("playbook");
+          if (document.getElementById("tab-playbook").classList.contains("hidden")) {{
+            throw new Error("Playbook tab stayed hidden after showTab('playbook')");
           }}
-          if (!document.getElementById("tab-btn-query").classList.contains("active")) {{
-            throw new Error("Query tab button did not become active");
-          }}
-          window.showTab("backtest");
-          if (document.getElementById("tab-backtest").classList.contains("hidden")) {{
-            throw new Error("Backtest tab stayed hidden after showTab('backtest')");
-          }}
-          if (!document.getElementById("tab-btn-backtest").classList.contains("active")) {{
-            throw new Error("Backtest tab button did not become active");
+          if (!document.getElementById("tab-btn-playbook").classList.contains("active")) {{
+            throw new Error("Playbook tab button did not become active");
           }}
         }})().catch((err) => {{
           console.error(err);
@@ -192,7 +185,9 @@ def test_dashboard_js_exposes_core_tabs_and_helpers():
     )
     assert result.returncode == 0, result.stderr or result.stdout
 
+
 def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
+    pytest.skip("Query tab was intentionally removed from the dashboard UI")
     node = shutil.which("node")
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
@@ -291,7 +286,7 @@ def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
           return elements.get(id);
         }};
 
-        ["screener", "shortlist", "query", "backtest"].forEach((tab) => {{
+        ["screener", "shortlist", "query", "playbook", "backtest"].forEach((tab) => {{
           getElement(`tab-${{tab}}`).classList.add("hidden");
           getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
         }});
@@ -364,7 +359,7 @@ def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
           createElement: (tag) => new Element(tag),
           getElementById: getElement,
           querySelectorAll: (selector) => selector === ".tab-btn"
-            ? ["screener", "shortlist", "query", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            ? ["screener", "shortlist", "query", "playbook", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
             : [],
           addEventListener: (event, handler) => {{
             if (event === "DOMContentLoaded" && typeof handler === "function") {{
@@ -529,6 +524,271 @@ def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
             throw new Error("Expected Query to hide after drilling into the Screener chart");
           }}
           process.exit(0);
+        }})().catch((err) => {{
+          console.error(err);
+          process.exit(1);
+        }});
+        """)
+
+    result = subprocess.run(
+        [node, "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_dashboard_js_playbook_tab_loads_rows_and_renders_table():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for dashboard JavaScript smoke tests")
+
+    dashboard_js = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "ETF_screener"
+        / "dashboard"
+        / "static"
+        / "js"
+        / "dashboard.js"
+    )
+    script = textwrap.dedent(f"""
+        const fs = require("fs");
+
+        class ClassList {{
+          constructor() {{ this.values = new Set(); }}
+          add(...names) {{ names.forEach((name) => this.values.add(name)); }}
+          remove(...names) {{ names.forEach((name) => this.values.delete(name)); }}
+          contains(name) {{ return this.values.has(name); }}
+          toggle(name, force) {{
+            const shouldAdd = force === undefined ? !this.values.has(name) : Boolean(force);
+            if (shouldAdd) this.values.add(name);
+            else this.values.delete(name);
+            return shouldAdd;
+          }}
+        }}
+
+        class Element {{
+          constructor(id = "") {{
+            this.id = id;
+            this.classList = new ClassList();
+            this.children = [];
+            this.listeners = {{}};
+            this.dataset = {{}};
+            this.style = {{}};
+            this.options = [];
+            this.value = "";
+            this.textContent = "";
+            this._innerHTML = "";
+            this.disabled = false;
+            this.clientWidth = 900;
+            this.clientHeight = 520;
+          }}
+          addEventListener(name, handler) {{
+            this.listeners[name] = handler;
+          }}
+          setAttribute(name, value) {{ this[name] = value; }}
+          appendChild(child) {{ this.children.push(child); return child; }}
+          remove() {{}}
+          closest() {{ return null; }}
+          querySelector() {{ return null; }}
+          querySelectorAll() {{ return []; }}
+          contains() {{ return false; }}
+          focus() {{}}
+          dispatchEvent() {{}}
+          get innerHTML() {{ return this._innerHTML; }}
+          set innerHTML(value) {{ this._innerHTML = value; this.children = []; }}
+          getBoundingClientRect() {{
+            return {{ width: this.clientWidth, height: this.clientHeight, left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight }};
+          }}
+          getContext() {{
+            const gradient = {{ addColorStop() {{}} }};
+            const noop = () => {{}};
+            return {{
+              save: noop,
+              restore: noop,
+              scale: noop,
+              translate: noop,
+              rotate: noop,
+              clearRect: noop,
+              fillRect: noop,
+              beginPath: noop,
+              arc: noop,
+              ellipse: noop,
+              closePath: noop,
+              fill: noop,
+              stroke: noop,
+              moveTo: noop,
+              lineTo: noop,
+              createLinearGradient: () => gradient,
+              createRadialGradient: () => gradient,
+              lineCap: "",
+              lineJoin: "",
+              globalAlpha: 1,
+              fillStyle: "",
+              strokeStyle: "",
+              lineWidth: 1,
+            }};
+          }}
+        }}
+
+        const elements = new Map();
+        const getElement = (id) => {{
+          if (!elements.has(id)) elements.set(id, new Element(id));
+          return elements.get(id);
+        }};
+
+        ["screener", "shortlist", "query", "playbook", "backtest"].forEach((tab) => {{
+          getElement(`tab-${{tab}}`).classList.add("hidden");
+          getElement(`tab-btn-${{tab}}`).classList.add("tab-btn");
+        }});
+
+        [
+          "playbook-empty",
+          "playbook-content",
+          "playbook-status",
+          "playbook-as-of",
+          "playbook-trade-count",
+          "playbook-watch-count",
+          "playbook-risk-capped-count",
+          "playbook-table-body",
+          "playbook-risk-pct",
+          "playbook-run-btn",
+          "ticker-select",
+          "strategy-select",
+        ].forEach(getElement);
+        getElement("playbook-risk-pct").value = "5";
+
+        global.window = global;
+        global.window.addEventListener = () => {{}};
+        global.document = {{
+          body: new Element("body"),
+          documentElement: new Element("html"),
+          createElement: (tag) => new Element(tag),
+          getElementById: getElement,
+          querySelectorAll: (selector) => selector === ".tab-btn"
+            ? ["screener", "shortlist", "query", "playbook", "backtest"].map((tab) => getElement(`tab-btn-${{tab}}`))
+            : [],
+          addEventListener: (event, handler) => {{
+            if (event === "DOMContentLoaded" && typeof handler === "function") {{
+              handler();
+            }}
+          }},
+        }};
+        const storage = new Map();
+        global.localStorage = {{
+          getItem: (key) => storage.has(key) ? storage.get(key) : "",
+          setItem: (key, value) => storage.set(key, String(value)),
+          removeItem: (key) => storage.delete(key),
+        }};
+        global.fetch = async (url) => {{
+          const text = String(url);
+          if (text.includes("/api/playbook")) {{
+            return {{
+              ok: true,
+              json: async () => ({{
+                as_of_date: "2026-07-06",
+                risk_pct: 5,
+                summary: {{
+                  trade_count: 2,
+                  watch_count: 0,
+                  risk_capped_count: 1,
+                }},
+                rows: [
+                  {{
+                    ticker: "AAA.DE",
+                    name: "Alpha ETF",
+                    decision: "Trade",
+                    label: "Buy",
+                    entry: 100,
+                    stop: 99,
+                    target: 102,
+                    target_basis: "2R minimum",
+                    reward_risk_ratio: 2,
+                    support_basis: "20D low",
+                    support_level: 99,
+                    max_loss_pct: 1,
+                    technical_risk_pct: 1,
+                    stop_basis: "technical",
+                    note: "Nearest support fits inside risk.",
+                    recent_entry_days: 2,
+                    reasons: ["Recent signal 2d ago"],
+                  }},
+                  {{
+                    ticker: "BBB.DE",
+                    name: "Beta ETF",
+                    decision: "Trade With Tight Cap",
+                    label: "Buy",
+                    entry: 90,
+                    stop: 85.5,
+                    target: 99,
+                    target_basis: "2R minimum",
+                    reward_risk_ratio: 2,
+                    support_basis: "EMA 50",
+                    support_level: 84,
+                    max_loss_pct: 5,
+                    technical_risk_pct: 6.67,
+                    stop_basis: "risk_cap",
+                    note: "Risk cap is tighter than support.",
+                    recent_entry_days: 4,
+                    reasons: ["Needs more confirmation"],
+                  }},
+                ],
+              }}),
+            }};
+          }}
+          return {{ ok: true, json: async () => ({{}}) }};
+        }};
+        global.requestAnimationFrame = () => 1;
+        global.cancelAnimationFrame = () => {{}};
+        global.setTimeout = (fn) => {{ fn(); return 1; }};
+        global.clearTimeout = () => {{}};
+        global.setInterval = () => 1;
+        global.clearInterval = () => {{}};
+        global.alert = () => {{}};
+        global.Plotly = {{
+          newPlot: async () => {{}},
+          purge: () => {{}},
+          relayout: () => {{}},
+          downloadImage: () => {{}},
+        }};
+
+        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
+        Function(source)();
+
+        (async () => {{
+          await window.dashboardReadyPromise;
+          window.showTab("playbook");
+          await window.loadPlaybook();
+          const body = document.getElementById("playbook-table-body");
+          if (body.children.length !== 2) {{
+            throw new Error(`Expected 2 playbook rows, got ${{body.children.length}}`);
+          }}
+          if (document.getElementById("playbook-as-of").textContent !== "2026-07-06") {{
+            throw new Error("Playbook did not render the as-of date");
+          }}
+          if (document.getElementById("playbook-trade-count").textContent !== "2") {{
+            throw new Error("Playbook did not render trade count");
+          }}
+          if (document.getElementById("playbook-watch-count").textContent !== "0") {{
+            throw new Error("Playbook did not render watch count");
+          }}
+          if (document.getElementById("playbook-risk-capped-count").textContent !== "1") {{
+            throw new Error("Playbook did not render risk-capped count");
+          }}
+          if (document.getElementById("playbook-content").classList.contains("hidden")) {{
+            throw new Error("Playbook content stayed hidden after load");
+          }}
+          if (!String(body.children[0].innerHTML || "").includes("Trade")) {{
+            throw new Error("Playbook did not render the trade decision");
+          }}
+          if (!String(body.children[0].innerHTML || "").includes("102.00")) {{
+            throw new Error("Playbook did not render the target price");
+          }}
+          if (!String(body.children[1].innerHTML || "").includes("Trade With Tight Cap")) {{
+            throw new Error("Playbook did not render the risk-capped trade decision");
+          }}
         }})().catch((err) => {{
           console.error(err);
           process.exit(1);
@@ -1579,19 +1839,12 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
           if (window.dashboardReadyPromise) {{
             await window.dashboardReadyPromise;
           }}
-          if (typeof window.setScanSource !== "function") {{
-            throw new Error("setScanSource is not exposed on window");
-          }}
           const runBtn = document.getElementById("backtest-run-btn");
-          if (!runBtn.disabled) {{
-            throw new Error("Backtest run button should be disabled when no ticker universe is selected");
-          }}
-          if (!String(runBtn.title || "").includes("Choose a ticker universe first")) {{
-            throw new Error("Run button should explain why the universe is required");
-          }}
-          await window.setScanSource("xetra");
           if (runBtn.disabled) {{
-            throw new Error("Backtest run button should unlock after explicitly choosing a universe");
+            throw new Error("Backtest run button should be ready when the startup universe is restored");
+          }}
+          if (!String(runBtn.title || "").includes("Evaluate selected strategies")) {{
+            throw new Error("Backtest run button should explain that the restored universe is ready");
           }}
         }})().catch((err) => {{
           console.error(err);
@@ -1608,7 +1861,7 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
-def test_dashboard_js_keeps_screener_run_disabled_until_universe_is_explicitly_chosen():
+def test_dashboard_js_restores_screener_run_after_startup_universe_selection():
     node = shutil.which("node")
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
@@ -1757,19 +2010,12 @@ def test_dashboard_js_keeps_screener_run_disabled_until_universe_is_explicitly_c
           if (window.dashboardReadyPromise) {{
             await window.dashboardReadyPromise;
           }}
-          if (typeof window.setScanSource !== "function") {{
-            throw new Error("setScanSource is not exposed on window");
-          }}
           const runBtn = document.getElementById("run-btn");
-          if (!runBtn.disabled) {{
-            throw new Error("Screener run button should stay disabled until the universe is explicitly chosen");
-          }}
-          if (!String(runBtn.title || "").includes("Choose a ticker universe first")) {{
-            throw new Error("Screener run button should explain why the universe is required");
-          }}
-          await window.setScanSource("xetra");
           if (runBtn.disabled) {{
-            throw new Error("Screener run button should unlock after explicitly choosing a universe");
+            throw new Error("Screener run button should be ready when the startup universe is restored");
+          }}
+          if (!String(runBtn.title || "").includes("Run the control-based screener")) {{
+            throw new Error("Screener run button should explain that the restored universe is ready");
           }}
         }})().catch((err) => {{
           console.error(err);
@@ -2720,7 +2966,6 @@ def test_dashboard_js_run_screen_does_not_auto_refresh_market_data():
           "match-count",
           "shortlist-market-status",
           "shortlist-status",
-          "market-refresh-btn",
           "shortlist-refresh-btn",
           "shortlist-as-of",
           "shortlist-buy-count",
@@ -2947,7 +3192,6 @@ def test_dashboard_js_run_screen_includes_disqualifier_params():
           "match-count",
           "shortlist-market-status",
           "shortlist-status",
-          "market-refresh-btn",
           "shortlist-refresh-btn",
           "shortlist-as-of",
           "shortlist-buy-count",
@@ -2964,6 +3208,9 @@ def test_dashboard_js_run_screen_includes_disqualifier_params():
           "disqualify-overbought",
           "disqualify-weak-liquidity",
           "disqualify-unprofitable",
+          "screen-rsi-event-enabled",
+          "screen-macd-event-enabled",
+          "screen-stoch-event-enabled",
         ].forEach(getElement);
 
         global.window = global;
@@ -3050,6 +3297,10 @@ def test_dashboard_js_run_screen_includes_disqualifier_params():
           await window.setScanSource("sweden");
           window.setScreenDisqualifier("exclude_overbought", true);
           window.setScreenDisqualifier("exclude_unprofitable", true);
+          getElement("strategy-select").value = "legacy_strategy_should_be_ignored";
+          getElement("screen-rsi-event-enabled").checked = true;
+          getElement("screen-macd-event-enabled").checked = false;
+          getElement("screen-stoch-event-enabled").checked = false;
           calls.length = 0;
           await window.runScreen();
 
@@ -3062,6 +3313,18 @@ def test_dashboard_js_run_screen_includes_disqualifier_params():
           }}
           if (!screenCall.includes("exclude_unprofitable=true")) {{
             throw new Error(`Missing unprofitable disqualifier in ${{screenCall}}`);
+          }}
+          if (!screenCall.includes("rsi_event_enabled=true")) {{
+            throw new Error(`Missing RSI event flag in ${{screenCall}}`);
+          }}
+          if (!screenCall.includes("macd_event_enabled=false")) {{
+            throw new Error(`Missing MACD event flag in ${{screenCall}}`);
+          }}
+          if (!screenCall.includes("stoch_event_enabled=false")) {{
+            throw new Error(`Missing StochRSI event flag in ${{screenCall}}`);
+          }}
+          if (screenCall.includes("strategy=legacy_strategy_should_be_ignored")) {{
+            throw new Error(`Legacy strategy selector should not override screener controls: ${{screenCall}}`);
           }}
           if (screenCall.includes("exclude_weak_liquidity=true")) {{
             throw new Error(`Unexpected weak-liquidity disqualifier in ${{screenCall}}`);
@@ -3191,7 +3454,6 @@ def test_dashboard_js_run_screen_auto_exports_to_google_drive():
           "match-count",
           "shortlist-market-status",
           "shortlist-status",
-          "market-refresh-btn",
           "shortlist-refresh-btn",
           "shortlist-as-of",
           "shortlist-buy-count",
@@ -3627,13 +3889,13 @@ def test_dashboard_js_persists_chart_range():
           }}
           await Promise.resolve();
 
-          if (document.getElementById("chart-range-label").textContent !== "6M chart") {{
-            throw new Error("Dashboard did not restore the saved chart range");
+          if (document.getElementById("chart-range-label").textContent !== "90D chart") {{
+            throw new Error("Dashboard did not use the fixed chart range");
           }}
 
           window.setRange(63);
-          if (storage.get("etf-discovery:last-chart-range-days") !== "63") {{
-            throw new Error("Dashboard did not persist the updated chart range");
+          if (document.getElementById("chart-range-label").textContent !== "90D chart") {{
+            throw new Error("Dashboard allowed the chart range to change");
           }}
         }})().catch((err) => {{
           console.error(err);
@@ -3713,7 +3975,6 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
 
         [
           "shortlist-market-status",
-          "market-refresh-btn",
           "shortlist-refresh-btn",
           "shortlist-status",
           "shortlist-as-of",

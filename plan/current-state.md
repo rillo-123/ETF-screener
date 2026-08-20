@@ -2,6 +2,21 @@
 
 - -Summary
 
+- Added explicit HA candle-color enforcement with Green only as the default, plus Red only and Any color options.
+- Aligned HA condition EMA calculations and chart EMA overlays to the same Heikin-Ashi OHLC series, eliminating raw-price/HA comparison mismatches.
+- Added bounded TA history warm-up based on the longest configured indicator period, including reliable EMA 200 support.
+- Added regression tests for HA OHLC conditions, candle color, history warm-up, chart behavior, and dashboard integration.
+
+## Event-stack timeline milestone — 2026-07-25
+
+- The Screener timeline stack now supports explicit up/down event ordering, chronological slider constraints, relative event markers, active-row highlighting, and repeated Left/Right keyboard adjustment.
+- The first event retains an absolute “days ago” position; subsequent events visually progress toward today while preserving their absolute readouts.
+- This interaction is now suitable for composing and testing dip-confirmation sequences across larger universes such as Nasdaq.
+
+- -Summary
+
+- -Summary
+
 - Added a Nasdaq-only vitality gate so source-selected scans now drop recent low-energy names before ranking them, using recent trading continuity, average close, share volume, and dollar-volume thresholds instead of only the raw listing universe.
 - Wired that vitality filter through the Query scan path plus the Screener, Backtester, and Swarm scope resolution paths so Nasdaq behaves more like an actionable universe than a raw directory dump.
 - Verified the vitality pass with `.\run.ps1 -Tests`; the full pytest and Playwright suite passed.

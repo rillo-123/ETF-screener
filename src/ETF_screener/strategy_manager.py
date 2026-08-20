@@ -11,7 +11,7 @@ class CachedStrategyManager:
     """Manages strategy execution with memory caching for indicator calculations."""
 
     _memory_cache: ClassVar[OrderedDict[str, Any]] = OrderedDict()
-    _memory_cache_limit: ClassVar[int] = 256
+    _memory_cache_limit: ClassVar[int] = 4096
 
     def __init__(self, db: ETFDatabase, cache_dir: str = "data/cache"):
         self.db = db
@@ -29,7 +29,12 @@ class CachedStrategyManager:
             if not isinstance(v, (pd.Series, pd.DataFrame))
         }
         param_str = json.dumps(serializable_params, sort_keys=True)
-        return f"{ticker}_{indicator_name}_{param_str}_{df_len}"
+        db_path = getattr(self.db, "db_path", None)
+        try:
+            db_revision = db_path.stat().st_mtime_ns if db_path is not None else 0
+        except (AttributeError, OSError):
+            db_revision = 0
+        return f"{ticker}_{indicator_name}_{param_str}_{df_len}_{db_revision}"
 
     @classmethod
     def _get_cached_value(cls, cache_key: str) -> Any | None:

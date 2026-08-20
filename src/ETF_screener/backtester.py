@@ -29,6 +29,24 @@ from ETF_screener.strategy_manager import CachedStrategyManager
 logger = logging.getLogger(__name__)
 
 
+def _heikin_ashi_ohlc(frame: pd.DataFrame) -> dict[str, pd.Series]:
+    """Build the Heikin-Ashi OHLC series used by the readable DSL aliases."""
+    raw_close = pd.to_numeric(frame["close"], errors="coerce")
+    raw_open = pd.to_numeric(frame.get("open", raw_close), errors="coerce")
+    raw_high = pd.to_numeric(frame.get("high", raw_close), errors="coerce")
+    raw_low = pd.to_numeric(frame.get("low", raw_close), errors="coerce")
+    ha_close = (raw_open + raw_high + raw_low + raw_close) / 4.0
+    ha_open = ((raw_open + raw_close) / 2.0).copy()
+    for index in range(1, len(ha_open)):
+        ha_open.iloc[index] = (ha_open.iloc[index - 1] + ha_close.iloc[index - 1]) / 2.0
+    return {
+        "ha_open": ha_open,
+        "ha_high": pd.concat([raw_high, ha_open, ha_close], axis=1).max(axis=1),
+        "ha_low": pd.concat([raw_low, ha_open, ha_close], axis=1).min(axis=1),
+        "ha_close": ha_close,
+    }
+
+
 def _worker_run_remote(
     ticker,
     db_path,
@@ -82,7 +100,7 @@ def _worker_run_remote_scripted(
 
 
 class Backtester:
-    RESULT_CACHE_VERSION = "backtest_result_v2"
+    RESULT_CACHE_VERSION = "backtest_result_v3"
 
     def __init__(
         self,
@@ -142,7 +160,14 @@ class Backtester:
             strategy_name = f"dsl_{strat_hash}"
             cache_dir.mkdir(parents=True, exist_ok=True)
             latest_date = db.get_latest_date(ticker) or "no_date"
-            cache_key = f"{ticker}_{strategy_name}_{days}_{latest_date}_{self.RESULT_CACHE_VERSION}"
+            try:
+                db_revision = Path(self.db_path).stat().st_mtime_ns
+            except OSError:
+                db_revision = 0
+            cache_key = (
+                f"{ticker}_{strategy_name}_{days}_{latest_date}_"
+                f"{db_revision}_{self.RESULT_CACHE_VERSION}"
+            )
             cache_path = Path(get_paths()["data"]["parquet"]) / f"{cache_key}.parquet"
             result_cache_path = cache_dir / f"{cache_key}.pkl"
 
@@ -462,7 +487,32 @@ class Backtester:
                 return
 
             if base_c not in df_eval.columns:
-                if re.match(r"ema_\d+", base_c):
+                if base_c in {"ha_open", "ha_high", "ha_low", "ha_close"}:
+                    for name, series in _heikin_ashi_ohlc(df_eval).items():
+                        df_eval[name] = series
+                    return
+                ema_source_match = re.fullmatch(
+                    r"ema_(open|high|low|close|ha_open|ha_high|ha_low|ha_close)_(\d+)",
+                    base_c,
+                )
+                if ema_source_match:
+                    source_name, period_s = ema_source_match.groups()
+                    if source_name.startswith("ha_"):
+                        if source_name not in df_eval.columns:
+                            for name, series in _heikin_ashi_ohlc(df_eval).items():
+                                df_eval[name] = series
+                        source_series = df_eval[source_name]
+                    else:
+                        source_series = df_eval[source_name]
+                    df_eval[base_c] = manager.get_indicator(
+                        df,
+                        ticker,
+                        calculate_ema,
+                        base_c,
+                        series=source_series,
+                        period=int(period_s),
+                    )
+                elif re.match(r"ema_\d+", base_c):
                     df_eval[base_c] = manager.get_indicator(
                         df,
                         ticker,
@@ -655,6 +705,25 @@ class Backtester:
                 df_eval[f"{c}_d1"] = df_eval[c].shift(1)
 
         def p(s):
+            # Accept the readable condition syntax alongside legacy operators.
+            for alias, operator in {
+                "GT": ">",
+                "GE": ">=",
+                "GTE": ">=",
+                "LT": "<",
+                "LE": "<=",
+                "LTE": "<=",
+                "EQ": "==",
+                "NE": "!=",
+            }.items():
+                s = re.sub(rf"\b{alias}\b", operator, s, flags=re.IGNORECASE)
+            s = re.sub(
+                r"\b(rsi|ema_(?:open|high|low|close))\s*\(\s*(\d+)\s*\)",
+                lambda match: f"{match.group(1)}_{match.group(2)}",
+                s,
+                flags=re.IGNORECASE,
+            )
+
             # 1. Expand aliases FIRST
             def sub_st(st_m):
                 pv, mv, sv = st_m.group(1), st_m.group(2), st_m.group(3)

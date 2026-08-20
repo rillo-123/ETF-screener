@@ -54,9 +54,11 @@ STRATEGY_STRUCTURE_AXIS_CATALOG = (
 )
 
 _MAX_DAYS_PATTERN = re.compile(
-    r"^(MAX_DAYS|MAX_SIGNAL_AGE_DAYS|SIGNAL_MAX_DAYS|SINCE_DAYS)\s*:\s*(\d+)\s*$",
+    r"^(?:CANDLE_AGE\s+(?:LTE|LE|EQ)\s+\d+|"
+    r"(?:CANDLE_AGE|DAYS|MAX_DAYS|MAX_SIGNAL_AGE_DAYS|SIGNAL_MAX_DAYS|SINCE_DAYS)\s*:\s*\d+)\s*$",
     re.IGNORECASE,
 )
+_PERIOD_1D_PATTERN = re.compile(r"^PERIOD_1D\s*$", re.IGNORECASE)
 _INDICATOR_FAMILY_PATTERNS = (
     ("ema", re.compile(r"\bema_\d+\b", re.IGNORECASE)),
     ("rsi", re.compile(r"\brsi(?:_ema)?_\d+(?:_\d+)?\b", re.IGNORECASE)),
@@ -185,7 +187,12 @@ def parse_strategy_blocks(content: str | None) -> list[StrategyBlock]:
 
 
 def parse_strategy_scripts(content: str | None) -> tuple[str, str]:
-    """Compile a DSL file into entry and exit expressions."""
+    """Compile a DSL file into entry and exit expressions.
+
+    ``candle_age`` and ``period_1d`` are entry-side metadata. They constrain
+    where an entry may be found; the backtest engine evaluates the exit only
+    after a position has been opened.
+    """
     lines = iter_clean_lines(content)
     if not lines:
         return "False", "False"
@@ -217,7 +224,14 @@ def parse_strategy_scripts(content: str | None) -> tuple[str, str]:
         exit_script = " or ".join(exit_terms) if exit_terms else "False"
         return entry_script, exit_script
 
-    fallback_expr = " ".join(lines).strip()
+    fallback_lines = [
+        line
+        for line in lines
+        if not _MAX_DAYS_PATTERN.match(line)
+        and not _PERIOD_1D_PATTERN.match(line)
+        and line.upper() not in {"AND", "OR"}
+    ]
+    fallback_expr = " and ".join(fallback_lines).strip()
     return fallback_expr or "False", "False"
 
 
@@ -279,7 +293,15 @@ def parse_strategy_structure_profile(content: str | None) -> dict[str, object]:
     for line in lines:
         directive = _MAX_DAYS_PATTERN.match(line)
         if directive:
-            max_days = int(directive.group(2))
+            # _MAX_DAYS_PATTERN is intentionally a validation pattern and
+            # does not expose capture groups.  Extract the trailing numeric
+            # value separately so both ``candle_age LTE 30`` and
+            # ``max_days: 30`` directives work here.
+            max_days_match = re.search(r"(\d+)\s*$", line)
+            if max_days_match:
+                max_days = int(max_days_match.group(1))
+            continue
+        if _PERIOD_1D_PATTERN.match(line):
             continue
 
         begin_prefix = re.match(r"^begin\s+(.+)$", line, re.IGNORECASE)

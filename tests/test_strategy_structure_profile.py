@@ -42,6 +42,15 @@ def test_structure_profile_missing_max_days_still_keeps_time_discipline_positive
     assert rsi_axes["trend_context"] < fanout_axes["trend_context"]
 
 
+def test_structure_profile_accepts_candle_age_operator_directive():
+    profile = parse_strategy_structure_profile(
+        "candle_age LTE 30\nperiod_1d\nENTRY: close GT ema_20\nEXIT: close LT open"
+    )
+
+    assert "has_time_stop" in profile["structure_tags"]
+    assert profile["structure_axes"]["time_discipline"] > 0
+
+
 def test_structure_profile_returns_zeroed_profile_when_unavailable(monkeypatch):
     monkeypatch.setattr(
         "ETF_screener.dsl_parser.parse_strategy_blocks",

@@ -11,7 +11,6 @@ from typing import Any
 
 import pandas as pd
 
-
 GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
 GOOGLE_SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 DEFAULT_AUTO_EXPORT_FOLDER_NAME = "Auto Exports"
@@ -22,9 +21,7 @@ class GoogleDriveExportError(RuntimeError):
 
 
 def _slugify(value: object, fallback: str = "na") -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9]+", "-", str(value or "").strip().lower()).strip(
-        "-"
-    )
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "-", str(value or "").strip().lower()).strip("-")
     return cleaned or fallback
 
 

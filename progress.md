@@ -1,6 +1,34 @@
 
 # Progress
 
+## 2026-08-17 21:53:56 +02:00
+
+- -Summary
+- Next resume point: Review the latest commit and pick up the next implementation task.
+
+## 2026-08-12 22:26:58 +02:00
+
+- Added explicit HA candle-color enforcement with Green only as the default, plus Red only and Any color options.
+- Aligned HA condition EMA calculations and chart EMA overlays to the same Heikin-Ashi OHLC series, eliminating raw-price/HA comparison mismatches.
+- Added bounded TA history warm-up based on the longest configured indicator period, including reliable EMA 200 support.
+- Added regression tests for HA OHLC conditions, candle color, history warm-up, chart behavior, and dashboard integration.
+- Next resume point: Review the HA screener milestone against live Investing.com candles and continue with data-source reconciliation if discrepancies remain.
+
+## 2026-07-25 — Event-stack timeline milestone
+
+- Added up/down controls to every screener event-stack member so users can explicitly define chronological event order.
+- Enforced chronology in the timeline controls: events below cannot be moved earlier than the event above, and moving rows swaps their timeline positions.
+- Added a relative timeline visualization: the first event keeps its absolute age slider, while later events are shown progressively toward today according to their relative timing.
+- Added active-event selection with a visible border and repeated Left/Right arrow-key adjustment in one-day increments.
+- Verified the dashboard API tests, JavaScript syntax, and diff formatting; the focused Playwright run passed 5 tests with 1 unrelated existing backtest-header failure.
+- Current status: the event stack is usable as a visual sequence builder for identifying viable dip setups.
+- Next resume point: test the interaction on broader universes and refine the relative timeline spacing if needed.
+
+## 2026-07-22 21:50:20 +02:00
+
+- -Summary
+- Next resume point: Review the latest commit and pick up the next implementation task.
+
 ## 2026-06-17 20:30:25 +02:00
 
 - -Summary

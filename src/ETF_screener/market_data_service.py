@@ -117,6 +117,7 @@ class MarketDataRefresher:
         fetcher: Optional[YFinanceFetcher] = None,
         storage: Optional[ParquetStorage] = None,
         collection_mode: str = "active",
+        tracked_tickers_override: object | None = None,
     ):
         self.db = ETFDatabase(db_path=db_path)
         self.etfs_file = Path(etfs_file)
@@ -127,6 +128,7 @@ class MarketDataRefresher:
         self.collection_mode = (
             "all" if str(collection_mode).strip().lower() == "all" else "active"
         )
+        self.tracked_tickers_override = tracked_tickers_override
 
     @staticmethod
     def _parse_day(raw: str | None) -> Optional[date]:
@@ -136,6 +138,14 @@ class MarketDataRefresher:
             return datetime.strptime(str(raw).split(" ")[0], "%Y-%m-%d").date()
         except ValueError:
             return None
+
+    @staticmethod
+    def _expected_market_day(today: date | None = None) -> date:
+        """Return the latest weekday that can reasonably have a market candle."""
+        expected = today or date.today()
+        while expected.weekday() >= 5:
+            expected -= timedelta(days=1)
+        return expected
 
     def _load_blacklist(self) -> set[str]:
         if not self.blacklist_file.exists():
@@ -175,6 +185,14 @@ class MarketDataRefresher:
 
     def _load_tracked_tickers(self) -> list[str]:
         blacklist = self._load_blacklist()
+        if self.tracked_tickers_override is not None:
+            return sorted(
+                ticker
+                for ticker in self._normalize_ticker_values(
+                    self.tracked_tickers_override
+                )
+                if ticker not in blacklist
+            )
         tickers: set[str] = set()
         if self.etfs_file.exists():
             with open(self.etfs_file, "r", encoding="utf-8") as handle:
@@ -318,7 +336,11 @@ class MarketDataRefresher:
         else:
             if latest_day is None:
                 raise RuntimeError("Expected a latest market date when refreshing")
-            fetch_start = latest_day - timedelta(days=max(5, int(warmup_days)))
+            # Existing history already contains the indicator warm-up window.
+            # Only overlap a few days when topping it up so a daily refresh
+            # does not download the last 90 days again for every ticker.
+            refresh_overlap_days = max(5, min(int(warmup_days), 10))
+            fetch_start = latest_day - timedelta(days=refresh_overlap_days)
             fetched = self.fetcher.fetch_historical_data(
                 ticker,
                 start_date=fetch_start,
@@ -369,7 +391,8 @@ class MarketDataRefresher:
         blacklist = self._load_blacklist()
         latest_by_ticker = self.db.get_ticker_latest_dates()
 
-        today = date.today()
+        calendar_today = date.today()
+        today = self._expected_market_day(calendar_today)
         threshold_days = max(0, int(stale_after_days))
         market_day = self._parse_day(self.db.get_latest_market_date())
         shortlist_day = self._parse_day(self.db.get_latest_shortlist_date())
@@ -383,7 +406,8 @@ class MarketDataRefresher:
             if ticker in latest_by_ticker
             and (self._parse_day(latest_by_ticker[ticker]) or date.min) < stale_cutoff
         ]
-        days_stale = (today - market_day).days if market_day else None
+        days_stale = (calendar_today - market_day).days if market_day else None
+        market_days_stale = (today - market_day).days if market_day else None
         fresh_tickers = max(0, len(tracked) - len(missing) - len(stale))
 
         return {
@@ -394,9 +418,10 @@ class MarketDataRefresher:
             ),
             "latest_shortlist_updated_at": shortlist_updated_at,
             "days_stale": days_stale,
+            "market_days_stale": market_days_stale,
             "is_stale": (
-                days_stale is None
-                or days_stale > threshold_days
+                market_days_stale is None
+                or market_days_stale > threshold_days
                 or bool(missing)
                 or bool(stale)
             ),
@@ -461,7 +486,7 @@ class MarketDataRefresher:
         )
         tracked = self._load_tracked_tickers()
         latest_by_ticker = self.db.get_ticker_latest_dates()
-        today = date.today()
+        today = self._expected_market_day()
         threshold_days = max(0, int(stale_after_days))
         stale_cutoff = today - timedelta(days=threshold_days)
 
@@ -546,7 +571,11 @@ class MarketDataRefresher:
                     message = str(exc)
                     if "No data found" in message or "No rows returned" in message:
                         self.delisting_tracker.mark_missing(ticker, reason=message)
-                        self.delisting_tracker.promote_aged_missing(threshold_days=14)
+                        # An empty response is a definitive invalid/delisted
+                        # symbol result. Blacklist it immediately so the next
+                        # refresh does not waste another request. Transient
+                        # fetch/API errors are not promoted here.
+                        self.delisting_tracker.promote_aged_missing(threshold_days=0)
                     errors.append({"ticker": ticker, "error": str(exc)})
                 finally:
                     completed += 1
@@ -591,8 +620,11 @@ class MarketDataRefresher:
                         message = str(exc)
                         if "No data found" in message or "No rows returned" in message:
                             self.delisting_tracker.mark_missing(ticker, reason=message)
+                            # Do not retry symbols for which the provider
+                            # returned no rows; transient exceptions remain
+                            # retryable because they are not marked missing.
                             self.delisting_tracker.promote_aged_missing(
-                                threshold_days=14
+                                threshold_days=0
                             )
                         errors.append({"ticker": ticker, "error": str(exc)})
                     finally:
