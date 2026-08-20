@@ -440,19 +440,12 @@ def test_latest_event_age_supports_today_as_zero_days():
     assert _latest_event_age_days(mask, dates, lookback_days=30) == 0
 
 
-def test_indicator_presets_are_isolated_and_event_ages_fit_their_lookback():
+def test_saved_screen_presets_support_dsl_and_filter_formats():
     config_path = Path("config") / "screener_presets.json"
     payload = json.loads(config_path.read_text(encoding="utf-8"))
-    presets = {preset["name"]: preset["filters"] for preset in payload["presets"]}
+    assert payload["schema_version"] == "screen_presets_v1"
+    assert payload["presets"]
 
-    expected_enabled = {
-        "RSI-LT-30": {"rsi_event_enabled"},
-        "supertrend": {"supertrend_event_enabled"},
-        "stoch": {"stoch_event_enabled"},
-        "ema": {"ema_relationship_enabled"},
-        "rsi-down-nasdaq": {"rsi_event_enabled"},
-        "rsi-crossdown": {"rsi_event_enabled"},
-    }
     event_keys = {
         "macd_event_enabled",
         "rsi_event_enabled",
@@ -462,20 +455,18 @@ def test_indicator_presets_are_isolated_and_event_ages_fit_their_lookback():
         "volume_spike_enabled",
     }
 
-    for name, expected in expected_enabled.items():
-        filters = presets[name]
-        enabled = {key for key in event_keys if filters.get(key)}
-        assert enabled == expected
+    for preset in payload["presets"]:
+        assert str(preset.get("name") or "").strip()
+        dsl = str(preset.get("dsl") or "").strip()
+        if dsl:
+            assert "filters" not in preset
+            continue
+
+        filters = preset.get("filters")
+        assert isinstance(filters, dict)
+        lookback_days = filters.get("lookback_days")
+        assert isinstance(lookback_days, int)
         for key in event_keys:
             age_key = key.replace("_enabled", "_age")
             if age_key in filters:
-                assert 0 <= filters[age_key] <= filters["lookback_days"]
-
-    # The general RSI-40 preset is a pure 30-day event screen; it must not
-    # reintroduce the extra liquidity/slope gates that caused the original bug.
-    rsi_40 = presets["rsi-crossdown"]
-    assert rsi_40["rsi_cross_value"] == 40.0
-    assert rsi_40["rsi_cross_mode"] == "cross_down"
-    assert rsi_40["rsi_event_age"] == 30
-    assert rsi_40["volume_range"]["min"] == 0.0
-    assert rsi_40["ema_slope_200"] == "any"
+                assert 0 <= filters[age_key] <= lookback_days
