@@ -4428,6 +4428,17 @@
       if (exitPreview) exitPreview.value = exit;
     }
 
+    function syncBacktestDslEditors() {
+      const entry = document.getElementById("backtest-entry-preview");
+      const exit = document.getElementById("backtest-exit-preview");
+      const screenEntry = document.getElementById("screen-dsl-editor");
+      const screenExit = document.getElementById("screen-exit-editor");
+      if (entry && screenEntry) screenEntry.value = entry.value;
+      if (exit && screenExit) screenExit.value = exit.value;
+      updateScanActionButtonsState();
+      updateBacktestRunButtonState();
+    }
+
     async function saveBacktestPreset() {
       const name = String(document.getElementById("backtest-preset-name")?.value || "").trim();
       const screenName = document.getElementById("screen-preset-name");
@@ -5765,15 +5776,26 @@
       const metricRows = scoredRows.length > 0 ? scoredRows : rows;
       const strategyCount = new Set(rows.map((row) => row.strategy).filter(Boolean)).size;
       const returnValues = metricRows.map((row) => Number(row.return_pct)).filter(Number.isFinite);
+      const drawdownValues = metricRows.map((row) => Number(row.max_dd_pct)).filter(Number.isFinite);
       const sharpeValues = metricRows.map((row) => Number(row.sharpe)).filter(Number.isFinite);
       const qualityValues = metricRows.map((row) => Number(row.quality_score)).filter(Number.isFinite);
       const avg = (values) => values.length
         ? values.reduce((sum, value) => sum + value, 0) / values.length
         : 0;
+      const median = (values) => {
+        if (!values.length) return 0;
+        const sorted = [...values].sort((left, right) => left - right);
+        const middle = Math.floor(sorted.length / 2);
+        return sorted.length % 2
+          ? sorted[middle]
+          : (sorted[middle - 1] + sorted[middle]) / 2;
+      };
       const strategyNode = document.getElementById("bt-strategy");
       const countNode = document.getElementById("bt-count");
       const bestQualityNode = document.getElementById("bt-best-quality");
       const avgReturnNode = document.getElementById("bt-avg-return");
+      const medianReturnNode = document.getElementById("bt-median-return");
+      const medianDrawdownNode = document.getElementById("bt-median-drawdown");
       const avgSharpeNode = document.getElementById("bt-avg-sharpe");
       if (strategyNode) {
         strategyNode.textContent = strategyCount > 1 ? `${strategyCount} strategies` : (rows[0]?.strategy || "Running");
@@ -5786,6 +5808,12 @@
       }
       if (avgReturnNode) {
         avgReturnNode.textContent = `${avg(returnValues).toFixed(2)}%`;
+      }
+      if (medianReturnNode) {
+        medianReturnNode.textContent = `${median(returnValues).toFixed(2)}%`;
+      }
+      if (medianDrawdownNode) {
+        medianDrawdownNode.textContent = `${median(drawdownValues).toFixed(2)}%`;
       }
       if (avgSharpeNode) {
         avgSharpeNode.textContent = avg(sharpeValues).toFixed(2);
@@ -6400,6 +6428,14 @@
         document.getElementById("bt-count").textContent = String(data.summary?.count || 0);
         document.getElementById("bt-best-quality").textContent = Number(data.summary?.best_quality || 0).toFixed(2);
         document.getElementById("bt-avg-return").textContent = `${Number(data.summary?.avg_return || 0).toFixed(2)}%`;
+        const medianReturnNode = document.getElementById("bt-median-return");
+        if (medianReturnNode) {
+          medianReturnNode.textContent = `${Number(data.summary?.median_return || 0).toFixed(2)}%`;
+        }
+        const medianDrawdownNode = document.getElementById("bt-median-drawdown");
+        if (medianDrawdownNode) {
+          medianDrawdownNode.textContent = `${Number(data.summary?.median_max_dd || 0).toFixed(2)}%`;
+        }
         document.getElementById("bt-avg-sharpe").textContent = Number(data.summary?.avg_sharpe || 0).toFixed(2);
         setBacktestStructureData({
           summaries: data.strategy_summaries,

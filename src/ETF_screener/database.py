@@ -504,11 +504,10 @@ class ETFDatabase:
         # Sort back to ascending for technical analysis
         df_raw = df_raw.sort_values("date").reset_index(drop=True)
 
-        # Check for "zombie" tickers: return empty if 2+ days have 0 volume in the LATEST data
-        # (Only check the last 30 days of data retrieved to avoid penalizing history)
-        df_check = df_raw.tail(30)
-        if (df_check["volume"] == 0).sum() >= 2:
-            return pd.DataFrame()
+        # Do not reject a ticker solely because it has a few zero-volume days.
+        # Thinly traded ETFs can legitimately have gaps while still providing
+        # valid OHLC history. Liquidity/inactivity filtering belongs to the
+        # universe-selection layer, not this generic historical-data accessor.
 
         # Ensure we don't have duplicates before renaming
         df = df_raw.drop_duplicates(subset=["date"]).copy()

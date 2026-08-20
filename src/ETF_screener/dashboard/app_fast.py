@@ -799,6 +799,12 @@ def _backtest_strategy_summary_from_frame(
     avg_return = _finite_number(
         return_series.mean() if not return_series.empty else 0.0
     )
+    median_return = _finite_number(
+        return_series.median() if not return_series.empty else 0.0
+    )
+    median_max_dd = _finite_number(
+        max_dd_series.median() if not max_dd_series.empty else 0.0
+    )
     avg_sharpe = _finite_number(
         sharpe_series.mean() if not sharpe_series.empty else 0.0
     )
@@ -847,6 +853,8 @@ def _backtest_strategy_summary_from_frame(
         "quality_score": round(best_quality, 2),
         "avg_quality_score": round(avg_quality, 2),
         "return_pct": round(avg_return, 2),
+        "median_return_pct": round(median_return, 2),
+        "median_max_dd_pct": round(median_max_dd, 2),
         "sharpe": round(avg_sharpe, 2),
         "win_rate_pct": round(avg_win_rate, 2),
         "profit_factor": round(avg_profit_factor, 2),
@@ -3894,6 +3902,8 @@ async def backtest_view(
                 "count": 0,
                 "best_quality": 0.0,
                 "avg_return": 0.0,
+                "median_return": 0.0,
+                "median_max_dd": 0.0,
                 "avg_sharpe": 0.0,
             },
             "strategy_profile": structure_profile,
@@ -3987,6 +3997,8 @@ async def backtest_view(
                 "count": 0,
                 "best_quality": 0.0,
                 "avg_return": 0.0,
+                "median_return": 0.0,
+                "median_max_dd": 0.0,
                 "avg_sharpe": 0.0,
             },
             "strategy_profile": structure_profile,
@@ -4106,6 +4118,12 @@ async def backtest_view(
             "avg_return": round(
                 float(_trade_rows_for_summary(df)["Return (%)"].mean()), 2
             ),
+            "median_return": round(
+                float(_trade_rows_for_summary(df)["Return (%)"].median()), 2
+            ),
+            "median_max_dd": round(
+                float(_trade_rows_for_summary(df)["Max DD (%)"].median()), 2
+            ),
             "avg_sharpe": round(float(_trade_rows_for_summary(df)["Sharpe"].mean()), 2),
             "trades": _trade_count_for_summary(df),
         },
@@ -4163,6 +4181,8 @@ async def backtest_matrix_view(
                 "ticker_count": 0,
                 "best_quality": 0.0,
                 "avg_return": 0.0,
+                "median_return": 0.0,
+                "median_max_dd": 0.0,
                 "avg_sharpe": 0.0,
             },
             "rows": [],
@@ -4938,6 +4958,22 @@ async def backtest_matrix_view(
                 ),
                 2,
             ),
+            "median_return": round(
+                _finite_number(
+                    _trade_rows_for_summary(df)["Return (%)"].median()
+                    if not df.empty
+                    else 0.0
+                ),
+                2,
+            ),
+            "median_max_dd": round(
+                _finite_number(
+                    _trade_rows_for_summary(df)["Max DD (%)"].median()
+                    if not df.empty
+                    else 0.0
+                ),
+                2,
+            ),
             "avg_sharpe": round(
                 _finite_number(
                     _trade_rows_for_summary(df)["Sharpe"].mean()
@@ -5154,6 +5190,31 @@ async def get_chart(
         except (TypeError, ValueError, json.JSONDecodeError):
             logger.warning("Ignoring malformed ema_overlay_specs query parameter")
 
+    def _atr_stop_trace(frame: pd.DataFrame) -> dict:
+        """Return a long-position stop guide at close minus two ATRs."""
+        local_df = frame.copy()
+        dates = pd.to_datetime(local_df["Date"], errors="coerce")
+        high = pd.to_numeric(local_df["High"], errors="coerce")
+        low = pd.to_numeric(local_df["Low"], errors="coerce")
+        close = pd.to_numeric(local_df["Close"], errors="coerce")
+        previous_close = close.shift(1)
+        true_range = pd.concat(
+            [high - low, (high - previous_close).abs(), (low - previous_close).abs()],
+            axis=1,
+        ).max(axis=1)
+        atr = true_range.rolling(window=14, min_periods=14).mean()
+        stop = close - (2.0 * atr)
+        return {
+            "type": "scatter",
+            "mode": "lines",
+            "name": "Stop Loss (Close - 2×ATR)",
+            "x": [value.isoformat() if pd.notna(value) else None for value in dates],
+            "y": [float(value) if pd.notna(value) else None for value in stop],
+            "line": {"color": "#dc2626", "width": 2, "dash": "dash"},
+            "connectgaps": False,
+            "hovertemplate": "Stop: %{y:.2f}<extra>2× ATR stop</extra>",
+        }
+
     def _fallback_plot_payload(frame: pd.DataFrame) -> dict:
         """Build a minimal chart payload when Plotly is unavailable."""
         local_df = frame.copy()
@@ -5171,6 +5232,7 @@ async def get_chart(
                 "y": close,
             }
         ]
+        data.append(_atr_stop_trace(local_df))
 
         for candidate in ("Supertrend", "supertrend", "st", "ST_Lower", "st_lower"):
             if candidate in local_df.columns:
@@ -5245,6 +5307,8 @@ async def get_chart(
 
         fig_json = fig.to_json()
         fig_dict = json.loads(fig_json)
+        fig_dict.setdefault("data", []).append(_atr_stop_trace(df))
+        fig_json = json.dumps(fig_dict, default=str)
         return {
             "ticker": ticker,
             "strategy_name": strategy or "Custom Strategy",

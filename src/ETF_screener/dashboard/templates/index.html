@@ -944,11 +944,60 @@
   <div id="dashboard-tabs" class="flex space-x-3 bg-slate-800 px-6 pt-3 pb-2 border-b border-slate-700">
     <button id="tab-btn-screener" class="tab-btn active bg-rose-600 text-white font-bold py-2.5 px-5 rounded-lg border border-rose-400/50 shadow-sm"
       onclick="showTab('screener')">Screener</button>
+    <button id="tab-btn-backtest" class="tab-btn bg-emerald-700 text-white font-bold py-2.5 px-5 rounded-lg border border-emerald-400/40 shadow-sm"
+      onclick="showTab('backtest')">Backtester</button>
     <button id="tab-btn-playbook" class="tab-btn bg-violet-700 text-white font-bold py-2.5 px-5 rounded-lg border border-violet-400/40 shadow-sm"
       onclick="showTab('playbook')">Graph Playground</button>
   </div>
 
   <!-- Tab Content Sections -->
+  <div id="tab-backtest" class="hidden">
+    <div class="p-6 space-y-5">
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">Backtester</h2>
+          <p class="text-sm text-slate-500">Backtest the selected screener preset. Entry age limits apply only to finding entries; exits happen afterward.</p>
+        </div>
+        <div class="flex flex-wrap items-end gap-2">
+          <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Preset
+            <select id="backtest-preset-select" onchange="applyBacktestPreset(this.value)" class="mt-1 block min-w-[190px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+              <option value="">Choose preset</option>
+            </select>
+          </label>
+          <label class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Save as
+            <input id="backtest-preset-name" type="text" placeholder="Preset name" class="mt-1 block w-36 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
+          </label>
+          <button type="button" onclick="saveBacktestPreset()" class="rounded-lg border border-rose-300 bg-rose-600 px-3 py-2 text-sm font-bold text-white">Save Preset</button>
+          <button id="bt-source-editor" type="button" onclick="setBacktestSourceMode('editor')" class="rounded-lg border border-indigo-300 bg-indigo-600 px-3 py-2 text-sm font-bold text-white">Use Entry / Exit</button>
+          <button id="backtest-run-btn" type="button" onclick="loadBacktestMetrics()" class="rounded-lg border border-emerald-500/60 bg-emerald-600 px-4 py-2 text-sm font-bold text-white">Run Backtest</button>
+        </div>
+      </div>
+      <div class="grid gap-3 md:grid-cols-2">
+        <label class="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Entry DSL
+          <textarea id="backtest-entry-preview" oninput="syncBacktestDslEditors()" placeholder="Enter the strategy entry DSL..." class="mt-1 min-h-[130px] w-full rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-3 font-mono text-sm text-emerald-950"></textarea>
+        </label>
+        <label class="text-[10px] font-bold uppercase tracking-wide text-rose-700">Exit DSL
+          <textarea id="backtest-exit-preview" oninput="syncBacktestDslEditors()" placeholder="Enter the strategy exit DSL..." class="mt-1 min-h-[130px] w-full rounded-lg border border-rose-300 bg-rose-50 px-3 py-3 font-mono text-sm text-rose-950"></textarea>
+        </label>
+      </div>
+      <div id="backtest-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">Choose a preset, then run the backtest.</div>
+      <div id="backtest-content" class="hidden space-y-5">
+        <div class="grid grid-cols-2 gap-3 md:grid-cols-7">
+          <div class="rounded-xl border-t-4 border-emerald-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Strategy</div><div id="bt-strategy" class="mt-2 font-bold text-slate-800">-</div></div>
+          <div class="rounded-xl border-t-4 border-indigo-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Candidates</div><div id="bt-count" class="mt-2 font-bold text-slate-800">0</div></div>
+          <div class="rounded-xl border-t-4 border-amber-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Best Quality</div><div id="bt-best-quality" class="mt-2 font-bold text-slate-800">0.00</div></div>
+          <div class="rounded-xl border-t-4 border-rose-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Avg Return</div><div id="bt-avg-return" class="mt-2 font-bold text-slate-800">0.00%</div></div>
+          <div class="rounded-xl border-t-4 border-fuchsia-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Median Return</div><div id="bt-median-return" class="mt-2 font-bold text-slate-800">0.00%</div></div>
+          <div class="rounded-xl border-t-4 border-orange-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Median Drawdown</div><div id="bt-median-drawdown" class="mt-2 font-bold text-slate-800">0.00%</div></div>
+          <div class="rounded-xl border-t-4 border-cyan-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Avg Sharpe</div><div id="bt-avg-sharpe" class="mt-2 font-bold text-slate-800">0.00</div></div>
+        </div>
+        <div id="backtest-chart" class="h-[360px] w-full"></div>
+        <div id="backtest-structure-panel" class="hidden"><div id="backtest-structure-chart" class="h-[360px] w-full"></div></div>
+        <div id="backtest-behavior-panel" class="hidden"><div id="backtest-behavior-chart" class="h-[360px] w-full"></div></div>
+        <table class="min-w-full text-sm"><tbody id="backtest-table-body" class="divide-y divide-slate-100"></tbody></table>
+      </div>
+    </div>
+  </div>
   <div id="tab-playbook" class="hidden">
     <div class="p-6 space-y-6">
       <div class="flex items-start justify-between gap-4">
@@ -1173,7 +1222,7 @@ ema_close(200)_slope GT 0</textarea>
             <div class="screen-range-axis"><span>0</span><span>100</span></div>
           </div>
           </div>
-          <div class="screen-timeline-stack xl:col-start-1 xl:row-start-1">
+          <div class="screen-timeline-stack hidden" aria-hidden="true">
             <div class="flex items-start justify-between gap-3">
               <div>
                 <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-500">Timeline Stack</div>

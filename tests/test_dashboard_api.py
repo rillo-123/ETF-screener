@@ -80,7 +80,8 @@ def test_tab_bar_visible():
     assert ">Graph Playground<" in html
     assert ">Shortlist<" not in html
     assert ">Query<" not in html
-    assert ">Backtester<" not in html
+    assert ">Backtester<" in html
+    assert 'id="bt-median-return"' in html
     assert 'id="tab-btn-screener" class="tab-btn active' in html
     assert 'id="tab-query"' not in html
     assert 'id="screen-preset-select"' in html
@@ -100,8 +101,8 @@ def test_tab_bar_visible():
     assert ">Swarm Lab<" not in html
     assert ">Churner<" not in html
     assert ">Discovery<" not in html
-    assert 'id="backtest-chart"' not in html
-    assert 'id="backtest-table-body"' not in html
+    assert 'id="backtest-chart"' in html
+    assert 'id="backtest-table-body"' in html
     assert 'id="backtest-race-fuel"' not in html
     assert 'id="shortlist-grid"' not in html
     assert 'id="tab-btn-query"' not in html
@@ -1225,7 +1226,11 @@ def test_backtest_matrix_returns_race_payload(monkeypatch):
     )
     ticker_events = [event for event in events if event["type"] == "ticker_done"]
     assert ticker_events
-    first_ticker = ticker_events[0]["payload"]
+    first_ticker = next(
+        event["payload"]
+        for event in ticker_events
+        if event["payload"].get("strategy") == "buy_the_dip"
+    )
     assert first_ticker["strategy"] == "buy_the_dip"
     assert first_ticker["ticker"] == "AAA.DE"
     assert first_ticker["scored"] is True
@@ -2148,6 +2153,14 @@ def test_get_chart_valid_ticker():
         for trace in fig["data"]
     )
     assert trace_has_data, "Chart traces are present but contain no data points"
+
+    atr_stop_traces = [
+        trace
+        for trace in fig["data"]
+        if str(trace.get("name", "")) == "Stop Loss (Close - 2×ATR)"
+    ]
+    assert len(atr_stop_traces) == 1
+    assert atr_stop_traces[0]["line"]["dash"] == "dash"
 
     st_present = any("ST " in str(trace.get("name", "")) for trace in fig["data"])
     print(f"\nSupertrend indicator found: {st_present}")

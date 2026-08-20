@@ -1,108 +1,71 @@
 {
-  "active_name": "ha_swing_with_exit_001",
+  "active_name": "ha_new_exit3",
   "presets": [
     {
-      "name": "RSI-LT-30",
-      "filters": {
-        "lookback_days": 30,
-        "rsi_event_enabled": true,
-        "rsi_event_age": 30,
-        "rsi_cross_value": 30.0,
-        "rsi_cross_mode": "cross_down",
-        "volume_range": {"min": 0.0, "max": 20000000.0},
-        "ema_slope_200": "any"
-      }
-    },
-    {
-      "name": "supertrend",
-      "filters": {"lookback_days": 30, "supertrend_event_enabled": true, "supertrend_event_age": 30}
-    },
-    {
-      "name": "stoch",
-      "filters": {"lookback_days": 30, "stoch_event_enabled": true, "stoch_event_age": 30}
-    },
-    {
-      "name": "ema",
-      "filters": {"lookback_days": 30, "ema_relationship_enabled": true, "ema_relationship_age": 30}
-    },
-    {
-      "name": "rsi-down-nasdaq",
-      "filters": {"lookback_days": 30, "rsi_event_enabled": true, "rsi_event_age": 30}
-    },
-    {
-      "name": "rsi-crossdown",
-      "filters": {
-        "lookback_days": 30,
-        "rsi_event_enabled": true,
-        "rsi_event_age": 30,
-        "rsi_cross_value": 40.0,
-        "rsi_cross_mode": "cross_down",
-        "volume_range": {"min": 0.0, "max": 20000000.0},
-        "ema_slope_200": "any"
-      }
-    },
-    {
       "dsl": "candle_age LTE 5\nperiod_1d\nha_close GT ema_high(20)\nAND\nha_open GT ema_low(20)\nAND\nrsi(14) GT 50\nAND\nema_close(200)_slope GT 0",
-      "filters": {},
       "name": "winner-2"
     },
     {
       "dsl": "candle_age LTE 5\nperiod_1d\nha_close GT ema_high(20)\nAND\nha_open GT ema_low(20)\nAND\nrsi(14) GT 50\nAND\nema_close(200)_slope GT 0",
-      "filters": {},
       "name": "winner-3"
     },
     {
       "dsl": "candle_age LTE 5\nperiod_1d\nha_close GT ema_high(20)\nAND\nha_open GT ema_low(20)\nAND\nrsi(14) GT 50\nAND\nema_close(200)_slope GT 0",
-      "filters": {},
       "name": "winner-4"
     },
     {
       "dsl": "candle_age LTE 5\nperiod_1d\nha_close GT ema_high(20)\nAND\nha_open GT ema_low(20)\nAND\nrsi(14) GT 50\nAND\nema_close(200)_slope GT 0",
-      "filters": {},
       "name": "winner-5"
     },
     {
       "dsl": "candle_age LTE 4\nperiod_1d\nha_close GT ema_high(20)\nAND\nha_open GT ema_low(20)\nAND\nrsi(14) GT 50\nAND\nema_close(200)_slope GT 0",
-      "filters": {},
       "name": "winner-6"
     },
     {
       "dsl": "candle_age LTE 0\nperiod_1d\nha_close GT ema_high(20)\nAND\nha_open GT ema_low(20)\nAND\nrsi(14) GT 50\nAND\nema_close(200)_slope GT 0",
-      "filters": {},
       "name": "candle_zero"
     },
     {
       "dsl": "candle_age LTE 10\nperiod_1d\nrsi(14) GT 50\nAND\nema_close(200)_slope GT 0",
-      "filters": {},
       "name": "candle_ten"
     },
     {
       "dsl": "candle_age LTE 0\nperiod_1d\nha_open GT ema_low(20) AND ha_open LT ema_high(20) AND ha_close GT ema_high(20) AND ha_close GT ha_open\nAND\nrsi(14) GT 50 AND ema_close(200)_slope GT 0\nAND\nvolume GT vol_ema_20",
-      "filters": {},
       "name": "new-plan"
     },
     {
       "dsl": "candle_age LTE 0\nperiod_1d\nha_open GT ema_low(20) AND ha_open LT ema_high(20) AND ha_close GT ema_high(20) AND ha_close GT ha_open\nAND\nrsi(14) GT 50 AND ema_close(200)_slope GT 0\nAND\nvolume GT vol_ema_20 * 1.5",
-      "filters": {},
       "name": "new-plan2"
     },
     {
       "dsl": "candle_age LTE 0\nperiod_1d\nha_open GT ema_low(20) AND ha_open LT ema_high(20) AND ha_close GT ema_high(20) AND ha_close GT ha_open\nAND\nrsi(14) GT 50 AND ema_close(200)_slope GT 0\nAND\nvolume GT vol_ema_20 * 1.5",
-      "filters": {},
       "name": "ha_candle_sweden"
     },
     {
       "dsl": "candle_age LTE 0\nperiod_1d\nha_open GT ema_low(20) AND ha_open LT ema_high(20) AND ha_close GT ema_high(20) AND ha_close GT ha_open\nAND\nrsi(14) GT 50 AND ema_close(200)_slope GT 0 AND rsi_14_slope GT 0\nAND\nvolume GT vol_ema_20 * 1.5",
-      "filters": {},
       "name": "ha_candle_sweden_2"
     },
     {
       "dsl": "candle_age LTE 0\nperiod_1d\nha_open GT ema_low(20) AND ha_open LT ema_high(20) AND ha_close GT ema_high(20) AND ha_close GT ha_open\nAND\nrsi(14) GT 50 AND ema_close(200)_slope GT 0 AND rsi_14_slope GT 0\nAND\nvolume GT vol_ema_20 * 1.5",
       "exit_dsl": "ha_close LT ha_open",
-      "filters": {},
       "name": "ha_swing_with_exit_001"
+    },
+    {
+      "dsl": "candle_age LTE 0\nperiod_1d\nha_open GT ema_low(20) AND ha_open LT ema_high(20) AND ha_close GT ema_high(20) AND ha_close GT ha_open\nAND\nrsi(14) GT 50 AND ema_close(200)_slope GT 0 AND rsi_14_slope GT 0\nAND\nvolume GT vol_ema_20 * 1.5",
+      "exit_dsl": "ha_close LT ha_open\nAND\nha_close GT ema_low(20)\nAND\nha_low LTE ema_low(20)",
+      "name": "ha_new_exit"
+    },
+    {
+      "dsl": "candle_age LTE 0\nperiod_1d\nha_open GT ema_low(20) AND ha_open LT ema_high(20) AND ha_close GT ema_high(20) AND ha_close GT ha_open\nAND\nrsi(14) GT 50 AND ema_close(200)_slope GT 0 AND rsi_14_slope GT 0\nAND\nvolume GT vol_ema_20 * 2.0",
+      "exit_dsl": "ha_close LT ha_open\nAND\nha_close GT ema_low(20)\nAND\nha_low LTE ema_low(20)",
+      "name": "ha_new_exit_2"
+    },
+    {
+      "dsl": "candle_age LTE 0\nperiod_1d\nha_open GT ema_low(20) AND ha_open LT ema_high(20) AND ha_close GT ema_high(20) AND ha_close GT ha_open\nAND\nrsi(14) GT 50 AND ema_close(200)_slope GT 0 AND rsi_14_slope GT 0\nAND\nvolume GT vol_ema_20 * 1.5\nAND \nema_close_20 GTE 10",
+      "exit_dsl": "ha_close LT ha_open\nAND\nha_close GT ema_low(20)\nAND\nha_low LTE ema_low(20)",
+      "name": "ha_new_exit3"
     }
   ],
   "schema_version": "screen_presets_v1",
-  "updated_at": "2026-08-16T19:37:46.696480+00:00"
+  "updated_at": "2026-08-18T20:02:25.363961+00:00"
 }
