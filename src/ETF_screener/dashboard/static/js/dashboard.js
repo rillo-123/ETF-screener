@@ -7571,7 +7571,7 @@
         return { ready: false, reason: "Enter a screening script first" };
       }
 
-      if (/^\s*strategy\b/i.test(text)) {
+      if (/^\s*(?:universe|strategy)\b/i.test(text)) {
         let braces = 0;
         let parentheses = 0;
         for (const char of text) {

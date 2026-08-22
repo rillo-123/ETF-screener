@@ -92,6 +92,38 @@ The precedence rule is simple: the strategy's concrete source wins;
 The host should alert the user if `universe.selected` is used without a current
 GUI selection.
 
+### Named liquidity universes
+
+Liquidity is an eligibility property of an instrument, not a signal on the
+candle that happens to match a strategy. Define it once at program level, then
+use the resulting named universe from one or more strategies:
+
+```dsl
+universe xetra_liquid {
+  from universe.xetra
+  require liquidity {
+    avg_turnover(20) >= 1_000_000
+    median_turnover(20) >= 500_000
+    active_sessions(20) >= 15
+    active_sessions(5) >= 3
+  }
+}
+
+strategy ha_breakout {
+  source universe.xetra_liquid
+  candles timeframe "1d" as heikin_ashi
+  scan latest
+
+  match when candle => candle.is_green && candle.rsi(14) > 50
+}
+```
+
+`turnover` is `close × volume` in the listing currency. The host evaluates all
+`require liquidity` clauses from finalized OHLCV history before it evaluates a
+strategy. A ticker must satisfy every clause. This deliberately avoids putting
+an instrument-quality rule inside `match when`, which must remain a predicate
+about one focal candle.
+
 `as heikin_ashi` means that `open`, `high`, `low`, `close`, colour, body, and
 wicks all refer to the transformed candle that is drawn. There is no mix of
 regular OHLC values and Heikin-Ashi visual properties within the rule.

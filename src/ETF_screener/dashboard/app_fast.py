@@ -3457,7 +3457,7 @@ async def screen(
             )
             return payload
 
-        if re.match(r"^\s*strategy\b", content, re.IGNORECASE):
+        if re.match(r"^\s*(?:universe|strategy)\b", content, re.IGNORECASE):
             program = DSLXProgramInterpreter(content)
             selected_tickers = filter_tickers_by_exchange_and_list(
                 list(_cached_screen_universe(db_path, latest_market_date)),
@@ -3468,13 +3468,21 @@ async def screen(
             source_tickers: dict[str, list[str]] = {
                 "universe.selected": selected_tickers,
             }
-            for definition in program.program.strategies:
-                if definition.source == "universe.selected":
+            custom_universes = {
+                definition.name for definition in program.program.universes
+            }
+            declared_sources = [
+                definition.source for definition in program.program.universes
+            ] + [definition.source for definition in program.program.strategies]
+            for source in declared_sources:
+                if source == "universe.selected":
                     continue
-                source_name = definition.source.removeprefix("universe.")
+                source_name = source.removeprefix("universe.")
+                if source_name in custom_universes:
+                    continue
                 if source_name not in {"etfs", "xetra", "nasdaq", "sweden"}:
-                    raise DSLXError(f"Unsupported dashboard source '{definition.source}'")
-                source_tickers[definition.source] = (
+                    raise DSLXError(f"Unsupported dashboard source '{source}'")
+                source_tickers[source] = (
                     list(_cached_screen_universe(db_path, latest_market_date))
                     if source_name == "etfs"
                     else filter_tickers_by_exchange_and_list(
@@ -5275,7 +5283,7 @@ async def get_chart(
     # legacy scripts express the same intent as ``ema_low(20)``. Resolve DSLX
     # calls here so the chart receives explicit overlay specs even when the
     # user has hidden the generic control-panel EMAs.
-    if re.match(r"^\s*strategy\b", strategy_content, re.IGNORECASE):
+    if re.match(r"^\s*(?:universe|strategy)\b", strategy_content, re.IGNORECASE):
         dslx_ema_specs = [
             {"source": source.lower(), "period": int(period)}
             for source, period in re.findall(

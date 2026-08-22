@@ -79,7 +79,7 @@ class Token:
 
 _TOKEN_RE = re.compile(
     r"\s+|//[^\n]*|#[^\n]*|"
-    r"(?P<number>\d+(?:\.\d+)?)|"
+    r"(?P<number>\d+(?:_\d{3})*(?:\.\d+)?)|"
     r"(?P<string>\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')|"
     r"(?P<operator>=>|&&|\|\||>=|<=|==|!=|>|<|[=+\-*/!])|"
     r"(?P<punct>[{}()\[\].,:;])|"
@@ -159,7 +159,27 @@ class Strategy:
 
 
 @dataclass(frozen=True)
+class LiquidityClause:
+    """One lookback-based liquidity condition for a named universe."""
+
+    metric: str
+    sessions: int
+    operator: str
+    value: float
+
+
+@dataclass(frozen=True)
+class UniverseDefinition:
+    """A reusable, pre-strategy universe narrowed by market eligibility."""
+
+    name: str
+    source: str
+    liquidity: tuple[LiquidityClause, ...]
+
+
+@dataclass(frozen=True)
 class Program:
+    universes: tuple[UniverseDefinition, ...]
     strategies: tuple[Strategy, ...]
     runs: tuple[tuple[str, str], ...]
     merges: tuple[tuple[str, str, str], ...]
@@ -267,12 +287,17 @@ class _Parser:
         )
 
     def parse_program(self) -> Program:
+        universes: list[UniverseDefinition] = []
         strategies: list[Strategy] = []
         runs: list[tuple[str, str]] = []
         merges: list[tuple[str, str, str]] = []
         shows: list[str] = []
         while self.current.kind != "eof":
             keyword = self.current.value.lower()
+            if keyword == "universe":
+                universes.append(self.parse_universe())
+                self.accept(";")
+                continue
             if keyword == "strategy":
                 strategies.append(self.parse_strategy(require_eof=False))
                 self.accept(";")
@@ -301,7 +326,65 @@ class _Parser:
                 self.expect(")")
                 shows.append(list_name)
             self.accept(";")
-        return Program(tuple(strategies), tuple(runs), tuple(merges), tuple(shows))
+        names = [universe.name for universe in universes]
+        if len(names) != len(set(names)):
+            raise DSLXSyntaxError("Universe names must be unique within a program")
+        return Program(
+            tuple(universes), tuple(strategies), tuple(runs), tuple(merges), tuple(shows)
+        )
+
+    def parse_universe(self) -> UniverseDefinition:
+        """Parse a top-level, data-eligibility universe declaration."""
+        if self.expect_identifier().lower() != "universe":
+            raise DSLXSyntaxError("Expected a universe declaration")
+        name = self.expect_identifier()
+        self.expect("{")
+        source: str | None = None
+        liquidity: list[LiquidityClause] = []
+        while not self.accept("}"):
+            keyword = self.expect_identifier().lower()
+            if keyword == "from":
+                if source is not None:
+                    raise DSLXSyntaxError("A universe can define only one source")
+                source = self.parse_dotted_name()
+            elif keyword == "require":
+                if self.expect_identifier().lower() != "liquidity":
+                    raise DSLXSyntaxError("A universe requirement must be 'liquidity'")
+                self.expect("{")
+                while not self.accept("}"):
+                    metric = self.expect_identifier().lower()
+                    if metric not in {"avg_turnover", "median_turnover", "active_sessions"}:
+                        raise DSLXSyntaxError(
+                            "liquidity supports avg_turnover, median_turnover, and active_sessions"
+                        )
+                    self.expect("(")
+                    if self.current.kind != "number" or "." in self.current.value:
+                        raise DSLXSyntaxError("liquidity lookback must be a positive integer")
+                    sessions = int(self.current.value)
+                    self.index += 1
+                    if sessions < 1:
+                        raise DSLXSyntaxError("liquidity lookback must be positive")
+                    self.expect(")")
+                    if self.current.value not in {">", ">=", "<", "<=", "==", "!="}:
+                        raise DSLXSyntaxError("liquidity condition requires a comparison operator")
+                    operator = self.current.value
+                    self.index += 1
+                    if self.current.kind != "number":
+                        raise DSLXSyntaxError("liquidity condition requires a numeric threshold")
+                    value = float(self.current.value)
+                    self.index += 1
+                    if value < 0:
+                        raise DSLXSyntaxError("liquidity threshold must be non-negative")
+                    liquidity.append(LiquidityClause(metric, sessions, operator, value))
+                    self.accept(";")
+            else:
+                raise DSLXSyntaxError(f"Unknown universe section '{keyword}'")
+            self.accept(";")
+        if source is None:
+            raise DSLXSyntaxError("A universe requires 'from universe.<source>'")
+        if not liquidity:
+            raise DSLXSyntaxError("A universe requires at least one liquidity condition")
+        return UniverseDefinition(name, source, tuple(liquidity))
 
     def parse_dotted_name(self) -> str:
         parts = [self.expect_identifier()]
@@ -897,6 +980,47 @@ class DSLXInterpreter:
             return False
 
 
+def _liquidity_clause_matches(frame: pd.DataFrame, clause: LiquidityClause) -> bool:
+    """Evaluate one universe-level liquidity clause from finalized OHLCV bars."""
+    close_column = next((name for name in ("Close", "close") if name in frame), None)
+    volume_column = next((name for name in ("Volume", "volume") if name in frame), None)
+    if close_column is None or volume_column is None:
+        return False
+    close = pd.to_numeric(frame[close_column], errors="coerce").tail(clause.sessions)
+    volume = pd.to_numeric(frame[volume_column], errors="coerce").tail(clause.sessions)
+    if len(close) < clause.sessions or len(volume) < clause.sessions:
+        return False
+    turnover = (close * volume).replace([np.inf, -np.inf], np.nan)
+    if clause.metric == "avg_turnover":
+        observed = float(turnover.mean()) if turnover.notna().all() else float("nan")
+    elif clause.metric == "median_turnover":
+        observed = float(turnover.median()) if turnover.notna().all() else float("nan")
+    else:
+        observed = float(((volume > 0) & close.notna() & volume.notna()).sum())
+    if not np.isfinite(observed):
+        return False
+    comparisons = {
+        ">": observed > clause.value,
+        ">=": observed >= clause.value,
+        "<": observed < clause.value,
+        "<=": observed <= clause.value,
+        "==": observed == clause.value,
+        "!=": observed != clause.value,
+    }
+    return comparisons[clause.operator]
+
+
+def _filter_universe(
+    frames: dict[str, pd.DataFrame], definition: UniverseDefinition
+) -> dict[str, pd.DataFrame]:
+    """Keep only instruments that meet every declared eligibility condition."""
+    return {
+        ticker: frame
+        for ticker, frame in frames.items()
+        if all(_liquidity_clause_matches(frame, clause) for clause in definition.liquidity)
+    }
+
+
 class DSLXProgramInterpreter:
     """Execute a parsed DSLX module against host-provided universes."""
 
@@ -913,13 +1037,23 @@ class DSLXProgramInterpreter:
         universes: dict[str, dict[str, pd.DataFrame]] | None = None,
     ) -> dict[str, MatchList]:
         """Run program bindings; hosts render the lists named by ``show()``."""
-        universes = universes or {}
+        available_universes = dict(universes or {})
+        available_universes["universe.selected"] = selected
+        for definition in self.program.universes:
+            source_frames = available_universes.get(definition.source)
+            if source_frames is None:
+                raise DSLXEvaluationError(
+                    f"Universe '{definition.source}' required by '{definition.name}' is unavailable"
+                )
+            available_universes[f"universe.{definition.name}"] = _filter_universe(
+                source_frames, definition
+            )
         values: dict[str, MatchList] = {}
         for target, strategy_name in self.program.runs:
             strategy = self.strategies.get(strategy_name)
             if strategy is None:
                 raise DSLXEvaluationError(f"Unknown strategy '{strategy_name}'")
-            frames = selected if strategy.source == "universe.selected" else universes.get(strategy.source)
+            frames = available_universes.get(strategy.source)
             if frames is None:
                 raise DSLXEvaluationError(f"Universe '{strategy.source}' is unavailable")
             runner = object.__new__(DSLXInterpreter)

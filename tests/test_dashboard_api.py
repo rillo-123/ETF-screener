@@ -449,6 +449,51 @@ def test_screen_endpoint_uses_control_screening_when_no_strategy(monkeypatch, tm
     assert captured["filters"]["stoch_event_age"] == 10
 
 
+def test_screen_endpoint_applies_dslx_named_liquidity_universe(monkeypatch):
+    liquid = _make_fake_ohlcv("LIQ.DE", n=30).assign(Volume=20_000.0)
+    thin = _make_fake_ohlcv("THIN.DE", n=30).assign(Volume=100.0)
+
+    class _FakeDb:
+        db_path = "fake.db"
+
+        def get_etf_data(self, ticker):
+            return {"LIQ.DE": liquid, "THIN.DE": thin}[ticker]
+
+    monkeypatch.setattr(app_fast, "get_db", lambda: _FakeDb())
+    monkeypatch.setattr(app_fast, "_latest_market_date_for", lambda _db: "2026-07-08")
+    monkeypatch.setattr(
+        app_fast, "_cached_screen_universe", lambda *_args: ("LIQ.DE", "THIN.DE")
+    )
+    monkeypatch.setattr(
+        app_fast,
+        "filter_tickers_by_exchange_and_list",
+        lambda tickers, **_kwargs: list(tickers),
+    )
+    monkeypatch.setattr(app_fast, "_cached_etf_metadata_map", lambda: {})
+
+    response = client.get(
+        "/api/screen",
+        params={
+            "dsl_content": """
+                universe xetra_liquid {
+                  from universe.xetra
+                  require liquidity { avg_turnover(20) >= 1000000 active_sessions(20) >= 15 }
+                }
+                strategy eligible {
+                  source universe.xetra_liquid
+                  scan latest
+                  match when candle => candle.close > 0
+                }
+                let matches = eligible.run()
+                matches.show()
+            """,
+        },
+    )
+
+    assert response.status_code == 200
+    assert [item["ticker"] for item in response.json()["matches"]] == ["LIQ.DE"]
+
+
 def test_screen_with_controls_reuses_indicator_history_cache(monkeypatch, tmp_path):
     screener_controls.clear_indicator_history_cache()
     monkeypatch.setattr(

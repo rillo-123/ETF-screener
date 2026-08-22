@@ -212,6 +212,53 @@ def test_dslx_program_runs_selected_universe_and_returns_shown_list():
     assert results["matches"][0].ticker == "AAA"
 
 
+def test_dslx_program_filters_a_named_universe_before_running_strategy():
+    liquid = _candles().assign(Volume=100_000.0)
+    thin = _candles().assign(Volume=[0.0] * 10 + [100.0] * 20)
+    interpreter = DSLXProgramInterpreter(
+        """
+        universe xetra_liquid {
+          from universe.xetra
+          require liquidity {
+            avg_turnover(20) >= 1_000_000
+            median_turnover(20) >= 1_000_000
+            active_sessions(20) >= 15
+            active_sessions(5) >= 3
+          }
+        }
+        strategy green {
+          source universe.xetra_liquid
+          scan latest
+          match when candle => candle.is_green
+        }
+        let matches = green.run()
+        matches.show()
+        """
+    )
+
+    results = interpreter.run(
+        selected={},
+        universes={"universe.xetra": {"LIQ.DE": liquid, "THIN.DE": thin}},
+    )
+
+    assert [match.ticker for match in results["matches"]] == ["LIQ.DE"]
+    definition = interpreter.program.universes[0]
+    assert definition.name == "xetra_liquid"
+    assert definition.source == "universe.xetra"
+    assert definition.liquidity[0].metric == "avg_turnover"
+
+
+def test_dslx_named_universe_rejects_invalid_liquidity_declarations():
+    with pytest.raises(DSLXSyntaxError, match="requires 'from"):
+        parse_program(
+            "universe bad { require liquidity { avg_turnover(20) >= 1 } }"
+        )
+    with pytest.raises(DSLXSyntaxError, match="liquidity supports"):
+        parse_program(
+            "universe bad { from universe.xetra require liquidity { spread(20) >= 1 } }"
+        )
+
+
 def test_heikin_ashi_candle_series_exposes_transformed_visual_geometry():
     frame = pd.DataFrame(
         {
