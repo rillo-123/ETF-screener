@@ -47,6 +47,12 @@ from ETF_screener.market_data_service import (
 )
 from ETF_screener.query_service import ETFQueryService
 from ETF_screener.shortlist_engine import ETFShortlistEngine
+from ETF_screener.ucits_catalogue import (
+    CatalogueError,
+    compare_catalogue,
+    filter_catalogue,
+    load_catalogue,
+)
 from ETF_screener.screener_controls import (
     DEFAULT_MACD_CROSS_MODE,
     DEFAULT_PRICE_EMA_CROSS_MODE,
@@ -5320,6 +5326,57 @@ async def get_chart(
 
         logger.exception("Plotter failed for %s: %s", ticker, e)
         raise HTTPException(status_code=500, detail=f"Plot generation failed: {str(e)}")
+
+
+@app.get("/api/ucits-catalogue")
+async def ucits_catalogue(
+    search: str | None = None,
+    max_ter_pct: float | None = None,
+    asset_class: str | None = None,
+    issuer: str | None = None,
+    distribution_policy: str | None = None,
+    replication: str | None = None,
+    fund_domicile: str | None = None,
+    currency: str | None = None,
+):
+    """Search the curated ETF facts that complement Yahoo market data."""
+    if max_ter_pct is not None and max_ter_pct < 0:
+        raise HTTPException(status_code=422, detail="max_ter_pct must be non-negative")
+    try:
+        funds = filter_catalogue(
+            load_catalogue(),
+            search=search,
+            max_ter_pct=max_ter_pct,
+            asset_class=asset_class,
+            issuer=issuer,
+            distribution_policy=distribution_policy,
+            replication=replication,
+            fund_domicile=fund_domicile,
+            currency=currency,
+        )
+    except CatalogueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"count": len(funds), "funds": funds, "data_source": "curated catalogue"}
+
+
+@app.get("/fund-finder", response_class=HTMLResponse)
+async def fund_finder(request: Request):
+    """Render the simple ETF product-fact browser and comparison view."""
+    return templates.TemplateResponse(
+        request=request,
+        name="fund_finder.html",
+        context={},
+    )
+
+
+@app.get("/api/ucits-catalogue/compare")
+async def ucits_catalogue_compare(tickers: str):
+    """Return consistent ETF facts side by side for selected tickers."""
+    try:
+        funds = compare_catalogue(load_catalogue(), tickers.split(","))
+    except CatalogueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"count": len(funds), "funds": funds, "data_source": "curated catalogue"}
 
 
 @app.get("/api/screen/basic")

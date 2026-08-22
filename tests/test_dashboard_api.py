@@ -166,6 +166,41 @@ def test_query_catalog_endpoint(monkeypatch):
     assert data["tickers"] == ["AAA.DE", "BBB.ST"]
 
 
+def test_ucits_catalogue_endpoint_filters_product_facts():
+    response = client.get(
+        "/api/ucits-catalogue?asset_class=Equity&max_ter_pct=0.22"
+        "&distribution_policy=Accumulating"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["data_source"] == "curated catalogue"
+    assert [fund["ticker"] for fund in data["funds"]] == [
+        "SXR8.DE",
+        "EUNL.DE",
+        "VWCE.DE",
+    ]
+
+
+def test_fund_finder_page_exposes_catalogue_filters_and_comparison():
+    response = client.get("/fund-finder")
+
+    assert response.status_code == 200
+    assert "ETF Fund Finder" in response.text
+    assert 'id="distribution_policy"' in response.text
+    assert "/api/ucits-catalogue/compare" in response.text
+
+
+def test_ucits_catalogue_comparison_endpoint_keeps_requested_order():
+    response = client.get("/api/ucits-catalogue/compare?tickers=VWCE.DE,SXR8.DE")
+
+    assert response.status_code == 200
+    assert [fund["ticker"] for fund in response.json()["funds"]] == [
+        "VWCE.DE",
+        "SXR8.DE",
+    ]
+
+
 def test_query_run_endpoint_reads_price_history_from_service(monkeypatch, tmp_path):
     storage = ParquetStorage(data_dir=str(tmp_path / "parquet"))
     db = app_fast.ETFDatabase(db_path=str(tmp_path / "etfs.db"))

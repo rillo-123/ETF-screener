@@ -48,6 +48,12 @@ The underlying launcher implementations live under `scripts/`.
 Use `.\update-devtools.ps1` to install or upgrade stable VS Code or VS Code Insiders, refresh the matching CLI extensions, and update `pwsh` when winget can manage it. Add `-ForceUpdate` if you want it to push through updatable packages and prompt for elevation when needed.
 Use `.\workflow_milestone.ps1` for the full test/fix/commit flow, and `.\workflow_update_plan_progress.ps1` when you want to stamp the root `plan.md`, prepend notes into the companion `plan/` files, and add a fresh progress entry together.
 
+### ETF Fund Finder (free Yahoo-powered MVP)
+
+Start the dashboard with `run.ps1`, then open [http://127.0.0.1:5000/fund-finder](http://127.0.0.1:5000/fund-finder). The Fund Finder is a focused UCITS ETF browser: filter the curated starter universe by asset class, issuer, accumulating/distributing policy, and maximum annual fee, then select funds for a side-by-side product comparison.
+
+The main dashboard uses Yahoo Finance for changing market data such as price history and volume. Product facts that Yahoo does not reliably provide for UCITS ETFs (ISIN, TER, domicile, replication, and distribution policy) live in `config/ucits_catalogue.json`; verify those facts against the issuer before investing.
+
 ### Milestone Convention
 
 In this repo, "set the milestone" means:
