@@ -85,6 +85,7 @@ def test_tab_bar_visible():
     assert 'id="tab-btn-screener" class="tab-btn active' in html
     assert 'id="tab-query"' not in html
     assert 'id="screen-preset-select"' in html
+    assert 'id="screen-dsl-validation"' in html
     assert 'id="screen-preset-name"' in html
     assert 'id="screen-save-preset-btn"' in html
     assert 'id="screen-volume-min"' in html
@@ -432,6 +433,7 @@ def test_screen_endpoint_uses_control_screening_when_no_strategy(monkeypatch, tm
     assert data["preset_name"] == "Sequence Alpha"
     assert data["strategy_name"] == "Sequence Alpha"
     assert data["matches"][0]["ticker"] == "AAA.DE"
+    assert data["matches"][0]["strategy"] == "Sequence Alpha"
     assert captured["tickers"] == ["AAA.DE", "BBB.ST"]
     assert captured["filters"]["volume_range"] == {"min": 150000.0, "max": 1200000.0}
     assert captured["filters"]["macd_event_enabled"] is False

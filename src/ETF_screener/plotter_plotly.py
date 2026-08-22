@@ -483,8 +483,9 @@ class InteractivePlotter:
     def _extract_ema_specs(self, strategy_content: str | None) -> list[tuple[int, str]]:
         """Extract EMA period/source pairs from the DSL.
 
-        Function-style references such as ``ema_high(20)`` are kept source-aware;
-        plain ``ema_20`` continues to mean an EMA of close.
+        Legacy references such as ``ema_high(20)`` and DSLX calls such as
+        ``candle.ema("high", 20)`` are kept source-aware; plain ``ema_20``
+        continues to mean an EMA of close.
         """
         if not strategy_content:
             return []
@@ -503,6 +504,13 @@ class InteractivePlotter:
             r"\bema_(open|high|low|close)\s*\(\s*(\d+)\s*\)", text
         ):
             add(int(period), source)
+        for source, period in re.findall(
+            r"\b(?:candle\.)?ema\s*\(\s*[\"'](open|high|low|close)[\"']\s*,\s*(\d+)\s*\)",
+            text,
+        ):
+            add(int(period), source)
+        for period in re.findall(r"\b(?:candle\.)?ema\s*\(\s*(\d+)\s*\)", text):
+            add(int(period), "close")
         for period in re.findall(r"\bema_(\d+)\b", text):
             add(int(period), "close")
         return specs

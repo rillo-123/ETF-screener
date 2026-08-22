@@ -28,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from ETF_screener.database import ETFDatabase
+from ETF_screener.dslx import DSLXError, DSLXProgramInterpreter
 from ETF_screener.backtester import Backtester
 from ETF_screener.config_loader import get_paths
 from ETF_screener.dsl_parser import (
@@ -3441,6 +3442,9 @@ async def screen(
                 preset_name or "Custom Controls"
             )
             payload["strategy_name"] = str(payload["preset_name"])
+            for match in payload["matches"]:
+                if isinstance(match, dict):
+                    match.setdefault("strategy", payload["strategy_name"])
             payload = _json_safe_value(payload)
             _save_cached_screen_result(cache_key, payload)
             _set_job_progress(
@@ -3453,9 +3457,79 @@ async def screen(
             )
             return payload
 
+        if re.match(r"^\s*strategy\b", content, re.IGNORECASE):
+            program = DSLXProgramInterpreter(content)
+            selected_tickers = filter_tickers_by_exchange_and_list(
+                list(_cached_screen_universe(db_path, latest_market_date)),
+                exchange=exchange,
+                ticker_list=ticker_list,
+                scan_scope=scan_scope,
+            )
+            source_tickers: dict[str, list[str]] = {
+                "universe.selected": selected_tickers,
+            }
+            for definition in program.program.strategies:
+                if definition.source == "universe.selected":
+                    continue
+                source_name = definition.source.removeprefix("universe.")
+                if source_name not in {"etfs", "xetra", "nasdaq", "sweden"}:
+                    raise DSLXError(f"Unsupported dashboard source '{definition.source}'")
+                source_tickers[definition.source] = (
+                    list(_cached_screen_universe(db_path, latest_market_date))
+                    if source_name == "etfs"
+                    else filter_tickers_by_exchange_and_list(
+                        list(_cached_screen_universe(db_path, latest_market_date)),
+                        exchange=source_name,
+                        ticker_list=None,
+                        scan_scope=source_name,
+                    )
+                )
+
+            def load_frames(tickers_to_load: list[str]) -> dict[str, pd.DataFrame]:
+                return {
+                    ticker: frame
+                    for ticker in tickers_to_load
+                    if not (frame := db.get_etf_data(ticker)).empty
+                }
+
+            frames_by_source = {
+                source_name: load_frames(tickers_to_load)
+                for source_name, tickers_to_load in source_tickers.items()
+            }
+            shown = program.run(
+                selected=frames_by_source["universe.selected"],
+                universes=frames_by_source,
+            )
+            metadata_map = _cached_etf_metadata_map()
+            matches = [
+                {
+                    **match.as_dict(),
+                    "name": str(metadata_map.get(match.ticker.upper(), {}).get("name") or match.ticker),
+                    "status": "Entry Signal" if match.age == 0 else f"Recent Entry ({match.age}d)",
+                    "days_since_entry": match.age,
+                }
+                for match_list in shown.values()
+                for match in match_list
+            ]
+            payload = {
+                "matches": matches,
+                "errors": [],
+                "total_errors": 0,
+                "total_candidates": sum(len(frames) for frames in frames_by_source.values()),
+                "strategy_name": ", ".join(match["strategy"] for match in matches[:1]) or "DSLX",
+            }
+            _set_job_progress(
+                "screen", "done", pct=100.0, label="Screen",
+                detail=f"{len(matches)} DSLX matches found", active=False,
+            )
+            return _json_safe_value(payload)
+
         strategy_spec = parse_dsl_content(content)
         final_entry = strategy_spec["entry"]
         final_exit = strategy_spec["exit"]
+        match_strategy_name = (
+            str(strategy or "Editor Draft").strip() or "Editor Draft"
+        )
         logger.info(
             "Strategy parsed. Entry script length: %d, Exit script length: %d, max_days=%s",
             len(final_entry),
@@ -3651,6 +3725,7 @@ async def screen(
                     liquidity_snapshot = _recent_liquidity_snapshot(df)
                     metadata = metadata_map.get(str(ticker).upper(), {})
                     candidate = {
+                        "strategy": match_strategy_name,
                         "ticker": ticker,
                         "name": str(metadata.get("name") or ticker).strip() or ticker,
                         "close": close_val,
@@ -5195,6 +5270,26 @@ async def get_chart(
                 overlay_specs = parsed_overlay_specs
         except (TypeError, ValueError, json.JSONDecodeError):
             logger.warning("Ignoring malformed ema_overlay_specs query parameter")
+
+    # DSLX has source-aware EMA calls (``candle.ema("low", 20)``), while
+    # legacy scripts express the same intent as ``ema_low(20)``. Resolve DSLX
+    # calls here so the chart receives explicit overlay specs even when the
+    # user has hidden the generic control-panel EMAs.
+    if re.match(r"^\s*strategy\b", strategy_content, re.IGNORECASE):
+        dslx_ema_specs = [
+            {"source": source.lower(), "period": int(period)}
+            for source, period in re.findall(
+                r"\b(?:candle\.)?ema\s*\(\s*[\"'](open|high|low|close)[\"']\s*,\s*(\d+)\s*\)",
+                strategy_content,
+                re.IGNORECASE,
+            )
+            if 2 <= int(period) <= 500
+        ]
+        if dslx_ema_specs:
+            overlay_specs = list(
+                { (item["period"], item["source"]): item for item in dslx_ema_specs }.values()
+            )
+            overlay_periods = sorted({int(item["period"]) for item in overlay_specs})
 
     def _atr_stop_trace(frame: pd.DataFrame) -> dict:
         """Return a long-position stop guide at close minus two ATRs."""

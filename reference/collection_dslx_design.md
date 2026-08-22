@@ -77,11 +77,46 @@ candle.volume
 candle.age
 ```
 
+At its selected timeframe, a candle is DSLX's atomic market observation and
+decision point. It represents a time interval in the underlying market, but a
+rule evaluates it as one focal event. Every directly visible characteristic and
+every derived value is anchored to that event.
+
 `age` is relative to the query's evaluation endpoint: `0` is the endpoint
 candle, `1` is the preceding trading bar, and so on.
 
 A live, still-forming bar is a separate provisional snapshot. It must not be
 silently treated as a finalized `Candle`.
+
+### Candle geometry
+
+Every visual part of a candle is also available as a numeric property. These
+properties are calculated from the candle's exposed OHLC values, so they work
+for regular candles and for Heikin-Ashi candles represented by transformed
+OHLC values.
+
+| Property | Meaning |
+| --- | --- |
+| `color` | `"green"`, `"red"`, or `"doji"` |
+| `is_green`, `is_red`, `is_doji` | Explicit colour/state predicates |
+| `total_length` (or `range`) | `high - low`, including wicks |
+| `body_length` | `abs(close - open)` |
+| `upper_wick_length` | `high - max(open, close)` |
+| `lower_wick_length` | `min(open, close) - low` |
+| `body_ratio` | `body_length / total_length` |
+| `upper_wick_ratio` | `upper_wick_length / total_length` |
+| `lower_wick_ratio` | `lower_wick_length / total_length` |
+
+The three ratios are fractions in the range `0..1` and sum to `1` for a
+non-zero-length candle. A zero-length candle returns `0` for every ratio,
+which keeps comparisons deterministic.
+
+```dsl
+# Green Heikin-Ashi candle with a dominant lower wick
+candle.color == "green"
+AND candle.lower_wick_ratio > 0.50
+AND candle.body_ratio < 0.30
+```
 
 ### Derived values and indicators
 
@@ -98,6 +133,10 @@ candle.sma("close", 50)
 Although an indicator is written on a candle for convenience, it is calculated
 from the candle's owning `CandleSeries`, ending at that candle. Thus
 `candle.ema(20)` never uses later bars.
+
+An indicator has no standalone identity in a rule: `candle.rsi(14)` means the
+RSI known at this particular candle's close. This makes the candle the common
+time anchor for all OHLC, visual, volume, and technical-analysis conditions.
 
 ## Collection types and guarantees
 

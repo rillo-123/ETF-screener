@@ -7050,6 +7050,25 @@
       syncExportMatchesButtonState();
     }
 
+    function matchStrategyNames(match) {
+      const names = [];
+      const add = (value) => {
+        const name = String(value || "").trim();
+        if (name && !names.includes(name)) names.push(name);
+      };
+      if (Array.isArray(match?.strategies)) match.strategies.forEach(add);
+      add(match?.strategy);
+      add(match?.strategy_name);
+      if (names.length === 0) add(lastScreenMeta?.strategy_name);
+      return names;
+    }
+
+    function renderMatchStrategyBadges(match) {
+      return matchStrategyNames(match).map((name) => (
+        `<span class="inline-flex max-w-full items-center rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[9px] font-bold leading-none text-violet-700" title="Matched by strategy: ${escapeHtml(name)}">${escapeHtml(name)}</span>`
+      )).join("");
+    }
+
     function projectCachedScreenResults(filters = screenFilters) {
       if (!Array.isArray(lastScreenCandidatePool) || lastScreenCandidatePool.length === 0) {
         return null;
@@ -7144,7 +7163,7 @@
           const change = Number(item.change_pct || 0);
           card.innerHTML = `
             <div class="flex justify-between items-start">
-              <div class="flex flex-col"><div class="flex items-baseline gap-1.5"><span class="font-bold text-slate-800 text-lg leading-none">${escapeHtml(item.ticker)}</span><span class="text-[10px] font-bold text-indigo-400">#${idx + 1}</span></div><span class="mt-1 text-[11px] text-slate-500">${escapeHtml(item.name || "")}</span><span class="text-[10px] text-indigo-600 mt-1 uppercase tracking-wider">${escapeHtml(item.status || "TRENDING")}</span></div>
+              <div class="flex flex-col"><div class="flex flex-wrap items-center gap-1.5"><span class="font-bold text-slate-800 text-lg leading-none">${escapeHtml(item.ticker)}</span><span class="text-[10px] font-bold text-indigo-400">#${idx + 1}</span>${renderMatchStrategyBadges(item)}</div><span class="mt-1 text-[11px] text-slate-500">${escapeHtml(item.name || "")}</span><span class="text-[10px] text-indigo-600 mt-1 uppercase tracking-wider">${escapeHtml(item.status || "TRENDING")}</span></div>
               <div class="flex flex-col items-end"><span class="text-slate-800 font-bold font-mono">${Number(item.close || 0).toFixed(2)}</span><span class="text-[10px] ${change >= 0 ? "text-emerald-500" : "text-rose-500"} font-mono">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</span></div>
             </div>
             <div class="mt-2 text-[11px] font-semibold text-rose-700">${escapeHtml(item.event_sequence || "Event sequence")}</div>
@@ -7480,6 +7499,66 @@
       updateScanActionButtonsState();
     }
 
+    function findContradictoryScreenDslConditions(expressions) {
+      const operand = String.raw`(?:[A-Za-z_][A-Za-z0-9_.]*(?:\([^)]*\))?|\d+(?:\.\d+)?)`;
+      const comparison = new RegExp(
+        `(${operand})\\s*(GT|GTE|GE|LT|LTE|LE|EQ|NE|>=|<=|==|!=|>|<)\\s*(${operand})`,
+        "gi",
+      );
+      const aliases = {
+        GT: ">", GTE: ">=", GE: ">=", LT: "<", LTE: "<=", LE: "<=",
+        EQ: "==", NE: "!=",
+      };
+      const inverse = { ">": "<", ">=": "<=", "<": ">", "<=": ">=", "==": "==", "!=": "!=" };
+      const constraints = new Map();
+
+      for (const expression of expressions) {
+        comparison.lastIndex = 0;
+        let found;
+        while ((found = comparison.exec(expression)) !== null) {
+          let left = found[1].toLowerCase();
+          let operator = aliases[found[2].toUpperCase()] || found[2];
+          let right = found[3].toLowerCase();
+          if (left === right) continue;
+          if (left > right) {
+            [left, right] = [right, left];
+            operator = inverse[operator];
+          }
+          const key = `${left}\u0000${right}`;
+          if (!constraints.has(key)) constraints.set(key, new Set());
+          constraints.get(key).add(operator);
+        }
+      }
+
+      for (const [key, operators] of constraints) {
+        const impossible = (
+          (operators.has(">") && (operators.has("<") || operators.has("<=") || operators.has("==")))
+          || (operators.has(">=") && operators.has("<"))
+          || (operators.has("<") && (operators.has(">") || operators.has(">=") || operators.has("==")))
+          || (operators.has("<=") && operators.has(">"))
+          || (operators.has("==") && operators.has("!="))
+        );
+        if (impossible) {
+          const [left, right] = key.split("\u0000");
+          return `Contradictory conditions: '${left}' and '${right}' cannot satisfy ${[...operators].join(" and ")} at the same candle.`;
+        }
+      }
+      return "";
+    }
+
+    function updateScreenDslValidation(readiness) {
+      const node = document.getElementById("screen-dsl-validation");
+      if (!node) return;
+      node.classList.remove("hidden");
+      if (readiness.ready) {
+        node.className = "mt-3 rounded-lg border border-emerald-400/30 bg-emerald-950/35 px-3 py-2 text-xs font-semibold text-emerald-200";
+        node.textContent = "Script checks passed. The server will validate it again before screening.";
+      } else {
+        node.className = "mt-3 rounded-lg border border-rose-400/40 bg-rose-950/35 px-3 py-2 text-xs font-semibold text-rose-200";
+        node.textContent = `Script needs attention: ${readiness.reason}`;
+      }
+    }
+
     function getScreenDslReadiness(source = null) {
       const node = document.getElementById("screen-dsl-editor");
       if ((!node || !node.tagName) && (source === null || String(source || "").trim() === "")) {
@@ -7492,8 +7571,25 @@
         return { ready: false, reason: "Enter a screening script first" };
       }
 
+      if (/^\s*strategy\b/i.test(text)) {
+        let braces = 0;
+        let parentheses = 0;
+        for (const char of text) {
+          if (char === "{") braces += 1;
+          if (char === "}") braces -= 1;
+          if (char === "(") parentheses += 1;
+          if (char === ")") parentheses -= 1;
+          if (braces < 0 || parentheses < 0) {
+            return { ready: false, reason: "Fix unmatched braces or parentheses in the DSLX program" };
+          }
+        }
+        return braces === 0 && parentheses === 0
+          ? { ready: true, reason: "Run the DSLX program" }
+          : { ready: false, reason: "Fix unmatched braces or parentheses in the DSLX program" };
+      }
+
       const lines = text.split(/\r?\n/)
-        .map((line) => line.replace(/#.*$/, "").trim())
+        .map((line) => line.replace(/(?:#|\/\/).*$/, "").trim())
         .filter(Boolean);
       const conditionLines = [];
       let previousWasCondition = false;
@@ -7515,9 +7611,9 @@
           continue;
         }
 
-        if (/^(AND|OR)$/i.test(line)) {
+        if (/^(?:AND|OR|&&|\|\|)$/i.test(line)) {
           if (!previousWasCondition || pendingConnector) {
-            return { ready: false, reason: "AND/OR must connect two conditions" };
+            return { ready: false, reason: "A logical operator must connect two conditions" };
           }
           pendingConnector = true;
           previousWasCondition = false;
@@ -7526,8 +7622,11 @@
 
         const section = line.match(/^(TRIGGER|FILTER|ENTRY|EXIT)\s*:\s*(.*)$/i);
         const expression = section ? section[2].trim() : line;
-        if (!expression || /^(AND|OR)$/i.test(expression)) {
+        if (!expression || /^(?:AND|OR|&&|\|\|)$/i.test(expression)) {
           return { ready: false, reason: "Add a condition to the script" };
+        }
+        if (/^(?:&&|\|\|)|(?:&&|\|\|)\s*$/i.test(expression)) {
+          return { ready: false, reason: "A logical operator must connect two conditions" };
         }
         if (/\b(?:GT|GTE|LT|LTE|GE|LE|EQ|NE)\s*$/i.test(expression)
           || /^(?:GT|GTE|LT|LTE|GE|LE|EQ|NE)\b/i.test(expression)) {
@@ -7547,12 +7646,19 @@
       if (pendingConnector) {
         return { ready: false, reason: "Finish the condition after AND/OR" };
       }
+      const contradiction = findContradictoryScreenDslConditions(conditionLines);
+      if (contradiction) {
+        return { ready: false, reason: contradiction };
+      }
       return { ready: true, reason: "Run the screener" };
     }
 
     function updateScanActionButtonsState() {
       const dslReadiness = getScreenDslReadiness();
-      const readiness = !tickerUniverseExplicitlyChosen
+      const dslText = String(document.getElementById("screen-dsl-editor")?.value || "");
+      const hasConcreteDslxSource = /^\s*source\s+universe\.(?!selected\b)[A-Za-z_][A-Za-z0-9_]*\s*$/im.test(dslText);
+      updateScreenDslValidation(dslReadiness);
+      const readiness = !tickerUniverseExplicitlyChosen && !hasConcreteDslxSource
         ? { ready: false, reason: "Choose a ticker universe first" }
         : dslReadiness;
       const scanBtn = document.getElementById("scan-btn");
@@ -7603,7 +7709,9 @@
       const errorSection = document.getElementById("error-section");
       const errorList = document.getElementById("error-list");
 
-      if (!tickerUniverseExplicitlyChosen) {
+      const requestedDsl = String(customDsl || typedDsl).trim();
+      const hasConcreteDslxSource = /^\s*source\s+universe\.(?!selected\b)[A-Za-z_][A-Za-z0-9_]*\s*$/im.test(requestedDsl);
+      if (!tickerUniverseExplicitlyChosen && !hasConcreteDslxSource) {
         resetScanUI();
         return;
       }
@@ -7892,9 +8000,10 @@
               card.innerHTML = `
                         <div class="flex justify-between items-start">
                             <div class="flex flex-col">
-                                <div class="flex items-baseline gap-1.5">
+                                <div class="flex flex-wrap items-center gap-1.5">
                                   <span class="font-bold text-slate-800 text-lg leading-none">${item.ticker}</span>
                                   <span class="text-[10px] font-bold text-indigo-400">#${idx + 1}</span>
+                                  ${renderMatchStrategyBadges(item)}
                                 </div>
                                 <span class="mt-1 text-[11px] text-slate-500">${escapeHtml(item.name || "")}</span>
                                 <span class="text-[10px] ${statusColor} mt-1 uppercase tracking-wider">${statusText}</span>

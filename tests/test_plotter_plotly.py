@@ -14,6 +14,16 @@ def _trace_y(trace_dict):
     return np.asarray(y, dtype=float)
 
 
+def test_dslx_source_aware_ema_calls_are_extracted_for_chart_overlays():
+    plotter = InteractivePlotter()
+
+    specs = plotter._extract_ema_specs(
+        'candle.ema("low", 20) < candle.ema("high", 20) && candle.ema(200) > 0'
+    )
+
+    assert specs == [(20, "low"), (20, "high"), (200, "close")]
+
+
 def test_context_ribbon_preserves_false_gaps():
     dates = pd.date_range(start="2024-01-01", periods=6)
     close = np.array([101.0, 99.0, 102.0, 98.0, 103.0, 97.0])
