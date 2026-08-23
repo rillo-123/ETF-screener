@@ -1,5 +1,9 @@
 # Current state
 
+- Added canonical file-backed DSLX strategies with a single-pane editor, file list, load/save flow, and Screener selection.
+- Made entry and exit explicit in DSLX, including a pass no-op exit, and added liquidity universe guards for robust ETF selection.
+- Added historical DSLX entry/exit signal evaluation through the existing trade simulator so DSLX strategies can be backtested.
+
 - -Summary
 
 - Added explicit HA candle-color enforcement with Green only as the default, plus Red only and Any color options.

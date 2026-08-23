@@ -11,6 +11,7 @@ import pandas as pd
 
 from ETF_screener.config_loader import get_paths
 from ETF_screener.database import ETFDatabase
+from ETF_screener.dslx import backtest_signals
 from ETF_screener.indicators import (
     calculate_adx,
     calculate_anchored_vwap,
@@ -150,13 +151,12 @@ class Backtester:
         cache_path = None
         result_cache_path = None
         strategy_name = "unknown"
-        if strategy_kwargs and "entry_script" in strategy_kwargs:
+        if strategy_kwargs and ("entry_script" in strategy_kwargs or "dslx_source" in strategy_kwargs):
             # Create a unique hash for the strategy logic
-            strat_hash = hashlib.sha256(
-                f"{strategy_kwargs.get('entry_script')}_{strategy_kwargs.get('exit_script')}".encode(
-                    "utf-8"
-                )
-            ).hexdigest()[:8]
+            strategy_source = strategy_kwargs.get("dslx_source") or (
+                f"{strategy_kwargs.get('entry_script')}_{strategy_kwargs.get('exit_script')}"
+            )
+            strat_hash = hashlib.sha256(str(strategy_source).encode("utf-8")).hexdigest()[:8]
             strategy_name = f"dsl_{strat_hash}"
             cache_dir.mkdir(parents=True, exist_ok=True)
             latest_date = db.get_latest_date(ticker) or "no_date"
@@ -211,12 +211,12 @@ class Backtester:
             is_scripted = False
             if (
                 hasattr(strategy_func, "__name__")
-                and strategy_func.__name__ == "scripted_strategy"
+                and strategy_func.__name__ in {"scripted_strategy", "dslx_strategy"}
             ):
                 is_scripted = True
             elif (
                 hasattr(strategy_func, "__func__")
-                and strategy_func.__func__.__name__ == "scripted_strategy"
+                and strategy_func.__func__.__name__ in {"scripted_strategy", "dslx_strategy"}
             ):
                 is_scripted = True
 
@@ -403,6 +403,15 @@ class Backtester:
                 )
 
         return results
+
+    def dslx_strategy(self, df, ticker, dslx_source, **_kwargs):
+        """Produce historical entry/exit signals from one DSLX program."""
+        result = backtest_signals(dslx_source, df, ticker=ticker)
+        return {
+            "df": result,
+            "b_em": result["entry_condition"],
+            "b_r": result["exit_condition"],
+        }
 
     def scripted_strategy(
         self,

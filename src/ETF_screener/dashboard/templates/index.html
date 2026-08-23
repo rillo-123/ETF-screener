@@ -944,6 +944,8 @@
   <div id="dashboard-tabs" class="flex space-x-3 bg-slate-800 px-6 pt-3 pb-2 border-b border-slate-700">
     <button id="tab-btn-screener" class="tab-btn active bg-rose-600 text-white font-bold py-2.5 px-5 rounded-lg border border-rose-400/50 shadow-sm"
       onclick="showTab('screener')">Screener</button>
+    <button id="tab-btn-editor" class="tab-btn bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-lg border border-indigo-400/40 shadow-sm"
+      onclick="showTab('editor')">DSLX Editor</button>
     <button id="tab-btn-backtest" class="tab-btn bg-emerald-700 text-white font-bold py-2.5 px-5 rounded-lg border border-emerald-400/40 shadow-sm"
       onclick="showTab('backtest')">Backtester</button>
     <button id="tab-btn-playbook" class="tab-btn bg-violet-700 text-white font-bold py-2.5 px-5 rounded-lg border border-violet-400/40 shadow-sm"
@@ -951,6 +953,57 @@
   </div>
 
   <!-- Tab Content Sections -->
+  <div id="tab-editor" class="hidden">
+    <div class="mx-auto max-w-[1600px] p-6">
+      <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-5">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-[0.2em] text-indigo-600">Strategy workspace</div>
+            <h2 class="mt-1 text-2xl font-bold text-slate-900">DSLX Editor</h2>
+            <p class="mt-1 text-sm text-slate-500">Open a file-backed strategy here, then edit and version it in VS Code. Every script contains an entry and an exit rule.</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <label class="flex items-center gap-1 rounded-lg border border-slate-600 bg-slate-900 px-2 text-xs font-semibold text-slate-200">File
+              <input id="dslx-strategy-filename" type="text" value="simple_green" spellcheck="false" class="w-36 bg-transparent py-2 font-mono outline-none" aria-label="DSLX file name">
+              <span class="text-slate-500">.dslx</span>
+            </label>
+            <button type="button" onclick="saveDslxStrategy()" class="rounded-lg border border-indigo-300 bg-indigo-600 px-4 py-2 text-sm font-bold text-white">Save</button>
+            <button type="button" onclick="runEditorScreen()" class="rounded-lg border border-emerald-500/60 bg-emerald-600 px-4 py-2 text-sm font-bold text-white">Run Entry Screen</button>
+            <button type="button" onclick="openEditorBacktest()" class="rounded-lg border border-rose-400/60 bg-rose-600 px-4 py-2 text-sm font-bold text-white">Open Backtester</button>
+          </div>
+        </div>
+        <div class="mt-5 rounded-xl border border-slate-700 bg-slate-950 p-4 shadow-inner">
+          <div class="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+            <aside class="rounded-xl border border-slate-700 bg-slate-900/80 p-3">
+              <div class="flex items-center justify-between gap-2">
+                <div class="text-xs font-bold uppercase tracking-[0.16em] text-indigo-300">DSLX files</div>
+                <button type="button" onclick="loadDslxStrategyList()" class="rounded border border-slate-600 px-2 py-1 text-[10px] font-bold text-slate-200">Refresh</button>
+              </div>
+              <p class="mt-2 text-[11px] leading-4 text-slate-400">Double-click a file to load it. Files live in <code>strategies/dslx</code>.</p>
+              <div id="dslx-strategy-list" class="mt-3 max-h-[520px] space-y-1 overflow-y-auto" aria-label="Available DSLX files"></div>
+            </aside>
+            <div class="flex min-h-[520px] flex-col">
+              <label for="screen-dsl-editor" class="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">DSLX script</label>
+              <textarea id="screen-dsl-editor" spellcheck="false"
+                class="min-h-[520px] flex-1 resize-y rounded-xl border border-emerald-400/30 bg-emerald-950/35 px-4 py-4 font-mono text-sm leading-6 text-emerald-50 outline-none focus:border-emerald-300">strategy simple_green {
+  source universe.selected
+  candles timeframe "1d" as heikin_ashi
+  scan latest
+
+  entry when candle => candle.is_green
+  exit when candle => pass
+}
+
+let matches = simple_green.run()
+matches.show()</textarea>
+              <p class="mt-2 text-[11px] text-slate-400">Every DSLX strategy declares both <code>entry</code> and <code>exit</code>. Use <code>exit when candle =&gt; pass</code> when no exit condition is wanted.</p>
+            </div>
+          </div>
+          <div id="screen-dsl-validation" role="status" aria-live="polite" class="mt-4 hidden rounded-lg border px-3 py-2 text-xs font-semibold"></div>
+        </div>
+      </section>
+    </div>
+  </div>
   <div id="tab-backtest" class="hidden">
     <div class="p-6 space-y-5">
       <div class="flex flex-wrap items-end justify-between gap-4">
@@ -1094,12 +1147,19 @@
             <span aria-hidden="true">↗</span>
             Find Trade Ideas
           </button>
-          <div class="grid gap-3 sm:grid-cols-[minmax(0,220px)_minmax(0,180px)_auto_auto]">
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,220px)_minmax(0,220px)_minmax(0,180px)_auto_auto]">
             <label class="block">
               <span class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Preset</span>
               <select id="screen-preset-select" onchange="applyScreenPreset(this.value)"
                 class="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-rose-400">
                 <option value="">Custom</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">DSLX File</span>
+              <select id="screen-dslx-file-select" onchange="loadDslxStrategyFromScreener(this.value)"
+                class="mt-1 block w-full rounded-xl border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-indigo-400">
+                <option value="">Choose DSLX file</option>
               </select>
             </label>
             <label class="block">
@@ -1122,39 +1182,19 @@
                 Run Screener
               </span>
             </button>
+            <button id="stop-run-btn" type="button" onclick="cancelScan()" disabled
+              class="hidden self-end rounded-xl border border-rose-300 bg-rose-50 px-4 py-2.5 text-sm font-bold text-rose-700 shadow-sm transition hover:bg-rose-100">
+              Stop Run
+            </button>
           </div>
         </div>
-        <div id="screen-ta-controls-slot" class="mt-5">
-          <div class="rounded-xl border border-indigo-200 bg-slate-950 p-4 shadow-inner">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-300">Condition DSL</div>
-                <div class="mt-1 text-sm font-semibold text-white">Write the entry and exit conditions</div>
-              </div>
-              <span class="rounded-full border border-indigo-400/30 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-indigo-300">Entry / Exit</span>
+        <div id="screen-ta-controls-slot" class="mt-5 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div><div class="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-600">Strategy rules</div><div class="mt-1 text-sm font-semibold text-slate-900">Edit the entry and exit DSLX rules in their own workspace.</div></div>
+            <div class="flex flex-wrap items-center gap-2">
+              <span id="screen-dslx-script-status" class="rounded-full border border-indigo-200 bg-white px-3 py-1.5 font-mono text-xs font-semibold text-indigo-800">DSLX: unsaved draft</span>
+              <button type="button" onclick="showTab('editor')" class="rounded-lg border border-indigo-300 bg-white px-4 py-2 text-sm font-bold text-indigo-700">Open DSLX Editor</button>
             </div>
-            <div class="mt-3 grid gap-3 md:grid-cols-2">
-              <div>
-                <label for="screen-dsl-editor" class="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Entry condition</label>
-                <textarea id="screen-dsl-editor" spellcheck="false"
-                  class="min-h-[170px] w-full resize-y rounded-lg border border-emerald-400/30 bg-emerald-950/35 px-3 py-3 font-mono text-sm leading-6 text-emerald-50 outline-none focus:border-emerald-300">candle_age LTE 30
-period_1d
-ha_close GT ema_high(20)
-AND
-ha_open GT ema_low(20)
-AND
-rsi(14) GT 50
-AND
-ema_close(200)_slope GT 0</textarea>
-              </div>
-              <div>
-                <label for="screen-exit-editor" class="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-rose-300">Exit condition</label>
-                <textarea id="screen-exit-editor" spellcheck="false"
-                  class="min-h-[170px] w-full resize-y rounded-lg border border-rose-400/30 bg-rose-950/35 px-3 py-3 font-mono text-sm leading-6 text-rose-50 outline-none focus:border-rose-300"
-                  placeholder="Optional exit condition"></textarea>
-              </div>
-            </div>
-            <div id="screen-dsl-validation" role="status" aria-live="polite" class="mt-3 hidden rounded-lg border px-3 py-2 text-xs font-semibold"></div>
           </div>
         </div>
         <div class="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.9fr)_minmax(14rem,0.58fr)] xl:items-start md:grid-cols-2">
@@ -1646,6 +1686,8 @@ ema_close(200)_slope GT 0</textarea>
       </main>
     </div>
   </div>
+
+  <section id="global-workspace" class="w-full px-6 pb-12" aria-label="Persistent market workspace"></section>
 
   <script src="/static/js/dashboard.js?v={{ dashboard_js_version }}"></script>
   <script src="/static/js/browser-log-relay.js?v={{ browser_log_relay_version }}"></script>

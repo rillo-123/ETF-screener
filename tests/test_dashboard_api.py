@@ -67,6 +67,7 @@ def test_tab_bar_visible():
     assert "Sweden Finance (42)" in html
     assert 'id="list-edit-btn"' in html
     assert ">Screener<" in html
+    assert ">DSLX Editor<" in html
     assert "StratFinder" not in html
     assert 'id="stratfinder-modal"' not in html
     assert 'id="stratfinder-modal-d"' not in html
@@ -83,6 +84,21 @@ def test_tab_bar_visible():
     assert ">Backtester<" in html
     assert 'id="bt-median-return"' in html
     assert 'id="tab-btn-screener" class="tab-btn active' in html
+    assert 'id="tab-btn-editor"' in html
+    assert 'id="tab-editor"' in html
+    assert 'id="global-workspace"' in html
+    assert 'id="screen-dsl-editor"' in html
+    assert 'id="dslx-strategy-list"' in html
+    assert 'id="screen-dslx-file-select"' in html
+    assert 'id="screen-dslx-script-status"' in html
+    assert 'id="stop-run-btn"' in html
+    assert "runEditorScreen" in dashboard_source
+    assert "openEditorBacktest" in dashboard_source
+    assert "mountPersistentMarketWorkspace" in dashboard_source
+    assert "updatePersistentMarketWorkspaceVisibility" in dashboard_source
+    assert "loadDslxStrategyFromScreener" in dashboard_source
+    assert "setLoadedDslxScript" in dashboard_source
+    assert "cancelScan" in dashboard_source
     assert 'id="tab-query"' not in html
     assert 'id="screen-preset-select"' in html
     assert 'id="screen-dsl-validation"' in html
@@ -483,6 +499,7 @@ def test_screen_endpoint_applies_dslx_named_liquidity_universe(monkeypatch):
                   source universe.xetra_liquid
                   scan latest
                   match when candle => candle.close > 0
+                  exit when candle => pass
                 }
                 let matches = eligible.run()
                 matches.show()
@@ -492,6 +509,47 @@ def test_screen_endpoint_applies_dslx_named_liquidity_universe(monkeypatch):
 
     assert response.status_code == 200
     assert [item["ticker"] for item in response.json()["matches"]] == ["LIQ.DE"]
+
+
+def test_dslx_editor_lists_and_loads_file_backed_scripts():
+    listing = client.get("/api/dslx-strategies")
+
+    assert listing.status_code == 200
+    assert "simple_green" in listing.json()
+
+    script = client.get("/api/dslx-strategy/simple_green")
+
+    assert script.status_code == 200
+    assert "entry when candle" in script.json()["content"]
+    assert "exit when candle => pass" in script.json()["content"]
+
+
+def test_dslx_editor_saves_only_a_valid_complete_script(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        app_fast, "_dslx_strategy_path", lambda name: tmp_path / f"{name}.dslx"
+    )
+    content = """
+        strategy saved {
+          entry when candle => candle.is_green
+          exit when candle => pass
+        }
+        let matches = saved.run()
+        matches.show()
+    """
+
+    response = client.post(
+        "/api/dslx-strategy/save", json={"name": "saved", "content": content}
+    )
+
+    assert response.status_code == 200
+    assert (tmp_path / "saved.dslx").read_text(encoding="utf-8").endswith("\n")
+
+    invalid = client.post(
+        "/api/dslx-strategy/save",
+        json={"name": "incomplete", "content": "strategy x { entry when candle => true }"},
+    )
+
+    assert invalid.status_code == 422
 
 
 def test_screen_with_controls_reuses_indicator_history_cache(monkeypatch, tmp_path):

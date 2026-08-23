@@ -198,12 +198,27 @@
       { key: "payoff_efficiency", label: "Profit Factor", max: 10 },
       { key: "drawdown_control", label: "Drawdown Control", max: 10 },
     ];
-    const DASHBOARD_TABS = ["screener", "backtest", "playbook"];
+    const DASHBOARD_TABS = ["screener", "editor", "backtest", "playbook"];
 
     function getDashboardTabs() {
       return DASHBOARD_TABS
         .map((name) => document.getElementById(`tab-${name}`))
         .filter(Boolean);
+    }
+
+    function mountPersistentMarketWorkspace() {
+      const workspace = document.getElementById("global-workspace");
+      const chartCard = document.getElementById("chart-card");
+      if (workspace && chartCard && chartCard.parentElement !== workspace) {
+        workspace.appendChild(chartCard);
+      }
+    }
+
+    function updatePersistentMarketWorkspaceVisibility(tab) {
+      const workspace = document.getElementById("global-workspace");
+      if (workspace) {
+        workspace.classList.toggle("hidden", tab !== "screener");
+      }
     }
 
     function normalizeDashboardTab(value) {
@@ -1634,6 +1649,9 @@
       if (!entry) {
         const strategyEntry = document.getElementById("strategy-entry-editor");
         return strategyEntry ? syncStrategyEditorFromParts().trim() : String(document.getElementById("strategy-editor")?.value || "").trim();
+      }
+      if (/^\s*(?:universe|strategy)\b/i.test(entry)) {
+        return entry;
       }
       const lines = entry.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       const metadata = lines.filter((line) => /^(?:candle_age\s+(?:LTE|LE|EQ)\s+\d+|period_1d)$/i.test(line));
@@ -4382,6 +4400,116 @@
       return screenPresetCatalog;
     }
 
+    async function loadDslxStrategy(name) {
+      const response = await fetch(`/api/dslx-strategy/${encodeURIComponent(name)}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.detail || "Could not load DSLX strategy");
+      }
+      const editor = document.getElementById("screen-dsl-editor");
+      if (editor) {
+        editor.value = String(payload.content || "");
+        editor.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      const filename = document.getElementById("dslx-strategy-filename");
+      if (filename) filename.value = String(payload.name || name);
+      const screenerFileSelect = document.getElementById("screen-dslx-file-select");
+      if (screenerFileSelect) screenerFileSelect.value = String(payload.name || name);
+      setLoadedDslxScript(String(payload.name || name));
+      document.querySelectorAll("[data-dslx-strategy]").forEach((node) => {
+        node.classList.toggle("bg-indigo-700", node.dataset.dslxStrategy === name);
+        node.classList.toggle("text-white", node.dataset.dslxStrategy === name);
+      });
+      showToast(`Loaded DSLX file: ${name}.dslx`);
+    }
+
+    function setLoadedDslxScript(name = "") {
+      const status = document.getElementById("screen-dslx-script-status");
+      if (!status) return;
+      const normalizedName = String(name || "").replace(/\.dslx$/i, "").trim();
+      status.textContent = normalizedName
+        ? `DSLX: ${normalizedName}.dslx`
+        : "DSLX: unsaved draft";
+    }
+
+    async function loadDslxStrategyList() {
+      const list = document.getElementById("dslx-strategy-list");
+      const screenerFileSelect = document.getElementById("screen-dslx-file-select");
+      if (!list && !screenerFileSelect) return;
+      if (list) list.textContent = "Loading…";
+      try {
+        const response = await fetch("/api/dslx-strategies", { cache: "no-store" });
+        const strategies = await response.json();
+        if (!response.ok) throw new Error("Could not list DSLX strategies");
+        if (list) list.innerHTML = "";
+        const selectedName = String(screenerFileSelect?.value || "");
+        if (screenerFileSelect) {
+          screenerFileSelect.innerHTML = '<option value="">Choose DSLX file</option>';
+        }
+        if (!Array.isArray(strategies) || strategies.length === 0) {
+          if (list) list.textContent = "No .dslx files found.";
+          return;
+        }
+        strategies.forEach((name) => {
+          if (list) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.dataset.dslxStrategy = String(name);
+            button.className = "block w-full rounded px-2 py-2 text-left font-mono text-xs text-slate-200 hover:bg-slate-700";
+            button.textContent = `${name}.dslx`;
+            button.title = "Double-click to load this DSLX file";
+            button.addEventListener("dblclick", () => {
+              loadDslxStrategy(String(name)).catch((error) => showToast(error.message, true));
+            });
+            list.appendChild(button);
+          }
+          if (screenerFileSelect) {
+            const option = document.createElement("option");
+            option.value = String(name);
+            option.textContent = `${name}.dslx`;
+            screenerFileSelect.appendChild(option);
+          }
+        });
+        if (screenerFileSelect && strategies.includes(selectedName)) {
+          screenerFileSelect.value = selectedName;
+        }
+      } catch (error) {
+        if (list) list.textContent = "Could not load DSLX files.";
+        console.error("Failed to load DSLX strategy list", error);
+      }
+    }
+
+    function loadDslxStrategyFromScreener(name) {
+      if (!name) return;
+      loadDslxStrategy(String(name)).catch((error) => showToast(error.message, true));
+    }
+
+    async function saveDslxStrategy() {
+      const filename = String(document.getElementById("dslx-strategy-filename")?.value || "").trim();
+      const content = String(document.getElementById("screen-dsl-editor")?.value || "");
+      if (!filename) {
+        showToast("Enter a DSLX file name before saving.", true);
+        return;
+      }
+      try {
+        const response = await fetch("/api/dslx-strategy/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: filename, content }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.detail || "Could not save DSLX strategy");
+        const savedName = String(payload.name || filename).replace(/\.dslx$/i, "");
+        const field = document.getElementById("dslx-strategy-filename");
+        if (field) field.value = savedName;
+        await loadDslxStrategyList();
+        setLoadedDslxScript(savedName);
+        showToast(`Saved DSLX file: ${savedName}.dslx`);
+      } catch (error) {
+        showToast(error.message || "Could not save DSLX strategy", true);
+      }
+    }
+
     async function applyScreenPreset(name) {
       const presetName = String(name || "").trim();
       if (!presetName) {
@@ -4509,11 +4637,36 @@
       showToast(`Saved preset: ${presetName}`);
     }
 
+    async function runEditorScreen() {
+      const entry = String(document.getElementById("screen-dsl-editor")?.value || "").trim();
+      if (!entry) {
+        showToast("Write an entry rule before running the screen.", true);
+        return;
+      }
+      showTab("screener");
+      await runScreen(entry);
+    }
+
+    function openEditorBacktest() {
+      syncBacktestPresetPreview();
+      setBacktestSourceMode("editor");
+      showTab("backtest");
+      updateBacktestRunButtonState();
+    }
+
     function bindScreenControlInputs() {
       const dslEditor = document.getElementById("screen-dsl-editor");
       if (dslEditor && dslEditor.dataset.validationBound !== "1") {
         dslEditor.dataset.validationBound = "1";
-        dslEditor.addEventListener("input", updateScanActionButtonsState);
+        dslEditor.addEventListener("input", () => {
+          setLoadedDslxScript();
+          updateScanActionButtonsState();
+        });
+      }
+      const exitEditor = document.getElementById("screen-exit-editor");
+      if (exitEditor && exitEditor.dataset.validationBound !== "1") {
+        exitEditor.dataset.validationBound = "1";
+        exitEditor.addEventListener("input", updateBacktestRunButtonState);
       }
       [
         "screen-volume-min",
@@ -4807,7 +4960,7 @@
       const chartRangeControls = document.getElementById("nav-chart-range-controls");
       const context = document.getElementById("nav-tab-context");
       if (screenerControls) {
-        screenerControls.classList.toggle("hidden", tab !== "screener");
+        screenerControls.classList.toggle("hidden", tab !== "screener" && tab !== "editor");
       }
       if (chartRangeControls) {
         chartRangeControls.classList.toggle("hidden", tab === "screener");
@@ -4817,6 +4970,8 @@
       }
       if (tab === "playbook") {
         context.textContent = "Graph Playground: experiment with visual trade setups";
+      } else if (tab === "editor") {
+        context.textContent = "DSLX Editor: shape entry and exit rules side by side";
       } else {
         context.textContent = "Screener: place the event markers, then click Run Screener";
       }
@@ -4913,6 +5068,8 @@
       if (activeSection) {
         activeSection.classList.remove('hidden');
       }
+      mountPersistentMarketWorkspace();
+      updatePersistentMarketWorkspaceVisibility(tab);
       updateTabChrome(tab);
       if (tab === 'playbook') {
         loadPlaybook().catch((err) => {
@@ -6595,6 +6752,7 @@
     }
     // Show default tab on load
     document.addEventListener('DOMContentLoaded', async function() {
+      mountPersistentMarketWorkspace();
       console.log('[TABBAR] Tab bar rendered');
       fetch('/api/log', {
         method: 'POST',
@@ -7278,7 +7436,12 @@
     function cancelScan() {
       if (scanAbortController) {
         scanAbortController.abort();
-        resetScanUI();
+        const stopButton = document.getElementById("stop-run-btn");
+        if (stopButton) {
+          stopButton.disabled = true;
+          stopButton.textContent = "Stopping…";
+        }
+        showToast("Stopping the screener run…");
       }
     }
 
@@ -7476,10 +7639,16 @@
 
     function syncScreenerRunButtonState(running = false) {
       const runBtn = document.getElementById("run-btn");
+      const stopBtn = document.getElementById("stop-run-btn");
       if (!runBtn) {
         return;
       }
       runBtn.dataset.running = running ? "1" : "0";
+      if (stopBtn) {
+        stopBtn.classList.toggle("hidden", !running);
+        stopBtn.disabled = !running;
+        stopBtn.textContent = "Stop Run";
+      }
       if (running) {
         runBtn.innerHTML = `
             <svg class="w-3.5 h-3.5 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -7737,7 +7906,8 @@
       }
 
       // Set up abortion
-      scanAbortController = new AbortController();
+      const abortController = new AbortController();
+      scanAbortController = abortController;
 
       if (spinner) spinner.classList.remove("hidden");
       setNavScanProgress({
@@ -7862,7 +8032,7 @@
         let resp = null;
         let rawData = null;
         try {
-          resp = await fetch(url, { signal: scanAbortController.signal, cache: "no-store" });
+          resp = await fetch(url, { signal: abortController.signal, cache: "no-store" });
           console.log("Fetch response status:", resp.status, "URL:", url);
 
           rawData = await resp.json();
@@ -8033,6 +8203,11 @@
           progInterval = null;
         }
       } catch (err) {
+        if (err && (err.name === "AbortError" || abortController.signal.aborted)) {
+          resetScanUI();
+          showToast("Screener run stopped.");
+          return;
+        }
         const errMsg = err instanceof Error ? err.message : String(err);
         const errStack = err instanceof Error ? err.stack : "No stack trace";
         console.error("=== SCREEN SCAN ERROR ===");
@@ -8429,6 +8604,7 @@
       await loadMarketStatus();
       try {
         await loadScreenPresets();
+        await loadDslxStrategyList();
       } catch (err) {
         console.warn("Could not load screener presets", err);
         applyScreenFilters(SCREEN_DEFAULT_FILTERS);
@@ -8445,6 +8621,7 @@
     Object.assign(window, {
       applyDsl,
       applyJobProgressSnapshot,
+      cancelScan,
       closeModifyModal,
       closeListEditorModal,
       openListEditorModal,
@@ -8463,6 +8640,11 @@
       exportTopMatches,
       applyScreenPreset,
       applyBacktestPreset,
+      loadDslxStrategyList,
+      loadDslxStrategyFromScreener,
+      saveDslxStrategy,
+      runEditorScreen,
+      openEditorBacktest,
       saveBacktestPreset,
       resetDashboardTabPreference,
       runScreen,

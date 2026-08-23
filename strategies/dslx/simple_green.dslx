@@ -1,0 +1,11 @@
+strategy simple_green {
+  source universe.selected
+  candles timeframe "1d" as heikin_ashi
+  scan latest
+
+  entry when candle => candle.is_green
+  exit when candle => pass
+}
+
+let matches = simple_green.run()
+matches.show()

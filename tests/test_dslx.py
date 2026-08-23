@@ -8,6 +8,7 @@ from ETF_screener.dslx import (
     DSLXProgramInterpreter,
     DSLXSyntaxError,
     MatchList,
+    backtest_signals,
     parse_program,
     parse_strategy,
 )
@@ -44,11 +45,40 @@ def test_dslx_strategy_evaluates_documented_when_rules():
     assert interpreter.matches_exit(_candles()) is False
 
 
+def test_dslx_requires_an_explicit_exit_and_accepts_pass_as_a_no_op():
+    with pytest.raises(DSLXSyntaxError, match="needs an exit rule"):
+        parse_strategy("strategy incomplete { entry when candle => candle.is_green }")
+
+    interpreter = DSLXInterpreter(
+        "strategy hold { entry when candle => candle.is_green exit when candle => pass }"
+    )
+    assert interpreter.matches_exit(_candles()) is False
+
+
+def test_dslx_backtest_signals_are_historical_and_preserve_no_op_exits():
+    signals = backtest_signals(
+        """
+        strategy green {
+          entry when candle => candle.is_green
+          exit when candle => pass
+        }
+        let matches = green.run()
+        matches.show()
+        """,
+        _candles(),
+    )
+
+    assert bool(signals["entry_condition"].iloc[-1]) is True
+    assert signals["exit_condition"].sum() == 0
+    assert signals["signal"].iloc[-1] == 1
+
+
 def test_dslx_window_predicates_are_consecutive_and_safe():
     interpreter = DSLXInterpreter(
         """
         strategy green_sequence {
           entry when candle => candle.window(3).all(c => c.close > c.open)
+          exit when candle => pass
         }
         """
     )
@@ -62,6 +92,7 @@ def test_dslx_accepts_c_style_logical_operators():
         """
         strategy c_style_operators {
           entry when candle => candle.is_green && !candle.is_doji || candle.is_red
+          exit when candle => pass
         }
         """
     )
@@ -75,6 +106,7 @@ def test_dslx_supports_previous_window_aggregates_and_chained_comparisons():
         strategy breakout {
           entry when candle => candle.close > candle.previous(1).window(20).high.max()
             AND 40 < candle.rsi(14) < 101
+          exit when candle => pass
         }
         """
     )
@@ -115,6 +147,7 @@ def test_dslx_can_filter_on_candle_geometry_and_doji():
           entry when candle => candle.color == "green"
             AND candle.lower_wick_ratio > 0.4
             AND candle.body_ratio < 0.4
+          exit when candle => pass
         }
         """
     )
@@ -139,6 +172,7 @@ def test_dslx_supports_source_aware_indicators_and_indicator_slope():
           entry when candle => candle.ema("high", 20).slope > 0
             && candle.rsi(14).slope >= 0
             && candle.volume >= candle.volume_ema(20)
+          exit when candle => pass
         }
         """
     )
@@ -154,6 +188,7 @@ def test_dslx_parses_candle_centred_strategy_declarations():
           candles timeframe "1d" as heikin_ashi
           scan within 10 candles
           match when candle => candle.is_green && candle.rsi(14) > 50
+          exit when candle => pass
         }
         """
     )
@@ -168,7 +203,7 @@ def test_dslx_run_returns_composable_provenance_carrying_match_lists():
     latest = _candles()
     latest.loc[29, "Open"] = latest.loc[29, "Close"] - 1
     interpreter = DSLXInterpreter(
-        "strategy green { scan latest match when candle => candle.is_green }"
+        "strategy green { scan latest match when candle => candle.is_green exit when candle => pass }"
     )
 
     matches = interpreter.run(
@@ -180,12 +215,13 @@ def test_dslx_run_returns_composable_provenance_carrying_match_lists():
     assert matches[0].ticker == "AAA"
     assert matches[0].age == 0
     assert (matches + MatchList()).show()[0]["strategy"] == "green"
+    assert (matches + MatchList()).show()[0]["rsi"] == pytest.approx(100.0)
 
 
 def test_dslx_program_parses_strategy_execution_and_display():
     program = parse_program(
         """
-        strategy green { source universe.selected scan latest match when candle => candle.is_green }
+        strategy green { source universe.selected scan latest match when candle => candle.is_green exit when candle => pass }
         let matches = green.run()
         let combined = matches + matches
         combined.show()
@@ -201,7 +237,7 @@ def test_dslx_program_parses_strategy_execution_and_display():
 def test_dslx_program_runs_selected_universe_and_returns_shown_list():
     interpreter = DSLXProgramInterpreter(
         """
-        strategy green { source universe.selected scan latest match when candle => candle.is_green }
+        strategy green { source universe.selected scan latest match when candle => candle.is_green exit when candle => pass }
         let matches = green.run()
         matches.show()
         """
@@ -230,6 +266,7 @@ def test_dslx_program_filters_a_named_universe_before_running_strategy():
           source universe.xetra_liquid
           scan latest
           match when candle => candle.is_green
+          exit when candle => pass
         }
         let matches = green.run()
         matches.show()
@@ -277,7 +314,7 @@ def test_dslx_rejects_unknown_sections_and_python_syntax():
     with pytest.raises(DSLXSyntaxError, match="Unknown strategy section"):
         parse_strategy("strategy bad { import when candle => true }")
     interpreter = DSLXInterpreter(
-        "strategy bad { entry when candle => __import__('os') }"
+        "strategy bad { entry when candle => __import__('os') exit when candle => pass }"
     )
     with pytest.raises(DSLXEvaluationError, match="Unknown name"):
         interpreter.matches_entry(_candles())

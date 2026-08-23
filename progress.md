@@ -1,6 +1,13 @@
 
 # Progress
 
+## 2026-08-23 19:45:40 +02:00
+
+- Added canonical file-backed DSLX strategies with a single-pane editor, file list, load/save flow, and Screener selection.
+- Made entry and exit explicit in DSLX, including a pass no-op exit, and added liquidity universe guards for robust ETF selection.
+- Added historical DSLX entry/exit signal evaluation through the existing trade simulator so DSLX strategies can be backtested.
+- Next resume point: Live-test ha_breakout.dslx backtesting on Nasdaq, then remove the remaining legacy DSL controls from the GUI.
+
 ## 2026-08-17 21:53:56 +02:00
 
 - -Summary

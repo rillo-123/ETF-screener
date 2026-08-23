@@ -28,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from ETF_screener.database import ETFDatabase
-from ETF_screener.dslx import DSLXError, DSLXProgramInterpreter
+from ETF_screener.dslx import DSLXError, DSLXProgramInterpreter, parse_program
 from ETF_screener.backtester import Backtester
 from ETF_screener.config_loader import get_paths
 from ETF_screener.dsl_parser import (
@@ -619,6 +619,22 @@ def load_strategy_content(name):
     if strat_path.exists():
         return strat_path.read_text(encoding="utf-8")
     return ""
+
+
+def _dslx_strategy_path(name: str) -> Path:
+    """Return a safe path for a file-backed DSLX strategy."""
+    safe_name = str(name or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", safe_name):
+        raise HTTPException(status_code=400, detail="Invalid DSLX strategy name")
+    return Path("strategies") / "dslx" / f"{safe_name}.dslx"
+
+
+def get_dslx_strategies() -> list[str]:
+    """List canonical DSLX strategy files, without mixing in legacy .dsl scripts."""
+    directory = Path("strategies") / "dslx"
+    if not directory.exists():
+        return []
+    return sorted(path.stem for path in directory.glob("*.dslx") if path.is_file())
 
 
 def _finite_number(value: object, default: float = 0.0) -> float:
@@ -2374,6 +2390,44 @@ async def index(request: Request):
 async def list_strategies():
     """Get list of available strategies."""
     return get_strategies()
+
+
+@app.get("/api/dslx-strategies")
+async def list_dslx_strategies():
+    """List the file-backed DSLX scripts available to the editor."""
+    return get_dslx_strategies()
+
+
+@app.get("/api/dslx-strategy/{name}")
+async def get_dslx_strategy(name: str):
+    """Load one canonical DSLX script for the browser editor."""
+    path = _dslx_strategy_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="DSLX strategy not found")
+    content = path.read_text(encoding="utf-8")
+    try:
+        parse_program(content)
+    except DSLXError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid DSLX strategy: {exc}") from exc
+    return {"name": path.stem, "content": content}
+
+
+@app.post("/api/dslx-strategy/save")
+async def save_dslx_strategy(request: Request):
+    """Validate and save a canonical DSLX strategy file."""
+    data = await request.json()
+    name = str(data.get("name") or "").removesuffix(".dslx")
+    content = str(data.get("content") or "")
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="DSLX content is required")
+    path = _dslx_strategy_path(name)
+    try:
+        parse_program(content)
+    except DSLXError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid DSLX strategy: {exc}") from exc
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content.rstrip() + "\n", encoding="utf-8")
+    return {"status": "success", "name": path.stem, "message": f"Saved {path.name}"}
 
 
 @app.get("/api/strategy/{name}")

@@ -1,5 +1,5 @@
 {
-  "active_name": "ha_new_exit3",
+  "active_name": "ha_breakout2",
   "presets": [
     {
       "dsl": "candle_age LTE 5\nperiod_1d\nha_close GT ema_high(20)\nAND\nha_open GT ema_low(20)\nAND\nrsi(14) GT 50\nAND\nema_close(200)_slope GT 0",
@@ -64,8 +64,28 @@
       "dsl": "candle_age LTE 0\nperiod_1d\nha_open GT ema_low(20) AND ha_open LT ema_high(20) AND ha_close GT ema_high(20) AND ha_close GT ha_open\nAND\nrsi(14) GT 50 AND ema_close(200)_slope GT 0 AND rsi_14_slope GT 0\nAND\nvolume GT vol_ema_20 * 1.5\nAND \nema_close_20 GTE 10",
       "exit_dsl": "ha_close LT ha_open\nAND\nha_close GT ema_low(20)\nAND\nha_low LTE ema_low(20)",
       "name": "ha_new_exit3"
+    },
+    {
+      "dsl": "strategy ha_breakout {\n  source universe.selected\n  candles timeframe \"1d\" as heikin_ashi\n  scan latest\n\n  entry when candle =>\n    candle.open > candle.ema(\"low\", 20)\n    && candle.open < candle.ema(\"high\", 20)\n    && candle.close > candle.ema(\"high\", 20)\n    && candle.is_green\n    && candle.rsi(14) > 50\n    && candle.ema(\"close\", 200).slope > 0\n    && candle.rsi(14).slope > 0\n    && candle.volume > candle.volume_ema(20) * 1.5\n    && candle.ema(\"close\", 20) >= 10\n\n  exit when candle => pass\n}",
+      "exit_dsl": "ha_close LT ha_open\nAND\nha_close GT ema_low(20)\nAND\nha_low LTE ema_low(20)",
+      "name": "dslx_test"
+    },
+    {
+      "dsl": "strategy simple_green {\n  source universe.selected\n  candles timeframe \"1d\" as heikin_ashi\n  scan latest\n\n  entry when candle => candle.is_green\n  exit when candle => pass\n}\n\nlet matches = simple_green.run()\nmatches.show()",
+      "exit_dsl": "ha_close LT ha_open\nAND\nha_close GT ema_low(20)\nAND\nha_low LTE ema_low(20)",
+      "name": "simple.green"
+    },
+    {
+      "dsl": "strategy ha_breakout {\n  source universe.selected\n  candles timeframe \"1d\" as heikin_ashi\n  scan latest\n\n  entry when candle =>\n    candle.open > candle.ema(\"low\", 20)\n    && candle.open < candle.ema(\"high\", 20)\n    && candle.close > candle.ema(\"high\", 20)\n    && candle.is_green\n    && candle.rsi(14) > 50\n    && candle.ema(\"close\", 200).slope > 0\n    && candle.rsi(14).slope > 0\n    && candle.volume > candle.volume_ema(20) * 1.5\n    && candle.ema(\"close\", 20) >= 10\n\n  exit when candle => pass\n}\n\nlet matches = ha_breakout.run()\nmatches.show()",
+      "exit_dsl": "ha_close LT ha_open\nAND\nha_close GT ema_low(20)\nAND\nha_low LTE ema_low(20)",
+      "name": "ha_breakout"
+    },
+    {
+      "dsl": "strategy ha_breakout {\n  source universe.selected\n  candles timeframe \"1d\" as heikin_ashi\n  scan latest\n\n  entry when candle =>\n    candle.open > candle.ema(\"low\", 20) && candle.open < candle.ema(\"high\", 20)\n    && candle.close > candle.ema(\"high\", 20)\n    && candle.is_green\n    && candle.rsi(14) > 50\n    && candle.ema(\"close\", 200).slope > 0\n    && candle.rsi(14).slope > 0\n    && candle.volume > candle.volume_ema(20) * 1.6\n    && candle.ema(\"close\", 20) >= 10\n\n  exit when candle => pass\n}\n\nlet matches = ha_breakout.run()\nmatches.show()",
+      "exit_dsl": "ha_close LT ha_open\nAND\nha_close GT ema_low(20)\nAND\nha_low LTE ema_low(20)",
+      "name": "ha_breakout2"
     }
   ],
   "schema_version": "screen_presets_v1",
-  "updated_at": "2026-08-18T20:02:25.363961+00:00"
+  "updated_at": "2026-08-22T16:29:17.811074+00:00"
 }

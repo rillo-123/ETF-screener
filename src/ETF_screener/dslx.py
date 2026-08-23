@@ -41,6 +41,10 @@ class Match:
     timestamp: object | None = None
 
     def as_dict(self) -> dict[str, object]:
+        try:
+            rsi = float(self.candle.rsi(14))
+        except InsufficientHistory:
+            rsi = None
         return {
             "strategy": self.strategy,
             "ticker": self.ticker,
@@ -51,6 +55,7 @@ class Match:
             "low": self.candle.low,
             "close": self.candle.close,
             "volume": self.candle.volume,
+            "rsi": rsi,
         }
 
 
@@ -281,6 +286,10 @@ class _Parser:
             raise DSLXSyntaxError(f"Unexpected token at offset {self.current.offset}")
         if entry is None:
             raise DSLXSyntaxError("A strategy needs an entry rule")
+        if exit_rule is None:
+            raise DSLXSyntaxError(
+                "A strategy needs an exit rule; use 'exit when candle => pass' for a no-op exit"
+            )
         return Strategy(
             name, entry, exit_rule, entry_execution, exit_execution,
             source, timeframe, candle_style, scan,
@@ -509,6 +518,8 @@ class _Parser:
             if value == "true":
                 return Literal(True)
             if value == "false":
+                return Literal(False)
+            if value == "pass":
                 return Literal(False)
             return Name(token.value)
         if self.accept("("):
@@ -1067,3 +1078,53 @@ class DSLXProgramInterpreter:
             if name not in values:
                 raise DSLXEvaluationError(f"Unknown MatchList '{name}'")
         return {name: values[name] for name in self.program.shows}
+
+
+def backtest_signals(source: str, frame: pd.DataFrame, *, ticker: str = "BACKTEST") -> pd.DataFrame:
+    """Evaluate one DSLX strategy across historical finalized candles.
+
+    The returned frame contains entry/exit masks and an execution signal suitable
+    for the existing trade simulator.  It deliberately evaluates each candle at
+    its own endpoint, so no rule can read a later candle.
+    """
+    program = DSLXProgramInterpreter(source)
+    if len(program.program.strategies) != 1:
+        raise DSLXSyntaxError("A DSLX backtest program must declare exactly one strategy")
+    strategy = program.program.strategies[0]
+    available: dict[str, dict[str, pd.DataFrame]] = {
+        "universe.selected": {ticker: frame},
+    }
+    for definition in program.program.universes:
+        source_frames = available.get(definition.source)
+        if source_frames is None:
+            raise DSLXEvaluationError(
+                f"Universe '{definition.source}' required by '{definition.name}' is unavailable"
+            )
+        available[f"universe.{definition.name}"] = _filter_universe(
+            source_frames, definition
+        )
+    if ticker not in available.get(strategy.source, {}):
+        result = frame.copy()
+        result["entry_condition"] = False
+        result["exit_condition"] = False
+        result["signal"] = 0
+        return result
+
+    series = CandleSeries(frame, style=strategy.candle_style)
+    entry_mask: list[bool] = []
+    exit_mask: list[bool] = []
+    for endpoint in range(len(frame)):
+        candle = series.candle_at(endpoint)
+        try:
+            entry_mask.append(bool(LambdaValue(strategy.entry, {})(candle)))
+        except InsufficientHistory:
+            entry_mask.append(False)
+        try:
+            exit_mask.append(bool(LambdaValue(cast(Lambda, strategy.exit), {})(candle)))
+        except InsufficientHistory:
+            exit_mask.append(False)
+    result = frame.copy()
+    result["entry_condition"] = entry_mask
+    result["exit_condition"] = exit_mask
+    result["signal"] = np.where(result["exit_condition"], -1, np.where(result["entry_condition"], 1, 0))
+    return result

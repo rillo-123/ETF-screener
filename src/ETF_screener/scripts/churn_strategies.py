@@ -3,6 +3,7 @@ import json
 import logging
 
 from ETF_screener.config_loader import get_paths
+from ETF_screener.dslx import DSLXError, parse_program
 from ETF_screener.backtester import (
     Backtester,
     _heikin_ashi_ohlc,
@@ -650,6 +651,16 @@ def find_recent_entry_days(
     if df is None or df.empty:
         return None
 
+    if strategy_spec.get("dslx"):
+        entry_mask = df.get("entry_condition", pd.Series(False, index=df.index)).fillna(False).astype(bool)
+        exit_mask = df.get("exit_condition", pd.Series(False, index=df.index)).fillna(False).astype(bool)
+        scan_limit = len(df) if max_days is None else min(int(max_days) + 1, len(df))
+        for age in range(scan_limit):
+            idx = len(df) - 1 - age
+            if idx >= 0 and bool(entry_mask.iloc[idx]) and not bool(exit_mask.iloc[idx]) and not bool(exit_mask.iloc[idx + 1 :].any()):
+                return age
+        return None
+
     trigger_expr = strategy_spec.get("trigger") or strategy_spec.get("entry")
     filter_expr = strategy_spec.get("filter")
     if not trigger_expr:
@@ -738,6 +749,23 @@ def _load_strategy_specs(
                     }
                 )
     elif dsl_content:
+        if re.match(r"^\s*(?:universe|strategy)\b", dsl_content, re.IGNORECASE):
+            try:
+                program = parse_program(dsl_content)
+            except DSLXError as exc:
+                raise ValueError(f"Invalid DSLX strategy: {exc}") from exc
+            if len(program.strategies) != 1:
+                raise ValueError("A DSLX backtest requires exactly one strategy")
+            strategies.append(
+                {
+                    "name": strategy_name or program.strategies[0].name,
+                    "func": backtester.dslx_strategy,
+                    "kwargs": {"dslx_source": dsl_content},
+                    "dslx": True,
+                    "max_days": None,
+                }
+            )
+            return strategies
         res = parse_dsl_content(dsl_content)
         if res["entry"] and res["entry"] != "False":
             if not res.get("has_valid_exit", False):
