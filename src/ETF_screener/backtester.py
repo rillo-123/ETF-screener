@@ -30,6 +30,74 @@ from ETF_screener.strategy_manager import CachedStrategyManager
 logger = logging.getLogger(__name__)
 
 
+def profit_target_outcomes(
+    frame: pd.DataFrame,
+    *,
+    target_return_pct: float,
+    horizon_days: int,
+    entry_price_multiplier: float = 1.0,
+) -> dict[str, float | int]:
+    """Measure whether entry conditions reach a return target within a horizon.
+
+    Entries use the closing price on their execution bar (including the supplied
+    slippage multiplier).  A target is counted only when a later daily high
+    reaches it, so an entry at the close never benefits from that same day's
+    earlier intraday high.  Entries without a complete forward horizon are
+    excluded instead of being treated as losses.
+    """
+    if target_return_pct <= 0:
+        raise ValueError("target_return_pct must be positive")
+    if horizon_days < 1:
+        raise ValueError("horizon_days must be at least one trading day")
+
+    columns = {str(column).lower(): str(column) for column in frame.columns}
+    close_column = columns.get("close")
+    high_column = columns.get("high", close_column)
+    signal_column = columns.get("target_entry_signal") or columns.get("signal")
+    if not close_column or not high_column or not signal_column:
+        return {
+            "target_entries": 0,
+            "target_hits": 0,
+            "target_hit_rate_pct": 0.0,
+            "target_median_days": 0.0,
+            "target_unresolved_entries": 0,
+        }
+
+    close = pd.to_numeric(frame[close_column], errors="coerce").to_numpy(dtype=float)
+    entry_price_column = columns.get("target_entry_price")
+    entry_prices = (
+        pd.to_numeric(frame[entry_price_column], errors="coerce").to_numpy(dtype=float)
+        if entry_price_column
+        else close
+    )
+    high = pd.to_numeric(frame[high_column], errors="coerce").to_numpy(dtype=float)
+    signals = pd.to_numeric(frame[signal_column], errors="coerce").fillna(0).to_numpy()
+    entry_indexes = np.flatnonzero(signals == 1)
+    eligible_indexes = entry_indexes[entry_indexes + horizon_days < len(frame)]
+    days_to_target: list[int] = []
+    for entry_index in eligible_indexes:
+        entry_price = entry_prices[entry_index] * entry_price_multiplier
+        target_price = entry_price * (1 + target_return_pct / 100.0)
+        forward_highs = high[entry_index + 1 : entry_index + horizon_days + 1]
+        reached = np.flatnonzero(forward_highs >= target_price)
+        if len(reached):
+            days_to_target.append(int(reached[0]) + 1)
+
+    eligible_count = int(len(eligible_indexes))
+    hit_count = len(days_to_target)
+    return {
+        "target_entries": eligible_count,
+        "target_hits": hit_count,
+        "target_hit_rate_pct": round((hit_count / eligible_count) * 100, 2)
+        if eligible_count
+        else 0.0,
+        "target_median_days": round(float(np.median(days_to_target)), 2)
+        if days_to_target
+        else 0.0,
+        "target_unresolved_entries": int(len(entry_indexes) - eligible_count),
+    }
+
+
 def _heikin_ashi_ohlc(frame: pd.DataFrame) -> dict[str, pd.Series]:
     """Build the Heikin-Ashi OHLC series used by the readable DSL aliases."""
     raw_close = pd.to_numeric(frame["close"], errors="coerce")
@@ -101,7 +169,7 @@ def _worker_run_remote_scripted(
 
 
 class Backtester:
-    RESULT_CACHE_VERSION = "backtest_result_v3"
+    RESULT_CACHE_VERSION = "backtest_result_v7"
 
     def __init__(
         self,
@@ -267,6 +335,16 @@ class Backtester:
 
         price_series = df["Close"] if "Close" in df.columns else df["close"]
         prices = pd.to_numeric(price_series, errors="coerce").to_numpy(dtype="float64")
+        exit_fill_prices = (
+            pd.to_numeric(df["exit_fill_price"], errors="coerce").to_numpy(dtype="float64")
+            if "exit_fill_price" in df.columns
+            else np.full(len(df), np.nan)
+        )
+        entry_fill_prices = (
+            pd.to_numeric(df["entry_fill_price"], errors="coerce").to_numpy(dtype="float64")
+            if "entry_fill_price" in df.columns
+            else np.full(len(df), np.nan)
+        )
         signals = (
             pd.to_numeric(df["signal"], errors="coerce")
             .fillna(0)
@@ -295,7 +373,8 @@ class Backtester:
                 mdd = dd
 
             if signal == 1 and position == 0:
-                buy_price = price * (1 + self.slippage_pct / 100)
+                entry_price = entry_fill_prices[i] if np.isfinite(entry_fill_prices[i]) else price
+                buy_price = entry_price * (1 + self.slippage_pct / 100)
                 capital -= self.commission
                 position = capital / buy_price
                 capital = 0
@@ -303,7 +382,8 @@ class Backtester:
                 executed_signals[i] = 1
             elif signal == -1 and position > 0:
                 buy_trade = trades[-1]
-                sell_price = price * (1 - self.slippage_pct / 100)
+                exit_price = exit_fill_prices[i] if np.isfinite(exit_fill_prices[i]) else price
+                sell_price = exit_price * (1 - self.slippage_pct / 100)
                 capital = (position * sell_price) - self.commission
                 position = 0
                 profit = (sell_price - buy_trade["price"]) / buy_trade["price"]
@@ -337,6 +417,14 @@ class Backtester:
             else:
                 executed_signals[i] = 0
 
+        # Preserve all entry conditions for forward-return analysis.  The
+        # public ``signal`` column below contains only trades that the
+        # one-position simulator executed, which would otherwise hide valid
+        # setups occurring while an earlier position was still open.
+        df["target_entry_signal"] = (signals == 1).astype(np.int8)
+        df["target_entry_price"] = np.where(
+            np.isfinite(entry_fill_prices), entry_fill_prices, prices
+        )
         df["Signal"] = executed_signals
         df["signal"] = executed_signals
 

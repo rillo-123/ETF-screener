@@ -70,7 +70,35 @@ def test_dslx_backtest_signals_are_historical_and_preserve_no_op_exits():
 
     assert bool(signals["entry_condition"].iloc[-1]) is True
     assert signals["exit_condition"].sum() == 0
-    assert signals["signal"].iloc[-1] == 1
+    assert signals["signal"].sum() == 1
+    assert signals["signal"].iloc[-1] == 0
+
+
+def test_dslx_exit_rules_can_reference_the_open_position_entry_price():
+    frame = pd.DataFrame(
+        {
+            "Open": [100.0, 101.0, 102.0],
+            "High": [101.0, 104.0, 106.0],
+            "Low": [99.0, 100.0, 101.0],
+            "Close": [100.0, 102.0, 104.0],
+            "Volume": [1_000.0, 1_000.0, 1_000.0],
+        }
+    )
+    signals = backtest_signals(
+        """
+        strategy fixed_target {
+          candles timeframe "1d" as regular
+          entry at candle.close when candle => candle.close == 100
+          exit when candle => candle.high >= position.entry_price * 1.03
+        }
+        """,
+        frame,
+    )
+
+    assert signals["signal"].tolist() == [1, -1, 0]
+    assert signals["entry_fill_price"].iloc[0] == pytest.approx(100.0)
+    assert signals["exit_condition"].tolist() == [False, True, False]
+    assert signals["exit_fill_price"].iloc[1] == pytest.approx(103.0)
 
 
 def test_dslx_window_predicates_are_consecutive_and_safe():
@@ -85,6 +113,132 @@ def test_dslx_window_predicates_are_consecutive_and_safe():
 
     assert interpreter.matches_entry(_candles()) is True
     assert interpreter.matches_entry(_candles().iloc[:2]) is False
+
+
+def test_dslx_compares_adjacent_candles_with_arbitrary_previous_offsets():
+    candles = pd.DataFrame(
+        {
+            "Open": [10.0, 9.0, 11.0],
+            "High": [11.0, 12.0, 14.0],
+            "Low": [8.0, 8.0, 10.0],
+            "Close": [9.0, 11.0, 13.0],
+            "Volume": [1_000.0, 2_000.0, 3_000.0],
+        }
+    )
+    interpreter = DSLXInterpreter(
+        """
+        strategy two_candle_reversal {
+          candles timeframe "1d" as regular
+          entry when candle => candle.is_green
+            AND candle.previous(1).is_green
+            AND candle.close > candle.previous(1).high
+            AND candle.previous(2).is_red
+          exit when candle => pass
+        }
+        """
+    )
+
+    assert interpreter.matches_entry(candles) is True
+    assert interpreter.matches_entry(candles.iloc[:2]) is False
+
+
+def test_dslx_named_candle_structs_define_consecutive_pattern_order():
+    candles = pd.DataFrame(
+        {
+            "Open": [10.0, 9.0, 11.0],
+            "High": [11.0, 12.0, 14.0],
+            "Low": [8.0, 8.5, 10.0],
+            "Close": [9.0, 11.0, 13.0],
+            "Volume": [1_000.0, 2_000.0, 3_000.0],
+        }
+    )
+    source = """
+        strategy consecutive_breakout {
+          candle breakout {
+            when => is_green && close > recovery.high
+          }
+          candle setup {
+            when => is_red
+          }
+          candle recovery {
+            when => is_green && low > setup.low
+          }
+          candle breakdown {
+            when => is_red
+          }
+          entrystruct {
+            setup
+            recovery
+            breakout
+            at breakout.close
+          }
+          exitstruct {
+            breakdown
+          }
+        }
+    """
+    interpreter = DSLXInterpreter(source)
+
+    assert interpreter.matches_entry(candles) is True
+    assert interpreter.matches_entry(candles.iloc[:2]) is False
+    matches = interpreter.run({"PATTERN": candles})
+    assert [name for name, _candle in matches[0].pattern] == [
+        "setup", "recovery", "breakout"
+    ]
+    assert [item["name"] for item in matches.show()[0]["candles"]] == [
+        "setup", "recovery", "breakout"
+    ]
+
+
+def test_dslx_struct_references_are_validated_before_evaluation():
+    missing_member = """
+        strategy invalid {
+          candle setup { when => is_red }
+          candle breakout { when => close > setup.high }
+          candle exit_candle { when => is_red }
+          entrystruct { breakout }
+          exitstruct { exit_candle }
+        }
+    """
+    with pytest.raises(DSLXSyntaxError, match="not a member of this structure"):
+        parse_strategy(missing_member)
+
+    forward_reference = missing_member.replace(
+        "entrystruct { breakout }", "entrystruct { breakout setup }"
+    )
+    with pytest.raises(DSLXSyntaxError, match="cannot reference later candle 'setup'"):
+        parse_strategy(forward_reference)
+
+
+def test_dslx_structs_produce_historical_entry_and_exit_signals():
+    frame = pd.DataFrame(
+        {
+            "Open": [10.0, 9.0, 11.0, 14.0],
+            "High": [11.0, 12.0, 14.0, 14.0],
+            "Low": [8.0, 8.5, 10.0, 11.0],
+            "Close": [9.0, 11.0, 13.0, 12.0],
+            "Volume": [1_000.0] * 4,
+        }
+    )
+    signals = backtest_signals(
+        """
+        strategy pattern_trade {
+          candle setup { when => is_red }
+          candle recovery { when => is_green }
+          candle breakout { when => is_green && close > recovery.high }
+          candle exit_setup { when => is_green }
+          candle breakdown { when => is_red && close < exit_setup.close }
+          entrystruct { setup recovery breakout at breakout.close }
+          exitstruct { exit_setup breakdown }
+        }
+        """,
+        frame,
+    )
+
+    assert signals["entry_condition"].tolist() == [False, False, True, False]
+    assert signals["exit_condition"].tolist() == [False, False, False, True]
+    assert signals["signal"].tolist() == [0, 0, 1, -1]
+    assert signals["entry_fill_price"].iloc[2] == pytest.approx(13.0)
 
 
 def test_dslx_accepts_c_style_logical_operators():
@@ -178,6 +332,102 @@ def test_dslx_supports_source_aware_indicators_and_indicator_slope():
     )
 
     assert interpreter.matches_entry(_candles()) is True
+
+
+def test_dslx_indicator_candle_region_predicates_follow_visible_candle_parts():
+    body = DSLXInterpreter(
+        """
+        strategy ema_in_body {
+          entry when candle => candle.ema("close", 2).within_body
+          exit when candle => pass
+        }
+        """
+    )
+    upper_wick = DSLXInterpreter(
+        """
+        strategy ema_in_upper_wick {
+          entry when candle => candle.ema("close", 2).within_upper_wick
+          exit when candle => pass
+        }
+        """
+    )
+    lower_wick = DSLXInterpreter(
+        """
+        strategy ema_in_lower_wick {
+          entry when candle => candle.ema("close", 2).within_lower_wick
+          exit when candle => pass
+        }
+        """
+    )
+    frame = pd.DataFrame(
+        {
+            "Open": [10.0, 10.0, 10.0],
+            "High": [12.0, 12.0, 12.0],
+            "Low": [8.0, 8.0, 8.0],
+            "Close": [10.0, 11.0, 11.0],
+            "Volume": [1_000.0] * 3,
+        }
+    )
+
+    # EMA(2) ends inside the final 10-to-11 body.
+    assert body.matches_entry(frame) is True
+    assert upper_wick.matches_entry(frame) is False
+    assert lower_wick.matches_entry(frame) is False
+
+    upper_frame = frame.assign(Close=[10.0, 12.0, 12.0])
+    # EMA(2) ends just above the final body, leaving it in the upper wick.
+    upper_frame.loc[2, "Close"] = 11.0
+    assert upper_wick.matches_entry(upper_frame) is True
+
+    lower_frame = frame.assign(Close=[10.0, 8.0, 9.0])
+    assert lower_wick.matches_entry(lower_frame) is True
+
+
+def test_dslx_candle_within_ema_band_requires_the_full_candle_inside():
+    interpreter = DSLXInterpreter(
+        """
+        strategy contained_by_ema_band {
+          entry when candle => candle.within_ema_band(2)
+          exit when candle => pass
+        }
+        """
+    )
+    contained = pd.DataFrame(
+        {
+            "Open": [10.0, 10.0, 10.0],
+            "High": [12.0, 12.0, 11.0],
+            "Low": [8.0, 8.0, 9.0],
+            "Close": [10.0, 10.0, 10.0],
+            "Volume": [1_000.0] * 3,
+        }
+    )
+
+    assert interpreter.matches_entry(contained) is True
+    assert interpreter.matches_entry(contained.assign(High=[12.0, 12.0, 13.0])) is False
+    assert interpreter.matches_entry(contained.assign(Low=[8.0, 8.0, 7.0])) is False
+
+
+def test_dslx_ema_band_contains_is_a_concise_alias_for_candle_containment():
+    interpreter = DSLXInterpreter(
+        """
+        strategy contained_by_ema_band {
+          entry when candle => candle.ema("high", "low", 2).contains
+          exit when candle => pass
+        }
+        """
+    )
+    contained = pd.DataFrame(
+        {
+            "Open": [10.0, 10.0, 10.0],
+            "High": [12.0, 12.0, 11.0],
+            "Low": [8.0, 8.0, 9.0],
+            "Close": [10.0, 10.0, 10.0],
+            "Volume": [1_000.0] * 3,
+        }
+    )
+
+    assert interpreter.matches_entry(contained) is True
+    assert interpreter.matches_entry(contained.assign(High=[12.0, 12.0, 13.0])) is False
 
 
 def test_dslx_parses_candle_centred_strategy_declarations():

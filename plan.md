@@ -1,10 +1,10 @@
 # Plan
 
-Last updated: 2026-08-23 19:45:40 +02:00
+Last updated: 2026-08-27 20:49:58 +02:00
 
 ## Current objective
 
-Continue the DSLX-native strategy workflow and retire the legacy GUI after backtest parity is live.
+Milestone workflow completed successfully with no auto-fixes required.
 
 ## Plan map
 

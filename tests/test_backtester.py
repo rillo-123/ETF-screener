@@ -2,7 +2,34 @@ import pytest
 import pandas as pd
 import numpy as np
 from concurrent.futures.process import BrokenProcessPool
-from ETF_screener.backtester import Backtester, rsi_strategy, ema_cross_strategy
+from ETF_screener.backtester import (
+    Backtester,
+    ema_cross_strategy,
+    profit_target_outcomes,
+    rsi_strategy,
+)
+
+
+def test_profit_target_outcomes_uses_future_highs_and_excludes_incomplete_windows():
+    frame = pd.DataFrame(
+        {
+            "Close": [100.0, 101.0, 104.0, 100.0, 100.0],
+            "High": [101.0, 103.0, 106.0, 102.0, 101.0],
+            "signal": [1, 0, 1, 0, 1],
+        }
+    )
+
+    outcomes = profit_target_outcomes(
+        frame, target_return_pct=5.0, horizon_days=2
+    )
+
+    assert outcomes == {
+        "target_entries": 2,
+        "target_hits": 1,
+        "target_hit_rate_pct": 50.0,
+        "target_median_days": 2.0,
+        "target_unresolved_entries": 1,
+    }
 
 
 @pytest.fixture

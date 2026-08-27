@@ -6417,6 +6417,14 @@
       const runBtn = document.getElementById("backtest-run-btn");
       const content = document.getElementById("backtest-content");
       const signalDays = getBacktestSignalDays();
+      const targetReturnInput = document.getElementById("bt-target-return-pct");
+      const targetHorizonInput = document.getElementById("bt-target-horizon-days");
+      const targetReturnPct = Number(targetReturnInput?.value ?? 3);
+      const targetHorizonDays = Number(targetHorizonInput?.value ?? 10);
+      if (!(targetReturnPct > 0) || !(targetHorizonDays >= 1)) {
+        setBacktestEmptyState("Set a positive profit target and at least one trading day.");
+        return;
+      }
 
       if (backtestSourceMode === "saved" && !activeSavedStrategy) {
         setBacktestEmptyState("Select a saved strategy first, then open Backtester to score it.");
@@ -6544,6 +6552,8 @@
         if (signalDays !== null) {
           url += `&signal_days=${encodeURIComponent(String(signalDays))}`;
         }
+        url += `&target_return_pct=${encodeURIComponent(String(targetReturnPct))}`;
+        url += `&target_horizon_days=${encodeURIComponent(String(Math.floor(targetHorizonDays)))}`;
         if (backtestSourceMode === "editor") {
           url += `&strategy=${encodeURIComponent(strategyName || 'Editor Draft')}`;
           url += `&dsl_content=${encodeURIComponent(editorDsl)}`;
@@ -6594,6 +6604,15 @@
           medianDrawdownNode.textContent = `${Number(data.summary?.median_max_dd || 0).toFixed(2)}%`;
         }
         document.getElementById("bt-avg-sharpe").textContent = Number(data.summary?.avg_sharpe || 0).toFixed(2);
+        const targetLabel = document.getElementById("bt-target-hit-label");
+        const targetRate = document.getElementById("bt-target-hit-rate");
+        if (targetLabel) targetLabel.textContent = `${targetReturnPct.toFixed(1)}% in ${Math.floor(targetHorizonDays)}d`;
+        if (targetRate) {
+          const rate = Number(data.summary?.target_hit_rate_pct);
+          const entries = Number(data.summary?.target_entries || 0);
+          targetRate.textContent = Number.isFinite(rate) && entries > 0 ? `${rate.toFixed(1)}%` : "—";
+          targetRate.title = `${Number(data.summary?.target_hits || 0)} of ${entries} eligible entries reached the target`;
+        }
         setBacktestStructureData({
           summaries: data.strategy_summaries,
           strategyProfile: data.strategy_profile,

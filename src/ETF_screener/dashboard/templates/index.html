@@ -960,7 +960,7 @@
           <div>
             <div class="text-[11px] font-bold uppercase tracking-[0.2em] text-indigo-600">Strategy workspace</div>
             <h2 class="mt-1 text-2xl font-bold text-slate-900">DSLX Editor</h2>
-            <p class="mt-1 text-sm text-slate-500">Open a file-backed strategy here, then edit and version it in VS Code. Every script contains an entry and an exit rule.</p>
+            <p class="mt-1 text-sm text-slate-500">Open a file-backed strategy here, then edit and version it in VS Code. Entry and exit rules may use lambdas or ordered named-candle structs.</p>
           </div>
           <div class="flex flex-wrap gap-2">
             <label class="flex items-center gap-1 rounded-lg border border-slate-600 bg-slate-900 px-2 text-xs font-semibold text-slate-200">File
@@ -996,7 +996,7 @@
 
 let matches = simple_green.run()
 matches.show()</textarea>
-              <p class="mt-2 text-[11px] text-slate-400">Every DSLX strategy declares both <code>entry</code> and <code>exit</code>. Use <code>exit when candle =&gt; pass</code> when no exit condition is wanted.</p>
+              <p class="mt-2 text-[11px] text-slate-400">For consecutive patterns, define named <code>candle</code> objects and order them oldest-to-newest in <code>entrystruct</code> or <code>exitstruct</code>. Legacy entry/exit lambdas remain supported.</p>
             </div>
           </div>
           <div id="screen-dsl-validation" role="status" aria-live="polite" class="mt-4 hidden rounded-lg border px-3 py-2 text-xs font-semibold"></div>
@@ -1033,9 +1033,19 @@ matches.show()</textarea>
           <textarea id="backtest-exit-preview" oninput="syncBacktestDslEditors()" placeholder="Enter the strategy exit DSL..." class="mt-1 min-h-[130px] w-full rounded-lg border border-rose-300 bg-rose-50 px-3 py-3 font-mono text-sm text-rose-950"></textarea>
         </label>
       </div>
+      <div class="flex flex-wrap items-end gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <div class="text-sm font-semibold text-amber-950">Profit-target gauge</div>
+        <label class="text-[10px] font-bold uppercase tracking-wide text-amber-800">Target return
+          <input id="bt-target-return-pct" type="number" min="0.1" step="0.1" value="3" class="mt-1 block w-24 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-800">
+        </label>
+        <label class="text-[10px] font-bold uppercase tracking-wide text-amber-800">Within trading days
+          <input id="bt-target-horizon-days" type="number" min="1" step="1" value="10" class="mt-1 block w-24 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-800">
+        </label>
+        <p class="max-w-xl text-xs text-amber-900">For each entry setup, checks whether a later daily high reaches the target. Entries without a full horizon are excluded.</p>
+      </div>
       <div id="backtest-empty" class="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">Choose a preset, then run the backtest.</div>
       <div id="backtest-content" class="hidden space-y-5">
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-7">
+        <div class="grid grid-cols-2 gap-3 md:grid-cols-8">
           <div class="rounded-xl border-t-4 border-emerald-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Strategy</div><div id="bt-strategy" class="mt-2 font-bold text-slate-800">-</div></div>
           <div class="rounded-xl border-t-4 border-indigo-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Candidates</div><div id="bt-count" class="mt-2 font-bold text-slate-800">0</div></div>
           <div class="rounded-xl border-t-4 border-amber-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Best Quality</div><div id="bt-best-quality" class="mt-2 font-bold text-slate-800">0.00</div></div>
@@ -1043,6 +1053,7 @@ matches.show()</textarea>
           <div class="rounded-xl border-t-4 border-fuchsia-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Median Return</div><div id="bt-median-return" class="mt-2 font-bold text-slate-800">0.00%</div></div>
           <div class="rounded-xl border-t-4 border-orange-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Median Drawdown</div><div id="bt-median-drawdown" class="mt-2 font-bold text-slate-800">0.00%</div></div>
           <div class="rounded-xl border-t-4 border-cyan-500 bg-white p-4 shadow"><div class="text-xs font-bold uppercase text-slate-500">Avg Sharpe</div><div id="bt-avg-sharpe" class="mt-2 font-bold text-slate-800">0.00</div></div>
+          <div class="rounded-xl border-t-4 border-amber-500 bg-white p-4 shadow"><div id="bt-target-hit-label" class="text-xs font-bold uppercase text-slate-500">Target Hit Rate</div><div id="bt-target-hit-rate" class="mt-2 font-bold text-slate-800">—</div></div>
         </div>
         <div id="backtest-chart" class="h-[360px] w-full"></div>
         <div id="backtest-structure-panel" class="hidden"><div id="backtest-structure-chart" class="h-[360px] w-full"></div></div>

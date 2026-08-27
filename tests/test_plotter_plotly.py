@@ -24,6 +24,43 @@ def test_dslx_source_aware_ema_calls_are_extracted_for_chart_overlays():
     assert specs == [(20, "low"), (20, "high"), (200, "close")]
 
 
+def test_high_low_ema_ribbon_uses_heikin_ashi_wicks():
+    df = pd.DataFrame(
+        {
+            "Date": pd.date_range(start="2024-01-01", periods=4),
+            "Open": [0.40, 0.45, 1.00, 1.10],
+            "High": [0.50, 0.55, 1.20, 1.30],
+            "Low": [0.30, 0.35, 0.90, 1.00],
+            "Close": [0.45, 0.40, 1.10, 1.20],
+            "Volume": [1000.0] * 4,
+        }
+    )
+    plotter = InteractivePlotter()
+    fig = plotter.create_plot(
+        df,
+        "TEST",
+        indicator_params={
+            "candle_mode": "heikin_ashi",
+            "ema_overlay_periods": [2],
+            "ema_overlay_specs": [
+                {"period": 2, "source": "high"},
+                {"period": 2, "source": "low"},
+            ],
+        },
+    )
+    traces = {trace.name: trace for trace in fig.data}
+    _, ha_high, ha_low, _ = plotter._heikin_ashi_ohlc(df)
+    assert np.allclose(
+        _trace_y({"y": traces["EMA 2 High"].y}),
+        ha_high.ewm(span=2, adjust=False).mean(),
+    )
+    assert np.allclose(
+        _trace_y({"y": traces["EMA 2 Low"].y}),
+        ha_low.ewm(span=2, adjust=False).mean(),
+    )
+    assert traces["EMA 2 Low"].fill == "tonexty"
+
+
 def test_context_ribbon_preserves_false_gaps():
     dates = pd.date_range(start="2024-01-01", periods=6)
     close = np.array([101.0, 99.0, 102.0, 98.0, 103.0, 97.0])
@@ -450,6 +487,27 @@ def test_heikin_ashi_is_default_and_uses_transformed_ohlc():
     assert ha_open.tolist() == [11.0, 11.0]
     assert ha_high.tolist() == [14.0, 24.0]
     assert ha_low.tolist() == [8.0, 11.0]
+
+
+def test_volume_colors_follow_displayed_heikin_ashi_candles():
+    """A raw red bar can still be a green Heikin-Ashi candle."""
+    df = pd.DataFrame(
+        {
+            "Date": pd.date_range("2024-01-01", periods=2),
+            "Open": [10.0, 20.0],
+            "High": [11.0, 21.0],
+            "Low": [9.0, 18.0],
+            "Close": [10.0, 19.0],
+            "Volume": [1_000.0, 10_000.0],
+        }
+    )
+
+    fig = InteractivePlotter().create_plot(df, "TEST")
+    volume = next(trace for trace in fig.data if trace.type == "bar" and trace.name == "Volume")
+
+    # The second raw candle is red (19 < 20), but its HA close (19.5) is
+    # above its HA open (10), so its volume spike must be green too.
+    assert list(volume.marker.color) == ["green", "green"]
 
 
 def test_simplified_dsl_does_not_fallback_to_default_ribbons():

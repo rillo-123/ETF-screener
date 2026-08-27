@@ -672,6 +672,13 @@ def _backtest_row_from_series(row: pd.Series) -> dict[str, object]:
         "max_dd_pct": round(_finite_number(row.get("Max DD (%)")), 2),
         "trades": int(_finite_number(row.get("Trades"), 0.0)),
         "days_since_entry": int(_finite_number(row.get("Days Since Entry"), 999.0)),
+        "target_hit_rate_pct": (
+            round(_finite_number(row.get("Target Hit Rate (%)")), 2)
+            if pd.notna(row.get("Target Hit Rate (%)"))
+            else None
+        ),
+        "target_entries": int(_finite_number(row.get("Target Entries"), 0.0)),
+        "target_hits": int(_finite_number(row.get("Target Hits"), 0.0)),
     }
 
 
@@ -2408,6 +2415,7 @@ async def get_dslx_strategy(name: str):
     try:
         parse_program(content)
     except DSLXError as exc:
+        logger.warning("DSLX strategy load validation failed for %s: %s", path.name, exc)
         raise HTTPException(status_code=422, detail=f"Invalid DSLX strategy: {exc}") from exc
     return {"name": path.stem, "content": content}
 
@@ -2424,6 +2432,7 @@ async def save_dslx_strategy(request: Request):
     try:
         parse_program(content)
     except DSLXError as exc:
+        logger.warning("DSLX strategy save validation failed for %s: %s", path.name, exc)
         raise HTTPException(status_code=422, detail=f"Invalid DSLX strategy: {exc}") from exc
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
@@ -4018,6 +4027,8 @@ async def backtest_view(
     scan_scope: Optional[str] = None,
     exchange: Optional[str] = None,
     ticker_list: Optional[str] = None,
+    target_return_pct: Optional[float] = None,
+    target_horizon_days: Optional[int] = None,
 ):
     """Evaluate a saved strategy and return ranked quality metrics for the UI."""
     strategy_name = (strategy or "").strip()
@@ -4081,6 +4092,9 @@ async def backtest_view(
             "dsl_content": dsl_text or None,
             "strategy_name": (strategy_name or "Editor Draft"),
         }
+        if target_return_pct is not None or target_horizon_days is not None:
+            evaluate_kwargs["target_return_pct"] = target_return_pct
+            evaluate_kwargs["target_horizon_days"] = target_horizon_days
         if signal_window_days is not None:
             evaluate_kwargs["since_days"] = signal_window_days
         if scan_scope is not None:
@@ -4204,6 +4218,13 @@ async def backtest_view(
                 "max_dd_pct": round(float(row.get("Max DD (%)", 0.0)), 2),
                 "trades": int(row.get("Trades", 0) or 0),
                 "days_since_entry": int(row.get("Days Since Entry", 999) or 999),
+                "target_hit_rate_pct": (
+                    round(float(row["Target Hit Rate (%)"]), 2)
+                    if pd.notna(row.get("Target Hit Rate (%)"))
+                    else None
+                ),
+                "target_entries": int(row.get("Target Entries", 0) or 0),
+                "target_hits": int(row.get("Target Hits", 0) or 0),
             }
         )
 
@@ -4250,6 +4271,8 @@ async def backtest_view(
         detail=f"{len(df)} rows scored",
         structure_profile=structure_profile,
     )
+    target_entries = int(pd.to_numeric(df.get("Target Entries"), errors="coerce").fillna(0).sum()) if "Target Entries" in df else 0
+    target_hits = int(pd.to_numeric(df.get("Target Hits"), errors="coerce").fillna(0).sum()) if "Target Hits" in df else 0
 
     return {
         "strategy_name": profile_strategy_name,
@@ -4269,6 +4292,13 @@ async def backtest_view(
             ),
             "avg_sharpe": round(float(_trade_rows_for_summary(df)["Sharpe"].mean()), 2),
             "trades": _trade_count_for_summary(df),
+            "target_hit_rate_pct": round(target_hits * 100 / target_entries, 2)
+            if target_entries
+            else None,
+            "target_entries": target_entries,
+            "target_hits": target_hits,
+            "target_return_pct": target_return_pct,
+            "target_horizon_days": target_horizon_days,
         },
         "strategy_profile": structure_profile,
         "strategy_summaries": [strategy_summary],
@@ -4302,6 +4332,8 @@ async def backtest_matrix_view(
     scan_scope: Optional[str] = None,
     exchange: Optional[str] = None,
     ticker_list: Optional[str] = None,
+    target_return_pct: Optional[float] = None,
+    target_horizon_days: Optional[int] = None,
 ):
     """Evaluate multiple saved strategies and return rows for flexible 2D plotting."""
     requested = _parse_strategy_selection(strategies)
@@ -4726,6 +4758,8 @@ async def backtest_matrix_view(
                     "exchange": exchange,
                     "ticker_list": ticker_list,
                     "max_workers": ticker_workers,
+                    "target_return_pct": target_return_pct,
+                    "target_horizon_days": target_horizon_days,
                 }
                 try:
                     df = await asyncio.to_thread(
@@ -5022,6 +5056,8 @@ async def backtest_matrix_view(
     safe_limit = max(1, min(int(limit), 5000))
     view = df.head(safe_limit).copy() if not df.empty else df
     rows = [_backtest_row_from_series(row) for _, row in view.iterrows()]
+    target_entries = int(pd.to_numeric(df.get("Target Entries"), errors="coerce").fillna(0).sum()) if "Target Entries" in df else 0
+    target_hits = int(pd.to_numeric(df.get("Target Hits"), errors="coerce").fillna(0).sum()) if "Target Hits" in df else 0
     csv_label = (
         "backtest_matrix_"
         + "_".join(strategy_names[:3])
@@ -5125,6 +5161,13 @@ async def backtest_matrix_view(
                 ),
                 2,
             ),
+            "target_hit_rate_pct": round(target_hits * 100 / target_entries, 2)
+            if target_entries
+            else None,
+            "target_entries": target_entries,
+            "target_hits": target_hits,
+            "target_return_pct": target_return_pct,
+            "target_horizon_days": target_horizon_days,
             "trades": _trade_count_for_summary(df),
         },
         "rows": rows,
@@ -5333,25 +5376,36 @@ async def get_chart(
         except (TypeError, ValueError, json.JSONDecodeError):
             logger.warning("Ignoring malformed ema_overlay_specs query parameter")
 
-    # DSLX has source-aware EMA calls (``candle.ema("low", 20)``), while
-    # legacy scripts express the same intent as ``ema_low(20)``. Resolve DSLX
-    # calls here so the chart receives explicit overlay specs even when the
-    # user has hidden the generic control-panel EMAs.
-    if re.match(r"^\s*(?:universe|strategy)\b", strategy_content, re.IGNORECASE):
-        dslx_ema_specs = [
-            {"source": source.lower(), "period": int(period)}
-            for source, period in re.findall(
-                r"\b(?:candle\.)?ema\s*\(\s*[\"'](open|high|low|close)[\"']\s*,\s*(\d+)\s*\)",
-                strategy_content,
-                re.IGNORECASE,
-            )
-            if 2 <= int(period) <= 500
-        ]
-        if dslx_ema_specs:
-            overlay_specs = list(
-                { (item["period"], item["source"]): item for item in dslx_ema_specs }.values()
-            )
-            overlay_periods = sorted({int(item["period"]) for item in overlay_specs})
+    # Keep source-aware EMA overlays in sync with the strategy.  Both DSLX
+    # (``candle.ema("low", 20)``) and legacy DSL (``ema_low(20)``) are in
+    # active use; previously only DSLX replaced the generic control-panel
+    # EMA overlays, causing a legacy High/Low pair to be rendered as one
+    # close-based curve instead.
+    source_ema_matches = [
+        *re.findall(
+            r"\bema_(open|high|low|close)\s*\(\s*(\d+)\s*\)",
+            strategy_content,
+            re.IGNORECASE,
+        ),
+        *re.findall(
+            r"\b(?:candle\.)?ema\s*\(\s*[\"'](open|high|low|close)[\"']\s*,\s*(\d+)\s*\)",
+            strategy_content,
+            re.IGNORECASE,
+        ),
+    ]
+    strategy_ema_specs = [
+        {"source": source.lower(), "period": int(period)}
+        for source, period in source_ema_matches
+        if 2 <= int(period) <= 500
+    ]
+    if strategy_ema_specs:
+        overlay_specs = list(
+            {
+                (item["period"], item["source"]): item
+                for item in strategy_ema_specs
+            }.values()
+        )
+        overlay_periods = sorted({int(item["period"]) for item in overlay_specs})
 
     def _atr_stop_trace(frame: pd.DataFrame) -> dict:
         """Return a long-position stop guide at close minus two ATRs."""

@@ -1,6 +1,42 @@
 
 # Progress
 
+## 2026-08-27 20:49:58 +02:00
+
+- -Summary
+- Next resume point: Review the latest commit and pick up the next implementation task.
+
+## 2026-08-27 20:45:36 +02:00
+
+- -Summary
+- Next resume point: Inspect the failing test output and fix the remaining bug before rerunning the milestone workflow.
+
+## 2026-08-27
+
+- Replaced fixed 5–10-day market refresh overlap with adaptive missing-tail
+  fetching: populated caches now request from the day after their latest stored
+  candle through the current refresh endpoint, regardless of cached row count.
+- Added regression coverage proving that a five-session gap requests and merges
+  exactly that missing tail; market-refresher and dashboard API verification
+  passed with 67 tests.
+- Implemented named DSLX candle objects plus ordered `entrystruct` and
+  `exitstruct` patterns. The final struct member is the newest candle and all
+  earlier members bind to consecutive historical candles.
+- Added parse-time semantic validation for missing candle members, unknown
+  names, duplicate members, forward references, invalid position access, and
+  mixed legacy/structural rules.
+- Preserved legacy entry/exit lambdas and the existing `run()`, composable
+  `MatchList`, and `show()` behavior. Structured MatchList records now retain
+  the complete named candle sequence.
+- Wired structured patterns through historical backtesting, including explicit
+  named entry prices, and added detailed DSLX load/save validation logging.
+- Added an executable structural copy of the liquid Heikin-Ashi breakout and
+  verified the focused DSLX/backtester/dashboard/plotting/churn suite: 147 tests
+  passed.
+- Next resume point: restart the live dashboard, exercise the structural file
+  against real market data, then design the first genuinely multi-candle entry
+  pattern.
+
 ## 2026-08-23 19:45:40 +02:00
 
 - Added canonical file-backed DSLX strategies with a single-pane editor, file list, load/save flow, and Screener selection.

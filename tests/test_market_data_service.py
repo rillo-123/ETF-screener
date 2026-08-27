@@ -348,7 +348,7 @@ def test_market_data_refresher_zero_day_threshold_tops_up_yesterday(tmp_path):
         }
 
 
-def test_market_data_refresher_uses_delta_window_for_stale_ticker(tmp_path):
+def test_market_data_refresher_fetches_only_missing_tail_for_stale_ticker(tmp_path):
     db_path = tmp_path / "etfs.db"
     etfs_path = tmp_path / "etfs.json"
     etfs_path.write_text(
@@ -419,9 +419,57 @@ def test_market_data_refresher_uses_delta_window_for_stale_ticker(tmp_path):
 
     assert calls, "Expected an incremental fetch call"
     latest_existing_day = existing_df["Date"].max().date()
-    assert calls[0]["start_date"] == latest_existing_day - timedelta(days=10)
+    assert calls[0]["start_date"] == latest_existing_day + timedelta(days=1)
     assert refreshed_df["Date"].max().date() == latest_business_day
     assert len(refreshed_df) > len(existing_df)
+
+
+def test_market_data_refresher_adapts_to_five_missing_sessions():
+    expected_day = MarketDataRefresher._expected_market_day()
+    missing_dates = pd.bdate_range(end=pd.Timestamp(expected_day), periods=5)
+    latest_existing = pd.bdate_range(
+        end=missing_dates[0] - pd.Timedelta(days=1), periods=1
+    )[0]
+    existing_dates = pd.bdate_range(end=latest_existing, periods=20)
+    existing = pd.DataFrame(
+        {
+            "Date": existing_dates,
+            "Open": [100.0] * len(existing_dates),
+            "High": [101.0] * len(existing_dates),
+            "Low": [99.0] * len(existing_dates),
+            "Close": [100.5] * len(existing_dates),
+            "Volume": [100_000] * len(existing_dates),
+        }
+    )
+    calls = []
+
+    class FakeFetcher:
+        def fetch_historical_data(
+            self, symbol, days=365, start_date=None, end_date=None
+        ):
+            calls.append((symbol, days, pd.Timestamp(start_date).date(), end_date))
+            return pd.DataFrame(
+                {
+                    "Date": missing_dates,
+                    "Open": [101.0] * 5,
+                    "High": [102.0] * 5,
+                    "Low": [100.0] * 5,
+                    "Close": [101.5] * 5,
+                    "Volume": [110_000] * 5,
+                }
+            )
+
+    refresher = object.__new__(MarketDataRefresher)
+    refresher.fetcher = FakeFetcher()
+    refresher._load_existing_price_frame = lambda _ticker: existing.copy()
+
+    _ticker, refreshed = refresher._build_refresh_frame(
+        "AAA", depth=400, warmup_days=90
+    )
+
+    assert calls[0][2] == latest_existing.date() + timedelta(days=1)
+    assert refreshed["Date"].max().date() == expected_day
+    assert len(refreshed) == len(existing) + 5
 
 
 def test_market_data_refresher_preserves_timezone_aware_fresh_rows(tmp_path):

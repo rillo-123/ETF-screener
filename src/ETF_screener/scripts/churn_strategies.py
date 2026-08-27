@@ -7,6 +7,7 @@ from ETF_screener.dslx import DSLXError, parse_program
 from ETF_screener.backtester import (
     Backtester,
     _heikin_ashi_ohlc,
+    profit_target_outcomes,
 )
 from ETF_screener.indicators import calculate_rsi
 from ETF_screener.market_data_service import filter_low_vitality_nasdaq_tickers
@@ -20,7 +21,7 @@ from pathlib import Path
 from typing import Dict, List
 
 BLACKLIST_PATH = Path("config") / "blacklist.json"
-STRATEGY_EVAL_CACHE_VERSION = "strategy_eval_v3"
+STRATEGY_EVAL_CACHE_VERSION = "strategy_eval_v7"
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +65,8 @@ def _strategy_request_signature(
     exchange: str | None,
     ticker_list: str | None,
     scan_scope: str | None,
+    target_return_pct: float | None,
+    target_horizon_days: int | None,
     latest_market_date: str | None,
     tickers: list[str] | tuple[str, ...],
 ) -> str:
@@ -103,6 +106,8 @@ def _strategy_request_signature(
             str(ticker_list or "").encode("utf-8")
         ).hexdigest(),
         "scan_scope": str(scan_scope or "").strip().lower(),
+        "target_return_pct": target_return_pct,
+        "target_horizon_days": target_horizon_days,
         "latest_market_date": latest_market_date or "",
         "universe_sha": hashlib.sha256(universe_blob.encode("utf-8")).hexdigest(),
     }
@@ -930,9 +935,17 @@ def evaluate_strategies(
     scan_scope: str | None = None,
     max_workers: int | None = None,
     progress_callback=None,
+    target_return_pct: float | None = None,
+    target_horizon_days: int | None = None,
 ) -> pd.DataFrame:
     """Run strategy scoring and return a ranked DataFrame without plotting side effects."""
     backtester = Backtester()
+    if (target_return_pct is None) != (target_horizon_days is None):
+        raise ValueError("Provide both a profit target percentage and a target horizon")
+    if target_return_pct is not None and float(target_return_pct) <= 0:
+        raise ValueError("Profit target percentage must be positive")
+    if target_horizon_days is not None and int(target_horizon_days) < 1:
+        raise ValueError("Target horizon must be at least one trading day")
     latest_market_date = backtester.db.get_latest_market_date()
     tickers = list(
         _cached_strategy_tickers(
@@ -975,6 +988,8 @@ def evaluate_strategies(
         exchange=exchange,
         ticker_list=ticker_list,
         scan_scope=scan_scope,
+        target_return_pct=target_return_pct,
+        target_horizon_days=target_horizon_days,
         latest_market_date=latest_market_date,
         tickers=tickers,
     )
@@ -1034,6 +1049,17 @@ def evaluate_strategies(
             if max_allowed_days is not None and recent_days_value > max_allowed_days:
                 continue
 
+            target_stats = (
+                profit_target_outcomes(
+                    df,
+                    target_return_pct=float(target_return_pct),
+                    horizon_days=int(target_horizon_days),
+                    entry_price_multiplier=1 + backtester.slippage_pct / 100.0,
+                )
+                if target_return_pct is not None and target_horizon_days is not None
+                else {}
+            )
+
             all_results.append(
                 {
                     "Ticker": res["ticker"],
@@ -1045,6 +1071,10 @@ def evaluate_strategies(
                     "Max DD (%)": res.get("max_drawdown_pct", 0),
                     "Trades": res.get("num_trades", 0),
                     "Days Since Entry": recent_days_value,
+                    "Target Hit Rate (%)": target_stats.get("target_hit_rate_pct"),
+                    "Target Entries": target_stats.get("target_entries"),
+                    "Target Hits": target_stats.get("target_hits"),
+                    "Target Median Days": target_stats.get("target_median_days"),
                     "df": df,
                 }
             )

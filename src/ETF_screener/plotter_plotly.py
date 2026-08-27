@@ -1195,6 +1195,27 @@ class InteractivePlotter:
         self._apply_chart_indicator_params(df, indicator_params)
         chart_params = indicator_params if isinstance(indicator_params, dict) else {}
         candle_mode = str(chart_params.get("candle_mode", "heikin_ashi")).lower()
+        # High/Low EMA bands must use the same candle basis as the visible
+        # candles.  Close-based overlays retain their existing regular-price
+        # calculation, while High/Low bands follow the displayed HA wicks.
+        heikin_ashi_ema_sources: dict[str, pd.Series] = {}
+        if candle_mode == "heikin_ashi":
+            _, ha_high, ha_low, _ = self._heikin_ashi_ohlc(df)
+            heikin_ashi_ema_sources = {"high": ha_high, "low": ha_low}
+
+        def ema_source_series(source: str, fallback: pd.Series) -> pd.Series:
+            return heikin_ashi_ema_sources.get(source, fallback)
+
+        def calculate_chart_ema(source: str, values: pd.Series, period: int) -> pd.Series:
+            # High/Low channels must retain genuine price gaps.  The generic
+            # EMA helper smooths apparent spikes, which can incorrectly pin
+            # one side of a channel after a valid repricing (as with MVIR.ST).
+            if source in {"high", "low"}:
+                return pd.to_numeric(values, errors="coerce").ewm(
+                    span=period, adjust=False
+                ).mean()
+            return calculate_ema(values, period=period)
+
         rsi_trigger = getattr(self, "_active_chart_rsi_trigger", 50.0)
         stoch_trigger = getattr(self, "_active_chart_stoch_trigger", 20.0)
 
@@ -1218,9 +1239,11 @@ class InteractivePlotter:
                 source_column = self._find_column_case_insensitive(
                     df, source.title()
                 ) or self._find_column_case_insensitive(df, source)
-                source_series = df[source_column] if source_column else close
-                df[f"EMA_{period}_{source}"] = calculate_ema(
-                    source_series, period=period
+                source_series = ema_source_series(
+                    source, df[source_column] if source_column else close
+                )
+                df[f"EMA_{period}_{source}"] = calculate_chart_ema(
+                    source, source_series, period
                 )
             chart_params["ema_overlay_specs_resolved"] = ema_specs_for_chart
         else:
@@ -1245,9 +1268,11 @@ class InteractivePlotter:
                 source_column = self._find_column_case_insensitive(
                     df, source.title()
                 ) or self._find_column_case_insensitive(df, source)
-                source_series = df[source_column] if source_column else close
+                source_series = ema_source_series(
+                    source, df[source_column] if source_column else close
+                )
                 ema_column = f"EMA_{period}_{source}"
-                df[ema_column] = calculate_ema(source_series, period=period)
+                df[ema_column] = calculate_chart_ema(source, source_series, period)
             chart_params["ema_overlay_specs_resolved"] = ema_specs_for_chart
         overlay_names = {
             *[f"ema_{period}" for period in ema_periods_for_chart],
@@ -1597,8 +1622,26 @@ class InteractivePlotter:
         ema_specs = chart_params.get("ema_overlay_specs_resolved") or [
             (period, "close") for period in ema_periods
         ]
+        # Plot a high/low pair consecutively, with High first.  Plotly's
+        # ``tonexty`` fill then produces a ribbon down to the Low curve even
+        # when the strategy happened to reference Low before High.
+        ema_spec_set = set(ema_specs)
+        ordered_ema_specs: list[tuple[int, str]] = []
+        emitted_ribbon_periods: set[int] = set()
+        for period, source in ema_specs:
+            is_high_low_pair = {
+                (period, "high"),
+                (period, "low"),
+            }.issubset(ema_spec_set)
+            if is_high_low_pair:
+                if period in emitted_ribbon_periods:
+                    continue
+                ordered_ema_specs.extend([(period, "high"), (period, "low")])
+                emitted_ribbon_periods.add(period)
+                continue
+            ordered_ema_specs.append((period, source))
         ema_colors = ["#f59e0b", "#3b82f6", "#10b981", "#ef4444", "#8b5cf6", "#14b8a6"]
-        for idx, (period, source) in enumerate(ema_specs):
+        for idx, (period, source) in enumerate(ordered_ema_specs):
             ema_col = f"EMA_{period}_{source}"
             if ema_col not in df.columns and source == "close":
                 ema_col = (
@@ -1614,6 +1657,12 @@ class InteractivePlotter:
                     y=df[ema_col],
                     name=f"EMA {period} {source.title()}",
                     line=dict(color=ema_colors[idx % len(ema_colors)], width=1.2),
+                    fill="tonexty" if source == "low" and (period, "high") in ema_spec_set else None,
+                    fillcolor=(
+                        "rgba(96, 165, 250, 0.18)"
+                        if source == "low" and (period, "high") in ema_spec_set
+                        else None
+                    ),
                 ),
                 row=1,
                 col=1,
@@ -1828,7 +1877,11 @@ class InteractivePlotter:
 
         # 2. Volume Chart
         colors = [
-            "red" if df["Close"].iloc[i] < df["Open"].iloc[i] else "green"
+            # Use the same OHLC series that drives the displayed candles.  In
+            # Heikin-Ashi mode, raw OHLC can be red while the transformed
+            # candle is green, which made the corresponding volume bar look
+            # incorrectly bearish.
+            "red" if candle_close.iloc[i] < candle_open.iloc[i] else "green"
             for i in range(len(df))
         ]
         fig.add_trace(

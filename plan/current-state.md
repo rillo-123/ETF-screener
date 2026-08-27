@@ -1,5 +1,21 @@
 # Current state
 
+- -Summary
+
+- -Summary
+
+- Market refresh now treats every populated ticker cache as authoritative and
+  requests only the adaptive missing tail after its latest stored candle. The
+  previous fixed 5–10-day overlap and short-cache full redownload are removed.
+- DSLX now supports independently declared named candle objects and ordered
+  `entrystruct` / `exitstruct` patterns. Struct order binds consecutive candles
+  oldest-to-newest, with the final member at the scan endpoint.
+- Named candle predicates can compare themselves with earlier members of their
+  struct. Missing members, unknown names, duplicates, and forward references
+  are rejected before execution.
+- Structured patterns now run through screening, MatchList display provenance,
+  and historical entry/exit backtesting while legacy DSLX lambda rules remain
+  compatible.
 - Added canonical file-backed DSLX strategies with a single-pane editor, file list, load/save flow, and Screener selection.
 - Made entry and exit explicit in DSLX, including a pass no-op exit, and added liquidity universe guards for robust ETF selection.
 - Added historical DSLX entry/exit signal evaluation through the existing trade simulator so DSLX strategies can be backtested.

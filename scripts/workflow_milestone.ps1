@@ -282,7 +282,8 @@ try {
     # Keep obviously local runtime artifacts out of the milestone commit.
     $excludePaths = @(
         'etf.db',
-        'config/delisting_state.json'
+        'config/delisting_state.json',
+        'config/blacklist.json'
     )
     foreach ($excludePath in $excludePaths) {
         if (Test-Path (Join-Path $root $excludePath)) {

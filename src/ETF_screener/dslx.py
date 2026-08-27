@@ -39,13 +39,14 @@ class Match:
     candle: "Candle"
     age: int
     timestamp: object | None = None
+    pattern: tuple[tuple[str, "Candle"], ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         try:
             rsi = float(self.candle.rsi(14))
         except InsufficientHistory:
             rsi = None
-        return {
+        record: dict[str, object] = {
             "strategy": self.strategy,
             "ticker": self.ticker,
             "timestamp": self.timestamp,
@@ -57,6 +58,19 @@ class Match:
             "volume": self.candle.volume,
             "rsi": rsi,
         }
+        if self.pattern:
+            record["candles"] = [
+                {
+                    "name": name,
+                    "open": candle.open,
+                    "high": candle.high,
+                    "low": candle.low,
+                    "close": candle.close,
+                    "volume": candle.volume,
+                }
+                for name, candle in self.pattern
+            ]
+        return record
 
 
 class MatchList(tuple[Match, ...]):
@@ -153,7 +167,8 @@ class Lambda:
 @dataclass(frozen=True)
 class Strategy:
     name: str
-    entry: Lambda
+    entry: Lambda | None
+    entry_price: object | None = None
     exit: Lambda | None = None
     entry_execution: str = "next_open"
     exit_execution: str = "next_open"
@@ -161,6 +176,17 @@ class Strategy:
     timeframe: str = "1d"
     candle_style: str = "regular"
     scan: str = "latest"
+    candle_definitions: tuple["CandleDefinition", ...] = ()
+    entry_struct: tuple[str, ...] | None = None
+    exit_struct: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
+class CandleDefinition:
+    """A named candle predicate whose time position is assigned by a struct."""
+
+    name: str
+    condition: object
 
 
 @dataclass(frozen=True)
@@ -189,6 +215,39 @@ class Program:
     runs: tuple[tuple[str, str], ...]
     merges: tuple[tuple[str, str, str], ...]
     shows: tuple[str, ...]
+
+
+_IMPLICIT_CANDLE_NAMES = {
+    "open", "high", "low", "close", "volume",
+    "is_green", "is_red", "is_doji", "color",
+    "total_length", "range", "body_length",
+    "upper_wick_length", "lower_wick_length",
+    "body_ratio", "upper_wick_ratio", "lower_wick_ratio",
+    "previous", "window", "within_ema_band", "ema", "sma", "rsi", "atr",
+    "volume_ema",
+}
+
+
+def _expression_names(expression: object | None) -> set[str]:
+    """Collect bare identifiers from an expression for semantic validation."""
+    if expression is None or isinstance(expression, Literal):
+        return set()
+    if isinstance(expression, Name):
+        return {expression.value}
+    if isinstance(expression, Attribute):
+        return _expression_names(expression.target)
+    if isinstance(expression, Call):
+        names = _expression_names(expression.target)
+        for argument in expression.args:
+            names.update(_expression_names(argument))
+        return names
+    if isinstance(expression, Unary):
+        return _expression_names(expression.value)
+    if isinstance(expression, Binary):
+        return _expression_names(expression.left) | _expression_names(expression.right)
+    if isinstance(expression, Lambda):
+        return _expression_names(expression.body) - {expression.parameter}
+    return set()
 
 
 class _Parser:
@@ -227,6 +286,7 @@ class _Parser:
         name = self.expect_identifier()
         self.expect("{")
         entry: Lambda | None = None
+        entry_price: object | None = None
         exit_rule: Lambda | None = None
         entry_execution = "next_open"
         exit_execution = "next_open"
@@ -234,6 +294,9 @@ class _Parser:
         timeframe = "1d"
         candle_style = "regular"
         scan = "latest"
+        candle_definitions: list[CandleDefinition] = []
+        entry_struct: tuple[str, ...] | None = None
+        exit_struct: tuple[str, ...] | None = None
         while not self.accept("}"):
             keyword = self.expect_identifier().lower()
             if keyword == "execution":
@@ -264,7 +327,25 @@ class _Parser:
                     scan = f"within:{count}"
                 elif scan != "latest":
                     raise DSLXSyntaxError("scan must be latest or within <count> candles")
+            elif keyword == "candle":
+                candle_definitions.append(self.parse_candle_definition())
+            elif keyword in {"entrystruct", "exitstruct"}:
+                members, struct_price_expression = self.parse_pattern_struct(
+                    allow_price=keyword == "entrystruct"
+                )
+                if keyword == "entrystruct":
+                    if entry_struct is not None:
+                        raise DSLXSyntaxError("A strategy can define only one entrystruct")
+                    entry_struct = members
+                    entry_price = struct_price_expression
+                else:
+                    if exit_struct is not None:
+                        raise DSLXSyntaxError("A strategy can define only one exitstruct")
+                    exit_struct = members
             elif keyword in {"entry", "exit", "match"}:
+                price_expression: object | None = None
+                if keyword == "entry" and self.accept("at"):
+                    price_expression = self.parse_expression()
                 self.expect("when")
                 expression = self.parse_expression()
                 if not isinstance(expression, Lambda):
@@ -275,6 +356,9 @@ class _Parser:
                     if entry is not None:
                         raise DSLXSyntaxError("A strategy can define only one match/entry rule")
                     entry = expression
+                    entry_price = price_expression
+                elif price_expression is not None:
+                    raise DSLXSyntaxError("Only entry rules can declare an entry price")
                 else:
                     if exit_rule is not None:
                         raise DSLXSyntaxError("A strategy can define only one exit rule")
@@ -284,16 +368,119 @@ class _Parser:
             self.accept(";")
         if require_eof and self.current.kind != "eof":
             raise DSLXSyntaxError(f"Unexpected token at offset {self.current.offset}")
-        if entry is None:
+        if entry is not None and entry_struct is not None:
+            raise DSLXSyntaxError("A strategy cannot mix entry/match with entrystruct")
+        if exit_rule is not None and exit_struct is not None:
+            raise DSLXSyntaxError("A strategy cannot mix exit with exitstruct")
+        if entry is None and entry_struct is None:
             raise DSLXSyntaxError("A strategy needs an entry rule")
-        if exit_rule is None:
+        if exit_rule is None and exit_struct is None:
             raise DSLXSyntaxError(
-                "A strategy needs an exit rule; use 'exit when candle => pass' for a no-op exit"
+                "A strategy needs an exit rule or exitstruct; "
+                "use 'exit when candle => pass' for a no-op exit"
             )
-        return Strategy(
-            name, entry, exit_rule, entry_execution, exit_execution,
-            source, timeframe, candle_style, scan,
+        strategy = Strategy(
+            name=name,
+            entry=entry,
+            entry_price=entry_price,
+            exit=exit_rule,
+            entry_execution=entry_execution,
+            exit_execution=exit_execution,
+            source=source,
+            timeframe=timeframe,
+            candle_style=candle_style,
+            scan=scan,
+            candle_definitions=tuple(candle_definitions),
+            entry_struct=entry_struct,
+            exit_struct=exit_struct,
         )
+        self.validate_pattern_structs(strategy)
+        return strategy
+
+    def parse_candle_definition(self) -> CandleDefinition:
+        """Parse ``candle name { when => <implicit-candle expression> }``."""
+        name = self.expect_identifier()
+        self.expect("{")
+        if self.expect_identifier().lower() != "when":
+            raise DSLXSyntaxError(f"Candle '{name}' requires a when condition")
+        self.expect("=>")
+        condition = self.parse_expression()
+        self.accept(";")
+        self.expect("}")
+        return CandleDefinition(name, condition)
+
+    def parse_pattern_struct(self, *, allow_price: bool) -> tuple[tuple[str, ...], object | None]:
+        """Parse an ordered list of named candles; the last member is newest."""
+        self.expect("{")
+        members: list[str] = []
+        price_expression: object | None = None
+        passed = False
+        while not self.accept("}"):
+            name = self.expect_identifier()
+            if name.lower() == "at":
+                if not allow_price:
+                    raise DSLXSyntaxError("Only entrystruct can declare an entry price")
+                if price_expression is not None:
+                    raise DSLXSyntaxError("entrystruct can declare only one entry price")
+                price_expression = self.parse_expression()
+            elif name.lower() == "pass":
+                passed = True
+            else:
+                members.append(name)
+            self.accept(",")
+            self.accept(";")
+        if passed and members:
+            raise DSLXSyntaxError("pass cannot be combined with candles in a struct")
+        if not members and not passed:
+            raise DSLXSyntaxError("A candle struct cannot be empty")
+        if allow_price and passed:
+            raise DSLXSyntaxError("entrystruct cannot be pass")
+        return tuple(members), price_expression
+
+    @staticmethod
+    def validate_pattern_structs(strategy: Strategy) -> None:
+        """Resolve candle references before a strategy is allowed to run."""
+        definitions = {item.name: item for item in strategy.candle_definitions}
+        if len(definitions) != len(strategy.candle_definitions):
+            raise DSLXSyntaxError("Candle names must be unique within a strategy")
+        for label, members in (
+            ("entrystruct", strategy.entry_struct or ()),
+            ("exitstruct", strategy.exit_struct or ()),
+        ):
+            if len(members) != len(set(members)):
+                raise DSLXSyntaxError(f"{label} cannot contain the same candle more than once")
+            for index, member in enumerate(members):
+                definition = definitions.get(member)
+                if definition is None:
+                    raise DSLXSyntaxError(f"{label} references unknown candle '{member}'")
+                for reference in _expression_names(definition.condition):
+                    if reference == "position":
+                        if label != "exitstruct":
+                            raise DSLXSyntaxError(
+                                f"{label} candle '{member}' cannot reference position"
+                            )
+                        continue
+                    if reference in _IMPLICIT_CANDLE_NAMES or reference == member:
+                        continue
+                    if reference not in definitions:
+                        raise DSLXSyntaxError(
+                            f"{label} candle '{member}' references unknown name '{reference}'"
+                        )
+                    if reference not in members:
+                        raise DSLXSyntaxError(
+                            f"{label} candle '{member}' references '{reference}', "
+                            "but it is not a member of this structure"
+                        )
+                    if members.index(reference) > index:
+                        raise DSLXSyntaxError(
+                            f"{label} candle '{member}' cannot reference later candle '{reference}'"
+                        )
+            if label == "entrystruct" and strategy.entry_struct is not None:
+                for reference in _expression_names(strategy.entry_price):
+                    if reference not in members and reference not in _IMPLICIT_CANDLE_NAMES:
+                        raise DSLXSyntaxError(
+                            f"entrystruct price references unavailable candle '{reference}'"
+                        )
 
     def parse_program(self) -> Program:
         universes: list[UniverseDefinition] = []
@@ -597,17 +784,77 @@ class CandleWindow:
 
 
 class IndicatorValue(float):
-    """A numeric indicator value anchored to one focal candle."""
+    """A numeric indicator value anchored to one focal candle.
 
-    def __new__(cls, value: float, slope: float):
+    EMA and SMA values also retain their focal candle so strategies can express
+    visual relationships such as ``candle.ema(20).within_body`` directly.
+    """
+
+    def __new__(cls, value: float, slope: float, candle: "Candle | None" = None):
         instance = float.__new__(cls, value)
         instance._slope = slope
+        instance._candle = candle
         return instance
 
     @property
     def slope(self) -> float:
         """One-finalized-candle change in this indicator value."""
         return self._slope
+
+    def _within(self, lower: float, upper: float, *, include_lower: bool = True,
+                include_upper: bool = True) -> bool:
+        if self._candle is None:
+            raise DSLXEvaluationError("Candle-region predicates require a candle indicator")
+        value = float(self)
+        lower_match = value >= lower if include_lower else value > lower
+        upper_match = value <= upper if include_upper else value < upper
+        return lower_match and upper_match
+
+    @property
+    def within_body(self) -> bool:
+        """Whether the indicator lies in the inclusive open-to-close body."""
+        candle = self._candle
+        if candle is None:
+            raise DSLXEvaluationError("Candle-region predicates require a candle indicator")
+        return self._within(min(candle.open, candle.close), max(candle.open, candle.close))
+
+    @property
+    def within_upper_wick(self) -> bool:
+        """Whether the indicator lies above the body and up to the candle high."""
+        candle = self._candle
+        if candle is None:
+            raise DSLXEvaluationError("Candle-region predicates require a candle indicator")
+        return self._within(max(candle.open, candle.close), candle.high, include_lower=False)
+
+    @property
+    def within_lower_wick(self) -> bool:
+        """Whether the indicator lies from the candle low up to below the body."""
+        candle = self._candle
+        if candle is None:
+            raise DSLXEvaluationError("Candle-region predicates require a candle indicator")
+        return self._within(candle.low, min(candle.open, candle.close), include_upper=False)
+
+
+class EMABand:
+    """A high/low EMA channel anchored to one focal candle."""
+
+    def __init__(self, candle: "Candle", upper_source: str, lower_source: str, period: int):
+        self.candle = candle
+        self.upper_source = upper_source
+        self.lower_source = lower_source
+        self.period = period
+
+    @property
+    def contains(self) -> bool:
+        """Whether the focal candle, including wicks, lies inside this EMA band."""
+        first = float(
+            self.candle.series.indicator("ema", self.candle.index, self.upper_source, self.period)
+        )
+        second = float(
+            self.candle.series.indicator("ema", self.candle.index, self.lower_source, self.period)
+        )
+        lower, upper = min(first, second), max(first, second)
+        return self.candle.low >= lower and self.candle.high <= upper
 
 
 class CandleSeries:
@@ -712,7 +959,8 @@ class CandleSeries:
             raise InsufficientHistory(f"{name}({period}) is unavailable at this candle")
         prior = result.iloc[index - 1] if index else np.nan
         slope = float(value - prior) if pd.notna(prior) else 0.0
-        return IndicatorValue(float(value), slope)
+        candle = Candle(self, index) if name in {"ema", "sma"} else None
+        return IndicatorValue(float(value), slope, candle)
 
 
 class Candle:
@@ -828,7 +1076,21 @@ class Candle:
             raise InsufficientHistory(f"window({size}) needs {size} candles")
         return CandleWindow(tuple(self.series.candle_at(row) for row in range(start, self.index + 1)))
 
-    def ema(self, *args: object) -> IndicatorValue:
+    def within_ema_band(self, period: int) -> bool:
+        """Whether the entire candle fits inside its EMA low/high band.
+
+        The lower boundary is ``ema("low", period)`` and the upper boundary
+        is ``ema("high", period)``.  Both wicks are included, so a candle
+        only matches when ``low >= lower`` and ``high <= upper``.
+        """
+        return EMABand(self, "high", "low", period).contains
+
+    def ema(self, *args: object) -> IndicatorValue | EMABand:
+        if len(args) == 3 and isinstance(args[0], str) and isinstance(args[1], str):
+            period = args[2]
+            if not isinstance(period, int) or period <= 0:
+                raise DSLXEvaluationError("ema band requires a positive integer period")
+            return EMABand(self, args[0].lower(), args[1].lower(), period)
         return self.series.indicator("ema", self.index, *args)
 
     def sma(self, *args: object) -> IndicatorValue:
@@ -842,6 +1104,13 @@ class Candle:
 
     def volume_ema(self, period: int) -> IndicatorValue:
         return self.series.indicator("volume_ema", self.index, period)
+
+
+@dataclass(frozen=True)
+class Position:
+    """The open long position available only while evaluating an exit rule."""
+
+    entry_price: float
 
 
 class LambdaValue:
@@ -865,11 +1134,13 @@ def _attribute(value: object, name: str) -> object:
             "total_length", "range", "body_length",
             "upper_wick_length", "lower_wick_length",
             "body_ratio", "upper_wick_ratio", "lower_wick_ratio",
-            "previous", "window", "ema", "sma", "rsi", "atr", "volume_ema",
+            "previous", "window", "within_ema_band", "ema", "sma", "rsi", "atr", "volume_ema",
         },
+        Position: {"entry_price"},
         CandleWindow: {"all", "any", "count", "high", "low", "close", "volume"},
         ValueSequence: {"max", "min", "average"},
-        IndicatorValue: {"slope"},
+        IndicatorValue: {"slope", "within_body", "within_upper_wick", "within_lower_wick"},
+        EMABand: {"contains"},
     }
     for value_type, names in allowed.items():
         if isinstance(value, value_type):
@@ -926,6 +1197,90 @@ def _evaluate(expression: object, environment: dict[str, object]) -> object:
     raise DSLXEvaluationError("Unsupported DSLX syntax node")
 
 
+def _implicit_candle_environment(candle: Candle) -> dict[str, object]:
+    """Expose the safe Candle surface without requiring a repeated object prefix."""
+    return {name: _attribute(candle, name) for name in _IMPLICIT_CANDLE_NAMES}
+
+
+def _match_pattern(
+    strategy: Strategy,
+    members: tuple[str, ...],
+    series: CandleSeries,
+    endpoint: int,
+    *,
+    position: Position | None = None,
+) -> tuple[bool, dict[str, object], tuple[tuple[str, Candle], ...]]:
+    """Bind an ordered struct to consecutive candles ending at ``endpoint``."""
+    if not members:
+        return False, {}, ()
+    first_index = endpoint - len(members) + 1
+    if first_index < 0:
+        raise InsufficientHistory(f"Pattern needs {len(members)} consecutive candles")
+    definitions = {item.name: item for item in strategy.candle_definitions}
+    pattern = tuple(
+        (name, series.candle_at(first_index + offset))
+        for offset, name in enumerate(members)
+    )
+    bindings: dict[str, object] = dict(pattern)
+    if position is not None:
+        bindings["position"] = position
+    for name, candle in pattern:
+        environment = dict(bindings)
+        environment.update(_implicit_candle_environment(candle))
+        if not bool(_evaluate(definitions[name].condition, environment)):
+            return False, environment, pattern
+    final_environment = dict(bindings)
+    final_environment.update(_implicit_candle_environment(pattern[-1][1]))
+    return True, final_environment, pattern
+
+
+def _take_profit_fill_price(
+    expression: object, candle: Candle, position: Position
+) -> float | None:
+    """Return a limit-fill price for ``candle.high >= position.entry_price * n``.
+
+    Other exit predicates deliberately keep the normal close-based fill model.
+    """
+    if not isinstance(expression, Binary) or expression.operator not in {">", ">="}:
+        return None
+    left = expression.left
+    if not (
+        isinstance(left, Attribute)
+        and left.name == "high"
+        and isinstance(left.target, Name)
+        and left.target.value == "candle"
+    ):
+        return None
+    try:
+        target = float(_evaluate(expression.right, {"candle": candle, "position": position}))
+    except (DSLXEvaluationError, TypeError, ValueError):
+        return None
+    return target if np.isfinite(target) and candle.high >= target else None
+
+
+def _structured_take_profit_fill_price(
+    strategy: Strategy, environment: dict[str, object]
+) -> float | None:
+    """Recognize a position-relative target in a matched exit candle predicate."""
+    definitions = {item.name: item for item in strategy.candle_definitions}
+    for name in reversed(strategy.exit_struct or ()):
+        expression = definitions[name].condition
+        if not (
+            isinstance(expression, Binary)
+            and expression.operator in {">", ">="}
+            and "position" in _expression_names(expression.right)
+        ):
+            continue
+        try:
+            observed = float(_evaluate(expression.left, environment))
+            target = float(_evaluate(expression.right, environment))
+        except (DSLXEvaluationError, TypeError, ValueError):
+            continue
+        if np.isfinite(target) and observed >= target:
+            return target
+    return None
+
+
 class DSLXInterpreter:
     """Compile and evaluate one DSLX strategy against finalized candles."""
 
@@ -933,9 +1288,29 @@ class DSLXInterpreter:
         self.strategy = parse_strategy(source)
 
     def matches_entry(self, frame: pd.DataFrame, endpoint: int | None = None) -> bool:
-        return self._matches(self.strategy.entry, frame, endpoint, self.strategy.candle_style)
+        series = CandleSeries(frame, style=self.strategy.candle_style)
+        resolved_endpoint = len(series.frame) - 1 if endpoint is None else endpoint
+        if self.strategy.entry_struct is not None:
+            try:
+                return _match_pattern(
+                    self.strategy, self.strategy.entry_struct, series, resolved_endpoint
+                )[0]
+            except InsufficientHistory:
+                return False
+        return self._matches(
+            cast(Lambda, self.strategy.entry), frame, endpoint, self.strategy.candle_style
+        )
 
     def matches_exit(self, frame: pd.DataFrame, endpoint: int | None = None) -> bool:
+        if self.strategy.exit_struct is not None:
+            series = CandleSeries(frame, style=self.strategy.candle_style)
+            resolved_endpoint = len(series.frame) - 1 if endpoint is None else endpoint
+            try:
+                return _match_pattern(
+                    self.strategy, self.strategy.exit_struct, series, resolved_endpoint
+                )[0]
+            except InsufficientHistory:
+                return False
         if self.strategy.exit is None:
             return False
         return self._matches(self.strategy.exit, frame, endpoint, self.strategy.candle_style)
@@ -955,9 +1330,18 @@ class DSLXInterpreter:
             for endpoint in endpoints:
                 candle = series.candle_at(endpoint)
                 try:
-                    matched = bool(LambdaValue(self.strategy.entry, {})(candle))
+                    if self.strategy.entry_struct is not None:
+                        matched, _environment, pattern = _match_pattern(
+                            self.strategy, self.strategy.entry_struct, series, endpoint
+                        )
+                    else:
+                        matched = bool(
+                            LambdaValue(cast(Lambda, self.strategy.entry), {})(candle)
+                        )
+                        pattern = ()
                 except InsufficientHistory:
                     matched = False
+                    pattern = ()
                 if not matched:
                     continue
                 timestamp = next(
@@ -975,6 +1359,7 @@ class DSLXInterpreter:
                         candle,
                         len(series.frame) - 1 - endpoint,
                         timestamp,
+                        pattern,
                     )
                 )
         return MatchList(matches)
@@ -1113,18 +1498,88 @@ def backtest_signals(source: str, frame: pd.DataFrame, *, ticker: str = "BACKTES
     series = CandleSeries(frame, style=strategy.candle_style)
     entry_mask: list[bool] = []
     exit_mask: list[bool] = []
+    signals: list[int] = []
+    exit_fill_prices: list[float] = []
+    entry_fill_prices: list[float] = []
+    position: Position | None = None
+    close_column = next((name for name in ("Close", "close") if name in frame), None)
+    if close_column is None:
+        raise DSLXEvaluationError("Candle data is missing Close for position entry pricing")
+    raw_close = pd.to_numeric(frame[close_column], errors="coerce")
     for endpoint in range(len(frame)):
         candle = series.candle_at(endpoint)
+        entry_environment: dict[str, object] = {"candle": candle}
         try:
-            entry_mask.append(bool(LambdaValue(strategy.entry, {})(candle)))
+            if strategy.entry_struct is not None:
+                entered, entry_environment, _entry_pattern = _match_pattern(
+                    strategy, strategy.entry_struct, series, endpoint
+                )
+            else:
+                entered = bool(LambdaValue(cast(Lambda, strategy.entry), {})(candle))
         except InsufficientHistory:
-            entry_mask.append(False)
-        try:
-            exit_mask.append(bool(LambdaValue(cast(Lambda, strategy.exit), {})(candle)))
-        except InsufficientHistory:
-            exit_mask.append(False)
+            entered = False
+        entry_mask.append(entered)
+
+        exited = False
+        exit_fill_price: float | None = None
+        if position is not None:
+            try:
+                if strategy.exit_struct is not None:
+                    exited, exit_environment, _exit_pattern = _match_pattern(
+                        strategy,
+                        strategy.exit_struct,
+                        series,
+                        endpoint,
+                        position=position,
+                    )
+                    if exited:
+                        exit_fill_price = _structured_take_profit_fill_price(
+                            strategy, exit_environment
+                        )
+                else:
+                    exited = bool(
+                        LambdaValue(cast(Lambda, strategy.exit), {"position": position})(
+                            candle
+                        )
+                    )
+                    if exited:
+                        exit_fill_price = _take_profit_fill_price(
+                            cast(Lambda, strategy.exit).body, candle, position
+                        )
+            except InsufficientHistory:
+                exited = False
+        exit_mask.append(exited)
+        exit_fill_prices.append(float(exit_fill_price) if exit_fill_price is not None else np.nan)
+
+        # Keep signal order identical to the one-position trade simulator: an
+        # open position exits first; a fresh entry is accepted only while flat.
+        if position is not None and exited:
+            position = None
+            signals.append(-1)
+            entry_fill_prices.append(np.nan)
+        elif position is None and entered:
+            price = raw_close.iloc[endpoint]
+            if strategy.entry_price is not None:
+                try:
+                    price = float(_evaluate(strategy.entry_price, entry_environment))
+                except (DSLXEvaluationError, TypeError, ValueError):
+                    price = np.nan
+            if pd.notna(price):
+                if float(price) <= 0:
+                    raise DSLXEvaluationError("entry price must be positive")
+                position = Position(float(price))
+                signals.append(1)
+                entry_fill_prices.append(float(price))
+            else:
+                signals.append(0)
+                entry_fill_prices.append(np.nan)
+        else:
+            signals.append(0)
+            entry_fill_prices.append(np.nan)
     result = frame.copy()
     result["entry_condition"] = entry_mask
     result["exit_condition"] = exit_mask
-    result["signal"] = np.where(result["exit_condition"], -1, np.where(result["entry_condition"], 1, 0))
+    result["exit_fill_price"] = exit_fill_prices
+    result["entry_fill_price"] = entry_fill_prices
+    result["signal"] = signals
     return result

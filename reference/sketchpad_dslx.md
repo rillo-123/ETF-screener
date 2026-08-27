@@ -132,6 +132,67 @@ The expression after `match when` is one boolean predicate. All `&&` clauses
 therefore apply to the **same candle**. Methods such as `previous(1)` and
 `window(3)` are the explicit way to inspect earlier candles.
 
+### Adjacent candle patterns
+
+Define named candle objects independently, then place them in an
+`entrystruct` or `exitstruct` to give them consecutive time positions. The
+definition order has no time meaning. Struct order is oldest to newest, and
+the final member is the most recent candle at the scan endpoint:
+
+```dsl
+candle setup {
+  when => is_red
+}
+
+candle recovery {
+  when => is_green && low > setup.low
+}
+
+candle breakout {
+  when => is_green && close > recovery.high
+}
+
+entrystruct {
+  setup
+  recovery
+  breakout
+  at breakout.close
+}
+```
+
+For a match ending at candle `t`, that struct binds `setup` to `t-2`,
+`recovery` to `t-1`, and `breakout` to `t`. Every member must match its bound
+candle. Named objects may reference themselves or earlier members of the same
+struct. A missing member or a later/forward reference is rejected while the
+program is parsed; DSLX never inserts hidden candles automatically.
+
+The legacy `candle.previous(n)` form remains supported for compatibility and
+`window(n)` remains useful when one uniform condition applies to a range:
+
+```dsl
+entry when candle => candle.window(3).all(c => c.is_green)
+```
+
+If the requested prior candle or window is outside available history, the
+strategy simply does not match at that point.
+
+### Position-aware exits
+
+Exit rules can inspect the price at which the current simulated position was
+opened. This lets a strategy express a fixed profit target directly:
+
+```dsl
+entry at candle.close when candle => candle.is_green
+exit when candle => candle.high >= position.entry_price * 1.03
+```
+
+`position.entry_price` is available only in an exit rule while a position is
+open. `entry at candle.close` explicitly declares the entry fill price; omit
+`at ...` to retain the default close price. The price expression can use any
+property of the entry candle, such as `candle.open`, `candle.close`, or an EMA.
+It uses the strategy's simulated entry price before transaction costs;
+the backtester still applies its configured slippage and commission to fills.
+
 ## Result model
 
 ```text

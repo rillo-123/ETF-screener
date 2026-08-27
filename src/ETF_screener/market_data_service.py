@@ -325,22 +325,28 @@ class MarketDataRefresher:
         warmup_days: int,
         min_existing_rows: int = 100,
     ) -> tuple[str, pd.DataFrame]:
+        # Populated caches are always extended from their latest date. These
+        # legacy tuning inputs remain accepted for caller compatibility only.
+        del warmup_days, min_existing_rows
         existing = self._load_existing_price_frame(ticker)
         latest_day = None
         if not existing.empty:
             latest_day = pd.to_datetime(existing["Date"].max()).date()
 
-        if existing.empty or len(existing) < min_existing_rows:
+        if existing.empty:
             fetched = self.fetcher.fetch_historical_data(ticker, days=depth)
             merged = self._normalize_price_frame(fetched)
         else:
             if latest_day is None:
                 raise RuntimeError("Expected a latest market date when refreshing")
-            # Existing history already contains the indicator warm-up window.
-            # Only overlap a few days when topping it up so a daily refresh
-            # does not download the last 90 days again for every ticker.
-            refresh_overlap_days = max(5, min(int(warmup_days), 10))
-            fetch_start = latest_day - timedelta(days=refresh_overlap_days)
+            expected_day = self._expected_market_day()
+            if latest_day >= expected_day:
+                return ticker, add_indicators(existing)
+
+            # The cache is authoritative. Request the adaptive missing tail,
+            # beginning on the calendar day after the latest stored candle.
+            # The provider naturally omits weekends and exchange closures.
+            fetch_start = latest_day + timedelta(days=1)
             fetched = self.fetcher.fetch_historical_data(
                 ticker,
                 start_date=fetch_start,

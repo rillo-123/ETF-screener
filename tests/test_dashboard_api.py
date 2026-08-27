@@ -1,5 +1,6 @@
 ﻿import json
 import os
+import logging
 import threading
 import time
 from datetime import datetime
@@ -522,6 +523,25 @@ def test_dslx_editor_lists_and_loads_file_backed_scripts():
     assert script.status_code == 200
     assert "entry when candle" in script.json()["content"]
     assert "exit when candle => pass" in script.json()["content"]
+
+    structural = client.get(
+        "/api/dslx-strategy/ha_breakout_liquid_filtered_struct"
+    )
+    assert structural.status_code == 200
+    assert "entrystruct" in structural.json()["content"]
+
+
+def test_dslx_editor_logs_validation_details(monkeypatch, tmp_path, caplog):
+    path = tmp_path / "invalid.dslx"
+    path.write_text("strategy invalid { candle nope { when => true } }", encoding="utf-8")
+    monkeypatch.setattr(app_fast, "_dslx_strategy_path", lambda _name: path)
+
+    with caplog.at_level(logging.WARNING):
+        response = client.get("/api/dslx-strategy/invalid")
+
+    assert response.status_code == 422
+    assert "invalid.dslx" in caplog.text
+    assert "needs an entry rule" in caplog.text
 
 
 def test_dslx_editor_saves_only_a_valid_complete_script(monkeypatch, tmp_path):
@@ -2324,6 +2344,28 @@ def test_get_chart_hides_supertrend_overlay_when_event_is_disabled():
     assert (
         not supertrend_traces
     ), "Supertrend should stay hidden unless its event is enabled"
+
+
+def test_get_chart_renders_legacy_source_aware_ema_pair():
+    """Legacy high/low EMA calls must not fall back to a single close EMA."""
+    with patch(
+        "ETF_screener.dashboard.app_fast.MarketDataRefresher.refresh_ticker_data",
+        return_value=add_indicators(_make_fake_ohlcv("EMAHL.TEST")),
+    ):
+        response = client.get(
+            "/api/chart/EMAHL.TEST",
+            params={
+                "days": 30,
+                "dsl_content": "FILTER: close > ema_high(20) AND close > ema_low(20)",
+            },
+        )
+    assert response.status_code == 200
+    fig = json.loads(response.json()["figure"])
+    traces_by_name = {str(trace.get("name", "")): trace for trace in fig["data"]}
+    assert "EMA 20 High" in traces_by_name
+    assert "EMA 20 Low" in traces_by_name
+    assert traces_by_name["EMA 20 Low"]["fill"] == "tonexty"
+    assert traces_by_name["EMA 20 Low"]["fillcolor"] == "rgba(96, 165, 250, 0.18)"
 
 
 def test_on_demand_fetch_persists():

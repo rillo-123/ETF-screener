@@ -1,5 +1,13 @@
 # Next steps
 
+- Measure the next Nasdaq daily top-up with adaptive missing-tail fetching and
+  compare refresh duration and transferred rows with the previous fixed-overlap
+  run.
+- Live-test multi-candle `entrystruct` and `exitstruct` patterns on real Nasdaq
+  histories, then decide which named pattern should replace the single-candle
+  breakout in the structural example.
+- Consider adding editor syntax highlighting and richer MatchList rendering for
+  each named candle in a matched structure.
 - Live-test the new Nasdaq source in the dashboard and decide whether the current common-stock filters and vitality thresholds should stay as-is or be tightened further around ADRs, operating companies, and liquidity.
 - Decide whether Nasdaq refresh should keep using on-demand top-ups only or whether we want an explicit larger-universe maintenance command outside the GUI.
 

@@ -6,6 +6,10 @@
 
 - -NextResumePoint
 
+- -NextResumePoint
+
+- -NextResumePoint
+
 - Treat Nasdaq as a curated actionable stock universe, not a raw all-listings dump; low-vitality names should be filtered out centrally from actual scan universes rather than left for the user to sift manually.
 
 - Treat the Query and Screener source buttons as first-class actionable universes. Xetra, Sweden, Nasdaq, custom lists, and all-lists scans should share one backend source model instead of fragmenting into separate ad hoc filters.
