@@ -3,8 +3,9 @@ strategy simple_green {
   candles timeframe "1d" as heikin_ashi
   scan latest
 
-  entry when candle => candle.is_green
-  exit when candle => pass
+  candle green { when => is_green }
+  entrystruct { green }
+  exitstruct { pass }
 }
 
 let matches = simple_green.run()

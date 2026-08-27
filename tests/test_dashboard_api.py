@@ -499,8 +499,9 @@ def test_screen_endpoint_applies_dslx_named_liquidity_universe(monkeypatch):
                 strategy eligible {
                   source universe.xetra_liquid
                   scan latest
-                  match when candle => candle.close > 0
-                  exit when candle => pass
+                  candle eligible_candle { when => close > 0 }
+                  entrystruct { eligible_candle }
+                  exitstruct { pass }
                 }
                 let matches = eligible.run()
                 matches.show()
@@ -512,6 +513,19 @@ def test_screen_endpoint_applies_dslx_named_liquidity_universe(monkeypatch):
     assert [item["ticker"] for item in response.json()["matches"]] == ["LIQ.DE"]
 
 
+def test_screen_reports_dslx_validation_errors_without_a_generic_server_error():
+    response = client.get(
+        "/api/screen",
+        params={
+            "scan_scope": "sweden",
+            "dsl_content": "strategy old { entry when candle => candle.is_green }",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "no longer supported" in response.json()["detail"]
+
+
 def test_dslx_editor_lists_and_loads_file_backed_scripts():
     listing = client.get("/api/dslx-strategies")
 
@@ -521,8 +535,8 @@ def test_dslx_editor_lists_and_loads_file_backed_scripts():
     script = client.get("/api/dslx-strategy/simple_green")
 
     assert script.status_code == 200
-    assert "entry when candle" in script.json()["content"]
-    assert "exit when candle => pass" in script.json()["content"]
+    assert "entrystruct" in script.json()["content"]
+    assert "exitstruct { pass }" in script.json()["content"]
 
     structural = client.get(
         "/api/dslx-strategy/ha_breakout_liquid_filtered_struct"
@@ -541,7 +555,7 @@ def test_dslx_editor_logs_validation_details(monkeypatch, tmp_path, caplog):
 
     assert response.status_code == 422
     assert "invalid.dslx" in caplog.text
-    assert "needs an entry rule" in caplog.text
+    assert "needs an entrystruct" in caplog.text
 
 
 def test_dslx_editor_saves_only_a_valid_complete_script(monkeypatch, tmp_path):
@@ -550,8 +564,9 @@ def test_dslx_editor_saves_only_a_valid_complete_script(monkeypatch, tmp_path):
     )
     content = """
         strategy saved {
-          entry when candle => candle.is_green
-          exit when candle => pass
+          candle green { when => is_green }
+          entrystruct { green }
+          exitstruct { pass }
         }
         let matches = saved.run()
         matches.show()
@@ -566,7 +581,7 @@ def test_dslx_editor_saves_only_a_valid_complete_script(monkeypatch, tmp_path):
 
     invalid = client.post(
         "/api/dslx-strategy/save",
-        json={"name": "incomplete", "content": "strategy x { entry when candle => true }"},
+        json={"name": "incomplete", "content": "strategy x { candle green { when => true } }"},
     )
 
     assert invalid.status_code == 422

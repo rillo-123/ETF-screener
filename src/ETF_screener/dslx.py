@@ -1,7 +1,9 @@
 """Safe interpreter for the initial candle-oriented DSLX strategy subset.
 
 DSLX intentionally has its own parser and evaluator.  It never delegates source
-text to Python ``eval`` and does not alter the legacy ``.dsl`` execution path.
+text to Python ``eval`` and does not alter the separate legacy ``.dsl`` execution
+path.  DSLX strategies themselves use named candle definitions and ordered
+``entrystruct`` / ``exitstruct`` patterns only.
 """
 
 from __future__ import annotations
@@ -167,9 +169,7 @@ class Lambda:
 @dataclass(frozen=True)
 class Strategy:
     name: str
-    entry: Lambda | None
     entry_price: object | None = None
-    exit: Lambda | None = None
     entry_execution: str = "next_open"
     exit_execution: str = "next_open"
     source: str = "universe.selected"
@@ -285,9 +285,7 @@ class _Parser:
             raise DSLXSyntaxError("DSLX source must start with 'strategy'")
         name = self.expect_identifier()
         self.expect("{")
-        entry: Lambda | None = None
         entry_price: object | None = None
-        exit_rule: Lambda | None = None
         entry_execution = "next_open"
         exit_execution = "next_open"
         source = "universe.selected"
@@ -343,47 +341,24 @@ class _Parser:
                         raise DSLXSyntaxError("A strategy can define only one exitstruct")
                     exit_struct = members
             elif keyword in {"entry", "exit", "match"}:
-                price_expression: object | None = None
-                if keyword == "entry" and self.accept("at"):
-                    price_expression = self.parse_expression()
-                self.expect("when")
-                expression = self.parse_expression()
-                if not isinstance(expression, Lambda):
-                    raise DSLXSyntaxError(
-                        f"{keyword} rule must use a lambda such as 'candle => candle.close > candle.ema(20)'"
-                    )
-                if keyword in {"entry", "match"}:
-                    if entry is not None:
-                        raise DSLXSyntaxError("A strategy can define only one match/entry rule")
-                    entry = expression
-                    entry_price = price_expression
-                elif price_expression is not None:
-                    raise DSLXSyntaxError("Only entry rules can declare an entry price")
-                else:
-                    if exit_rule is not None:
-                        raise DSLXSyntaxError("A strategy can define only one exit rule")
-                    exit_rule = expression
+                raise DSLXSyntaxError(
+                    f"Legacy '{keyword} when candle =>' rules are no longer supported; "
+                    "define named candle objects and use entrystruct/exitstruct"
+                )
             else:
                 raise DSLXSyntaxError(f"Unknown strategy section '{keyword}'")
             self.accept(";")
         if require_eof and self.current.kind != "eof":
             raise DSLXSyntaxError(f"Unexpected token at offset {self.current.offset}")
-        if entry is not None and entry_struct is not None:
-            raise DSLXSyntaxError("A strategy cannot mix entry/match with entrystruct")
-        if exit_rule is not None and exit_struct is not None:
-            raise DSLXSyntaxError("A strategy cannot mix exit with exitstruct")
-        if entry is None and entry_struct is None:
-            raise DSLXSyntaxError("A strategy needs an entry rule")
-        if exit_rule is None and exit_struct is None:
+        if entry_struct is None:
+            raise DSLXSyntaxError("A strategy needs an entrystruct")
+        if exit_struct is None:
             raise DSLXSyntaxError(
-                "A strategy needs an exit rule or exitstruct; "
-                "use 'exit when candle => pass' for a no-op exit"
+                "A strategy needs an exitstruct; use 'exitstruct { pass }' for a no-op exit"
             )
         strategy = Strategy(
             name=name,
-            entry=entry,
             entry_price=entry_price,
-            exit=exit_rule,
             entry_execution=entry_execution,
             exit_execution=exit_execution,
             source=source,
@@ -1234,30 +1209,6 @@ def _match_pattern(
     return True, final_environment, pattern
 
 
-def _take_profit_fill_price(
-    expression: object, candle: Candle, position: Position
-) -> float | None:
-    """Return a limit-fill price for ``candle.high >= position.entry_price * n``.
-
-    Other exit predicates deliberately keep the normal close-based fill model.
-    """
-    if not isinstance(expression, Binary) or expression.operator not in {">", ">="}:
-        return None
-    left = expression.left
-    if not (
-        isinstance(left, Attribute)
-        and left.name == "high"
-        and isinstance(left.target, Name)
-        and left.target.value == "candle"
-    ):
-        return None
-    try:
-        target = float(_evaluate(expression.right, {"candle": candle, "position": position}))
-    except (DSLXEvaluationError, TypeError, ValueError):
-        return None
-    return target if np.isfinite(target) and candle.high >= target else None
-
-
 def _structured_take_profit_fill_price(
     strategy: Strategy, environment: dict[str, object]
 ) -> float | None:
@@ -1290,30 +1241,22 @@ class DSLXInterpreter:
     def matches_entry(self, frame: pd.DataFrame, endpoint: int | None = None) -> bool:
         series = CandleSeries(frame, style=self.strategy.candle_style)
         resolved_endpoint = len(series.frame) - 1 if endpoint is None else endpoint
-        if self.strategy.entry_struct is not None:
-            try:
-                return _match_pattern(
-                    self.strategy, self.strategy.entry_struct, series, resolved_endpoint
-                )[0]
-            except InsufficientHistory:
-                return False
-        return self._matches(
-            cast(Lambda, self.strategy.entry), frame, endpoint, self.strategy.candle_style
-        )
+        try:
+            return _match_pattern(
+                self.strategy, cast(tuple[str, ...], self.strategy.entry_struct), series, resolved_endpoint
+            )[0]
+        except InsufficientHistory:
+            return False
 
     def matches_exit(self, frame: pd.DataFrame, endpoint: int | None = None) -> bool:
-        if self.strategy.exit_struct is not None:
-            series = CandleSeries(frame, style=self.strategy.candle_style)
-            resolved_endpoint = len(series.frame) - 1 if endpoint is None else endpoint
-            try:
-                return _match_pattern(
-                    self.strategy, self.strategy.exit_struct, series, resolved_endpoint
-                )[0]
-            except InsufficientHistory:
-                return False
-        if self.strategy.exit is None:
+        if not self.strategy.exit_struct:
             return False
-        return self._matches(self.strategy.exit, frame, endpoint, self.strategy.candle_style)
+        series = CandleSeries(frame, style=self.strategy.candle_style)
+        resolved_endpoint = len(series.frame) - 1 if endpoint is None else endpoint
+        try:
+            return _match_pattern(self.strategy, self.strategy.exit_struct, series, resolved_endpoint)[0]
+        except InsufficientHistory:
+            return False
 
     def run(self, frames: dict[str, pd.DataFrame]) -> MatchList:
         """Evaluate this strategy over provided ticker frames and return matches."""
@@ -1363,18 +1306,6 @@ class DSLXInterpreter:
                     )
                 )
         return MatchList(matches)
-
-    @staticmethod
-    def _matches(
-        rule: Lambda, frame: pd.DataFrame, endpoint: int | None, candle_style: str = "regular"
-    ) -> bool:
-        series = CandleSeries(frame, style=candle_style)
-        candle = series.last if endpoint is None else series.candle_at(endpoint)
-        try:
-            return bool(LambdaValue(rule, {})(candle))
-        except InsufficientHistory:
-            return False
-
 
 def _liquidity_clause_matches(frame: pd.DataFrame, clause: LiquidityClause) -> bool:
     """Evaluate one universe-level liquidity clause from finalized OHLCV bars."""
@@ -1510,12 +1441,9 @@ def backtest_signals(source: str, frame: pd.DataFrame, *, ticker: str = "BACKTES
         candle = series.candle_at(endpoint)
         entry_environment: dict[str, object] = {"candle": candle}
         try:
-            if strategy.entry_struct is not None:
-                entered, entry_environment, _entry_pattern = _match_pattern(
-                    strategy, strategy.entry_struct, series, endpoint
-                )
-            else:
-                entered = bool(LambdaValue(cast(Lambda, strategy.entry), {})(candle))
+            entered, entry_environment, _entry_pattern = _match_pattern(
+                strategy, cast(tuple[str, ...], strategy.entry_struct), series, endpoint
+            )
         except InsufficientHistory:
             entered = False
         entry_mask.append(entered)
@@ -1524,7 +1452,7 @@ def backtest_signals(source: str, frame: pd.DataFrame, *, ticker: str = "BACKTES
         exit_fill_price: float | None = None
         if position is not None:
             try:
-                if strategy.exit_struct is not None:
+                if strategy.exit_struct:
                     exited, exit_environment, _exit_pattern = _match_pattern(
                         strategy,
                         strategy.exit_struct,
@@ -1535,16 +1463,6 @@ def backtest_signals(source: str, frame: pd.DataFrame, *, ticker: str = "BACKTES
                     if exited:
                         exit_fill_price = _structured_take_profit_fill_price(
                             strategy, exit_environment
-                        )
-                else:
-                    exited = bool(
-                        LambdaValue(cast(Lambda, strategy.exit), {"position": position})(
-                            candle
-                        )
-                    )
-                    if exited:
-                        exit_fill_price = _take_profit_fill_price(
-                            cast(Lambda, strategy.exit).body, candle, position
                         )
             except InsufficientHistory:
                 exited = False

@@ -1,5 +1,10 @@
 # DSLX: collection-oriented language design
 
+> Historical design note: the strategy-level `entry when candle =>`,
+> `match when candle =>`, and `exit when candle =>` examples below have been
+> superseded. Current DSLX uses named candle objects with `entrystruct` and
+> `exitstruct`; see `sketchpad_dslx.md` for the active syntax.
+
 ## Purpose
 
 This is a proposal for **DSLX**, the next generation of the screening and

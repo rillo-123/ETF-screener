@@ -3877,6 +3877,28 @@ async def screen(
                 "total_candidates": 0,
             },
         )
+    except DSLXError as e:
+        detail = f"Invalid DSLX strategy: {e}"
+        logger.warning("Screen DSLX validation failed: %s", e)
+        _set_job_progress(
+            "screen",
+            "failed",
+            pct=100.0,
+            label="Screen",
+            detail=detail,
+            active=False,
+            error=detail,
+        )
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": detail,
+                "matches": [],
+                "errors": [{"ticker": "DSLX", "error": detail}],
+                "total_errors": 1,
+                "total_candidates": 0,
+            },
+        )
     except Exception as e:
         logger.error("Screen endpoint failed: %s", str(e), exc_info=True)
         _set_job_progress(

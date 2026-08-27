@@ -14,8 +14,8 @@
   struct. Missing members, unknown names, duplicates, and forward references
   are rejected before execution.
 - Structured patterns now run through screening, MatchList display provenance,
-  and historical entry/exit backtesting while legacy DSLX lambda rules remain
-  compatible.
+  and historical entry/exit backtesting. DSLX accepts only named candle objects
+  plus ordered `entrystruct` / `exitstruct` patterns.
 - Added canonical file-backed DSLX strategies with a single-pane editor, file list, load/save flow, and Screener selection.
 - Made entry and exit explicit in DSLX, including a pass no-op exit, and added liquidity universe guards for robust ETF selection.
 - Added historical DSLX entry/exit signal evaluation through the existing trade simulator so DSLX strategies can be backtested.

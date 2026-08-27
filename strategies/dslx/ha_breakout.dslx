@@ -12,17 +12,22 @@ strategy ha_breakout {
   candles timeframe "1d" as heikin_ashi
   scan latest
 
-  entry when candle =>
-    candle.open > candle.ema("low", 20)
-    && candle.open < candle.ema("high", 20)
-    && candle.close > candle.ema("high", 20)
-    && candle.is_green
-    && candle.rsi(14) > 50
-    && candle.ema("close", 200).slope > 0
-    && candle.rsi(14).slope > 0
-    && candle.volume > candle.volume_ema(20) * 1.5
+  candle breakout {
+    when =>
+      open > ema("low", 20)
+      && open < ema("high", 20)
+      && close > ema("high", 20)
+      && is_green
+      && rsi(14) > 50
+      && ema("close", 200).slope > 0
+      && rsi(14).slope > 0
+      && volume > volume_ema(20) * 1.5
+  }
 
-  exit when candle => candle.close < candle.ema("low", 20)
+  candle breakdown { when => close < ema("low", 20) }
+
+  entrystruct { breakout at breakout.close }
+  exitstruct { breakdown }
 }
 
 let matches = ha_breakout.run()

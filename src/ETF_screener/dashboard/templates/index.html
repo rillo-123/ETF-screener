@@ -990,13 +990,14 @@
   candles timeframe "1d" as heikin_ashi
   scan latest
 
-  entry when candle => candle.is_green
-  exit when candle => pass
+  candle green { when => is_green }
+  entrystruct { green }
+  exitstruct { pass }
 }
 
 let matches = simple_green.run()
 matches.show()</textarea>
-              <p class="mt-2 text-[11px] text-slate-400">For consecutive patterns, define named <code>candle</code> objects and order them oldest-to-newest in <code>entrystruct</code> or <code>exitstruct</code>. Legacy entry/exit lambdas remain supported.</p>
+              <p class="mt-2 text-[11px] text-slate-400">Define named <code>candle</code> objects, then order them oldest-to-newest in <code>entrystruct</code> or <code>exitstruct</code>. The final member is the most recent candle.</p>
             </div>
           </div>
           <div id="screen-dsl-validation" role="status" aria-live="polite" class="mt-4 hidden rounded-lg border px-3 py-2 text-xs font-semibold"></div>

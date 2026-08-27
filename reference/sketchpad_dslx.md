@@ -40,7 +40,7 @@ For a normal screener, the eligible set is usually only the latest finalized
 candle. A historical scan or backtest can select many endpoint candles. The
 rule itself remains exactly the same in either case.
 
-## Proposed declarative shape
+## Declarative shape
 
 The language should say what candle series to inspect and what a matching
 candle looks like. It should not require users to allocate objects, create a
@@ -52,15 +52,22 @@ strategy ha_breakout {
   candles timeframe "1d" as heikin_ashi
   scan latest                         // use `within 30 candles` for history
 
-  match when candle =>
-    candle.open > candle.ema("low", 20)
-    && candle.open < candle.ema("high", 20)
-    && candle.close > candle.ema("high", 20)
-    && candle.is_green
-    && candle.rsi(14) > 50
-    && candle.ema("close", 200).slope > 0
-    && candle.rsi(14).slope > 0
-    && candle.volume > candle.volume_ema(20) * 1.5
+  candle breakout {
+    when =>
+      open > ema("low", 20)
+      && open < ema("high", 20)
+      && close > ema("high", 20)
+      && is_green
+      && rsi(14) > 50
+      && ema("close", 200).slope > 0
+      && rsi(14).slope > 0
+      && volume > volume_ema(20) * 1.5
+  }
+
+  candle breakdown { when => close < ema("low", 20) }
+
+  entrystruct { breakout at breakout.close }
+  exitstruct { breakdown }
     && candle.ema("close", 20) >= 10
 }
 ```
@@ -114,23 +121,25 @@ strategy ha_breakout {
   candles timeframe "1d" as heikin_ashi
   scan latest
 
-  match when candle => candle.is_green && candle.rsi(14) > 50
+  candle green { when => is_green && rsi(14) > 50 }
+  entrystruct { green }
+  exitstruct { pass }
 }
 ```
 
 `turnover` is `close × volume` in the listing currency. The host evaluates all
 `require liquidity` clauses from finalized OHLCV history before it evaluates a
 strategy. A ticker must satisfy every clause. This deliberately avoids putting
-an instrument-quality rule inside `match when`, which must remain a predicate
-about one focal candle.
+an instrument-quality rule inside a candle definition, which must remain a
+predicate about one focal candle.
 
 `as heikin_ashi` means that `open`, `high`, `low`, `close`, colour, body, and
 wicks all refer to the transformed candle that is drawn. There is no mix of
 regular OHLC values and Heikin-Ashi visual properties within the rule.
 
-The expression after `match when` is one boolean predicate. All `&&` clauses
-therefore apply to the **same candle**. Methods such as `previous(1)` and
-`window(3)` are the explicit way to inspect earlier candles.
+The expression after a candle object's `when =>` is one boolean predicate.
+All `&&` clauses therefore apply to the **same candle**. Use an ordered struct
+when a pattern needs distinct consecutive candle roles.
 
 ### Adjacent candle patterns
 
@@ -166,11 +175,15 @@ candle. Named objects may reference themselves or earlier members of the same
 struct. A missing member or a later/forward reference is rejected while the
 program is parsed; DSLX never inserts hidden candles automatically.
 
-The legacy `candle.previous(n)` form remains supported for compatibility and
-`window(n)` remains useful when one uniform condition applies to a range:
+Use a named, ordered struct for distinct consecutive roles. `window(n)`
+remains useful when one uniform condition applies to a range:
 
 ```dsl
-entry when candle => candle.window(3).all(c => c.is_green)
+candle three_green {
+  when => window(3).all(c => c.is_green)
+}
+entrystruct { three_green }
+exitstruct { pass }
 ```
 
 If the requested prior candle or window is outside available history, the
@@ -178,18 +191,22 @@ strategy simply does not match at that point.
 
 ### Position-aware exits
 
-Exit rules can inspect the price at which the current simulated position was
-opened. This lets a strategy express a fixed profit target directly:
+Exit candle objects can inspect the price at which the current simulated
+position was opened. This lets a strategy express a fixed profit target directly:
 
 ```dsl
-entry at candle.close when candle => candle.is_green
-exit when candle => candle.high >= position.entry_price * 1.03
+candle entry_signal { when => is_green }
+candle profit_target { when => high >= position.entry_price * 1.03 }
+
+entrystruct { entry_signal at entry_signal.close }
+exitstruct { profit_target }
 ```
 
-`position.entry_price` is available only in an exit rule while a position is
-open. `entry at candle.close` explicitly declares the entry fill price; omit
-`at ...` to retain the default close price. The price expression can use any
-property of the entry candle, such as `candle.open`, `candle.close`, or an EMA.
+`position.entry_price` is available only in an exit candle object while a
+position is open. `at entry_signal.close` explicitly declares the entry fill
+price; omit `at ...` to retain the default close price. The price expression
+can use any property of an entry-pattern candle, such as
+`entry_signal.open`, `entry_signal.close`, or an EMA.
 It uses the strategy's simulated entry price before transaction costs;
 the backtester still applies its configured slippage and commission to fills.
 
