@@ -61,14 +61,15 @@ strategy ha_breakout {
       && rsi(14) > 50
       && ema("close", 200).slope > 0
       && rsi(14).slope > 0
+      && atr(14) / close >= 0.01       // 14-day ATR is at least 1% of price
       && volume > volume_ema(20) * 1.5
+      && ema("close", 20) >= 10
   }
 
   candle breakdown { when => close < ema("low", 20) }
 
   entrystruct { breakout at breakout.close }
   exitstruct { breakdown }
-    && candle.ema("close", 20) >= 10
 }
 ```
 
@@ -140,6 +141,12 @@ regular OHLC values and Heikin-Ashi visual properties within the rule.
 The expression after a candle object's `when =>` is one boolean predicate.
 All `&&` clauses therefore apply to the **same candle**. Use an ordered struct
 when a pattern needs distinct consecutive candle roles.
+
+DSLX predicates are side-effect free, so the runtime evaluates cheap `&&`
+terms and short indicator lookbacks before longer rolling indicators, then
+stops at the first false term. Indicator series are cached per ticker, candle
+style, source, and period and reused by later conditions and historical
+endpoints.
 
 ### Adjacent candle patterns
 
@@ -289,6 +296,8 @@ remaining centered on the candle the trader sees.
 - Exact indicator API: source-aware `candle.ema("high", 20)` is clearer than
   names such as `ema_high(20)`, because it retains the focal candle as the
   owner of the value.
+- Candle-region indicators support `.within_body`, `.not_within_body`,
+  `.within_upper_wick`, and `.within_lower_wick`.
 - Whether `.slope` means one-bar absolute change, percentage change, or a
   configurable regression slope. It should be defined once and used uniformly.
 - How matches are ranked and de-duplicated when a screener needs one result per

@@ -1,6 +1,16 @@
 
 # Progress
 
+## 2026-08-30 20:17:05 +02:00
+
+- Added price-normalized ATR filtering to the Heikin-Ashi breakout strategies so flatlining instruments are rejected.
+- Made DSLX conjunction planning least-cost-first with lookback-aware ordering plus per-ticker source and indicator caches.
+- Added the visual indicator predicate not_within_body and documented the candle-region vocabulary.
+- Added and live-tested ha_breakout_other.dslx as a consecutive setup-to-breakout strategy on Nasdaq.
+- Reorganized the Screener interaction zone around strategy selection and a primary Run action, with collapsible preset management and one-click DSLX reload from disk.
+- Full milestone gate passed: 314 unit tests passed with 1 skipped, and 7 Playwright browser tests passed with 2 skipped.
+- Next resume point: Bulk-load or SQL-prefilter DSLX screen universes, then fix structural DSLX chart enrichment so chart requests no longer fall through the legacy expression parser.
+
 ## 2026-08-27 20:49:58 +02:00
 
 - -Summary

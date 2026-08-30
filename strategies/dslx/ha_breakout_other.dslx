@@ -10,18 +10,27 @@ universe liquid_selected {
 strategy ha_breakout_struct {
   source universe.liquid_selected
   candles timeframe "1d" as heikin_ashi
-  scan latest
+  scan within 5 candles
+
+
+  candle setup {
+    when =>
+      ema("low", 20).within_body
+      &&  ema("high", 20).not_within_body
+      && is_green
+  }
+
 
   candle breakout {
     when =>
-      open > ema("low", 20)
-      && ema("high", 20).within_body
+      ema("high", 20).within_body
+      && ema("low", 20).not_within_body
       && is_green
       && rsi(14) > 50
       && ema("close", 200).slope > 0
       && rsi(14).slope > 0
       && atr(14) / close >= 0.01
-      && volume > volume_ema(20) * 1.5
+      && volume > volume_ema(20) * 1.2
   }
 
   candle breakdown {
@@ -29,6 +38,7 @@ strategy ha_breakout_struct {
   }
 
   entrystruct {
+    setup
     breakout
     at breakout.close
   }

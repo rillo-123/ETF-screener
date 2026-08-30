@@ -4484,6 +4484,24 @@
       loadDslxStrategy(String(name)).catch((error) => showToast(error.message, true));
     }
 
+    async function reloadSelectedDslxStrategy() {
+      const select = document.getElementById("screen-dslx-file-select");
+      const name = String(select?.value || "").trim();
+      if (!name) {
+        showToast("Choose a DSLX file to reload.", true);
+        return;
+      }
+      const button = document.getElementById("screen-dslx-reload-btn");
+      if (button) button.disabled = true;
+      try {
+        await loadDslxStrategy(name);
+      } catch (error) {
+        showToast(error.message || "Could not reload DSLX strategy", true);
+      } finally {
+        if (button) button.disabled = false;
+      }
+    }
+
     async function saveDslxStrategy() {
       const filename = String(document.getElementById("dslx-strategy-filename")?.value || "").trim();
       const content = String(document.getElementById("screen-dsl-editor")?.value || "");
@@ -8661,6 +8679,7 @@
       applyBacktestPreset,
       loadDslxStrategyList,
       loadDslxStrategyFromScreener,
+      reloadSelectedDslxStrategy,
       saveDslxStrategy,
       runEditorScreen,
       openEditorBacktest,

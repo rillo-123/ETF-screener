@@ -1,5 +1,7 @@
 # Locked decisions
 
+- Keep DSLX candle predicates visual and declarative: named consecutive candles plus body/wick indicator relationships are the primary strategy-authoring model.
+
 - -NextResumePoint
 
 - -NextResumePoint

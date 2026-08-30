@@ -91,6 +91,7 @@ def test_tab_bar_visible():
     assert 'id="screen-dsl-editor"' in html
     assert 'id="dslx-strategy-list"' in html
     assert 'id="screen-dslx-file-select"' in html
+    assert 'id="screen-dslx-reload-btn"' in html
     assert 'id="screen-dslx-script-status"' in html
     assert 'id="stop-run-btn"' in html
     assert "runEditorScreen" in dashboard_source
@@ -98,6 +99,7 @@ def test_tab_bar_visible():
     assert "mountPersistentMarketWorkspace" in dashboard_source
     assert "updatePersistentMarketWorkspaceVisibility" in dashboard_source
     assert "loadDslxStrategyFromScreener" in dashboard_source
+    assert "reloadSelectedDslxStrategy" in dashboard_source
     assert "setLoadedDslxScript" in dashboard_source
     assert "cancelScan" in dashboard_source
     assert 'id="tab-query"' not in html

@@ -66,7 +66,7 @@
       "name": "ha_new_exit3"
     },
     {
-      "dsl": "strategy ha_breakout {\n  source universe.selected\n  candles timeframe \"1d\" as heikin_ashi\n  scan latest\n\n  candle breakout {\n    when =>\n      open > ema(\"low\", 20)\n      && open < ema(\"high\", 20)\n      && close > ema(\"high\", 20)\n      && is_green\n      && rsi(14) > 50\n      && ema(\"close\", 200).slope > 0\n      && rsi(14).slope > 0\n      && volume > volume_ema(20) * 1.5\n      && ema(\"close\", 20) >= 10\n  }\n\n  entrystruct { breakout }\n  exitstruct { pass }\n}",
+      "dsl": "strategy ha_breakout {\n  source universe.selected\n  candles timeframe \"1d\" as heikin_ashi\n  scan latest\n\n  candle breakout {\n    when =>\n      open > ema(\"low\", 20)\n      && open < ema(\"high\", 20)\n      && close > ema(\"high\", 20)\n      && is_green\n      && rsi(14) > 50\n      && ema(\"close\", 200).slope > 0\n      && rsi(14).slope > 0\n      && atr(14) / close >= 0.01\n      && volume > volume_ema(20) * 1.5\n      && ema(\"close\", 20) >= 10\n  }\n\n  entrystruct { breakout }\n  exitstruct { pass }\n}",
       "exit_dsl": "ha_close LT ha_open\nAND\nha_close GT ema_low(20)\nAND\nha_low LTE ema_low(20)",
       "name": "dslx_test"
     },
@@ -76,12 +76,12 @@
       "name": "simple.green"
     },
     {
-      "dsl": "strategy ha_breakout {\n  source universe.selected\n  candles timeframe \"1d\" as heikin_ashi\n  scan latest\n\n  candle breakout {\n    when =>\n      open > ema(\"low\", 20)\n      && open < ema(\"high\", 20)\n      && close > ema(\"high\", 20)\n      && is_green\n      && rsi(14) > 50\n      && ema(\"close\", 200).slope > 0\n      && rsi(14).slope > 0\n      && volume > volume_ema(20) * 1.5\n      && ema(\"close\", 20) >= 10\n  }\n\n  entrystruct { breakout }\n  exitstruct { pass }\n}\n\nlet matches = ha_breakout.run()\nmatches.show()",
+      "dsl": "strategy ha_breakout {\n  source universe.selected\n  candles timeframe \"1d\" as heikin_ashi\n  scan latest\n\n  candle breakout {\n    when =>\n      open > ema(\"low\", 20)\n      && open < ema(\"high\", 20)\n      && close > ema(\"high\", 20)\n      && is_green\n      && rsi(14) > 50\n      && ema(\"close\", 200).slope > 0\n      && rsi(14).slope > 0\n      && atr(14) / close >= 0.01\n      && volume > volume_ema(20) * 1.5\n      && ema(\"close\", 20) >= 10\n  }\n\n  entrystruct { breakout }\n  exitstruct { pass }\n}\n\nlet matches = ha_breakout.run()\nmatches.show()",
       "exit_dsl": "ha_close LT ha_open\nAND\nha_close GT ema_low(20)\nAND\nha_low LTE ema_low(20)",
       "name": "ha_breakout"
     },
     {
-      "dsl": "strategy ha_breakout {\n  source universe.selected\n  candles timeframe \"1d\" as heikin_ashi\n  scan latest\n\n  candle breakout {\n    when =>\n      open > ema(\"low\", 20) && open < ema(\"high\", 20)\n      && close > ema(\"high\", 20)\n      && is_green\n      && rsi(14) > 50\n      && ema(\"close\", 200).slope > 0\n      && rsi(14).slope > 0\n      && volume > volume_ema(20) * 1.6\n      && ema(\"close\", 20) >= 10\n  }\n\n  entrystruct { breakout }\n  exitstruct { pass }\n}\n\nlet matches = ha_breakout.run()\nmatches.show()",
+      "dsl": "strategy ha_breakout {\n  source universe.selected\n  candles timeframe \"1d\" as heikin_ashi\n  scan latest\n\n  candle breakout {\n    when =>\n      open > ema(\"low\", 20) && open < ema(\"high\", 20)\n      && close > ema(\"high\", 20)\n      && is_green\n      && rsi(14) > 50\n      && ema(\"close\", 200).slope > 0\n      && rsi(14).slope > 0\n      && atr(14) / close >= 0.01\n      && volume > volume_ema(20) * 1.6\n      && ema(\"close\", 20) >= 10\n  }\n\n  entrystruct { breakout }\n  exitstruct { pass }\n}\n\nlet matches = ha_breakout.run()\nmatches.show()",
       "exit_dsl": "ha_close LT ha_open\nAND\nha_close GT ema_low(20)\nAND\nha_low LTE ema_low(20)",
       "name": "ha_breakout2"
     }

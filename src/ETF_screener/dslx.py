@@ -217,6 +217,84 @@ class Program:
     shows: tuple[str, ...]
 
 
+_ROLLING_CALL_COSTS = {
+    "ema": 20,
+    "sma": 20,
+    "volume_ema": 20,
+    "rsi": 30,
+    "atr": 35,
+}
+
+
+def _expression_cost(expression: object) -> int:
+    """Estimate evaluation work so pure conjunctions can reject cheaply."""
+    if isinstance(expression, Literal):
+        return 0
+    if isinstance(expression, Name):
+        return 1
+    if isinstance(expression, Attribute):
+        return _expression_cost(expression.target) + 1
+    if isinstance(expression, Call):
+        call_name = (
+            expression.target.value
+            if isinstance(expression.target, Name)
+            else expression.target.name
+            if isinstance(expression.target, Attribute)
+            else ""
+        )
+        period_cost = 0
+        if call_name in _ROLLING_CALL_COSTS and expression.args:
+            period = expression.args[-1]
+            if isinstance(period, Literal) and isinstance(period.value, int):
+                period_cost = period.value
+        return (
+            _ROLLING_CALL_COSTS.get(call_name, 8)
+            + period_cost
+            + _expression_cost(expression.target)
+            + sum(_expression_cost(argument) for argument in expression.args)
+        )
+    if isinstance(expression, Unary):
+        return 1 + _expression_cost(expression.value)
+    if isinstance(expression, Binary):
+        return 1 + _expression_cost(expression.left) + _expression_cost(expression.right)
+    if isinstance(expression, Lambda):
+        return _expression_cost(expression.body)
+    return 1
+
+
+def _conjunction_terms(expression: object) -> list[object]:
+    if isinstance(expression, Binary) and expression.operator == "and":
+        return [*_conjunction_terms(expression.left), *_conjunction_terms(expression.right)]
+    return [expression]
+
+
+def _optimize_conjunctions(expression: object) -> object:
+    """Put cheap terms first in side-effect-free ``and`` expressions."""
+    if isinstance(expression, Attribute):
+        return Attribute(_optimize_conjunctions(expression.target), expression.name)
+    if isinstance(expression, Call):
+        return Call(
+            _optimize_conjunctions(expression.target),
+            tuple(_optimize_conjunctions(argument) for argument in expression.args),
+        )
+    if isinstance(expression, Unary):
+        return Unary(expression.operator, _optimize_conjunctions(expression.value))
+    if isinstance(expression, Lambda):
+        return Lambda(expression.parameter, _optimize_conjunctions(expression.body))
+    if not isinstance(expression, Binary):
+        return expression
+    left = _optimize_conjunctions(expression.left)
+    right = _optimize_conjunctions(expression.right)
+    optimized = Binary(expression.operator, left, right)
+    if expression.operator != "and":
+        return optimized
+    terms = sorted(_conjunction_terms(optimized), key=_expression_cost)
+    result = terms[0]
+    for term in terms[1:]:
+        result = Binary("and", result, term)
+    return result
+
+
 _IMPLICIT_CANDLE_NAMES = {
     "open", "high", "low", "close", "volume",
     "is_green", "is_red", "is_doji", "color",
@@ -379,7 +457,7 @@ class _Parser:
         if self.expect_identifier().lower() != "when":
             raise DSLXSyntaxError(f"Candle '{name}' requires a when condition")
         self.expect("=>")
-        condition = self.parse_expression()
+        condition = _optimize_conjunctions(self.parse_expression())
         self.accept(";")
         self.expect("}")
         return CandleDefinition(name, condition)
@@ -794,6 +872,11 @@ class IndicatorValue(float):
         return self._within(min(candle.open, candle.close), max(candle.open, candle.close))
 
     @property
+    def not_within_body(self) -> bool:
+        """Whether the indicator lies strictly outside the open-to-close body."""
+        return not self.within_body
+
+    @property
     def within_upper_wick(self) -> bool:
         """Whether the indicator lies above the body and up to the candle high."""
         candle = self._candle
@@ -850,6 +933,8 @@ class CandleSeries:
         if style == "heikin_ashi":
             self._apply_heikin_ashi()
             self.columns = {str(column).lower(): str(column) for column in self.frame.columns}
+        self._source_series_cache: dict[str, pd.Series] = {}
+        self._indicator_series_cache: dict[tuple[str, str, int], pd.Series] = {}
 
     def _apply_heikin_ashi(self) -> None:
         """Replace OHLC with the Heikin-Ashi candle series, preserving volume."""
@@ -888,23 +973,25 @@ class CandleSeries:
             raise InsufficientHistory(f"Candle field '{field}' is unavailable")
         return float(value)
 
-    def indicator(self, name: str, index: int, *args: object) -> IndicatorValue:
-        if not args or not isinstance(args[-1], int) or args[-1] <= 0:
-            raise DSLXEvaluationError(f"{name} requires a positive integer period")
-        period = int(args[-1])
-        source = "close"
-        if name in {"ema", "sma"} and len(args) == 2:
-            source = str(args[0]).lower()
-        elif len(args) != 1:
-            raise DSLXEvaluationError(f"Invalid arguments for {name}")
-        values = pd.Series(
-            [self.value(row, source) for row in range(len(self.frame))], dtype=float
-        )
-        if index + 1 < period:
-            raise InsufficientHistory(f"{name}({period}) needs {period} candles")
+    def _source_series(self, source: str) -> pd.Series:
+        """Return one numeric OHLCV series, materialized once per ticker."""
+        normalized = source.lower()
+        cached = self._source_series_cache.get(normalized)
+        if cached is None:
+            cached = pd.Series(
+                [self.value(row, normalized) for row in range(len(self.frame))], dtype=float
+            )
+            self._source_series_cache[normalized] = cached
+        return cached
+
+    def _indicator_series(self, name: str, source: str, period: int) -> pd.Series:
+        """Calculate a rolling indicator once and reuse it at every endpoint."""
+        key = (name, source, period)
+        cached = self._indicator_series_cache.get(key)
+        if cached is not None:
+            return cached
+        values = self._source_series(source)
         if name == "volume_ema":
-            source = "volume"
-            values = pd.Series([self.value(row, source) for row in range(len(self.frame))], dtype=float)
             result = values.ewm(span=period, adjust=False, min_periods=period).mean()
         elif name == "ema":
             result = values.ewm(span=period, adjust=False, min_periods=period).mean()
@@ -920,15 +1007,32 @@ class CandleSeries:
             # unknown. Keep the all-flat case undefined.
             result = result.where(losses != 0, np.where(gains > 0, 100.0, np.nan))
         elif name == "atr":
-            high = pd.Series([self.value(row, "high") for row in range(len(self.frame))])
-            low = pd.Series([self.value(row, "low") for row in range(len(self.frame))])
-            close = pd.Series([self.value(row, "close") for row in range(len(self.frame))])
+            high = self._source_series("high")
+            low = self._source_series("low")
+            close = self._source_series("close")
             true_range = pd.concat(
                 [high - low, (high - close.shift()).abs(), (low - close.shift()).abs()], axis=1
             ).max(axis=1)
             result = true_range.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
         else:
             raise DSLXEvaluationError(f"Unsupported indicator '{name}'")
+        self._indicator_series_cache[key] = result
+        return result
+
+    def indicator(self, name: str, index: int, *args: object) -> IndicatorValue:
+        if not args or not isinstance(args[-1], int) or args[-1] <= 0:
+            raise DSLXEvaluationError(f"{name} requires a positive integer period")
+        period = int(args[-1])
+        source = "close"
+        if name in {"ema", "sma"} and len(args) == 2:
+            source = str(args[0]).lower()
+        elif len(args) != 1:
+            raise DSLXEvaluationError(f"Invalid arguments for {name}")
+        if index + 1 < period:
+            raise InsufficientHistory(f"{name}({period}) needs {period} candles")
+        if name == "volume_ema":
+            source = "volume"
+        result = self._indicator_series(name, source, period)
         value = result.iloc[index]
         if pd.isna(value):
             raise InsufficientHistory(f"{name}({period}) is unavailable at this candle")
@@ -1114,7 +1218,10 @@ def _attribute(value: object, name: str) -> object:
         Position: {"entry_price"},
         CandleWindow: {"all", "any", "count", "high", "low", "close", "volume"},
         ValueSequence: {"max", "min", "average"},
-        IndicatorValue: {"slope", "within_body", "within_upper_wick", "within_lower_wick"},
+        IndicatorValue: {
+            "slope", "within_body", "not_within_body",
+            "within_upper_wick", "within_lower_wick",
+        },
         EMABand: {"contains"},
     }
     for value_type, names in allowed.items():

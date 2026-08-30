@@ -152,9 +152,69 @@ def test_dslx_named_candles_support_windows_indicators_and_geometry():
         "Low": [8.0, 8.0, 9.0], "Close": [10.0, 11.0, 11.0], "Volume": [1_000.0] * 3,
     })
     assert DSLXInterpreter(_strategy("body", 'ema("close", 2).within_body')).matches_entry(frame)
+    assert not DSLXInterpreter(
+        _strategy("outside_body", 'ema("close", 2).not_within_body')
+    ).matches_entry(frame)
+    assert DSLXInterpreter(
+        _strategy("outside_body", 'ema("high", 2).not_within_body')
+    ).matches_entry(frame)
     assert DSLXInterpreter(_strategy("band", 'ema("high", "low", 2).contains')).matches_entry(frame.assign(Close=[10.0] * 3))
     candle = CandleSeries(frame.assign(Open=[12.0] * 3, Close=[10.0] * 3)).last
     assert candle.color == "red" and candle.body_length == 2.0
+
+
+def test_dslx_normalized_atr_filter_rejects_flatlining_prices():
+    flat = pd.DataFrame({
+        "Open": [100.0] * 30,
+        "High": [100.1] * 30,
+        "Low": [99.9] * 30,
+        "Close": [100.0] * 30,
+        "Volume": [10_000.0] * 30,
+    })
+    moving = flat.assign(High=[102.0] * 30, Low=[98.0] * 30)
+    strategy = DSLXInterpreter(_strategy("volatile", "atr(14) / close >= 0.01"))
+
+    assert strategy.matches_entry(flat) is False
+    assert strategy.matches_entry(moving) is True
+
+
+def test_dslx_caches_source_and_indicator_series_per_ticker():
+    series = CandleSeries(_candles())
+
+    series.last.ema("close", 20)
+    cached_ema = series._indicator_series_cache[("ema", "close", 20)]
+    series.candle_at(20).ema("close", 20)
+    series.last.rsi(14)
+
+    assert series._indicator_series_cache[("ema", "close", 20)] is cached_ema
+    assert set(series._indicator_series_cache) == {
+        ("ema", "close", 20),
+        ("rsi", "close", 14),
+    }
+    assert set(series._source_series_cache) == {"close"}
+
+
+def test_dslx_evaluates_cheap_conjunction_terms_before_indicators(monkeypatch):
+    def unexpected_atr(*_args, **_kwargs):
+        raise AssertionError("ATR should not run after a cheap rejection")
+
+    monkeypatch.setattr("ETF_screener.dslx.Candle.atr", unexpected_atr)
+    strategy = DSLXInterpreter(_strategy("cheap_first", "atr(14) > 0 && close < 0"))
+
+    assert strategy.matches_entry(_candles()) is False
+
+
+def test_dslx_uses_short_indicator_lookbacks_to_reject_before_long_ones(monkeypatch):
+    def unexpected_ema(*_args, **_kwargs):
+        raise AssertionError("EMA(200) should not run after ATR(14) rejects")
+
+    monkeypatch.setattr("ETF_screener.dslx.Candle.ema", unexpected_ema)
+    frame = pd.concat([_candles()] * 8, ignore_index=True)
+    strategy = DSLXInterpreter(
+        _strategy("short_first", 'ema("close", 200) > 0 && atr(14) > 1_000')
+    )
+
+    assert strategy.matches_entry(frame) is False
 
 
 def test_dslx_program_retains_composable_match_lists_and_named_universes():

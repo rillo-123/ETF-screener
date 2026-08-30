@@ -21,6 +21,7 @@ strategy ha_breakout {
       && rsi(14) > 50
       && ema("close", 200).slope > 0
       && rsi(14).slope > 0
+      && atr(14) / close >= 0.01
       && volume > volume_ema(20) * 1.5
   }
 
