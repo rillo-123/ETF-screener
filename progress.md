@@ -1,6 +1,156 @@
 
 # Progress
 
+## 2026-09-01 22:15:23 +02:00
+
+- -Summary
+- Next resume point: Review the latest commit and pick up the next implementation task.
+
+## 2026-09-01 22:13:16 +02:00
+
+- Completed cautious, cancellable Yahoo access with process-wide pacing, cooldown, and streamed DSLX matches from SQLite.
+- Added provider-neutral market-data adapters while retaining Yahoo as the default, plus automatic background discovery and fetching of cache-missing symbols only.
+- Fixed threaded SQLite ownership, Heikin-Ashi EMA chart alignment, logarithmic volume scaling, DSLX catalogue reload, and removal of the legacy Aggregated lane.
+- Added strict, average, loose, and confirmed HA dip-finder strategies with expanded DSLX candle and EMA geometry.
+- Next resume point: Restart the dashboard, live-test the automatic Nasdaq missing-data fill and strategy switching, then tune strategy thresholds from observed matches.
+
+## 2026-09-01 21:21:39 +02:00
+
+- Made the DSLX Reload button refresh the on-disk strategy catalogue before
+  reloading the selected file, so newly created filenames appear without an
+  Uvicorn restart.
+- Anchored the DSLX directory to the repository location rather than the
+  backend process's current working directory.
+- Added a regression proving one running backend discovers and loads a DSLX
+  file created after its first catalogue request; focused API checks, Ruff,
+  and JavaScript syntax validation pass.
+
+## 2026-09-01 21:06:33 +02:00
+
+- Added `ha_dipfinder.dslx`, a five-candle latest-scan pattern: three consecutive
+  green Heikin-Ashi bodies above EMA 20 High followed by two progressively
+  lower red candles, with the final lower wick intersecting EMA 20 Low.
+- Applied the established average liquidity universe and a close-below-EMA-20-
+  Low breakdown exit, while keeping the entry price explicit at the final dip
+  candle close.
+- Verified the program parses to the intended five-member ordered structure and
+  is exposed through the dashboard DSLX catalogue.
+- Required the Heikin-Ashi EMA 200 Close slope to remain positive on every one
+  of the pattern candles, enforcing a persistent long-term uptrend through the
+  advance, pullback, and confirmation.
+- Added a sixth green recovery candle that must close above the second red
+  candle's high. Entry now occurs at that recovery close rather than while the
+  pullback is still falling.
+
+## 2026-09-01 20:52:05 +02:00
+
+- Added separate strict, average, and loose Heikin-Ashi breakout DSLX files.
+  They share the same consecutive setup/breakout structure and `scan latest`
+  semantics while progressively relaxing liquidity, RSI, volatility, and
+  volume confirmation.
+- Kept `ha_breakout_other.dslx` unchanged; the new average variant preserves
+  its current thresholds under an explicit stable name.
+- Verified all bundled breakout programs parse and that the dashboard strategy
+  catalogue exposes all three new files.
+
+## 2026-08-31 21:10:07 +02:00
+
+- Aligned close- and open-sourced EMA chart overlays with the displayed
+  Heikin-Ashi candle series, completing the existing High/Low alignment. The
+  plotted EMA 200 slope now matches DSLX evaluation; 99 dashboard/plotter tests
+  pass with clean Ruff checks.
+- Switched chart volume panes to a logarithmic y-axis so ordinary sessions
+  remain readable beside event-driven spikes such as MOVE's 6.64M day; price
+  and indicator panes remain linear. Dashboard/plotter verification passes
+  with 98 tests.
+- Fixed the live DSLX scan's SQLite thread-affinity failure by opening and
+  closing its read connection inside the background evaluation thread rather
+  than capturing the request thread's connection.
+- Added a real-SQLite dashboard regression test covering that nested request /
+  worker-thread ownership boundary.
+- Routed structural DSLX chart enrichment through the DSLX historical evaluator
+  instead of the legacy expression parser, eliminating the parser traceback
+  seen when opening the MOVE chart.
+- Made `show_ribbons=False` actually omit the legacy Aggregated lane and its
+  unused subplot from dashboard charts.
+- Audited MOVE's cached volume: there are no missing/zero sessions; the latest
+  6.64M shares is a genuine outlier against an 87.2K recent median, explaining
+  both the spotty appearance and why the volume-breakout predicate matched.
+- Verified the fixes with 354 passing tests, 3 intentional skips, and clean
+  Ruff checks.
+
+## 2026-08-31 20:50:10 +02:00
+
+- Introduced a provider-neutral `MarketDataProvider` contract and centralized
+  factory, selected with `ETF_SCREENER_MARKET_DATA_PROVIDER` while retaining
+  Yahoo as the default.
+- Decoupled cache refresh, CLI fetch paths, and cache-miss snippets from direct
+  Yahoo construction; provider choice no longer changes screening, storage, or
+  dashboard logic.
+- Upgraded the existing Finnhub adapter to support incremental date windows,
+  normalized OHLCV/dividend output, cancellation, header-based authentication,
+  cautious process-wide pacing, 429 cooldown, and actionable plan errors.
+- Documented Yahoo/Finnhub selection and the current Finnhub Premium historical
+  candle requirement. The adapter boundary is ready for Twelve Data, Tiingo,
+  or another provider without further refresh-pipeline changes.
+- Verified the provider refactor with 352 passing tests, 3 intentional skips,
+  and clean Ruff checks across the complete source and test trees.
+
+## 2026-08-31 20:37:47 +02:00
+
+- Added a process-wide Yahoo request gate that spaces downloads by one second
+  across refresh workers and opens an exponential 30-second-to-15-minute
+  cooldown circuit when Yahoo reports HTTP 429/rate limiting.
+- Reduced refresh concurrency to at most two workers and propagated the
+  existing cancellation token into Yahoo waits and downloads, so Stop also
+  interrupts throttling/backoff promptly.
+- Changed GUI screening to evaluate cached DSLX symbols incrementally and
+  publish progress plus matches through a bounded per-run event stream.
+- Updated the match list while a scan is still active, keeping its cards and
+  charts usable as later results arrive; the final response still reconciles
+  the complete result set for export and compatibility.
+- Removed the implicit Yahoo refresh from the Run path. Scans now start from
+  local cached data immediately, while manual refresh remains a separately
+  paced and cancellable operation.
+- Verified the cautious streaming milestone with 346 passing tests, 3
+  intentional skips, clean Ruff checks, and a clean JavaScript syntax check.
+
+## 2026-08-31 19:59:38 +02:00
+
+- Made the Screener Stop button request cooperative server-side cancellation
+  instead of only aborting the browser fetch.
+- Propagated cancellation checkpoints through DSLX frame loading/evaluation,
+  legacy parallel backtests, control screens, and market-data refresh workers.
+- Added request IDs so stale Stop clicks cannot cancel a newer run and reject
+  overlapping in-process screen or refresh jobs.
+- Removed the dashboard launcher's separate uncancellable full-market refresh;
+  refreshes now run through the dashboard API and share its progress/stop path.
+- Verified the cancellation milestone with 342 passing tests, 3 intentional
+  skips, clean Ruff checks, and a clean JavaScript syntax check.
+
+## 2026-08-31 18:15:03 +02:00
+
+- Added the `any` structural wildcard: it consumes exactly one unconstrained
+  real candle in entry or exit patterns, can repeat, appears in match
+  provenance, and cannot be defined or referenced as a named candle.
+- Added independent-period EMA channels using
+  `ema("high", 20, "low", 20)` syntax.
+- Added `.body_within` for inclusive open/close containment and
+  `.candle_within` for inclusive full-candle containment including wicks.
+- Removed the ambiguous legacy `.contains` EMA-channel member so strategies use
+  `.body_within` or `.candle_within` explicitly.
+- Replaced reversed single-line `within_*` predicates with entity-first
+  `.body_intersects`, `.upper_wick_intersects`, and
+  `.lower_wick_intersects`; negation now uses the language's existing `!`.
+- Documented the new predicates and added regression coverage for independent
+  periods, body-versus-wick behavior, inclusive boundaries, and reversed EMA
+  argument order.
+- Verification passed for the EMA geometry milestone: the full repository suite
+  had 330 passing tests and 3 intentional skips.
+- Wildcard verification passed with 26 focused DSLX tests, 14 backtester and
+  strategy-manager integration tests, all 5 bundled DSLX files parsing, and
+  Ruff clean on the changed Python files.
+
 ## 2026-08-30 20:17:05 +02:00
 
 - Added price-normalized ATR filtering to the Heikin-Ashi breakout strategies so flatlining instruments are rejected.

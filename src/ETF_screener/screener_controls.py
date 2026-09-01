@@ -1648,6 +1648,7 @@ def screen_with_controls(
     latest_market_date: object | None,
     filters: object | None = None,
     metadata_map: dict[str, dict[str, Any]] | None = None,
+    cancel_event=None,
 ) -> dict[str, Any]:
     """Scan the selected universe using recent MACD/RSI/StochRSI event controls."""
     normalized_filters = normalize_screen_filters(filters)
@@ -1717,6 +1718,8 @@ def screen_with_controls(
         expected_latest_date = max(observed_latest_dates)
 
     for ticker in requested_tickers:
+        if cancel_event is not None and cancel_event.is_set():
+            break
         frame = grouped.get(ticker)
         if frame is None or frame.empty:
             continue

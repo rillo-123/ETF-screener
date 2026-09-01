@@ -15,7 +15,7 @@ strategy ha_breakout {
   candle breakout {
     when =>
       open > ema("low", 20)
-      && ema("high", 20).within_body
+      && ema("high", 20).body_intersects
       && is_green
       && rsi(14) > 50
       && ema("close", 200).slope > 0

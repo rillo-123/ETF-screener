@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Any, Iterable, cast
+from typing import Any, Callable, Iterable, cast
 
 import numpy as np
 import pandas as pd
@@ -305,6 +305,8 @@ _IMPLICIT_CANDLE_NAMES = {
     "volume_ema",
 }
 
+_ANY_STRUCT_MEMBER = "any"
+
 
 def _expression_names(expression: object | None) -> set[str]:
     """Collect bare identifiers from an expression for semantic validation."""
@@ -453,6 +455,8 @@ class _Parser:
     def parse_candle_definition(self) -> CandleDefinition:
         """Parse ``candle name { when => <implicit-candle expression> }``."""
         name = self.expect_identifier()
+        if name.lower() == _ANY_STRUCT_MEMBER:
+            raise DSLXSyntaxError("'any' is reserved for unconstrained struct candles")
         self.expect("{")
         if self.expect_identifier().lower() != "when":
             raise DSLXSyntaxError(f"Candle '{name}' requires a when condition")
@@ -478,6 +482,8 @@ class _Parser:
                 price_expression = self.parse_expression()
             elif name.lower() == "pass":
                 passed = True
+            elif name.lower() == _ANY_STRUCT_MEMBER:
+                members.append(_ANY_STRUCT_MEMBER)
             else:
                 members.append(name)
             self.accept(",")
@@ -500,9 +506,14 @@ class _Parser:
             ("entrystruct", strategy.entry_struct or ()),
             ("exitstruct", strategy.exit_struct or ()),
         ):
-            if len(members) != len(set(members)):
+            named_members = tuple(
+                member for member in members if member != _ANY_STRUCT_MEMBER
+            )
+            if len(named_members) != len(set(named_members)):
                 raise DSLXSyntaxError(f"{label} cannot contain the same candle more than once")
             for index, member in enumerate(members):
+                if member == _ANY_STRUCT_MEMBER:
+                    continue
                 definition = definitions.get(member)
                 if definition is None:
                     raise DSLXSyntaxError(f"{label} references unknown candle '{member}'")
@@ -530,7 +541,10 @@ class _Parser:
                         )
             if label == "entrystruct" and strategy.entry_struct is not None:
                 for reference in _expression_names(strategy.entry_price):
-                    if reference not in members and reference not in _IMPLICIT_CANDLE_NAMES:
+                    if (
+                        reference not in named_members
+                        and reference not in _IMPLICIT_CANDLE_NAMES
+                    ):
                         raise DSLXSyntaxError(
                             f"entrystruct price references unavailable candle '{reference}'"
                         )
@@ -840,7 +854,7 @@ class IndicatorValue(float):
     """A numeric indicator value anchored to one focal candle.
 
     EMA and SMA values also retain their focal candle so strategies can express
-    visual relationships such as ``candle.ema(20).within_body`` directly.
+    visual relationships such as ``candle.ema(20).body_intersects`` directly.
     """
 
     def __new__(cls, value: float, slope: float, candle: "Candle | None" = None):
@@ -864,29 +878,24 @@ class IndicatorValue(float):
         return lower_match and upper_match
 
     @property
-    def within_body(self) -> bool:
-        """Whether the indicator lies in the inclusive open-to-close body."""
+    def body_intersects(self) -> bool:
+        """Whether the line intersects the inclusive open-to-close body."""
         candle = self._candle
         if candle is None:
             raise DSLXEvaluationError("Candle-region predicates require a candle indicator")
         return self._within(min(candle.open, candle.close), max(candle.open, candle.close))
 
     @property
-    def not_within_body(self) -> bool:
-        """Whether the indicator lies strictly outside the open-to-close body."""
-        return not self.within_body
-
-    @property
-    def within_upper_wick(self) -> bool:
-        """Whether the indicator lies above the body and up to the candle high."""
+    def upper_wick_intersects(self) -> bool:
+        """Whether the line intersects the upper wick above the candle body."""
         candle = self._candle
         if candle is None:
             raise DSLXEvaluationError("Candle-region predicates require a candle indicator")
         return self._within(max(candle.open, candle.close), candle.high, include_lower=False)
 
     @property
-    def within_lower_wick(self) -> bool:
-        """Whether the indicator lies from the candle low up to below the body."""
+    def lower_wick_intersects(self) -> bool:
+        """Whether the line intersects the lower wick below the candle body."""
         candle = self._candle
         if candle is None:
             raise DSLXEvaluationError("Candle-region predicates require a candle indicator")
@@ -894,26 +903,49 @@ class IndicatorValue(float):
 
 
 class EMABand:
-    """A high/low EMA channel anchored to one focal candle."""
+    """A two-EMA channel anchored to one focal candle."""
 
-    def __init__(self, candle: "Candle", upper_source: str, lower_source: str, period: int):
+    def __init__(
+        self,
+        candle: "Candle",
+        first_source: str,
+        first_period: int,
+        second_source: str,
+        second_period: int,
+    ):
         self.candle = candle
-        self.upper_source = upper_source
-        self.lower_source = lower_source
-        self.period = period
+        self.first_source = first_source
+        self.first_period = first_period
+        self.second_source = second_source
+        self.second_period = second_period
 
-    @property
-    def contains(self) -> bool:
-        """Whether the focal candle, including wicks, lies inside this EMA band."""
+    def _boundaries(self) -> tuple[float, float]:
+        """Return ordered channel boundaries, independent of argument order."""
         first = float(
-            self.candle.series.indicator("ema", self.candle.index, self.upper_source, self.period)
+            self.candle.series.indicator(
+                "ema", self.candle.index, self.first_source, self.first_period
+            )
         )
         second = float(
-            self.candle.series.indicator("ema", self.candle.index, self.lower_source, self.period)
+            self.candle.series.indicator(
+                "ema", self.candle.index, self.second_source, self.second_period
+            )
         )
-        lower, upper = min(first, second), max(first, second)
-        return self.candle.low >= lower and self.candle.high <= upper
+        return min(first, second), max(first, second)
 
+    @property
+    def body_within(self) -> bool:
+        """Whether the focal candle's complete open-to-close body is in the band."""
+        lower, upper = self._boundaries()
+        body_low = min(self.candle.open, self.candle.close)
+        body_high = max(self.candle.open, self.candle.close)
+        return body_low >= lower and body_high <= upper
+
+    @property
+    def candle_within(self) -> bool:
+        """Whether the focal candle, including both wicks, is in the band."""
+        lower, upper = self._boundaries()
+        return self.candle.low >= lower and self.candle.high <= upper
 
 class CandleSeries:
     """Immutable chronological OHLCV data exposed to DSLX evaluation."""
@@ -1162,14 +1194,30 @@ class Candle:
         is ``ema("high", period)``.  Both wicks are included, so a candle
         only matches when ``low >= lower`` and ``high <= upper``.
         """
-        return EMABand(self, "high", "low", period).contains
+        return EMABand(self, "high", period, "low", period).candle_within
 
     def ema(self, *args: object) -> IndicatorValue | EMABand:
         if len(args) == 3 and isinstance(args[0], str) and isinstance(args[1], str):
             period = args[2]
             if not isinstance(period, int) or period <= 0:
                 raise DSLXEvaluationError("ema band requires a positive integer period")
-            return EMABand(self, args[0].lower(), args[1].lower(), period)
+            return EMABand(self, args[0].lower(), period, args[1].lower(), period)
+        if len(args) == 4 and isinstance(args[0], str) and isinstance(args[2], str):
+            first_period, second_period = args[1], args[3]
+            if (
+                not isinstance(first_period, int)
+                or first_period <= 0
+                or not isinstance(second_period, int)
+                or second_period <= 0
+            ):
+                raise DSLXEvaluationError("ema band requires positive integer periods")
+            return EMABand(
+                self,
+                args[0].lower(),
+                first_period,
+                args[2].lower(),
+                second_period,
+            )
         return self.series.indicator("ema", self.index, *args)
 
     def sma(self, *args: object) -> IndicatorValue:
@@ -1219,10 +1267,10 @@ def _attribute(value: object, name: str) -> object:
         CandleWindow: {"all", "any", "count", "high", "low", "close", "volume"},
         ValueSequence: {"max", "min", "average"},
         IndicatorValue: {
-            "slope", "within_body", "not_within_body",
-            "within_upper_wick", "within_lower_wick",
+            "slope", "body_intersects", "upper_wick_intersects",
+            "lower_wick_intersects",
         },
-        EMABand: {"contains"},
+        EMABand: {"body_within", "candle_within"},
     }
     for value_type, names in allowed.items():
         if isinstance(value, value_type):
@@ -1303,12 +1351,16 @@ def _match_pattern(
         (name, series.candle_at(first_index + offset))
         for offset, name in enumerate(members)
     )
-    bindings: dict[str, object] = dict(pattern)
+    bindings: dict[str, object] = {
+        name: candle for name, candle in pattern if name != _ANY_STRUCT_MEMBER
+    }
     if position is not None:
         bindings["position"] = position
     for name, candle in pattern:
         environment = dict(bindings)
         environment.update(_implicit_candle_environment(candle))
+        if name == _ANY_STRUCT_MEMBER:
+            continue
         if not bool(_evaluate(definitions[name].condition, environment)):
             return False, environment, pattern
     final_environment = dict(bindings)
@@ -1322,6 +1374,8 @@ def _structured_take_profit_fill_price(
     """Recognize a position-relative target in a matched exit candle predicate."""
     definitions = {item.name: item for item in strategy.candle_definitions}
     for name in reversed(strategy.exit_struct or ()):
+        if name == _ANY_STRUCT_MEMBER:
+            continue
         expression = definitions[name].condition
         if not (
             isinstance(expression, Binary)
@@ -1365,12 +1419,24 @@ class DSLXInterpreter:
         except InsufficientHistory:
             return False
 
-    def run(self, frames: dict[str, pd.DataFrame]) -> MatchList:
+    def run(
+        self,
+        frames: dict[str, pd.DataFrame],
+        *,
+        cancel_check: Callable[[], None] | None = None,
+        match_callback: Callable[[Match], None] | None = None,
+        progress_callback: Callable[[str, int, int], None] | None = None,
+    ) -> MatchList:
         """Evaluate this strategy over provided ticker frames and return matches."""
         matches: list[Match] = []
-        for ticker, frame in frames.items():
+        total = len(frames)
+        for completed, (ticker, frame) in enumerate(frames.items(), start=1):
+            if cancel_check is not None:
+                cancel_check()
             series = CandleSeries(frame, style=self.strategy.candle_style)
             if series.frame.empty:
+                if progress_callback is not None:
+                    progress_callback(str(ticker), completed, total)
                 continue
             if self.strategy.scan == "latest":
                 endpoints = (len(series.frame) - 1,)
@@ -1402,16 +1468,19 @@ class DSLXInterpreter:
                     ),
                     None,
                 )
-                matches.append(
-                    Match(
-                        self.strategy.name,
-                        str(ticker),
-                        candle,
-                        len(series.frame) - 1 - endpoint,
-                        timestamp,
-                        pattern,
-                    )
+                match = Match(
+                    self.strategy.name,
+                    str(ticker),
+                    candle,
+                    len(series.frame) - 1 - endpoint,
+                    timestamp,
+                    pattern,
                 )
+                matches.append(match)
+                if match_callback is not None:
+                    match_callback(match)
+            if progress_callback is not None:
+                progress_callback(str(ticker), completed, total)
         return MatchList(matches)
 
 def _liquidity_clause_matches(frame: pd.DataFrame, clause: LiquidityClause) -> bool:
@@ -1445,14 +1514,22 @@ def _liquidity_clause_matches(frame: pd.DataFrame, clause: LiquidityClause) -> b
 
 
 def _filter_universe(
-    frames: dict[str, pd.DataFrame], definition: UniverseDefinition
+    frames: dict[str, pd.DataFrame],
+    definition: UniverseDefinition,
+    *,
+    cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Keep only instruments that meet every declared eligibility condition."""
-    return {
-        ticker: frame
-        for ticker, frame in frames.items()
-        if all(_liquidity_clause_matches(frame, clause) for clause in definition.liquidity)
-    }
+    filtered: dict[str, pd.DataFrame] = {}
+    for ticker, frame in frames.items():
+        if cancel_check is not None:
+            cancel_check()
+        if all(
+            _liquidity_clause_matches(frame, clause)
+            for clause in definition.liquidity
+        ):
+            filtered[ticker] = frame
+    return filtered
 
 
 class DSLXProgramInterpreter:
@@ -1469,10 +1546,22 @@ class DSLXProgramInterpreter:
         *,
         selected: dict[str, pd.DataFrame],
         universes: dict[str, dict[str, pd.DataFrame]] | None = None,
+        cancel_check: Callable[[], None] | None = None,
+        match_callback: Callable[[Match], None] | None = None,
+        progress_callback: Callable[[str, int, int], None] | None = None,
     ) -> dict[str, MatchList]:
         """Run program bindings; hosts render the lists named by ``show()``."""
         available_universes = dict(universes or {})
         available_universes["universe.selected"] = selected
+        visible_targets = set(self.program.shows)
+        changed = True
+        while changed:
+            changed = False
+            for target, left, right in self.program.merges:
+                if target in visible_targets:
+                    previous_size = len(visible_targets)
+                    visible_targets.update((left, right))
+                    changed = changed or len(visible_targets) != previous_size
         for definition in self.program.universes:
             source_frames = available_universes.get(definition.source)
             if source_frames is None:
@@ -1480,10 +1569,12 @@ class DSLXProgramInterpreter:
                     f"Universe '{definition.source}' required by '{definition.name}' is unavailable"
                 )
             available_universes[f"universe.{definition.name}"] = _filter_universe(
-                source_frames, definition
+                source_frames, definition, cancel_check=cancel_check
             )
         values: dict[str, MatchList] = {}
         for target, strategy_name in self.program.runs:
+            if cancel_check is not None:
+                cancel_check()
             strategy = self.strategies.get(strategy_name)
             if strategy is None:
                 raise DSLXEvaluationError(f"Unknown strategy '{strategy_name}'")
@@ -1492,7 +1583,12 @@ class DSLXProgramInterpreter:
                 raise DSLXEvaluationError(f"Universe '{strategy.source}' is unavailable")
             runner = object.__new__(DSLXInterpreter)
             runner.strategy = strategy
-            values[target] = runner.run(frames)
+            values[target] = runner.run(
+                frames,
+                cancel_check=cancel_check,
+                match_callback=(match_callback if target in visible_targets else None),
+                progress_callback=progress_callback,
+            )
         for target, left, right in self.program.merges:
             if left not in values or right not in values:
                 raise DSLXEvaluationError("MatchList combination refers to an unknown list")

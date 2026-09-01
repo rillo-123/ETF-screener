@@ -84,6 +84,49 @@ class DelistingTracker:
             if t and t not in blacklist
         ]
 
+    def repair_legacy_blacklist(self) -> dict[str, int]:
+        """Undo blacklist entries created by obsolete eager-promotion rules."""
+        blacklist = self.load_blacklist()
+        missing_state = self.load_missing_state()
+        removed_max_depth = 0
+        restored_missing = 0
+
+        for ticker, entry in list(blacklist.items()):
+            reason = str(entry.get("reason") or "")
+            if reason == "Max depth reached":
+                # This describes history availability, not ticker validity.
+                del blacklist[ticker]
+                removed_max_depth += 1
+                continue
+
+            if entry.get("missing_days") == 0:
+                first_missing = (
+                    _parse_day(entry.get("first_missing"))
+                    or _parse_day(entry.get("promoted_on"))
+                    or date.today()
+                )
+                last_missing = (
+                    _parse_day(entry.get("promoted_on")) or first_missing
+                )
+                missing_state[ticker] = {
+                    "status": "missing",
+                    "reason": reason or "No data found during refresh",
+                    "first_missing": first_missing.isoformat(),
+                    "last_missing": last_missing.isoformat(),
+                    "missing_days": max(0, (last_missing - first_missing).days),
+                }
+                del blacklist[ticker]
+                restored_missing += 1
+
+        if removed_max_depth or restored_missing:
+            self._save_json(self.blacklist_file, blacklist)
+            self._save_json(self.missing_file, missing_state)
+
+        return {
+            "removed_max_depth": removed_max_depth,
+            "restored_missing": restored_missing,
+        }
+
     def mark_missing(
         self,
         ticker: str,

@@ -1,5 +1,9 @@
 # Locked decisions
 
+- -NextResumePoint
+
+- Strategy changes over the same universe must reuse SQLite; automatic Yahoo work is limited to genuinely absent symbols and remains independently cancellable.
+
 - Keep DSLX candle predicates visual and declarative: named consecutive candles plus body/wick indicator relationships are the primary strategy-authoring model.
 
 - -NextResumePoint

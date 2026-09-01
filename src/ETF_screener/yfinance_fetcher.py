@@ -1,7 +1,11 @@
 """Fetch ETF data from Yahoo Finance API."""
 
 import logging
+import os
+import random
+import threading
 import time
+from concurrent.futures import CancelledError
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -9,7 +13,82 @@ import pandas as pd
 import yfinance as yf
 from tqdm import tqdm
 
+try:
+    from yfinance.exceptions import YFRateLimitError
+except ImportError:  # pragma: no cover - compatibility with older supported yfinance
+    class YFRateLimitError(RuntimeError):
+        def __init__(self):
+            super().__init__("Too Many Requests. Rate limited. Try after a while.")
+
 logger = logging.getLogger(__name__)
+
+YAHOO_MIN_REQUEST_INTERVAL_SECONDS = max(
+    0.0, float(os.getenv("ETF_SCREENER_YAHOO_REQUEST_INTERVAL", "1.0"))
+)
+YAHOO_RATE_LIMIT_BASE_BACKOFF_SECONDS = max(
+    1.0, float(os.getenv("ETF_SCREENER_YAHOO_RATE_BACKOFF", "30"))
+)
+YAHOO_RATE_LIMIT_MAX_BACKOFF_SECONDS = max(
+    YAHOO_RATE_LIMIT_BASE_BACKOFF_SECONDS,
+    float(os.getenv("ETF_SCREENER_YAHOO_RATE_MAX_BACKOFF", "900")),
+)
+
+
+class _YahooRequestGate:
+    """Process-wide pacing and circuit breaking for Yahoo requests."""
+
+    _lock = threading.Lock()
+    _next_request_at = 0.0
+    _blocked_until = 0.0
+    _rate_limit_strikes = 0
+
+    @classmethod
+    def wait(cls, cancel_event=None) -> None:
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                raise CancelledError("Yahoo request cancelled")
+            with cls._lock:
+                now = time.monotonic()
+                ready_at = max(cls._next_request_at, cls._blocked_until)
+                if ready_at <= now:
+                    cls._next_request_at = (
+                        now + YAHOO_MIN_REQUEST_INTERVAL_SECONDS
+                    )
+                    return
+                delay = min(ready_at - now, 1.0)
+            if cancel_event is not None:
+                if cancel_event.wait(delay):
+                    raise CancelledError("Yahoo request cancelled")
+            else:
+                time.sleep(delay)
+
+    @classmethod
+    def record_rate_limit(cls) -> float:
+        with cls._lock:
+            cls._rate_limit_strikes += 1
+            base_delay = min(
+                YAHOO_RATE_LIMIT_BASE_BACKOFF_SECONDS
+                * (2 ** (cls._rate_limit_strikes - 1)),
+                YAHOO_RATE_LIMIT_MAX_BACKOFF_SECONDS,
+            )
+            delay = min(
+                base_delay + random.uniform(0.0, min(5.0, base_delay * 0.1)),
+                YAHOO_RATE_LIMIT_MAX_BACKOFF_SECONDS,
+            )
+            cls._blocked_until = max(cls._blocked_until, time.monotonic() + delay)
+            return delay
+
+    @classmethod
+    def record_success(cls) -> None:
+        with cls._lock:
+            cls._rate_limit_strikes = 0
+
+    @classmethod
+    def reset_for_tests(cls) -> None:
+        with cls._lock:
+            cls._next_request_at = 0.0
+            cls._blocked_until = 0.0
+            cls._rate_limit_strikes = 0
 
 
 class YFinanceFetcher:
@@ -25,8 +104,10 @@ class YFinanceFetcher:
         start_date: datetime,
         end_date: datetime,
         interval: str = "1d",
+        cancel_event=None,
     ) -> pd.DataFrame:
         """Raw yfinance fetch, returns normalized DataFrame or empty DataFrame."""
+        _YahooRequestGate.wait(cancel_event)
         try:
             df = yf.Ticker(symbol).history(
                 start=start_date,
@@ -35,9 +116,26 @@ class YFinanceFetcher:
                 auto_adjust=False,
                 actions=True,
             )
+        except YFRateLimitError:
+            delay = _YahooRequestGate.record_rate_limit()
+            logger.warning(
+                "Yahoo rate limit reached for %s; pausing requests for %.1f seconds",
+                symbol,
+                delay,
+            )
+            raise
         except Exception as e:
+            if "too many requests" in str(e).lower() or "429" in str(e):
+                delay = _YahooRequestGate.record_rate_limit()
+                logger.warning(
+                    "Yahoo rate limit reached for %s; pausing requests for %.1f seconds",
+                    symbol,
+                    delay,
+                )
+                raise YFRateLimitError() from e
             logger.debug("yfinance error for %s: %s", symbol, e)
             return pd.DataFrame()
+        _YahooRequestGate.record_success()
         if df.empty:
             return df
         df = df.reset_index()
@@ -56,6 +154,7 @@ class YFinanceFetcher:
         start_date: Optional[datetime | date | str] = None,
         end_date: Optional[datetime | date | str] = None,
         interval: str = "1d",
+        cancel_event=None,
     ) -> pd.DataFrame:
         """
         Fetch historical OHLCV data for an ETF.
@@ -83,9 +182,15 @@ class YFinanceFetcher:
             resolved_start = resolved_end - timedelta(days=days)
 
         df = pd.DataFrame()
-        attempts = 3
+        attempts = 2
         for attempt in range(attempts):
-            df = self._fetch_yf(symbol, resolved_start, resolved_end, interval=interval)
+            df = self._fetch_yf(
+                symbol,
+                resolved_start,
+                resolved_end,
+                interval=interval,
+                cancel_event=cancel_event,
+            )
             if not df.empty:
                 break
             if attempt < attempts - 1:
@@ -103,7 +208,11 @@ class YFinanceFetcher:
                 )
                 for attempt in range(attempts):
                     df = self._fetch_yf(
-                        fallback, resolved_start, resolved_end, interval=interval
+                        fallback,
+                        resolved_start,
+                        resolved_end,
+                        interval=interval,
+                        cancel_event=cancel_event,
                     )
                     if not df.empty:
                         break

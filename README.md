@@ -65,12 +65,54 @@ In this repo, "set the milestone" means:
 
 `.\workflow_milestone.ps1` is the standard publish/checkpoint command for that flow. It updates the docs, runs the gate, attempts light automatic cleanup, and commits/pushes only when the repo is green.
 
+### Market-data providers
+
+Yahoo remains the default and requires no credentials. The refresh service,
+dashboard, cache-miss helpers, and shared CLI fetch paths construct providers
+through one adapter factory, so storage and screening no longer depend on a
+specific vendor.
+
+Select Finnhub for a PowerShell session with:
+
+```powershell
+$env:ETF_SCREENER_MARKET_DATA_PROVIDER = "finnhub"
+$env:FINNHUB_API_KEY = "your_api_key_here"
+./run.ps1
+```
+
+Return to Yahoo with:
+
+```powershell
+$env:ETF_SCREENER_MARKET_DATA_PROVIDER = "yahoo"
+```
+
+The Finnhub adapter sends the key in the `X-Finnhub-Token` header, supports
+incremental daily/weekly/monthly candle windows, shares the GUI cancellation
+path, and uses conservative process-wide pacing. Its official documentation
+currently marks historical stock candles as **Premium Access Required**, so a
+free API key may authenticate successfully but still receive a permission
+error from that endpoint.
+
+Optional pacing overrides:
+
+```powershell
+$env:ETF_SCREENER_YAHOO_REQUEST_INTERVAL = "1.0"
+$env:ETF_SCREENER_FINNHUB_REQUEST_INTERVAL = "1.0"
+$env:ETF_SCREENER_FINNHUB_RATE_BACKOFF = "60"
+```
+
+New providers implement `MarketDataProvider` in
+`src/ETF_screener/market_data_provider.py` and are registered in
+`create_market_data_provider`; refresh, persistence, and GUI code require no
+provider-specific branches.
+
 ### Get Finnhub API Key
 
 1. Sign up at [finnhub.io](https://finnhub.io)
 2. Get your free API key
-3. Set environment variable:
+3. Set environment variables:
    ```powershell
+   $env:ETF_SCREENER_MARKET_DATA_PROVIDER = "finnhub"
    $env:FINNHUB_API_KEY = "your_api_key_here"
    ```
 

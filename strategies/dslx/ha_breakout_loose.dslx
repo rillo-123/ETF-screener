@@ -1,0 +1,49 @@
+universe loose_liquid_selected {
+  from universe.selected
+  require liquidity {
+    avg_turnover(20) >= 500_000
+    median_turnover(20) >= 250_000
+    active_sessions(20) >= 18
+  }
+}
+
+strategy ha_breakout_loose {
+  source universe.loose_liquid_selected
+  candles timeframe "1d" as heikin_ashi
+  scan latest
+
+  candle setup {
+    when =>      
+        ema("high", 20,"low",20).body_within
+  }
+
+  candle breakout {
+    when =>
+      (
+        ema("high", 20).body_intersects
+          || ema("high", 20).upper_wick_intersects
+      )
+      && is_green
+      && rsi(14).slope > 0
+      && ema("close", 200).slope >= 0
+      && atr(14) / close >= 0.0075
+      && volume >= volume_ema(20) 
+  }
+
+  candle breakdown {
+    when => close < ema("low", 20)
+  }
+
+  entrystruct {
+    setup
+    breakout
+    at breakout.close
+  }
+
+  exitstruct {
+    breakdown
+  }
+}
+
+let matches = ha_breakout_loose.run()
+matches.show()

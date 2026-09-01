@@ -1120,6 +1120,7 @@ class Backtester:
         task_timeout_seconds=120,
         progress_callback=None,
         executor_mode="auto",
+        cancel_event=None,
     ):
         import concurrent.futures
         import os
@@ -1127,6 +1128,9 @@ class Backtester:
         from concurrent.futures.process import BrokenProcessPool
 
         results = []
+
+        def is_cancelled() -> bool:
+            return bool(cancel_event is not None and cancel_event.is_set())
         tickers = list(tickers)
         total = len(tickers)
         desc = progress_label or getattr(base_strategy, "__name__", "Backtest")
@@ -1275,6 +1279,8 @@ class Backtester:
                 len(remaining_tickers),
             )
             for fallback_ticker in remaining_tickers:
+                if is_cancelled():
+                    break
                 inline_result = _run_ticker_inline(fallback_ticker)
                 results.append(inline_result)
                 completed_count += 1
@@ -1308,6 +1314,8 @@ class Backtester:
             completed = 0
             submit_failed = False
             for t in tickers:
+                if is_cancelled():
+                    break
                 try:
                     if use_processes:
                         future = executor.submit(worker, t, *worker_args)
@@ -1331,7 +1339,7 @@ class Backtester:
                 future_to_ticker[future] = t
             running_times = {}
             pending = set(future_to_ticker)
-            while pending and not submit_failed:
+            while pending and not submit_failed and not is_cancelled():
                 done, _ = concurrent.futures.wait(
                     pending,
                     timeout=1.0,
@@ -1418,9 +1426,17 @@ class Backtester:
                 progress_callback(
                     {
                         "job": "backtest",
-                        "phase": "done",
-                        "pct": 100.0,
-                        "detail": f"{completed}/{total} tickers complete",
+                        "phase": "cancelled" if is_cancelled() else "done",
+                        "pct": (
+                            5.0 + ((completed / max(1, total)) * 88.0)
+                            if is_cancelled()
+                            else 100.0
+                        ),
+                        "detail": (
+                            f"Stopped after {completed}/{total} tickers"
+                            if is_cancelled()
+                            else f"{completed}/{total} tickers complete"
+                        ),
                         "label": progress_label or "Backtest",
                         "active": False,
                     }

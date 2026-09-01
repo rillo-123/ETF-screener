@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from ETF_screener.dslx import (
-    CandleSeries, DSLXInterpreter, DSLXProgramInterpreter,
+    CandleSeries, DSLXEvaluationError, DSLXInterpreter, DSLXProgramInterpreter,
     DSLXSyntaxError, backtest_signals, parse_program, parse_strategy,
 )
 
@@ -102,6 +102,114 @@ def test_dslx_named_candle_structs_define_consecutive_pattern_order():
     assert [row["name"] for row in matches.show()[0]["candles"]] == ["setup", "recovery", "breakout"]
 
 
+def test_dslx_any_struct_member_consumes_one_unconstrained_candle():
+    candles = pd.DataFrame({
+        "Open": [10.0, 12.0, 11.0, 14.0], "High": [11.0, 13.0, 14.0, 15.0],
+        "Low": [8.0, 9.0, 10.0, 13.0], "Close": [9.0, 10.0, 13.0, 14.0],
+        "Volume": [1_000.0] * 4,
+    })
+    source = """
+      strategy wildcard_breakout {
+        candle setup { when => is_red }
+        candle breakout { when => is_green && close > setup.high }
+        entrystruct { setup any breakout at breakout.close }
+        exitstruct { any }
+      }
+    """
+
+    interpreter = DSLXInterpreter(source)
+    assert interpreter.matches_entry(candles.iloc[:2]) is False
+    assert interpreter.matches_entry(candles.iloc[:3]) is True
+    match = interpreter.run({"WILDCARD": candles.iloc[:3]})[0]
+    assert [name for name, _ in match.pattern] == ["setup", "any", "breakout"]
+
+    signals = backtest_signals(source, candles)
+    assert signals["entry_condition"].tolist() == [False, False, True, False]
+    assert signals["exit_condition"].tolist() == [False, False, False, True]
+    assert signals["signal"].tolist() == [0, 0, 1, -1]
+
+
+def test_dslx_program_checks_for_cancellation_between_tickers():
+    source = """
+      strategy cancellable {
+        candle green { when => is_green }
+        entrystruct { green }
+        exitstruct { pass }
+      }
+      let matches = cancellable.run()
+      matches.show()
+    """
+    checks = 0
+
+    def cancel_check():
+        nonlocal checks
+        checks += 1
+        if checks >= 2:
+            raise RuntimeError("cancelled")
+
+    with pytest.raises(RuntimeError, match="cancelled"):
+        DSLXProgramInterpreter(source).run(
+            selected={"AAA": _candles(), "BBB": _candles()},
+            cancel_check=cancel_check,
+        )
+
+
+def test_dslx_program_publishes_matches_and_ticker_progress_incrementally():
+    source = """
+      strategy streaming {
+        candle green { when => is_green }
+        entrystruct { green }
+        exitstruct { pass }
+      }
+      let matches = streaming.run()
+      matches.show()
+    """
+    frame = _candles().assign(Open=lambda value: value["Close"] - 1.0)
+    streamed_matches = []
+    progress = []
+
+    result = DSLXProgramInterpreter(source).run(
+        selected={"AAA": frame, "BBB": frame},
+        match_callback=lambda match: streamed_matches.append(match.ticker),
+        progress_callback=lambda ticker, completed, total: progress.append(
+            (ticker, completed, total)
+        ),
+    )
+
+    assert streamed_matches == ["AAA", "BBB"]
+    assert progress == [("AAA", 1, 2), ("BBB", 2, 2)]
+    assert [match.ticker for match in result["matches"]] == ["AAA", "BBB"]
+
+
+def test_dslx_any_struct_member_can_repeat_but_cannot_be_named_or_referenced():
+    repeated = parse_strategy("""
+      strategy repeated_any {
+        candle setup { when => is_red }
+        candle breakout { when => is_green }
+        entrystruct { setup any any breakout }
+        exitstruct { pass }
+      }
+    """)
+    assert repeated.entry_struct == ("setup", "any", "any", "breakout")
+
+    with pytest.raises(DSLXSyntaxError, match="reserved for unconstrained"):
+        parse_strategy("""
+          strategy named_any {
+            candle any { when => is_green }
+            entrystruct { any }
+            exitstruct { pass }
+          }
+        """)
+    with pytest.raises(DSLXSyntaxError, match="unavailable candle 'any'"):
+        parse_strategy("""
+          strategy priced_any {
+            candle setup { when => is_red }
+            entrystruct { setup any at any.close }
+            exitstruct { pass }
+          }
+        """)
+
+
 def test_dslx_struct_references_are_validated_before_evaluation():
     source = """
       strategy invalid {
@@ -151,16 +259,79 @@ def test_dslx_named_candles_support_windows_indicators_and_geometry():
         "Open": [10.0, 10.0, 10.0], "High": [12.0, 12.0, 11.0],
         "Low": [8.0, 8.0, 9.0], "Close": [10.0, 11.0, 11.0], "Volume": [1_000.0] * 3,
     })
-    assert DSLXInterpreter(_strategy("body", 'ema("close", 2).within_body')).matches_entry(frame)
+    assert DSLXInterpreter(
+        _strategy("body", 'ema("close", 2).body_intersects')
+    ).matches_entry(frame)
     assert not DSLXInterpreter(
-        _strategy("outside_body", 'ema("close", 2).not_within_body')
+        _strategy("outside_body", '!ema("close", 2).body_intersects')
     ).matches_entry(frame)
     assert DSLXInterpreter(
-        _strategy("outside_body", 'ema("high", 2).not_within_body')
+        _strategy("outside_body", '!ema("high", 2).body_intersects')
     ).matches_entry(frame)
-    assert DSLXInterpreter(_strategy("band", 'ema("high", "low", 2).contains')).matches_entry(frame.assign(Close=[10.0] * 3))
+    assert DSLXInterpreter(
+        _strategy(
+            "upper_wick", 'ema("high", 2).upper_wick_intersects'
+        )
+    ).matches_entry(frame.assign(High=[12.0] * 3))
+    assert DSLXInterpreter(
+        _strategy(
+            "lower_wick", 'ema("low", 2).lower_wick_intersects'
+        )
+    ).matches_entry(frame.assign(Low=[8.0] * 3))
+    contained = frame.assign(Open=[10.0] * 3, Close=[10.0] * 3)
+    assert DSLXInterpreter(
+        _strategy("body_band", 'ema("high", 2, "low", 2).body_within')
+    ).matches_entry(contained)
+    assert DSLXInterpreter(
+        _strategy("candle_band", 'ema("high", 2, "low", 2).candle_within')
+    ).matches_entry(contained)
     candle = CandleSeries(frame.assign(Open=[12.0] * 3, Close=[10.0] * 3)).last
     assert candle.color == "red" and candle.body_length == 2.0
+
+
+def test_dslx_ema_band_distinguishes_body_from_full_candle_and_supports_periods():
+    frame = pd.DataFrame({
+        "Open": [9.0, 10.0, 10.0], "High": [12.0, 12.0, 13.0],
+        "Low": [8.0, 8.0, 7.0], "Close": [11.0, 10.0, 10.0],
+        "Volume": [1_000.0] * 3,
+    })
+
+    assert DSLXInterpreter(
+        _strategy("body_only", 'ema("high", 2, "low", 3).body_within')
+    ).matches_entry(frame)
+    assert not DSLXInterpreter(
+        _strategy("with_wicks", 'ema("high", 2, "low", 3).candle_within')
+    ).matches_entry(frame)
+
+
+def test_dslx_ema_band_boundaries_are_inclusive_and_argument_order_independent():
+    frame = pd.DataFrame({
+        "Open": [8.0, 8.0, 8.0], "High": [12.0, 12.0, 12.0],
+        "Low": [8.0, 8.0, 8.0], "Close": [12.0, 12.0, 12.0],
+        "Volume": [1_000.0] * 3,
+    })
+
+    assert DSLXInterpreter(
+        _strategy("inclusive", 'ema("low", 2, "high", 2).candle_within')
+    ).matches_entry(frame)
+
+
+def test_dslx_ema_band_does_not_expose_legacy_contains():
+    with pytest.raises(DSLXEvaluationError, match="'contains' is not available on EMABand"):
+        DSLXInterpreter(
+            _strategy("legacy_contains", 'ema("high", 2, "low", 2).contains')
+        ).matches_entry(_candles())
+
+
+@pytest.mark.parametrize(
+    "legacy_name",
+    ["within_body", "not_within_body", "within_upper_wick", "within_lower_wick"],
+)
+def test_dslx_indicator_does_not_expose_reversed_region_names(legacy_name):
+    with pytest.raises(DSLXEvaluationError, match=f"'{legacy_name}' is not available"):
+        DSLXInterpreter(
+            _strategy("legacy_region", f'ema("close", 2).{legacy_name}')
+        ).matches_entry(_candles())
 
 
 def test_dslx_normalized_atr_filter_rejects_flatlining_prices():

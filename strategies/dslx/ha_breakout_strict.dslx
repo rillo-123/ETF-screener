@@ -1,17 +1,16 @@
-universe liquid_selected {
+universe strict_liquid_selected {
   from universe.selected
   require liquidity {
-    avg_turnover(20) >= 1_000_000
-    median_turnover(20) >= 500_000
+    avg_turnover(20) >= 5_000_000
+    median_turnover(20) >= 2_000_000
     active_sessions(20) >= 20
   }
 }
 
-strategy ha_breakout_struct {
-  source universe.liquid_selected
+strategy ha_breakout_strict {
+  source universe.strict_liquid_selected
   candles timeframe "1d" as heikin_ashi
   scan latest
-
 
   candle setup {
     when =>
@@ -22,19 +21,15 @@ strategy ha_breakout_struct {
       && is_green
   }
 
-
   candle breakout {
     when =>
-    (
       ema("high", 20).body_intersects
-        || ema("high", 20).upper_wick_intersects
-    )
       && is_green
-      && rsi(14) > 50
+      && rsi(14) > 55
       && ema("close", 200).slope > 0
       && rsi(14).slope > 0
-      && atr(14) / close >= 0.01
-      && volume > volume_ema(20) * 1.1
+      && atr(14) / close >= 0.012
+      && volume > volume_ema(20) * 1.5
   }
 
   candle breakdown {
@@ -52,5 +47,5 @@ strategy ha_breakout_struct {
   }
 }
 
-let matches = ha_breakout_struct.run()
+let matches = ha_breakout_strict.run()
 matches.show()

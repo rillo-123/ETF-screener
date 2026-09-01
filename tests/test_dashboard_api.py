@@ -100,8 +100,15 @@ def test_tab_bar_visible():
     assert "updatePersistentMarketWorkspaceVisibility" in dashboard_source
     assert "loadDslxStrategyFromScreener" in dashboard_source
     assert "reloadSelectedDslxStrategy" in dashboard_source
+    assert "await loadDslxStrategyList();" in dashboard_source
+    assert "DSLX file list refreshed." in dashboard_source
     assert "setLoadedDslxScript" in dashboard_source
     assert "cancelScan" in dashboard_source
+    assert "startMissingMarketDataBackfill" in dashboard_source
+    assert "backfillMissing: true" in dashboard_source
+    assert 'missing_only: "true"' in dashboard_source
+    assert 'fetch("/api/jobs/screen/cancel"' in dashboard_source
+    assert 'fetch("/api/jobs/market-refresh/cancel"' in dashboard_source
     assert 'id="tab-query"' not in html
     assert 'id="screen-preset-select"' in html
     assert 'id="screen-dsl-validation"' in html
@@ -493,6 +500,7 @@ def test_screen_endpoint_applies_dslx_named_liquidity_universe(monkeypatch):
     response = client.get(
         "/api/screen",
         params={
+            "request_id": "dslx-live-events",
             "dsl_content": """
                 universe xetra_liquid {
                   from universe.xetra
@@ -513,6 +521,16 @@ def test_screen_endpoint_applies_dslx_named_liquidity_universe(monkeypatch):
 
     assert response.status_code == 200
     assert [item["ticker"] for item in response.json()["matches"]] == ["LIQ.DE"]
+    events = client.get(
+        "/api/screen/events",
+        params={"run_id": "dslx-live-events"},
+    ).json()["events"]
+    live_matches = [
+        event["payload"]["match"]
+        for event in events
+        if event["type"] == "match"
+    ]
+    assert [item["ticker"] for item in live_matches] == ["LIQ.DE"]
 
 
 def test_screen_reports_dslx_validation_errors_without_a_generic_server_error():
@@ -528,11 +546,212 @@ def test_screen_reports_dslx_validation_errors_without_a_generic_server_error():
     assert "no longer supported" in response.json()["detail"]
 
 
+def test_dashboard_cancel_endpoint_signals_matching_job_token():
+    request_id, cancel_event = app_fast._begin_cancellable_job(
+        "screen", "screen-cancel-test"
+    )
+    try:
+        response = client.post(
+            "/api/jobs/screen/cancel",
+            json={"request_id": request_id},
+        )
+        assert response.status_code == 200
+        assert response.json()["cancel_requested"] is True
+        assert cancel_event.is_set()
+    finally:
+        app_fast._finish_cancellable_job("screen", request_id)
+
+
+def test_dashboard_cancel_endpoint_does_not_cancel_a_newer_job():
+    request_id, cancel_event = app_fast._begin_cancellable_job(
+        "screen", "current-screen"
+    )
+    try:
+        response = client.post(
+            "/api/jobs/screen/cancel",
+            json={"request_id": "stale-screen"},
+        )
+        assert response.status_code == 200
+        assert response.json()["cancel_requested"] is False
+        assert not cancel_event.is_set()
+    finally:
+        app_fast._finish_cancellable_job("screen", request_id)
+
+
+def test_stop_request_interrupts_server_side_dslx_loading(monkeypatch):
+    started = threading.Event()
+    calls = []
+    frame = _make_fake_ohlcv("AAA", n=30)
+
+    class _SlowDb:
+        db_path = "fake.db"
+
+        def get_etf_data(self, ticker):
+            calls.append(ticker)
+            started.set()
+            time.sleep(0.01)
+            return frame
+
+    tickers = tuple(f"TICKER{index}" for index in range(200))
+    monkeypatch.setattr(app_fast, "get_db", lambda: _SlowDb())
+    monkeypatch.setattr(app_fast, "_latest_market_date_for", lambda _db: "2026-08-31")
+    monkeypatch.setattr(app_fast, "_cached_screen_universe", lambda *_args: tickers)
+    monkeypatch.setattr(
+        app_fast,
+        "filter_tickers_by_exchange_and_list",
+        lambda values, **_kwargs: list(values),
+    )
+    monkeypatch.setattr(app_fast, "_cached_etf_metadata_map", lambda: {})
+    source = """
+      strategy cancellable {
+        candle green { when => is_green }
+        entrystruct { green }
+        exitstruct { pass }
+      }
+      let matches = cancellable.run()
+      matches.show()
+    """
+    response_holder = {}
+
+    def run_screen_request():
+        response_holder["response"] = client.get(
+            "/api/screen",
+            params={"request_id": "live-cancel-test", "dsl_content": source},
+        )
+
+    worker = threading.Thread(target=run_screen_request)
+    worker.start()
+    assert started.wait(timeout=2.0)
+    cancel_response = client.post(
+        "/api/jobs/screen/cancel",
+        json={"request_id": "live-cancel-test"},
+    )
+    worker.join(timeout=2.0)
+
+    assert cancel_response.status_code == 200
+    assert cancel_response.json()["cancel_requested"] is True
+    assert not worker.is_alive()
+    assert response_holder["response"].status_code == 409
+    assert response_holder["response"].json()["cancelled"] is True
+    assert len(calls) < len(tickers)
+
+
+def test_dslx_match_event_is_visible_before_screen_finishes(monkeypatch):
+    frame = _make_fake_ohlcv("AAA", n=30)
+    frame["Open"] = frame["Close"] - 1.0
+
+    class _SlowDb:
+        db_path = "fake.db"
+
+        def get_etf_data(self, _ticker):
+            time.sleep(0.03)
+            return frame
+
+    tickers = tuple(f"LIVE{index}" for index in range(20))
+    monkeypatch.setattr(app_fast, "get_db", lambda: _SlowDb())
+    monkeypatch.setattr(app_fast, "_latest_market_date_for", lambda _db: "2026-08-31")
+    monkeypatch.setattr(app_fast, "_cached_screen_universe", lambda *_args: tickers)
+    monkeypatch.setattr(
+        app_fast,
+        "filter_tickers_by_exchange_and_list",
+        lambda values, **_kwargs: list(values),
+    )
+    monkeypatch.setattr(app_fast, "_cached_etf_metadata_map", lambda: {})
+    source = """
+      strategy live {
+        candle green { when => is_green }
+        entrystruct { green }
+        exitstruct { pass }
+      }
+      let matches = live.run()
+      matches.show()
+    """
+    response_holder = {}
+
+    def run_screen_request():
+        response_holder["response"] = client.get(
+            "/api/screen",
+            params={"request_id": "stream-before-done", "dsl_content": source},
+        )
+
+    worker = threading.Thread(target=run_screen_request)
+    worker.start()
+    live_events = []
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline and not live_events:
+        snapshot = client.get(
+            "/api/screen/events",
+            params={"run_id": "stream-before-done"},
+        ).json()
+        live_events = [
+            event for event in snapshot["events"] if event["type"] == "match"
+        ]
+        if not live_events:
+            time.sleep(0.01)
+
+    assert live_events
+    assert worker.is_alive()
+    client.post(
+        "/api/jobs/screen/cancel",
+        json={"request_id": "stream-before-done"},
+    )
+    worker.join(timeout=2.0)
+    assert not worker.is_alive()
+
+
+def test_dslx_worker_uses_its_own_sqlite_connection(monkeypatch, tmp_path):
+    db_path = tmp_path / "thread-affine.db"
+    frame = _make_fake_ohlcv("THREAD", n=30)
+    frame["Open"] = frame["Close"] - 1.0
+    seed_db = app_fast.ETFDatabase(db_path=str(db_path))
+    seed_db.insert_dataframe(frame, "THREAD")
+    seed_db.close()
+
+    monkeypatch.setattr(
+        app_fast,
+        "get_db",
+        lambda: app_fast.ETFDatabase(db_path=str(db_path)),
+    )
+    monkeypatch.setattr(
+        app_fast, "_cached_screen_universe", lambda *_args: ("THREAD",)
+    )
+    monkeypatch.setattr(
+        app_fast,
+        "filter_tickers_by_exchange_and_list",
+        lambda values, **_kwargs: list(values),
+    )
+    monkeypatch.setattr(app_fast, "_cached_etf_metadata_map", lambda: {})
+    source = """
+      strategy thread_safe {
+        candle green { when => is_green }
+        entrystruct { green }
+        exitstruct { pass }
+      }
+      let matches = thread_safe.run()
+      matches.show()
+    """
+
+    response = client.get(
+        "/api/screen",
+        params={"request_id": "sqlite-thread-owner", "dsl_content": source},
+    )
+
+    assert response.status_code == 200
+    assert [item["ticker"] for item in response.json()["matches"]] == ["THREAD"]
+
+
 def test_dslx_editor_lists_and_loads_file_backed_scripts():
     listing = client.get("/api/dslx-strategies")
 
     assert listing.status_code == 200
-    assert "simple_green" in listing.json()
+    strategy_names = set(listing.json())
+    assert {
+        "simple_green",
+        "ha_dipfinder",
+        "ha_breakout_strict",
+        "ha_breakout_average",
+        "ha_breakout_loose",
+    }.issubset(strategy_names)
 
     script = client.get("/api/dslx-strategy/simple_green")
 
@@ -545,6 +764,42 @@ def test_dslx_editor_lists_and_loads_file_backed_scripts():
     )
     assert structural.status_code == 200
     assert "entrystruct" in structural.json()["content"]
+
+    dipfinder = client.get("/api/dslx-strategy/ha_dipfinder")
+    assert dipfinder.status_code == 200
+    assert "green_1\n    green_2\n    green_3" in dipfinder.json()["content"]
+    assert "dip_red_1\n    dip_red_2\n    recovery" in dipfinder.json()["content"]
+    assert 'ema("low", 20).lower_wick_intersects' in dipfinder.json()["content"]
+    assert "close > dip_red_2.high" in dipfinder.json()["content"]
+    assert "at recovery.close" in dipfinder.json()["content"]
+    assert dipfinder.json()["content"].count(
+        'ema("close", 200).slope > 0'
+    ) == 6
+
+
+def test_dslx_catalogue_discovers_new_file_without_backend_restart(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(app_fast, "DSLX_STRATEGY_DIRECTORY", tmp_path)
+
+    assert client.get("/api/dslx-strategies").json() == []
+    (tmp_path / "just_added.dslx").write_text(
+        """
+        strategy just_added {
+          candle green { when => is_green }
+          entrystruct { green }
+          exitstruct { pass }
+        }
+        let matches = just_added.run()
+        matches.show()
+        """,
+        encoding="utf-8",
+    )
+
+    assert client.get("/api/dslx-strategies").json() == ["just_added"]
+    loaded = client.get("/api/dslx-strategy/just_added")
+    assert loaded.status_code == 200
+    assert loaded.json()["name"] == "just_added"
 
 
 def test_dslx_editor_logs_validation_details(monkeypatch, tmp_path, caplog):
@@ -1798,6 +2053,50 @@ def test_market_refresh_endpoint(monkeypatch):
     assert captured["collection_mode"] == "active"
 
 
+def test_market_refresh_endpoint_can_backfill_only_missing_symbols(monkeypatch):
+    captured = {}
+
+    class FakeRefresher:
+        def __init__(self, **_kwargs):
+            pass
+
+        def refresh_market_data(
+            self,
+            force=False,
+            rebuild_shortlist=True,
+            missing_only=False,
+            **_kwargs,
+        ):
+            captured.update(
+                {
+                    "force": force,
+                    "rebuild_shortlist": rebuild_shortlist,
+                    "missing_only": missing_only,
+                }
+            )
+            return {
+                "requested": 2,
+                "refreshed": 2,
+                "failed": 0,
+                "shortlist_rebuilt": False,
+                "cancelled": False,
+            }
+
+    monkeypatch.setattr(app_fast, "MarketDataRefresher", FakeRefresher)
+
+    response = client.post(
+        "/api/market-data/refresh",
+        params={"source": "nasdaq", "force": "false", "missing_only": "true"},
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "force": False,
+        "rebuild_shortlist": False,
+        "missing_only": True,
+    }
+
+
 def test_backtest_endpoint_returns_ranked_metrics(monkeypatch, tmp_path):
     strategies_dir = tmp_path / "strategies"
     strategies_dir.mkdir()
@@ -2361,6 +2660,38 @@ def test_get_chart_hides_supertrend_overlay_when_event_is_disabled():
     assert (
         not supertrend_traces
     ), "Supertrend should stay hidden unless its event is enabled"
+
+
+def test_get_chart_uses_structural_dslx_without_legacy_aggregated_lane():
+    source = """
+      strategy chart_structure {
+        candle green { when => is_green && rsi(14) > 40 }
+        entrystruct { green }
+        exitstruct { pass }
+      }
+      let matches = chart_structure.run()
+      matches.show()
+    """
+    with patch(
+        "ETF_screener.dashboard.app_fast.MarketDataRefresher.refresh_ticker_data",
+        return_value=add_indicators(_make_fake_ohlcv("DTE.DE")),
+    ):
+        with patch(
+            "ETF_screener.dashboard.app_fast.Backtester.scripted_strategy"
+        ) as legacy_strategy:
+            response = client.get(
+                "/api/chart/DTE.DE",
+                params={"days": 30, "dsl_content": source},
+            )
+
+    assert response.status_code == 200
+    legacy_strategy.assert_not_called()
+    figure = json.loads(response.json()["figure"])
+    assert all(trace.get("name") != "Aggregated" for trace in figure["data"])
+    annotation_text = {
+        annotation.get("text") for annotation in figure["layout"]["annotations"]
+    }
+    assert "<b>Aggregated</b>" not in annotation_text
 
 
 def test_get_chart_renders_legacy_source_aware_ema_pair():

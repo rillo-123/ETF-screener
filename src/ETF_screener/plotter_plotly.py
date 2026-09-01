@@ -1195,13 +1195,18 @@ class InteractivePlotter:
         self._apply_chart_indicator_params(df, indicator_params)
         chart_params = indicator_params if isinstance(indicator_params, dict) else {}
         candle_mode = str(chart_params.get("candle_mode", "heikin_ashi")).lower()
-        # High/Low EMA bands must use the same candle basis as the visible
-        # candles.  Close-based overlays retain their existing regular-price
-        # calculation, while High/Low bands follow the displayed HA wicks.
+        # Every EMA source must use the same candle basis as the visible
+        # candles and DSLX evaluation. Mixing a raw close EMA with displayed
+        # Heikin-Ashi candles can even show the opposite slope direction.
         heikin_ashi_ema_sources: dict[str, pd.Series] = {}
         if candle_mode == "heikin_ashi":
-            _, ha_high, ha_low, _ = self._heikin_ashi_ohlc(df)
-            heikin_ashi_ema_sources = {"high": ha_high, "low": ha_low}
+            ha_open, ha_high, ha_low, ha_close = self._heikin_ashi_ohlc(df)
+            heikin_ashi_ema_sources = {
+                "open": ha_open,
+                "high": ha_high,
+                "low": ha_low,
+                "close": ha_close,
+            }
 
         def ema_source_series(source: str, fallback: pd.Series) -> pd.Series:
             return heikin_ashi_ema_sources.get(source, fallback)
@@ -1544,26 +1549,31 @@ class InteractivePlotter:
 
         num_ribbons = len(visible_ribbon_data)
         num_strategy_panels = len(strategy_panel_groups)
-        layout_spec = self._get_ribbon_layout(num_ribbons + 1, num_strategy_panels)
+        aggregate_lane_count = 1 if self.show_ribbons else 0
+        lane_count = num_ribbons + aggregate_lane_count
+        layout_spec = self._get_ribbon_layout(lane_count, num_strategy_panels)
         row_heights = layout_spec["row_heights"]
         lane_line_width = layout_spec["lane_line_width"]
 
         strategy_row_start = 2
         volume_row = strategy_row_start + num_strategy_panels
         ribbon_row_start = volume_row + 1
-        aggregated_row = ribbon_row_start + num_ribbons
+        aggregated_row = (
+            ribbon_row_start + num_ribbons if aggregate_lane_count else None
+        )
+        total_rows = 2 + num_strategy_panels + lane_count
 
         # We start with a clean subplot setup
         # Reverting to shared_xaxes=True but we will FIX the layout naming issue
         fig = make_subplots(
-            rows=3 + num_strategy_panels + num_ribbons,
+            rows=total_rows,
             cols=1,
             shared_xaxes=True,
             vertical_spacing=0.0,
             row_heights=row_heights,
             # Panel names are added in the left gutter below, where they stay
             # aligned with the panel instead of appearing as centered titles.
-            subplot_titles=[""] * (3 + num_strategy_panels + num_ribbons),
+            subplot_titles=[""] * total_rows,
         )
 
         # Drop empty subplot-title annotations so ribbon lanes don't reserve extra headroom.
@@ -1895,6 +1905,10 @@ class InteractivePlotter:
             row=volume_row,
             col=1,
         )
+        # A single event-driven volume spike can flatten every ordinary bar on
+        # a linear axis. A logarithmic pane preserves their relative shape
+        # while keeping the raw values in hover data and strategy evaluation.
+        fig.update_yaxes(type="log", row=volume_row, col=1)
 
         for item_idx, item in enumerate(volume_overlay_specs):
             col_name = item["column"]
@@ -1967,49 +1981,59 @@ class InteractivePlotter:
                 align="left",
             )
 
-        # Bottom-most lane: aggregated strategy state.
-        agg_lane_min, agg_lane_max = 0.9, 1.1
-        bucket_ms = self._time_bucket_width_ms(df_state["Date"])
-        fig.add_trace(
-            go.Bar(
-                x=df_state["Date"],
-                y=np.where(agg_mask_np, agg_lane_max - agg_lane_min, 0.0),
-                base=agg_lane_min,
-                width=bucket_ms,
-                marker=dict(color="#16a34a", line=dict(width=0)),
-                opacity=1.0,
-                showlegend=False,
-                name="Aggregated",
-                hovertemplate=f"Aggregated Fill: {fill_condition}<br>Date: %{{x}}<extra></extra>",
-            ),
-            row=aggregated_row,
-            col=1,
-        )
-        fig.update_yaxes(
-            showticklabels=False,
-            range=[agg_lane_min, agg_lane_max],
-            showgrid=False,
-            zeroline=False,
-            row=aggregated_row,
-            col=1,
-        )
-        agg_yaxis_name = "yaxis" if aggregated_row == 1 else f"yaxis{aggregated_row}"
-        agg_domain = fig.layout[agg_yaxis_name].domain
-        fig.add_annotation(
-            xref="paper",
-            yref="paper",
-            x=panel_label_x,
-            y=(agg_domain[0] + agg_domain[1]) / 2,
-            xanchor="left",
-            yanchor="middle",
-            text="<b>Aggregated</b>",
-            showarrow=False,
-            font=dict(size=10, color="#0f766e"),
-            align="left",
-        )
+        if aggregated_row is not None:
+            # Bottom-most lane: aggregated strategy state. Dashboard charts
+            # construct the plotter with show_ribbons=False and therefore do
+            # not reserve or label this legacy lane.
+            agg_lane_min, agg_lane_max = 0.9, 1.1
+            bucket_ms = self._time_bucket_width_ms(df_state["Date"])
+            fig.add_trace(
+                go.Bar(
+                    x=df_state["Date"],
+                    y=np.where(agg_mask_np, agg_lane_max - agg_lane_min, 0.0),
+                    base=agg_lane_min,
+                    width=bucket_ms,
+                    marker=dict(color="#16a34a", line=dict(width=0)),
+                    opacity=1.0,
+                    showlegend=False,
+                    name="Aggregated",
+                    hovertemplate=(
+                        f"Aggregated Fill: {fill_condition}<br>"
+                        "Date: %{x}<extra></extra>"
+                    ),
+                ),
+                row=aggregated_row,
+                col=1,
+            )
+            fig.update_yaxes(
+                showticklabels=False,
+                range=[agg_lane_min, agg_lane_max],
+                showgrid=False,
+                zeroline=False,
+                row=aggregated_row,
+                col=1,
+            )
+            agg_yaxis_name = (
+                "yaxis" if aggregated_row == 1 else f"yaxis{aggregated_row}"
+            )
+            agg_domain = fig.layout[agg_yaxis_name].domain
+            fig.add_annotation(
+                xref="paper",
+                yref="paper",
+                x=panel_label_x,
+                y=(agg_domain[0] + agg_domain[1]) / 2,
+                xanchor="left",
+                yanchor="middle",
+                text="<b>Aggregated</b>",
+                showarrow=False,
+                font=dict(size=10, color="#0f766e"),
+                align="left",
+            )
 
         # 4. Global configurations for all x-axes
-        bottom_row = aggregated_row
+        bottom_row = aggregated_row or (
+            ribbon_row_start + num_ribbons - 1 if num_ribbons else volume_row
+        )
 
         # Completely re-write the end of the method with dictionary-level precision
         fig_dict = fig.to_dict()

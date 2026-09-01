@@ -195,8 +195,8 @@ def test_chart_labels_indicator_panels_in_left_gutter_and_frames_each_panel():
         "<b>MACD</b>",
         "<b>RSI</b>",
         "<b>Volume</b>",
-        "<b>Aggregated</b>",
     }
+    assert all(getattr(trace, "name", "") != "Aggregated" for trace in fig.data)
     assert all(annotation.xref == "paper" for annotation in panel_labels.values())
     assert all(float(annotation.x) == -0.08 for annotation in panel_labels.values())
 
@@ -205,6 +205,62 @@ def test_chart_labels_indicator_panels_in_left_gutter_and_frames_each_panel():
     assert len(border_shapes) == expected_rows
     assert all(shape.line.width == 1 for shape in border_shapes)
     assert all(shape.line.color == "#e2e8f0" for shape in border_shapes)
+
+
+def test_volume_pane_uses_log_scale_without_changing_price_scale():
+    dates = pd.date_range(start="2024-01-01", periods=5)
+    close = np.linspace(100.0, 104.0, len(dates))
+    frame = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": close - 0.5,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": [5_000, 25_000, 100_000, 300_000, 6_000_000],
+        }
+    )
+
+    fig = InteractivePlotter(show_ribbons=False).create_plot(frame, "LOGVOL")
+    volume_trace = next(trace for trace in fig.data if trace.name == "Volume")
+    axis_suffix = str(volume_trace.yaxis).removeprefix("y")
+    volume_axis_name = f"yaxis{axis_suffix}" if axis_suffix else "yaxis"
+
+    assert fig.layout[volume_axis_name].type == "log"
+    assert fig.layout.yaxis.type != "log"
+
+
+def test_heikin_ashi_close_ema_uses_same_series_as_dslx_strategy():
+    dates = pd.date_range(start="2024-01-01", periods=6)
+    frame = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [10.0, 10.0, 10.0, 10.0, 10.0, 15.0],
+            "High": [11.0, 11.0, 11.0, 11.0, 11.0, 16.0],
+            "Low": [9.0, 9.0, 9.0, 9.0, 9.0, 10.0],
+            "Close": [10.0, 10.0, 10.0, 10.0, 10.0, 11.0],
+            "Volume": [100_000.0] * 6,
+        }
+    )
+    strategy = 'candle rule { when => ema("close", 3).slope > 0 }'
+
+    figure = InteractivePlotter(show_ribbons=False).create_plot(
+        frame,
+        "HAEMA",
+        strategy_content=strategy,
+        indicator_params={"candle_mode": "heikin_ashi"},
+    )
+    ema_trace = next(trace for trace in figure.data if trace.name == "EMA 3 Close")
+    expected_ha_close = (
+        frame["Open"] + frame["High"] + frame["Low"] + frame["Close"]
+    ) / 4.0
+    expected = expected_ha_close.ewm(span=3, adjust=False).mean()
+    raw_close_ema = frame["Close"].ewm(span=3, adjust=False).mean()
+
+    plotted_ema = _trace_y({"y": ema_trace.y})
+    assert np.allclose(plotted_ema, expected.to_numpy())
+    assert not np.allclose(plotted_ema, raw_close_ema)
+    assert float(plotted_ema[-1] - plotted_ema[-2]) > 0
 
 
 def test_prepare_eval_columns_supports_supertrend_flat():

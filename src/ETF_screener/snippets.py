@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from ETF_screener.config_loader import get_paths
 from ETF_screener.database import ETFDatabase
 from ETF_screener.indicators import add_indicators
-from ETF_screener.yfinance_fetcher import YFinanceFetcher
+from ETF_screener.market_data_provider import create_market_data_provider
 
 
 class Snippet:
@@ -48,7 +48,7 @@ class Snippet:
             db_path = get_paths()["data"]["etf_db"]
         self.db = ETFDatabase(db_path=db_path)
         self.auto_fetch = auto_fetch
-        self.fetcher = YFinanceFetcher() if auto_fetch else None
+        self.fetcher = create_market_data_provider() if auto_fetch else None
 
     def iterate_tickers(self) -> Iterator[str]:
         """Iterate through all tickers in database (with progress bar).

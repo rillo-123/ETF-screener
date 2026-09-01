@@ -1,4 +1,5 @@
 import json
+import threading
 from datetime import date, timedelta
 from concurrent.futures import Future
 
@@ -104,6 +105,93 @@ def test_market_data_refresher_excludes_blacklisted_tickers(tmp_path):
     assert status["is_stale"] is False
 
 
+def test_market_data_refresh_honors_a_preexisting_cancellation(tmp_path):
+    db_path = tmp_path / "etfs.db"
+    etfs_path = tmp_path / "etfs.json"
+    etfs_path.write_text(
+        json.dumps({"AAA.DE": {"name": "Alpha ETF"}}), encoding="utf-8"
+    )
+    cancel_event = threading.Event()
+    cancel_event.set()
+    refresher = MarketDataRefresher(
+        db_path=str(db_path),
+        etfs_file=str(etfs_path),
+        storage=ParquetStorage(data_dir=str(tmp_path / "parquet")),
+    )
+
+    result = refresher.refresh_market_data(
+        force=True,
+        rebuild_shortlist=False,
+        cancel_event=cancel_event,
+    )
+
+    assert result["cancelled"] is True
+    assert result["refreshed"] == 0
+
+
+def test_missing_only_refresh_ignores_existing_stale_tickers(tmp_path):
+    db_path = tmp_path / "etfs.db"
+    etfs_path = tmp_path / "etfs.json"
+    etfs_path.write_text(
+        json.dumps(
+            {
+                "STALE.DE": {"name": "Already cached"},
+                "MISSING.DE": {"name": "Needs discovery"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    db = ETFDatabase(db_path=str(db_path))
+    db.insert_dataframe(
+        pd.DataFrame(
+            {
+                "Date": pd.to_datetime([date.today() - timedelta(days=30)]),
+                "Open": [100.0],
+                "High": [101.0],
+                "Low": [99.0],
+                "Close": [100.5],
+                "Volume": [100_000],
+            }
+        ),
+        "STALE.DE",
+    )
+    calls = []
+
+    class RecordingFetcher:
+        name = "Recording"
+
+        def fetch_historical_data(self, symbol, **_kwargs):
+            calls.append(symbol)
+            return pd.DataFrame(
+                {
+                    "Date": pd.to_datetime([date.today()]),
+                    "Open": [50.0],
+                    "High": [51.0],
+                    "Low": [49.0],
+                    "Close": [50.5],
+                    "Volume": [200_000],
+                }
+            )
+
+    refresher = MarketDataRefresher(
+        db_path=str(db_path),
+        etfs_file=str(etfs_path),
+        fetcher=RecordingFetcher(),
+        storage=ParquetStorage(data_dir=str(tmp_path / "parquet")),
+    )
+
+    result = refresher.refresh_market_data(
+        stale_after_days=0,
+        max_workers=1,
+        rebuild_shortlist=False,
+        missing_only=True,
+    )
+
+    assert calls == ["MISSING.DE"]
+    assert result["requested"] == 1
+    assert result["refreshed"] == 1
+
+
 def test_delisting_tracker_promotes_missing_tickers_after_14_days(tmp_path):
     blacklist_path = tmp_path / "blacklist.json"
     missing_path = tmp_path / "delisting_state.json"
@@ -133,6 +221,45 @@ def test_delisting_tracker_promotes_missing_tickers_after_14_days(tmp_path):
     assert blacklist["AAA.DE"]["status"] == "invalid"
     assert blacklist["AAA.DE"]["reason"] == "No data found during refresh"
     assert missing == {}
+
+
+def test_delisting_tracker_repairs_legacy_eager_blacklist_entries(tmp_path):
+    blacklist_path = tmp_path / "blacklist.json"
+    missing_path = tmp_path / "delisting_state.json"
+    blacklist_path.write_text(
+        json.dumps(
+            {
+                "DEPTH.DE": {"status": "invalid", "reason": "Max depth reached"},
+                "GAP.DE": {
+                    "status": "invalid",
+                    "reason": "No data found during refresh",
+                    "first_missing": "2026-08-20",
+                    "missing_days": 0,
+                    "promoted_on": "2026-08-20",
+                },
+                "DELISTED.DE": {
+                    "status": "invalid",
+                    "reason": "Stale data (likely delisted)",
+                    "first_missing": "2026-07-01",
+                    "missing_days": 20,
+                    "promoted_on": "2026-07-21",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    tracker = DelistingTracker(
+        blacklist_file=blacklist_path,
+        missing_file=missing_path,
+    )
+
+    repaired = tracker.repair_legacy_blacklist()
+
+    assert repaired == {"removed_max_depth": 1, "restored_missing": 1}
+    assert set(tracker.load_blacklist()) == {"DELISTED.DE"}
+    missing = tracker.load_missing_state()
+    assert missing["GAP.DE"]["status"] == "missing"
+    assert missing["GAP.DE"]["first_missing"] == "2026-08-20"
 
 
 def test_market_data_refresher_refreshes_and_rebuilds_shortlist(tmp_path, monkeypatch):
@@ -199,7 +326,9 @@ def test_market_data_refresher_refreshes_and_rebuilds_shortlist(tmp_path, monkey
     assert stored["dividends"].sum() == 0.15
 
 
-def test_market_data_refresher_uses_parallel_workers_for_sweden(tmp_path, monkeypatch):
+def test_market_data_refresher_respects_cautious_worker_limit_for_sweden(
+    tmp_path, monkeypatch
+):
     db_path = tmp_path / "etfs.db"
     etfs_path = tmp_path / "sweden.json"
     etfs_path.write_text(
@@ -270,9 +399,85 @@ def test_market_data_refresher_uses_parallel_workers_for_sweden(tmp_path, monkey
         rebuild_shortlist=False,
     )
 
-    assert captured["max_workers"] == 2
+    assert captured["max_workers"] == 1
     assert result["refreshed"] == 2
     assert result["failed"] == 0
+
+
+def test_market_data_refresher_prioritizes_newest_cached_tickers(
+    tmp_path, monkeypatch
+):
+    db_path = tmp_path / "etfs.db"
+    etfs_path = tmp_path / "xetra.json"
+    blacklist_path = tmp_path / "blacklist.json"
+    blacklist_path.write_text(json.dumps({}), encoding="utf-8")
+    etfs_path.write_text(
+        json.dumps(
+            {
+                "OLDER.DE": {"status": "active"},
+                "NEWER.DE": {"status": "active"},
+                "MISSING.DE": {"status": "active"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    db = ETFDatabase(db_path=str(db_path))
+    expected_day = MarketDataRefresher._expected_market_day()
+    for ticker, age in (("OLDER.DE", 8), ("NEWER.DE", 2)):
+        candle_day = expected_day - timedelta(days=age)
+        db.insert_dataframe(
+            pd.DataFrame(
+                {
+                    "Date": pd.to_datetime([candle_day]),
+                    "Open": [100.0],
+                    "High": [101.0],
+                    "Low": [99.0],
+                    "Close": [100.5],
+                    "Volume": [100_000],
+                }
+            ),
+            ticker,
+        )
+
+    submitted = []
+
+    class RecordingExecutor:
+        def __init__(self, max_workers=None):
+            del max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            del exc_type, exc, tb
+            return False
+
+        def submit(self, fn, ticker, *args):
+            submitted.append(ticker)
+            future = Future()
+            future.set_exception(ValueError("No rows returned"))
+            return future
+
+    monkeypatch.setattr(
+        "ETF_screener.market_data_service.ThreadPoolExecutor", RecordingExecutor
+    )
+    monkeypatch.setattr(
+        "ETF_screener.market_data_service.as_completed", lambda futures: list(futures)
+    )
+    refresher = MarketDataRefresher(
+        db_path=str(db_path),
+        etfs_file=str(etfs_path),
+        blacklist_file=str(blacklist_path),
+        storage=ParquetStorage(data_dir=str(tmp_path / "parquet")),
+    )
+
+    refresher.refresh_market_data(
+        stale_after_days=0,
+        max_workers=1,
+        rebuild_shortlist=False,
+    )
+
+    assert submitted == ["NEWER.DE", "OLDER.DE", "MISSING.DE"]
 
 
 def test_market_data_refresher_zero_day_threshold_tops_up_yesterday(tmp_path):
@@ -572,3 +777,143 @@ def test_filter_low_vitality_nasdaq_tickers_keeps_only_actionable_symbols(tmp_pa
     )
 
     assert filtered == ["LIVN", "AAA.DE"]
+
+
+def test_market_data_refresher_quarantines_empty_responses_before_blacklisting(
+    tmp_path,
+):
+    db_path = tmp_path / "etfs.db"
+    etfs_path = tmp_path / "xetra.json"
+    blacklist_path = tmp_path / "blacklist.json"
+    etfs_path.write_text(
+        json.dumps({"AAA.DE": {"name": "Alpha ETF", "status": "active"}}),
+        encoding="utf-8",
+    )
+    blacklist_path.write_text(json.dumps({}), encoding="utf-8")
+
+    class EmptyFetcher:
+        calls = 0
+
+        def fetch_historical_data(
+            self, symbol, days=365, start_date=None, end_date=None
+        ):
+            del symbol, days, start_date, end_date
+            self.calls += 1
+            return pd.DataFrame()
+
+    fetcher = EmptyFetcher()
+    refresher = MarketDataRefresher(
+        db_path=str(db_path),
+        etfs_file=str(etfs_path),
+        blacklist_file=str(blacklist_path),
+        fetcher=fetcher,
+        storage=ParquetStorage(data_dir=str(tmp_path / "parquet")),
+    )
+
+    result = refresher.refresh_market_data(
+        force=True,
+        max_workers=1,
+        rebuild_shortlist=False,
+    )
+
+    assert result["failed"] == 1
+    assert refresher.delisting_tracker.load_blacklist() == {}
+    missing = refresher.delisting_tracker.load_missing_state()
+    assert missing["AAA.DE"]["missing_days"] == 0
+
+    retry = refresher.refresh_market_data(
+        force=False,
+        max_workers=1,
+        rebuild_shortlist=False,
+    )
+
+    assert retry["requested"] == 0
+    assert retry["deferred_missing"] == 1
+    assert fetcher.calls == 1
+
+
+def test_market_data_refresh_prunes_rolling_window_when_already_fresh(tmp_path):
+    db_path = tmp_path / "etfs.db"
+    etfs_path = tmp_path / "xetra.json"
+    etfs_path.write_text(
+        json.dumps({"AAA.DE": {"name": "Alpha ETF", "status": "active"}}),
+        encoding="utf-8",
+    )
+    expected_day = MarketDataRefresher._expected_market_day()
+    old_day = expected_day - timedelta(days=60)
+    db = ETFDatabase(db_path=str(db_path))
+    db.insert_dataframe(
+        pd.DataFrame(
+            {
+                "Date": pd.to_datetime([old_day, expected_day]),
+                "Open": [90.0, 100.0],
+                "High": [91.0, 101.0],
+                "Low": [89.0, 99.0],
+                "Close": [90.5, 100.5],
+                "Volume": [100_000, 100_000],
+            }
+        ),
+        "AAA.DE",
+    )
+    refresher = MarketDataRefresher(
+        db_path=str(db_path),
+        etfs_file=str(etfs_path),
+        storage=ParquetStorage(data_dir=str(tmp_path / "parquet")),
+    )
+
+    result = refresher.refresh_market_data(
+        stale_after_days=0,
+        rebuild_shortlist=False,
+        retention_days=30,
+    )
+
+    assert result["requested"] == 0
+    assert result["pruned"] == 1
+    retained = db.get_etf_data("AAA.DE")
+    assert retained["Date"].dt.date.tolist() == [expected_day]
+
+
+def test_database_rejects_nonpositive_retention_window(tmp_path):
+    db = ETFDatabase(db_path=str(tmp_path / "etfs.db"))
+
+    try:
+        db.prune_old_data(days_to_keep=0)
+    except ValueError as exc:
+        assert "at least 1" in str(exc)
+    else:
+        raise AssertionError("Expected an invalid retention window to fail")
+
+
+def test_market_data_normalization_discards_incomplete_candles():
+    frame = pd.DataFrame(
+        {
+            "Date": pd.to_datetime(["2026-08-27", "2026-08-28"]),
+            "Open": [100.0, None],
+            "High": [101.0, None],
+            "Low": [99.0, None],
+            "Close": [100.5, None],
+            "Volume": [100_000, 120_000],
+        }
+    )
+
+    normalized = MarketDataRefresher._normalize_price_frame(frame)
+
+    assert normalized["Date"].dt.date.tolist() == [date(2026, 8, 27)]
+
+
+def test_database_prunes_incomplete_candles(tmp_path):
+    db = ETFDatabase(db_path=str(tmp_path / "etfs.db"))
+    conn = db._get_connection()
+    conn.execute(
+        """
+        INSERT INTO etf_data (ticker, date, open, high, low, close, volume)
+        VALUES ('AAA.DE', '2026-08-27', 100, 101, 99, 100.5, 100000),
+               ('AAA.DE', '2026-08-28', NULL, NULL, NULL, NULL, 120000)
+        """
+    )
+    conn.commit()
+
+    deleted = db.prune_incomplete_data()
+
+    assert deleted == 1
+    assert db.get_latest_date("AAA.DE") == "2026-08-27"

@@ -3,6 +3,10 @@
     let playbookSourceSignature = "";
     let playbookRows = [];
     let marketDataAutoRefreshAttempted = false;
+    let marketDataMissingBackfillAttempted = false;
+    let marketDataMissingBackfillPromise = null;
+    let marketDataMissingBackfillAbortController = null;
+    let marketDataMissingBackfillRequestId = null;
     let tickerSelectUniverse = [];
     let tickerUniverseLoadPromise = null;
     let tickerSelectLastValue = "";
@@ -904,6 +908,7 @@
       const listUniverseBadge = document.getElementById("list-select-universe-badge");
       tickerScanScope = normalized;
       marketDataAutoRefreshAttempted = false;
+      marketDataMissingBackfillAttempted = false;
       scopeButtons.forEach((button) => {
         if (!button) {
           return;
@@ -4487,16 +4492,20 @@
     async function reloadSelectedDslxStrategy() {
       const select = document.getElementById("screen-dslx-file-select");
       const name = String(select?.value || "").trim();
-      if (!name) {
-        showToast("Choose a DSLX file to reload.", true);
-        return;
-      }
       const button = document.getElementById("screen-dslx-reload-btn");
       if (button) button.disabled = true;
       try {
+        // Refresh the catalogue as well as the selected content. This makes
+        // files added outside the editor visible without restarting Uvicorn.
+        await loadDslxStrategyList();
+        if (!name) {
+          showToast("DSLX file list refreshed.");
+          return;
+        }
+        if (select) select.value = name;
         await loadDslxStrategy(name);
       } catch (error) {
-        showToast(error.message || "Could not reload DSLX strategy", true);
+        showToast(error.message || "Could not refresh DSLX strategies", true);
       } finally {
         if (button) button.disabled = false;
       }
@@ -5055,10 +5064,82 @@
       let refreshed = false;
       if (allowRefresh && status && status.is_stale && !marketDataAutoRefreshAttempted) {
         marketDataAutoRefreshAttempted = true;
-        await refreshMarketData();
+        await refreshMarketData(options);
         refreshed = true;
       }
+      if (
+        options.backfillMissing === true
+        && status
+        && Number(status.missing_tickers || 0) > 0
+      ) {
+        startMissingMarketDataBackfill(status, options);
+      }
       return { status, refreshed };
+    }
+
+    function startMissingMarketDataBackfill(status, options = {}) {
+      if (
+        marketDataMissingBackfillPromise
+        ||
+        marketDataMissingBackfillAttempted
+        || Number(status?.missing_tickers || 0) <= 0
+      ) {
+        return marketDataMissingBackfillPromise;
+      }
+      marketDataMissingBackfillAttempted = true;
+      const source = normalizeScanScope(tickerScanScope);
+      const params = new URLSearchParams({
+        depth: "180",
+        max_workers: "2",
+        force: "false",
+        stale_after_days: "0",
+        missing_only: "true",
+        source,
+      });
+      const requestId = createRunRequestId();
+      const abortController = new AbortController();
+      marketDataMissingBackfillRequestId = requestId;
+      marketDataMissingBackfillAbortController = abortController;
+      params.set("request_id", requestId);
+      if (source === "list") {
+        const tickerList = getUniverseFilterParams().get("ticker_list");
+        if (tickerList) params.set("ticker_list", tickerList);
+      }
+      const marketStatus = document.getElementById("shortlist-market-status");
+      if (marketStatus) {
+        marketStatus.textContent += " · filling missing symbols in background";
+      }
+      marketDataMissingBackfillPromise = fetch(
+        `/api/market-data/refresh?${params.toString()}`,
+        { method: "POST", signal: abortController.signal },
+      )
+        .then(async (response) => {
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(payload.detail || "Missing-data backfill failed");
+          }
+          if (Number(payload.refreshed || 0) > 0) {
+            showToast(
+              `Cached ${Number(payload.refreshed)} previously missing symbol${Number(payload.refreshed) === 1 ? "" : "s"}.`,
+            );
+          }
+          return loadMarketStatus(source);
+        })
+        .catch((error) => {
+          marketDataMissingBackfillAttempted = false;
+          if (error?.name !== "AbortError") {
+            console.warn("Automatic missing-data backfill failed", error);
+          }
+          return null;
+        })
+        .finally(() => {
+          marketDataMissingBackfillPromise = null;
+          marketDataMissingBackfillAbortController = null;
+          marketDataMissingBackfillRequestId = null;
+          syncScreenerRunButtonState(Boolean(scanAbortController));
+        });
+      syncScreenerRunButtonState(Boolean(scanAbortController));
+      return marketDataMissingBackfillPromise;
     }
 
     async function ensureFreshMarketData() {
@@ -5125,7 +5206,7 @@
       showTab(DEFAULT_DASHBOARD_TAB);
     }
 
-    async function refreshMarketData() {
+    async function refreshMarketData(options = {}) {
       const source = normalizeScanScope(tickerScanScope);
       const shortlistRefreshBtn = document.getElementById("shortlist-refresh-btn");
       const marketStatus = document.getElementById("shortlist-market-status");
@@ -5166,13 +5247,17 @@
         startJobProgressPolling("market-refresh", "Market Refresh", "Preparing market refresh...");
         const refreshParams = new URLSearchParams();
         refreshParams.set("depth", "180");
-        refreshParams.set("max_workers", "8");
+        refreshParams.set("max_workers", "2");
         // Refresh only stale/missing symbols. A manual click should not force
         // a full-market refetch when the status already identifies a small
         // stale subset.
         refreshParams.set("force", "false");
         refreshParams.set("stale_after_days", "0");
         refreshParams.set("source", source);
+        const requestId = String(options.requestId || "").trim();
+        if (requestId) {
+          refreshParams.set("request_id", requestId);
+        }
         if (source === "list") {
           const universeParams = getUniverseFilterParams();
           const tickerList = universeParams.get("ticker_list");
@@ -5182,6 +5267,7 @@
         }
         const resp = await fetch(`/api/market-data/refresh?${refreshParams.toString()}`, {
           method: "POST",
+          signal: options.signal,
         });
         const data = await resp.json();
         if (!resp.ok) {
@@ -5211,6 +5297,9 @@
         });
         showToast(`Market refresh: ${Number(data.refreshed || 0)} updated, ${Number(data.failed || 0)} failed`);
       } catch (err) {
+        if (err && err.name === "AbortError") {
+          return;
+        }
         if (marketStatus) {
           marketStatus.className = "text-xs font-bold uppercase tracking-wide text-rose-600";
           marketStatus.textContent = `Market refresh failed: ${err.message || err}`;
@@ -6832,6 +6921,12 @@
     let currentStrategy = "";
     let sourceStrategyName = ""; // tracks what strategy is being modified
     let scanAbortController = null;
+    let scanRunId = null;
+    let screenEventPoller = null;
+    let screenEventPollInFlight = false;
+    let screenEventSeq = 0;
+    let liveScreenMatches = [];
+    let liveScreenMatchKeys = new Set();
     let navScanProgressPoller = null;
     let navScanProgressJob = null;
     let lastScreenMatches = [];
@@ -7470,16 +7565,150 @@
     }
 
     // Initial Load
-    function cancelScan() {
-      if (scanAbortController) {
-        scanAbortController.abort();
+    function createRunRequestId() {
+      if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+        return globalThis.crypto.randomUUID();
+      }
+      return `run-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    async function cancelScan() {
+      if (scanAbortController || marketDataMissingBackfillPromise) {
+        const screenAbortController = scanAbortController;
+        const screenRequestId = scanRunId;
+        const backfillAbortController = marketDataMissingBackfillAbortController;
+        const backfillRequestId = marketDataMissingBackfillRequestId;
         const stopButton = document.getElementById("stop-run-btn");
         if (stopButton) {
           stopButton.disabled = true;
           stopButton.textContent = "Stopping…";
         }
-        showToast("Stopping the screener run…");
+        showToast(screenAbortController ? "Stopping the screener run…" : "Stopping the data fill…");
+        const cancellationRequests = [];
+        if (screenRequestId) {
+          cancellationRequests.push(fetch("/api/jobs/screen/cancel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ request_id: screenRequestId }),
+            keepalive: true,
+          }));
+        }
+        if (backfillRequestId) {
+          cancellationRequests.push(fetch("/api/jobs/market-refresh/cancel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ request_id: backfillRequestId }),
+            keepalive: true,
+          }));
+        }
+        screenAbortController?.abort();
+        backfillAbortController?.abort();
+        await Promise.allSettled(cancellationRequests);
       }
+    }
+
+    function createScreenMatchCard(item, index) {
+      const card = document.createElement("div");
+      card.className =
+        "ticker-card p-3 bg-slate-50 border-l-4 border-indigo-500 rounded shadow-sm hover:shadow-md hover:bg-indigo-50 cursor-pointer transition-all";
+      card.onclick = () => loadChart(item.ticker);
+      const statusText = item.status || "TRENDING";
+      const statusColor = item.status === "Entry Signal"
+        ? "text-emerald-500 animate-pulse font-bold"
+        : "text-indigo-600";
+      const closeVal = Number(item.close ?? 0);
+      const volumeVal = Number(item.recent_avg_volume ?? item.volume ?? 0);
+      const changePctVal = Number(item.change_pct ?? 0);
+      const scoreVal = Number(item.score ?? 0);
+      const rsiVal = Number(item.rsi ?? 0);
+      const sequenceText = String(item.event_sequence || "").trim();
+      const changeVal = Number.isFinite(changePctVal) ? changePctVal.toFixed(2) : "0.00";
+      const changeColor = parseFloat(changeVal) >= 0 ? "text-emerald-500" : "text-rose-500";
+      const sign = parseFloat(changeVal) >= 0 ? "+" : "";
+
+      card.innerHTML = `
+        <div class="flex justify-between items-start">
+          <div class="flex flex-col">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="font-bold text-slate-800 text-lg leading-none">${escapeHtml(item.ticker || "")}</span>
+              <span class="text-[10px] font-bold text-indigo-400">#${index + 1}</span>
+              ${renderMatchStrategyBadges(item)}
+            </div>
+            <span class="mt-1 text-[11px] text-slate-500">${escapeHtml(item.name || "")}</span>
+            <span class="text-[10px] ${statusColor} mt-1 uppercase tracking-wider">${escapeHtml(statusText)}</span>
+          </div>
+          <div class="flex flex-col items-end">
+            <span class="text-slate-800 font-bold font-mono">${closeVal.toFixed(2)}</span>
+            <span class="text-[10px] ${changeColor} font-mono">${sign}${changeVal}%</span>
+          </div>
+        </div>
+        <div class="mt-2 text-[11px] font-semibold text-rose-700">${escapeHtml(sequenceText || "Event sequence")}</div>
+        <div class="mt-2 grid grid-cols-3 gap-2 rounded-lg bg-slate-100/80 px-2 py-2 text-[10px] font-semibold text-slate-500">
+          <div>RSI <span class="block text-sm font-bold text-slate-800">${Number.isFinite(rsiVal) ? rsiVal.toFixed(1) : "-"}</span></div>
+          <div>VOL20 <span class="block text-sm font-bold text-slate-800">${formatCompactVolume(volumeVal)}</span></div>
+          <div>SCORE <span class="block text-sm font-bold text-slate-800">${scoreVal.toFixed(1)}</span></div>
+        </div>`;
+      return card;
+    }
+
+    function appendLiveScreenMatch(item) {
+      if (!item || !item.ticker) return;
+      const key = `${item.strategy || ""}|${item.ticker}|${item.days_since_entry ?? item.age ?? 0}`;
+      if (liveScreenMatchKeys.has(key)) return;
+      liveScreenMatchKeys.add(key);
+      liveScreenMatches.push(item);
+      const list = document.getElementById("ticker-list");
+      if (list && liveScreenMatches.length === 1) {
+        list.innerHTML = "";
+        list.style.opacity = "1";
+      }
+      if (list && liveScreenMatches.length <= 200) {
+        list.appendChild(createScreenMatchCard(item, liveScreenMatches.length - 1));
+      }
+      const count = document.getElementById("match-count");
+      if (count) count.textContent = String(liveScreenMatches.length);
+    }
+
+    function stopScreenEventPolling() {
+      if (screenEventPoller) clearInterval(screenEventPoller);
+      screenEventPoller = null;
+      screenEventPollInFlight = false;
+    }
+
+    function startScreenEventPolling(runId, onProgress) {
+      stopScreenEventPolling();
+      screenEventSeq = 0;
+      liveScreenMatches = [];
+      liveScreenMatchKeys = new Set();
+      let seenRun = false;
+      const poll = async () => {
+        if (screenEventPollInFlight) return;
+        screenEventPollInFlight = true;
+        try {
+          const response = await fetch(
+            `/api/screen/events?run_id=${encodeURIComponent(runId)}&after_seq=${screenEventSeq}&limit=500`,
+            { cache: "no-store" },
+          );
+          if (!response.ok) return;
+          const snapshot = await response.json();
+          const events = Array.isArray(snapshot.events) ? snapshot.events : [];
+          if (snapshot.active || events.length) seenRun = true;
+          events.forEach((event) => {
+            screenEventSeq = Math.max(screenEventSeq, Number(event.seq || 0));
+            if (event.type === "match") {
+              appendLiveScreenMatch(event.payload?.match);
+            } else if (event.type === "progress" && typeof onProgress === "function") {
+              onProgress(event.payload || {});
+            }
+          });
+          if (seenRun && !snapshot.active) stopScreenEventPolling();
+        } catch (err) {
+          console.warn("Screen event polling failed", err);
+        } finally {
+          screenEventPollInFlight = false;
+        }
+      };
+      screenEventPoller = setInterval(poll, 500);
     }
 
     function stopJobProgressPolling() {
@@ -7677,14 +7906,15 @@
     function syncScreenerRunButtonState(running = false) {
       const runBtn = document.getElementById("run-btn");
       const stopBtn = document.getElementById("stop-run-btn");
+      const fillingMissingData = Boolean(marketDataMissingBackfillPromise);
       if (!runBtn) {
         return;
       }
       runBtn.dataset.running = running ? "1" : "0";
       if (stopBtn) {
-        stopBtn.classList.toggle("hidden", !running);
-        stopBtn.disabled = !running;
-        stopBtn.textContent = "Stop Run";
+        stopBtn.classList.toggle("hidden", !running && !fillingMissingData);
+        stopBtn.disabled = !running && !fillingMissingData;
+        stopBtn.textContent = running ? "Stop Run" : "Stop Data Fill";
       }
       if (running) {
         runBtn.innerHTML = `
@@ -7886,6 +8116,7 @@
       const list = document.getElementById("ticker-list");
 
       stopJobProgressPolling();
+      stopScreenEventPolling();
       if (spinner) spinner.classList.add("hidden");
       setNavScanProgress({
         show: false,
@@ -7901,6 +8132,7 @@
 
       if (list) list.style.opacity = "1.0";
       scanAbortController = null;
+      scanRunId = null;
       syncScreenerRunButtonState(false);
       updateScanActionButtonsState();
     }
@@ -7945,6 +8177,7 @@
       // Set up abortion
       const abortController = new AbortController();
       scanAbortController = abortController;
+      scanRunId = createRunRequestId();
 
       if (spinner) spinner.classList.remove("hidden");
       setNavScanProgress({
@@ -7975,9 +8208,15 @@
       if (list) list.style.opacity = "0.5";
 
       try {
-        // Top up stale data automatically before evaluating candle_age 0.
-        // The refresh helper is stale-aware, so fresh universes are not refetched.
-        await ensureGuiMarketBackbone({ allowRefresh: true });
+        // Screen the local cache immediately. Market refresh is intentionally
+        // separate so a large, cautiously throttled Yahoo update never blocks
+        // the first visible matches or the rest of the dashboard.
+        await ensureGuiMarketBackbone({
+          allowRefresh: false,
+          backfillMissing: true,
+          requestId: scanRunId,
+          signal: abortController.signal,
+        });
         startJobProgressPolling("screen", "Global");
         setNavScanProgress({
           show: true,
@@ -7992,6 +8231,7 @@
         });
         let url = "/api/screen";
         const universeParams = getUniverseFilterParams();
+        universeParams.set("request_id", scanRunId);
         if (!customDsl) {
           const screenParams = getScreenDisqualifierParams();
           const controlParams = buildScreenFilterParams();
@@ -8065,6 +8305,19 @@
           }, 300);
         };
         startProgress();
+        if (list) {
+          list.innerHTML = '<div class="text-sm text-slate-400 italic p-4 text-center">Scanning… matches will appear here as they are found.</div>';
+        }
+        startScreenEventPolling(scanRunId, (payload) => {
+          const pct = Number(payload.pct || 0);
+          if (Number.isFinite(pct)) fakeProg = Math.max(fakeProg, pct);
+          setNavScanProgress({
+            contextLabel: "Screen",
+            contextText: String(payload.detail || `${Math.round(fakeProg)}%`),
+            contextPct: fakeProg,
+            contextWorking: true,
+          });
+        });
 
         let resp = null;
         let rawData = null;
@@ -8180,54 +8433,7 @@
 
           visibleMatches.forEach((item, idx) => {
             try {
-              const card = document.createElement("div");
-              card.className =
-                "ticker-card p-3 bg-slate-50 border-l-4 border-indigo-500 rounded shadow-sm hover:shadow-md hover:bg-indigo-50 cursor-pointer transition-all";
-              card.onclick = () => loadChart(item.ticker);
-              const statusText = item.status || "TRENDING";
-              const statusColor =
-                item.status === "Entry Signal"
-                  ? "text-emerald-500 animate-pulse font-bold"
-                  : "text-indigo-600";
-
-              const closeVal = Number(item.close ?? 0);
-              const volumeVal = Number(item.recent_avg_volume ?? item.volume ?? 0);
-              const changePctVal = Number(item.change_pct ?? 0);
-              const scoreVal = Number(item.score ?? 0);
-              const rsiVal = Number(item.rsi ?? 0);
-              const sequenceText = String(item.event_sequence || "").trim();
-
-              const changeVal = Number.isFinite(changePctVal)
-                ? changePctVal.toFixed(2)
-                : "0.00";
-              const changeColor =
-                parseFloat(changeVal) >= 0 ? "text-emerald-500" : "text-rose-500";
-              const sign = parseFloat(changeVal) >= 0 ? "+" : "";
-
-              card.innerHTML = `
-                        <div class="flex justify-between items-start">
-                            <div class="flex flex-col">
-                                <div class="flex flex-wrap items-center gap-1.5">
-                                  <span class="font-bold text-slate-800 text-lg leading-none">${item.ticker}</span>
-                                  <span class="text-[10px] font-bold text-indigo-400">#${idx + 1}</span>
-                                  ${renderMatchStrategyBadges(item)}
-                                </div>
-                                <span class="mt-1 text-[11px] text-slate-500">${escapeHtml(item.name || "")}</span>
-                                <span class="text-[10px] ${statusColor} mt-1 uppercase tracking-wider">${statusText}</span>
-                            </div>
-                            <div class="flex flex-col items-end">
-                              <span class="text-slate-800 font-bold font-mono">${closeVal.toFixed(2)}</span>
-                                <span class="text-[10px] ${changeColor} font-mono">${sign}${changeVal}%</span>
-                            </div>
-                        </div>
-                        <div class="mt-2 text-[11px] font-semibold text-rose-700">${escapeHtml(sequenceText || "Event sequence")}</div>
-                        <div class="mt-2 grid grid-cols-3 gap-2 rounded-lg bg-slate-100/80 px-2 py-2 text-[10px] font-semibold text-slate-500">
-                            <div>RSI <span class="block text-sm font-bold text-slate-800">${Number.isFinite(rsiVal) ? rsiVal.toFixed(1) : "-"}</span></div>
-                            <div>VOL20 <span class="block text-sm font-bold text-slate-800">${formatCompactVolume(volumeVal)}</span></div>
-                            <div>SCORE <span class="block text-sm font-bold text-slate-800">${scoreVal.toFixed(1)}</span></div>
-                        </div>
-                    `;
-              list.appendChild(card);
+              list.appendChild(createScreenMatchCard(item, idx));
               console.log(`Card ${idx} added for ${item.ticker}`);
             } catch (cardErr) {
               console.error(`Error processing card at index ${idx}:`, cardErr);

@@ -27,7 +27,6 @@ import pandas as pd
 from tqdm import tqdm
 
 
-from ETF_screener.data_fetcher import FinnhubFetcher
 from ETF_screener.database import ETFDatabase
 from ETF_screener.backtester import Backtester
 from ETF_screener.etf_discovery import ETFDiscovery
@@ -38,6 +37,7 @@ from ETF_screener.indicators import (
     calculate_consecutive_streak,
     calculate_ema,
 )
+from ETF_screener.market_data_provider import create_market_data_provider
 
 from ETF_screener.hotlist import generate_hotlist
 from ETF_screener.plotter_plotly import InteractivePlotter
@@ -50,9 +50,6 @@ from ETF_screener.strategy_manager import CachedStrategyManager
 from ETF_screener.storage import ParquetStorage
 
 from ETF_screener.xetra_extractor import XETRETFExtractor
-
-from ETF_screener.yfinance_fetcher import YFinanceFetcher
-
 
 def parse_volume(volume_str: str) -> int:
     """
@@ -269,14 +266,14 @@ def fetch_and_analyze(
             if not quiet:
                 print("Initializing Finnhub fetcher...")
 
-            fetcher = FinnhubFetcher(api_key=api_key)
+            fetcher = create_market_data_provider("finnhub", api_key=api_key)
 
         else:
 
             if not quiet:
                 print("Initializing Yahoo Finance fetcher...")
 
-            fetcher = YFinanceFetcher()  # type: ignore[assignment]
+            fetcher = create_market_data_provider("yahoo")
 
         # Fetch data for all symbols
 
@@ -532,7 +529,7 @@ def screen_etfs(
 
                 print(f"\nFetching {len(to_fetch)} missing from Yahoo Finance...")
 
-                fetcher = YFinanceFetcher()  # type: ignore[assignment]
+                fetcher = create_market_data_provider()
 
                 etf_data = fetcher.fetch_multiple_etfs(to_fetch, days=max(50, days))
 
@@ -613,7 +610,7 @@ def screen_etfs(
                         f"\nFetching {len(to_fetch)} ETFs (minimum 50 days for accurate EMA50)..."
                     )
 
-                    fetcher = YFinanceFetcher()  # type: ignore[assignment]
+                    fetcher = create_market_data_provider()
 
                     etf_data = fetcher.fetch_multiple_etfs(to_fetch, days=max(50, days))
 
@@ -1316,7 +1313,7 @@ def refresh_database(
         # Initialize database
         db = ETFDatabase()
 
-        fetcher = YFinanceFetcher()
+        fetcher = create_market_data_provider()
 
         # Fetch and store data
 
@@ -1442,7 +1439,9 @@ def refresh_database(
                         pbar.write(
                             f"[INFO] {ticker} already at max available depth ({days_in_db} days)."
                         )
-                        extractor.add_to_blacklist(ticker, reason="Max depth reached")
+                        # Reaching the provider's oldest available candle does not
+                        # make an otherwise live symbol invalid. Keep it eligible
+                        # for incremental refreshes and screening.
                         skipped += 1
                         continue
 

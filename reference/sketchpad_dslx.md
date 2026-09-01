@@ -182,6 +182,24 @@ candle. Named objects may reference themselves or earlier members of the same
 struct. A missing member or a later/forward reference is rejected while the
 program is parsed; DSLX never inserts hidden candles automatically.
 
+Use `any` when one real candle must occupy a structure position without
+matching a predicate:
+
+```dsl
+entrystruct {
+  setup
+  any
+  breakout
+  at breakout.close
+}
+```
+
+Here `setup`, the unconstrained candle, and `breakout` are three consecutive
+candles. Each `any` consumes exactly one candle and may be repeated for a fixed
+multi-candle gap. It creates no named binding and therefore cannot be referenced
+from a predicate or `at` expression. `pass` remains distinct: it is permitted
+only as the complete no-op `exitstruct` and consumes no candle.
+
 Use a named, ordered struct for distinct consecutive roles. `window(n)`
 remains useful when one uniform condition applies to a range:
 
@@ -296,8 +314,15 @@ remaining centered on the candle the trader sees.
 - Exact indicator API: source-aware `candle.ema("high", 20)` is clearer than
   names such as `ema_high(20)`, because it retains the focal candle as the
   owner of the value.
-- Candle-region indicators support `.within_body`, `.not_within_body`,
-  `.within_upper_wick`, and `.within_lower_wick`.
+- A single indicator line uses entity-first intersection predicates:
+  `.body_intersects`, `.upper_wick_intersects`, and
+  `.lower_wick_intersects`. Negate a predicate with `!` when the line must not
+  intersect that region.
+- A two-EMA channel can use independent sources and periods. The inclusive
+  `.body_within` predicate requires both `open` and `close` to lie inside the
+  channel, while `.candle_within` also requires both wicks to lie inside it:
+  `ema("high", 20, "low", 20).body_within` and
+  `ema("high", 20, "low", 20).candle_within`.
 - Whether `.slope` means one-bar absolute change, percentage change, or a
   configurable regression slope. It should be defined once and used uniformly.
 - How matches are ranked and de-duplicated when a screener needs one result per

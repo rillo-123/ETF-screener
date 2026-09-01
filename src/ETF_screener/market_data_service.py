@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import inspect
 import logging
-import os
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from concurrent.futures import as_completed as as_completed  # noqa: F401
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -17,9 +18,12 @@ import pandas as pd
 from ETF_screener.database import ETFDatabase
 from ETF_screener.delisting_tracker import DelistingTracker
 from ETF_screener.indicators import add_indicators
+from ETF_screener.market_data_provider import (
+    MarketDataProvider,
+    create_market_data_provider,
+)
 from ETF_screener.shortlist_engine import ETFShortlistEngine
 from ETF_screener.storage import ParquetStorage
-from ETF_screener.yfinance_fetcher import YFinanceFetcher
 
 logger = logging.getLogger(__name__)
 
@@ -108,22 +112,28 @@ class MarketDataRefresher:
     """Track and refresh the underlying ETF market data cache."""
 
     INDICATOR_WARMUP_DAYS = 90
+    DEFAULT_RETENTION_DAYS = 365
 
     def __init__(
         self,
         db_path: str | None = None,
         etfs_file: str = "config/xetra.json",
         blacklist_file: str = "config/blacklist.json",
-        fetcher: Optional[YFinanceFetcher] = None,
+        fetcher: Optional[MarketDataProvider] = None,
         storage: Optional[ParquetStorage] = None,
         collection_mode: str = "active",
         tracked_tickers_override: object | None = None,
+        provider: str | None = None,
+        provider_api_key: str | None = None,
     ):
         self.db = ETFDatabase(db_path=db_path)
         self.etfs_file = Path(etfs_file)
         self.blacklist_file = Path(blacklist_file)
         self.delisting_tracker = DelistingTracker(blacklist_file=self.blacklist_file)
-        self.fetcher = fetcher or YFinanceFetcher()
+        self.fetcher = fetcher or create_market_data_provider(
+            provider,
+            api_key=provider_api_key,
+        )
         self.storage = storage or ParquetStorage()
         self.collection_mode = (
             "all" if str(collection_mode).strip().lower() == "all" else "active"
@@ -300,6 +310,14 @@ class MarketDataRefresher:
         normalized = normalized[
             ["Date", "Open", "High", "Low", "Close", "Volume", "Dividends"]
         ]
+        for column in ["Open", "High", "Low", "Close"]:
+            normalized[column] = pd.to_numeric(
+                normalized[column], errors="coerce"
+            )
+        # Providers sometimes expose an unfinished session with volume but no
+        # price body. It is not a finalized candle and must never become the
+        # latest bar used by liquidity or TA predicates.
+        normalized = normalized.dropna(subset=["Open", "High", "Low", "Close"])
         normalized = normalized.sort_values("Date").drop_duplicates(
             subset=["Date"], keep="last"
         )
@@ -324,6 +342,7 @@ class MarketDataRefresher:
         depth: int,
         warmup_days: int,
         min_existing_rows: int = 100,
+        cancel_event=None,
     ) -> tuple[str, pd.DataFrame]:
         # Populated caches are always extended from their latest date. These
         # legacy tuning inputs remain accepted for caller compatibility only.
@@ -333,8 +352,16 @@ class MarketDataRefresher:
         if not existing.empty:
             latest_day = pd.to_datetime(existing["Date"].max()).date()
 
+        fetch_supports_cancel = (
+            "cancel_event"
+            in inspect.signature(self.fetcher.fetch_historical_data).parameters
+        )
+
         if existing.empty:
-            fetched = self.fetcher.fetch_historical_data(ticker, days=depth)
+            fetch_kwargs = {"days": depth}
+            if fetch_supports_cancel:
+                fetch_kwargs["cancel_event"] = cancel_event
+            fetched = self.fetcher.fetch_historical_data(ticker, **fetch_kwargs)
             merged = self._normalize_price_frame(fetched)
         else:
             if latest_day is None:
@@ -347,11 +374,13 @@ class MarketDataRefresher:
             # beginning on the calendar day after the latest stored candle.
             # The provider naturally omits weekends and exchange closures.
             fetch_start = latest_day + timedelta(days=1)
-            fetched = self.fetcher.fetch_historical_data(
-                ticker,
-                start_date=fetch_start,
-                end_date=datetime.now(),
-            )
+            fetch_kwargs = {
+                "start_date": fetch_start,
+                "end_date": datetime.now(),
+            }
+            if fetch_supports_cancel:
+                fetch_kwargs["cancel_event"] = cancel_event
+            fetched = self.fetcher.fetch_historical_data(ticker, **fetch_kwargs)
             fresh_slice = self._normalize_price_frame(fetched)
             merged = self._normalize_price_frame(
                 pd.concat([existing, fresh_slice], ignore_index=True)
@@ -417,6 +446,7 @@ class MarketDataRefresher:
         fresh_tickers = max(0, len(tracked) - len(missing) - len(stale))
 
         return {
+            "provider": str(getattr(self.fetcher, "name", type(self.fetcher).__name__)),
             "today": today.isoformat(),
             "latest_market_date": market_day.isoformat() if market_day else None,
             "latest_shortlist_date": (
@@ -446,6 +476,7 @@ class MarketDataRefresher:
         depth: int = 400,
         warmup_days: int = INDICATOR_WARMUP_DAYS,
         min_existing_rows: int = 100,
+        retention_days: int = DEFAULT_RETENTION_DAYS,
     ) -> pd.DataFrame:
         symbol, df = self._build_refresh_frame(
             ticker=ticker,
@@ -455,6 +486,8 @@ class MarketDataRefresher:
         )
         self.db.insert_dataframe(df, symbol)
         self.storage.save_etf_data(df, symbol)
+        self.db.prune_incomplete_data()
+        self.db.prune_old_data(days_to_keep=retention_days)
         return df
 
     def refresh_market_data(
@@ -462,21 +495,28 @@ class MarketDataRefresher:
         depth: int = 400,
         stale_after_days: int = 3,
         force: bool = False,
-        max_workers: int = 8,
+        max_workers: int = 2,
         rebuild_shortlist: bool = True,
         warmup_days: int = INDICATOR_WARMUP_DAYS,
+        retention_days: int = DEFAULT_RETENTION_DAYS,
         progress_callback=None,
+        cancel_event=None,
+        missing_only: bool = False,
     ) -> dict[str, Any]:
         job = "market-refresh"
+
+        def is_cancelled() -> bool:
+            return bool(cancel_event is not None and cancel_event.is_set())
         source_name = self.etfs_file.name.lower()
         logger.info(
-            "Market refresh started: source=%s force=%s stale_after_days=%s depth=%s max_workers=%s rebuild_shortlist=%s",
+            "Market refresh started: source=%s force=%s stale_after_days=%s depth=%s max_workers=%s rebuild_shortlist=%s missing_only=%s",
             source_name,
             force,
             stale_after_days,
             depth,
             max_workers,
             rebuild_shortlist,
+            missing_only,
         )
         promoted = self.delisting_tracker.promote_aged_missing(threshold_days=14)
         if promoted:
@@ -492,18 +532,80 @@ class MarketDataRefresher:
         )
         tracked = self._load_tracked_tickers()
         latest_by_ticker = self.db.get_ticker_latest_dates()
+        missing_state = self.delisting_tracker.load_missing_state()
         today = self._expected_market_day()
+        observation_day = date.today()
         threshold_days = max(0, int(stale_after_days))
         stale_cutoff = today - timedelta(days=threshold_days)
 
         to_refresh = []
+        deferred_missing = 0
         for ticker in tracked:
+            if is_cancelled():
+                break
             latest = self._parse_day(latest_by_ticker.get(ticker))
-            if force or latest is None or latest < stale_cutoff:
-                to_refresh.append(ticker)
+            if missing_only and latest is not None:
+                continue
+            if not (force or latest is None or latest < stale_cutoff):
+                continue
+            last_missing = self._parse_day(
+                str(missing_state.get(ticker, {}).get("last_missing") or "")
+            )
+            if (
+                not force
+                and last_missing is not None
+                and (observation_day - last_missing).days < 1
+            ):
+                deferred_missing += 1
+                continue
+            to_refresh.append(ticker)
+
+        # Treat refresh work as a useful-data queue: update symbols with the
+        # newest existing candles first and leave never-seen symbols until last.
+        # This prevents obsolete catalogue entries from delaying usable TA data.
+        to_refresh.sort(
+            key=lambda ticker: (
+                self._parse_day(latest_by_ticker.get(ticker)) is not None,
+                self._parse_day(latest_by_ticker.get(ticker)) or date.min,
+            ),
+            reverse=True,
+        )
+
+        if is_cancelled():
+            self._emit_progress(
+                progress_callback,
+                job=job,
+                phase="cancelled",
+                pct=2.0,
+                detail="Market refresh stopped",
+                label="Market Refresh",
+                active=False,
+            )
+            status = self.get_status(stale_after_days=stale_after_days)
+            status.update(
+                {
+                    "requested": len(to_refresh),
+                    "refreshed": 0,
+                    "failed": 0,
+                    "shortlist_rebuilt": False,
+                    "pruned": 0,
+                    "pruned_incomplete": 0,
+                    "deferred_missing": deferred_missing,
+                    "errors": [],
+                    "cancelled": True,
+                }
+            )
+            return status
 
         if not to_refresh:
             logger.info("Market refresh planning complete: nothing to refresh")
+            pruned_incomplete = self.db.prune_incomplete_data()
+            pruned = self.db.prune_old_data(days_to_keep=retention_days)
+            logger.info(
+                "Market data retention complete: pruned=%d retention_days=%d",
+                pruned,
+                retention_days,
+            )
             self._emit_progress(
                 progress_callback,
                 job=job,
@@ -520,16 +622,19 @@ class MarketDataRefresher:
                     "refreshed": 0,
                     "failed": 0,
                     "shortlist_rebuilt": False,
+                    "pruned": pruned,
+                    "pruned_incomplete": pruned_incomplete,
+                    "deferred_missing": deferred_missing,
                 }
             )
             return status
 
-        worker_count = min(max(1, int(max_workers)), max(2, os.cpu_count() or 4, 8))
+        worker_count = min(max(1, int(max_workers)), 2)
         sequential_refresh = False
         if source_name in {"sweden.json", "nasdaq.json"}:
-            # Large exchange universes benefit from the normal parallel worker
-            # pool instead of the old small-universe throttles.
-            worker_count = max(worker_count, min(8, len(to_refresh)))
+            # A small worker pool plus the shared request gate prevents large
+            # universes from producing a Yahoo request burst.
+            worker_count = min(worker_count, max(1, len(to_refresh)))
         elif source_name == "custom_ticker_list.json" and len(to_refresh) <= 100:
             worker_count = min(worker_count, 2)
             sequential_refresh = True
@@ -560,11 +665,14 @@ class MarketDataRefresher:
         if sequential_refresh:
             logger.info("Market refresh worker mode: sequential")
             for ticker in to_refresh:
+                if is_cancelled():
+                    break
                 try:
                     symbol, df = self._build_refresh_frame(
                         ticker,
                         depth,
                         warmup_days,
+                        cancel_event=cancel_event,
                     )
                     if df is None or df.empty:
                         raise ValueError("No rows returned")
@@ -577,11 +685,9 @@ class MarketDataRefresher:
                     message = str(exc)
                     if "No data found" in message or "No rows returned" in message:
                         self.delisting_tracker.mark_missing(ticker, reason=message)
-                        # An empty response is a definitive invalid/delisted
-                        # symbol result. Blacklist it immediately so the next
-                        # refresh does not waste another request. Transient
-                        # fetch/API errors are not promoted here.
-                        self.delisting_tracker.promote_aged_missing(threshold_days=0)
+                        # Provider gaps can be transient. Keep the symbol in the
+                        # missing queue until the normal 14-day quarantine expires.
+                        self.delisting_tracker.promote_aged_missing(threshold_days=14)
                     errors.append({"ticker": ticker, "error": str(exc)})
                 finally:
                     completed += 1
@@ -601,50 +707,104 @@ class MarketDataRefresher:
             logger.info(
                 "Market refresh worker mode: parallel (%d workers)", worker_count
             )
-            with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                futures = {
-                    executor.submit(
+            executor = ThreadPoolExecutor(max_workers=worker_count)
+            futures = {}
+            try:
+                for ticker in to_refresh:
+                    if is_cancelled():
+                        break
+                    future = executor.submit(
                         self._build_refresh_frame,
                         ticker,
                         depth,
                         warmup_days,
-                    ): ticker
-                    for ticker in to_refresh
-                }
-                for future in as_completed(futures):
-                    ticker = futures[future]
-                    try:
-                        symbol, df = future.result()
-                        if df is None or df.empty:
-                            raise ValueError("No rows returned")
-                        self.db.insert_dataframe(df, symbol)
-                        self.storage.save_etf_data(df, symbol)
-                        self.delisting_tracker.clear_missing(ticker)
-                        refreshed += 1
-                    except Exception as exc:
-                        failed += 1
-                        message = str(exc)
-                        if "No data found" in message or "No rows returned" in message:
-                            self.delisting_tracker.mark_missing(ticker, reason=message)
-                            # Do not retry symbols for which the provider
-                            # returned no rows; transient exceptions remain
-                            # retryable because they are not marked missing.
-                            self.delisting_tracker.promote_aged_missing(
-                                threshold_days=0
+                        100,
+                        cancel_event,
+                    )
+                    futures[future] = ticker
+                pending = set(futures)
+                while pending and not is_cancelled():
+                    done, pending = wait(
+                        pending,
+                        timeout=0.25,
+                        return_when=FIRST_COMPLETED,
+                    )
+                    for future in done:
+                        ticker = futures[future]
+                        try:
+                            symbol, df = future.result()
+                            if df is None or df.empty:
+                                raise ValueError("No rows returned")
+                            self.db.insert_dataframe(df, symbol)
+                            self.storage.save_etf_data(df, symbol)
+                            self.delisting_tracker.clear_missing(ticker)
+                            refreshed += 1
+                        except Exception as exc:
+                            failed += 1
+                            message = str(exc)
+                            if "No data found" in message or "No rows returned" in message:
+                                self.delisting_tracker.mark_missing(ticker, reason=message)
+                                # Empty provider responses enter the missing queue;
+                                # only persistent misses become blacklist entries.
+                                self.delisting_tracker.promote_aged_missing(
+                                    threshold_days=14
+                                )
+                            errors.append({"ticker": ticker, "error": str(exc)})
+                        finally:
+                            completed += 1
+                            progress_pct = 5.0 + (completed / max(1, total)) * 75.0
+                            self._emit_progress(
+                                progress_callback,
+                                job=job,
+                                phase="refreshing",
+                                pct=progress_pct,
+                                detail=f"{completed}/{total} tickers processed",
+                                label="Market Refresh",
+                                active=True,
                             )
-                        errors.append({"ticker": ticker, "error": str(exc)})
-                    finally:
-                        completed += 1
-                        progress_pct = 5.0 + (completed / max(1, total)) * 75.0
-                        self._emit_progress(
-                            progress_callback,
-                            job=job,
-                            phase="refreshing",
-                            pct=progress_pct,
-                            detail=f"{completed}/{total} tickers processed",
-                            label="Market Refresh",
-                            active=True,
-                        )
+            finally:
+                for future in futures:
+                    if not future.done():
+                        future.cancel()
+                if hasattr(executor, "shutdown"):
+                    executor.shutdown(wait=False, cancel_futures=True)
+
+        if is_cancelled():
+            logger.info(
+                "Market refresh cancelled after %d/%d tickers", completed, total
+            )
+            self._emit_progress(
+                progress_callback,
+                job=job,
+                phase="cancelled",
+                pct=5.0 + (completed / max(1, total)) * 75.0,
+                detail=f"Stopped after {completed}/{total} tickers",
+                label="Market Refresh",
+                active=False,
+            )
+            status = self.get_status(stale_after_days=stale_after_days)
+            status.update(
+                {
+                    "requested": len(to_refresh),
+                    "refreshed": refreshed,
+                    "failed": failed,
+                    "shortlist_rebuilt": False,
+                    "pruned": 0,
+                    "pruned_incomplete": 0,
+                    "deferred_missing": deferred_missing,
+                    "errors": errors[:25],
+                    "cancelled": True,
+                }
+            )
+            return status
+
+        pruned_incomplete = self.db.prune_incomplete_data()
+        pruned = self.db.prune_old_data(days_to_keep=retention_days)
+        logger.info(
+            "Market data retention complete: pruned=%d retention_days=%d",
+            pruned,
+            retention_days,
+        )
 
         shortlist_rebuilt = False
         if rebuild_shortlist:
@@ -683,6 +843,9 @@ class MarketDataRefresher:
                 "refreshed": refreshed,
                 "failed": failed,
                 "shortlist_rebuilt": shortlist_rebuilt,
+                "pruned": pruned,
+                "pruned_incomplete": pruned_incomplete,
+                "deferred_missing": deferred_missing,
                 "errors": errors[:25],
             }
         )

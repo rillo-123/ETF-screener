@@ -1,8 +1,71 @@
 # Current state
 
+- -Summary
+
+- Completed cautious, cancellable Yahoo access with process-wide pacing, cooldown, and streamed DSLX matches from SQLite.
+- Added provider-neutral market-data adapters while retaining Yahoo as the default, plus automatic background discovery and fetching of cache-missing symbols only.
+- Fixed threaded SQLite ownership, Heikin-Ashi EMA chart alignment, logarithmic volume scaling, DSLX catalogue reload, and removal of the legacy Aggregated lane.
+- Added strict, average, loose, and confirmed HA dip-finder strategies with expanded DSLX candle and EMA geometry.
+
+- Reload now refreshes the DSLX catalogue as well as selected file contents;
+  files added on disk become available without restarting the backend.
+- `ha_dipfinder.dslx` scans for three green HA bodies above EMA 20 High, two
+  descending red candles whose final lower wick touches EMA 20 Low, and a green
+  recovery closing above the final red high. EMA 200 Close slope must stay
+  positive across all six candles; entry is delayed until confirmation.
+- The dashboard strategy catalogue now includes `ha_breakout_strict`,
+  `ha_breakout_average`, and `ha_breakout_loose` as separate latest-candle
+  variants, without replacing the experimental `ha_breakout_other` file.
+- Heikin-Ashi charts calculate all source-aware EMA overlays from Heikin-Ashi
+  OHLC, so visual EMA slopes match the values tested by DSLX strategies.
+- Chart volume panes use logarithmic scaling, preserving visibility of normal
+  sessions when one or two extreme volume spikes dominate the series.
+- Incremental DSLX workers now own separate SQLite connections, preventing the
+  cross-thread connection error observed during the Nasdaq scan.
+- Structural DSLX charts use DSLX-native historical signals and dashboard
+  charts no longer render the disabled legacy Aggregated lane.
+- MOVE's sparse-looking volume is verified provider data rather than missing
+  cache rows: its latest volume spike is over eight times its recent average.
+- This repair checkpoint passes with 354 tests and 3 intentional skips.
+- Historical data now enters through a provider-neutral protocol and factory.
+  `ETF_SCREENER_MARKET_DATA_PROVIDER` selects `yahoo` (default) or `finnhub`
+  without changing cache refresh, persistence, screening, or dashboard code.
+- The Finnhub adapter now matches the incremental and cancellable Yahoo
+  contract, normalizes its candles into the shared schema, paces requests, and
+  explains authentication/plan failures. Finnhub currently documents stock
+  candles as Premium access.
+- Provider-refactor verification passes with 352 tests and 3 intentional skips,
+  with Ruff clean across all source and tests.
+- DSLX screens over the selected cached universe now stream match cards into
+  the GUI as each ticker is evaluated. Users can inspect charts while the
+  remaining Nasdaq symbols continue to trickle through in the background.
+- Pressing Run no longer blocks on an automatic Yahoo refresh. Cached screening
+  starts immediately; market refresh is a separate cancellable job.
+- Yahoo downloads share a process-wide one-request-per-second gate, use at
+  most two refresh workers, and enter exponential cooldown after rate-limit
+  responses instead of retrying aggressively.
+- The full cautious-streaming checkpoint passes with 346 tests and 3 intentional
+  skips, plus clean Python lint and JavaScript syntax validation.
+- Screener Stop now cancels backend work through per-run cancellation tokens;
+  DSLX scans, backtests, control screens, and API market refreshes stop at safe
+  checkpoints instead of continuing after the browser request is aborted.
+- The dashboard launcher no longer starts a second uncancellable full-market
+  refresh process, avoiding the overlapping Yahoo request burst seen during the
+  Nasdaq live test.
+- Structural DSLX patterns accept `any` as an unconstrained member that consumes
+  exactly one real candle. It can repeat for fixed gaps, while `pass` remains a
+  complete no-op exit structure that consumes no candle.
+- DSLX two-EMA channels now accept independent source/period pairs through
+  `ema(source, period, source, period)` and expose inclusive `.body_within` and
+  `.candle_within` geometry predicates. The former ignores wick excursions;
+  the latter requires the full high-to-low candle to fit in the EMA channel.
+- EMA channels expose only the explicit `.body_within` and `.candle_within`
+  geometry names; the ambiguous legacy `.contains` member is unavailable.
 - Added price-normalized ATR filtering to the Heikin-Ashi breakout strategies so flatlining instruments are rejected.
 - Made DSLX conjunction planning least-cost-first with lookback-aware ordering plus per-ticker source and indicator caches.
-- Added the visual indicator predicate not_within_body and documented the candle-region vocabulary.
+- Single-line candle geometry consistently uses entity-first intersection
+  names: `.body_intersects`, `.upper_wick_intersects`, and
+  `.lower_wick_intersects`; negative conditions use `!`.
 - Added and live-tested ha_breakout_other.dslx as a consecutive setup-to-breakout strategy on Nasdaq.
 - Reorganized the Screener interaction zone around strategy selection and a primary Run action, with collapsible preset management and one-click DSLX reload from disk.
 - Verified the milestone with 314 passing unit tests and 7 passing Playwright browser tests; one unit test and two browser tests remain intentionally skipped.

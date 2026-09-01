@@ -1,0 +1,81 @@
+universe dipfinder_liquid_selected {
+  from universe.selected
+  require liquidity {
+    avg_turnover(20) >= 1_000_000
+    median_turnover(20) >= 500_000
+    active_sessions(20) >= 20
+  }
+}
+
+strategy dipfinder {
+  source universe.dipfinder_liquid_selected
+  candles timeframe "1d" as heikin_ashi
+  scan latest
+
+  candle green_1 {
+    when =>
+      is_green
+      && open > ema("high", 20)
+      && close > ema("high", 20)
+      && ema("close", 200).slope > 0
+  }
+
+  candle green_2 {
+    when =>
+      is_green
+      && open > ema("high", 20)
+      && close > ema("high", 20)
+      && ema("close", 200).slope > 0
+  }
+
+  candle green_3 {
+    when =>
+      is_green
+      && open > ema("high", 20)
+      && close > ema("high", 20)
+      && ema("close", 200).slope > 0
+  }
+
+  candle dip_red_1 {
+    when =>
+      is_red
+      && close < green_3.close
+      && ema("close", 200).slope > 0
+  }
+
+  candle dip_red_2 {
+    when =>
+      is_red
+      && close < dip_red_1.close
+      && ema("low", 20).lower_wick_intersects
+      && ema("close", 200).slope > 0
+  }
+
+  candle recovery {
+    when =>
+      is_green
+      && close > dip_red_2.high
+      && ema("close", 200).slope > 0
+  }
+
+  candle breakdown {
+    when => close < ema("low", 20)
+  }
+
+  entrystruct {
+    green_1
+    green_2
+    green_3
+    dip_red_1
+    dip_red_2
+    recovery
+    at recovery.close
+  }
+
+  exitstruct {
+    breakdown
+  }
+}
+
+let matches = dipfinder.run()
+matches.show()

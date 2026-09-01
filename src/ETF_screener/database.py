@@ -728,14 +728,35 @@ class ETFDatabase:
         Returns:
             Number of records deleted
         """
+        retention_days = int(days_to_keep)
+        if retention_days < 1:
+            raise ValueError("days_to_keep must be at least 1")
+
         conn = self._get_connection()
         cursor = conn.cursor()
 
         cursor.execute(
             "DELETE FROM etf_data WHERE date < date('now', '-' || ? || ' days')",
-            (days_to_keep,),
+            (retention_days,),
         )
 
+        deleted_count = cursor.rowcount
+        conn.commit()
+        return deleted_count
+
+    def prune_incomplete_data(self) -> int:
+        """Delete candles without a complete OHLC body."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            DELETE FROM etf_data
+            WHERE open IS NULL
+               OR high IS NULL
+               OR low IS NULL
+               OR close IS NULL
+            """
+        )
         deleted_count = cursor.rowcount
         conn.commit()
         return deleted_count

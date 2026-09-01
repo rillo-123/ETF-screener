@@ -20,7 +20,7 @@ import pandas as pd
 import yfinance as yf
 from typing import Any, Optional
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, Response, JSONResponse
@@ -28,7 +28,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from ETF_screener.database import ETFDatabase
-from ETF_screener.dslx import DSLXError, DSLXProgramInterpreter, parse_program
+from ETF_screener.dslx import (
+    DSLXError,
+    DSLXProgramInterpreter,
+    backtest_signals as dslx_backtest_signals,
+    parse_program,
+)
 from ETF_screener.backtester import Backtester
 from ETF_screener.config_loader import get_paths
 from ETF_screener.dsl_parser import (
@@ -134,6 +139,12 @@ _JOB_PROGRESS_STATE: dict[str, object] = {
     "error": None,
     "payload": None,
 }
+_JOB_CANCELLATION_LOCK = Lock()
+_JOB_CANCELLATION_EVENTS: dict[str, tuple[str, Event]] = {}
+_SCREEN_EVENT_LOCK = Lock()
+_SCREEN_EVENT_RUNS: dict[str, dict[str, object]] = {}
+_SCREEN_EVENT_MAX_RUNS = 8
+_SCREEN_EVENT_MAX_EVENTS = 2500
 _BACKTEST_EVENT_LOCK = Lock()
 _BACKTEST_EVENT_RUNS: dict[str, dict[str, object]] = {}
 _BACKTEST_EVENT_MAX_RUNS = 8
@@ -166,6 +177,114 @@ def _safe_float(val, default=None):
         return default if (math.isnan(f) or math.isinf(f)) else f
     except (TypeError, ValueError):
         return default
+
+
+class DashboardJobCancelled(Exception):
+    """Raised when a dashboard job observes a cooperative stop request."""
+
+
+def _begin_cancellable_job(job: str, request_id: str | None = None) -> tuple[str, Event]:
+    """Register one active cancellable job and reject overlapping work."""
+    safe_request_id = str(request_id or uuid.uuid4().hex).strip() or uuid.uuid4().hex
+    cancel_event = Event()
+    with _JOB_CANCELLATION_LOCK:
+        existing = _JOB_CANCELLATION_EVENTS.get(job)
+        if existing is not None and not existing[1].is_set():
+            raise HTTPException(status_code=409, detail=f"A {job} job is already running")
+        _JOB_CANCELLATION_EVENTS[job] = (safe_request_id, cancel_event)
+    return safe_request_id, cancel_event
+
+
+def _finish_cancellable_job(job: str, request_id: str) -> None:
+    """Remove a cancellation token without disturbing a newer job."""
+    with _JOB_CANCELLATION_LOCK:
+        existing = _JOB_CANCELLATION_EVENTS.get(job)
+        if existing is not None and existing[0] == request_id:
+            _JOB_CANCELLATION_EVENTS.pop(job, None)
+
+
+def _request_job_cancellation(job: str, request_id: str | None = None) -> bool:
+    """Signal the current job, optionally requiring its request identifier."""
+    with _JOB_CANCELLATION_LOCK:
+        existing = _JOB_CANCELLATION_EVENTS.get(job)
+        if existing is None:
+            return False
+        active_request_id, cancel_event = existing
+        if request_id and active_request_id != request_id:
+            return False
+        cancel_event.set()
+        return True
+
+
+def _raise_if_cancelled(cancel_event: Event) -> None:
+    if cancel_event.is_set():
+        raise DashboardJobCancelled("Job cancelled by user")
+
+
+def _new_screen_event_run(run_id: str) -> None:
+    """Create a bounded event stream for one screen request."""
+    with _SCREEN_EVENT_LOCK:
+        _SCREEN_EVENT_RUNS[run_id] = {
+            "run_id": run_id,
+            "events": deque(maxlen=_SCREEN_EVENT_MAX_EVENTS),
+            "next_seq": 1,
+            "active": True,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        while len(_SCREEN_EVENT_RUNS) > _SCREEN_EVENT_MAX_RUNS:
+            oldest_run_id = next(iter(_SCREEN_EVENT_RUNS))
+            if oldest_run_id == run_id and len(_SCREEN_EVENT_RUNS) == 1:
+                break
+            _SCREEN_EVENT_RUNS.pop(oldest_run_id, None)
+
+
+def _append_screen_event(
+    run_id: str,
+    event_type: str,
+    payload: object | None = None,
+) -> None:
+    with _SCREEN_EVENT_LOCK:
+        run = _SCREEN_EVENT_RUNS.get(run_id)
+        if run is None:
+            return
+        seq = int(run.get("next_seq") or 1)
+        events = run.get("events")
+        if isinstance(events, deque):
+            events.append(
+                {
+                    "seq": seq,
+                    "type": event_type,
+                    "payload": _json_safe_value(payload),
+                }
+            )
+        run["next_seq"] = seq + 1
+        run["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def _finish_screen_event_run(run_id: str, status: str) -> None:
+    _append_screen_event(run_id, status, {"status": status})
+    with _SCREEN_EVENT_LOCK:
+        run = _SCREEN_EVENT_RUNS.get(run_id)
+        if run is not None:
+            run["active"] = False
+
+
+def _get_screen_events(run_id: str, after_seq: int, limit: int) -> dict[str, object]:
+    with _SCREEN_EVENT_LOCK:
+        run = _SCREEN_EVENT_RUNS.get(run_id)
+        if run is None:
+            return {"run_id": run_id, "active": False, "events": []}
+        events = run.get("events")
+        selected = (
+            [event for event in events if int(event.get("seq") or 0) > after_seq]
+            if isinstance(events, deque)
+            else []
+        )
+        return {
+            "run_id": run_id,
+            "active": bool(run.get("active")),
+            "events": selected[: max(1, min(int(limit), 500))],
+        }
 
 
 def _json_safe_value(value: object) -> object:
@@ -601,6 +720,9 @@ app.mount(
     StaticFiles(directory="src/ETF_screener/dashboard/static"),
     name="static",
 )
+DSLX_STRATEGY_DIRECTORY = (
+    Path(__file__).resolve().parents[3] / "strategies" / "dslx"
+)
 
 
 def get_strategies():
@@ -626,12 +748,12 @@ def _dslx_strategy_path(name: str) -> Path:
     safe_name = str(name or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9_-]+", safe_name):
         raise HTTPException(status_code=400, detail="Invalid DSLX strategy name")
-    return Path("strategies") / "dslx" / f"{safe_name}.dslx"
+    return DSLX_STRATEGY_DIRECTORY / f"{safe_name}.dslx"
 
 
 def get_dslx_strategies() -> list[str]:
     """List canonical DSLX strategy files, without mixing in legacy .dsl scripts."""
-    directory = Path("strategies") / "dslx"
+    directory = DSLX_STRATEGY_DIRECTORY
     if not directory.exists():
         return []
     return sorted(path.stem for path in directory.glob("*.dslx") if path.is_file())
@@ -2324,6 +2446,45 @@ async def job_progress():
         return _json_safe_value(dict(_JOB_PROGRESS_STATE))
 
 
+@app.post("/api/jobs/{job}/cancel")
+async def cancel_dashboard_job(job: str, request: Request):
+    """Request cooperative cancellation of a running dashboard job."""
+    if job not in {"screen", "market-refresh"}:
+        raise HTTPException(status_code=404, detail="Unknown cancellable job")
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    request_id = str(payload.get("request_id") or "").strip() or None
+    cancelled = _request_job_cancellation(job, request_id)
+    if cancelled:
+        with _JOB_PROGRESS_LOCK:
+            progress_pct = _finite_number(_JOB_PROGRESS_STATE.get("pct"), 0.0)
+            progress_label = str(
+                _JOB_PROGRESS_STATE.get("label")
+                or job.replace("-", " ").title()
+            )
+        _set_job_progress(
+            job,
+            "cancelling",
+            pct=progress_pct,
+            label=progress_label,
+            detail="Stopping at the next safe checkpoint...",
+            active=True,
+        )
+    return {"job": job, "request_id": request_id, "cancel_requested": cancelled}
+
+
+@app.get("/api/screen/events")
+async def screen_events(
+    run_id: str,
+    after_seq: int = 0,
+    limit: int = 200,
+):
+    """Return incremental progress and match events for a screen run."""
+    return _json_safe_value(_get_screen_events(run_id, after_seq, limit))
+
+
 @app.get("/api/backtest/events")
 async def backtest_events(
     run_id: Optional[str] = None,
@@ -2652,9 +2813,11 @@ def refresh_market_data(
     force: bool = True,
     stale_after_days: int = 0,
     depth: int = 180,
-    max_workers: int = 8,
+    max_workers: int = 2,
     source: Optional[str] = None,
     ticker_list: Optional[str] = None,
+    request_id: Optional[str] = None,
+    missing_only: bool = False,
 ):
     """Refresh stale market data, then rebuild shortlist artifacts."""
     safe_depth = max(60, min(int(depth), 1500))
@@ -2665,13 +2828,17 @@ def refresh_market_data(
     if _normalize_market_source(source) == "list" and str(ticker_list or "").strip():
         tracked_tickers_override = _parse_strategy_selection(ticker_list)
     logger.info(
-        "Dashboard market refresh requested: source=%s force=%s stale_after_days=%s depth=%s max_workers=%s ticker_count=%s",
+        "Dashboard market refresh requested: source=%s force=%s stale_after_days=%s depth=%s max_workers=%s ticker_count=%s missing_only=%s",
         source or "default",
         force,
         safe_stale_after_days,
         safe_depth,
         safe_workers,
         len(tracked_tickers_override or []),
+        missing_only,
+    )
+    refresh_request_id, cancel_event = _begin_cancellable_job(
+        "market-refresh", request_id
     )
     refresher = MarketDataRefresher(
         db_path=str(get_db().db_path),
@@ -2685,22 +2852,33 @@ def refresh_market_data(
             "stale_after_days": safe_stale_after_days,
             "force": force,
             "max_workers": safe_workers,
-            "rebuild_shortlist": True,
+            "rebuild_shortlist": not missing_only,
         }
+        if "missing_only" in inspect.signature(
+            refresher.refresh_market_data
+        ).parameters:
+            refresh_kwargs["missing_only"] = missing_only
         if (
+            not missing_only
+            and
             "progress_callback"
             in inspect.signature(refresher.refresh_market_data).parameters
         ):
             refresh_kwargs["progress_callback"] = _update_job_progress
-        _set_job_progress(
-            "market-refresh",
-            "starting",
-            pct=2.0,
-            label="Market Refresh",
-            detail="Preparing market refresh",
-            active=True,
-        )
+        if "cancel_event" in inspect.signature(refresher.refresh_market_data).parameters:
+            refresh_kwargs["cancel_event"] = cancel_event
+        if not missing_only:
+            _set_job_progress(
+                "market-refresh",
+                "starting",
+                pct=2.0,
+                label="Market Refresh",
+                detail="Preparing market refresh",
+                active=True,
+            )
         result = refresher.refresh_market_data(**refresh_kwargs)
+        if result.get("cancelled"):
+            return JSONResponse(status_code=409, content=_json_safe_value(result))
         logger.info(
             "Dashboard market refresh finished: requested=%s refreshed=%s failed=%s shortlist_rebuilt=%s latest_market_date=%s",
             result.get("requested"),
@@ -2711,19 +2889,22 @@ def refresh_market_data(
         )
         return result
     except Exception as e:
-        _set_job_progress(
-            "market-refresh",
-            "failed",
-            pct=100.0,
-            label="Market Refresh",
-            detail=str(e),
-            active=False,
-            error=str(e),
-        )
+        if not missing_only:
+            _set_job_progress(
+                "market-refresh",
+                "failed",
+                pct=100.0,
+                label="Market Refresh",
+                detail=str(e),
+                active=False,
+                error=str(e),
+            )
         logger.error("Market refresh endpoint failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        _clear_job_progress("market-refresh")
+        if not missing_only:
+            _clear_job_progress("market-refresh")
+        _finish_cancellable_job("market-refresh", refresh_request_id)
 
 
 def _refresh_market_data_for_gui(
@@ -2731,6 +2912,7 @@ def _refresh_market_data_for_gui(
     ticker_list: Optional[str] = None,
     *,
     rebuild_shortlist: bool = True,
+    cancel_event: Event | None = None,
 ) -> dict[str, object] | None:
     """Top up market data for GUI-driven actions when a user asks for it."""
     if _normalize_market_source(source) == "all":
@@ -2743,6 +2925,7 @@ def _refresh_market_data_for_gui(
                 source=child_source,
                 ticker_list=ticker_list,
                 rebuild_shortlist=False,
+                cancel_event=cancel_event,
             )
             if result:
                 results.append(result)
@@ -2774,7 +2957,7 @@ def _refresh_market_data_for_gui(
             "depth": 180,
             "stale_after_days": 0,
             "force": False,
-            "max_workers": 8,
+            "max_workers": 2,
             "rebuild_shortlist": rebuild_shortlist,
         }
         if (
@@ -2782,6 +2965,11 @@ def _refresh_market_data_for_gui(
             in inspect.signature(refresher.refresh_market_data).parameters
         ):
             refresh_kwargs["progress_callback"] = _update_job_progress
+        if (
+            cancel_event is not None
+            and "cancel_event" in inspect.signature(refresher.refresh_market_data).parameters
+        ):
+            refresh_kwargs["cancel_event"] = cancel_event
         _set_job_progress(
             "market-refresh",
             "starting",
@@ -3151,6 +3339,7 @@ async def save_strategy(request: Request):
 
 @app.get("/api/screen")
 async def screen(
+    request_id: Optional[str] = None,
     strategy: Optional[str] = None,
     dsl_content: Optional[str] = None,
     refresh: bool = False,
@@ -3256,6 +3445,9 @@ async def screen(
         exclude_weak_liquidity=exclude_weak_liquidity,
         exclude_unprofitable=exclude_unprofitable,
     )
+    screen_request_id, cancel_event = _begin_cancellable_job("screen", request_id)
+    _new_screen_event_run(screen_request_id)
+    screen_event_status = "done"
 
     _set_job_progress(
         "screen",
@@ -3271,7 +3463,9 @@ async def screen(
             _refresh_market_data_for_gui(
                 source=scan_scope or exchange,
                 ticker_list=ticker_list,
+                cancel_event=cancel_event,
             )
+            _raise_if_cancelled(cancel_event)
             latest_market_date = _latest_market_date_for(db)
 
         parsed_rsi_events = None
@@ -3469,13 +3663,16 @@ async def screen(
                     "total_errors": 0,
                     "total_candidates": 0,
                 }
-            payload = screen_with_controls(
+            payload = await asyncio.to_thread(
+                screen_with_controls,
                 db_path=db_path,
                 tickers=tickers,
                 latest_market_date=latest_market_date,
                 filters=control_filters,
                 metadata_map=_cached_etf_metadata_map(),
+                cancel_event=cancel_event,
             )
+            _raise_if_cancelled(cancel_event)
             filtered_matches: list[dict[str, object]] = []
             for match in payload.get("matches", []):
                 if not isinstance(match, dict):
@@ -3522,6 +3719,7 @@ async def screen(
 
         if re.match(r"^\s*(?:universe|strategy)\b", content, re.IGNORECASE):
             program = DSLXProgramInterpreter(content)
+            metadata_map = _cached_etf_metadata_map()
             selected_tickers = filter_tickers_by_exchange_and_list(
                 list(_cached_screen_universe(db_path, latest_market_date)),
                 exchange=exchange,
@@ -3556,29 +3754,140 @@ async def screen(
                     )
                 )
 
-            def load_frames(tickers_to_load: list[str]) -> dict[str, pd.DataFrame]:
-                return {
-                    ticker: frame
-                    for ticker in tickers_to_load
-                    if not (frame := db.get_etf_data(ticker)).empty
-                }
+            total_frames_to_load = sum(len(items) for items in source_tickers.values())
+            loaded_frame_count = 0
 
-            frames_by_source = {
-                source_name: load_frames(tickers_to_load)
-                for source_name, tickers_to_load in source_tickers.items()
-            }
-            shown = program.run(
-                selected=frames_by_source["universe.selected"],
-                universes=frames_by_source,
-            )
-            metadata_map = _cached_etf_metadata_map()
-            matches = [
-                {
+            def load_frames(
+                database,
+                tickers_to_load: list[str],
+            ) -> dict[str, pd.DataFrame]:
+                nonlocal loaded_frame_count
+                loaded: dict[str, pd.DataFrame] = {}
+                for ticker in tickers_to_load:
+                    _raise_if_cancelled(cancel_event)
+                    frame = database.get_etf_data(ticker)
+                    if not frame.empty:
+                        loaded[ticker] = frame
+                    loaded_frame_count += 1
+                    if loaded_frame_count == 1 or loaded_frame_count % 25 == 0:
+                        pct = 5.0 + (
+                            loaded_frame_count / max(1, total_frames_to_load)
+                        ) * 35.0
+                        detail = (
+                            f"Loading cached data {loaded_frame_count}/"
+                            f"{total_frames_to_load}"
+                        )
+                        _set_job_progress(
+                            "screen",
+                            "loading",
+                            pct=pct,
+                            label="Screen",
+                            detail=detail,
+                            active=True,
+                        )
+                        _append_screen_event(
+                            screen_request_id,
+                            "progress",
+                            {"pct": pct, "detail": detail},
+                        )
+                return loaded
+
+            def build_match_payload(match) -> dict[str, object]:
+                return {
                     **match.as_dict(),
-                    "name": str(metadata_map.get(match.ticker.upper(), {}).get("name") or match.ticker),
-                    "status": "Entry Signal" if match.age == 0 else f"Recent Entry ({match.age}d)",
+                    "name": str(
+                        metadata_map.get(match.ticker.upper(), {}).get("name")
+                        or match.ticker
+                    ),
+                    "status": (
+                        "Entry Signal"
+                        if match.age == 0
+                        else f"Recent Entry ({match.age}d)"
+                    ),
                     "days_since_entry": match.age,
                 }
+
+            def publish_match(match) -> None:
+                _append_screen_event(
+                    screen_request_id,
+                    "match",
+                    {"match": build_match_payload(match)},
+                )
+
+            def publish_progress(ticker: str, completed: int, total: int) -> None:
+                if completed not in {1, total} and completed % 10 != 0:
+                    return
+                pct = 40.0 + (completed / max(1, total)) * 55.0
+                detail = f"Evaluated {completed}/{total}, last {ticker}"
+                _set_job_progress(
+                    "screen",
+                    "evaluating",
+                    pct=pct,
+                    label="Screen",
+                    detail=detail,
+                    active=True,
+                )
+                _append_screen_event(
+                    screen_request_id,
+                    "progress",
+                    {"pct": pct, "detail": detail},
+                )
+
+            def run_program():
+                # SQLite connections are thread-affine. The endpoint has
+                # already used ``db`` on its request thread, so the worker must
+                # open and close its own connection instead of capturing it.
+                worker_db = (
+                    ETFDatabase(db_path=db_path)
+                    if isinstance(db, ETFDatabase)
+                    else db  # Lightweight test doubles do not own SQLite handles.
+                )
+                try:
+                    if set(source_tickers) == {"universe.selected"}:
+                        selected_frames: dict[str, pd.DataFrame] = {}
+                        streamed_lists: dict[str, list[object]] = {
+                            name: [] for name in program.program.shows
+                        }
+                        selected_items = source_tickers["universe.selected"]
+                        for completed, ticker in enumerate(selected_items, start=1):
+                            _raise_if_cancelled(cancel_event)
+                            one_frame = load_frames(worker_db, [ticker])
+                            if one_frame:
+                                selected_frames.update(one_frame)
+                                ticker_lists = program.run(
+                                    selected=one_frame,
+                                    universes={"universe.selected": one_frame},
+                                    cancel_check=lambda: _raise_if_cancelled(
+                                        cancel_event
+                                    ),
+                                    match_callback=publish_match,
+                                )
+                                for name, match_list in ticker_lists.items():
+                                    streamed_lists.setdefault(name, []).extend(
+                                        match_list
+                                    )
+                            publish_progress(ticker, completed, len(selected_items))
+                        return {"universe.selected": selected_frames}, streamed_lists
+
+                    frames = {
+                        source_name: load_frames(worker_db, tickers_to_load)
+                        for source_name, tickers_to_load in source_tickers.items()
+                    }
+                    shown_lists = program.run(
+                        selected=frames["universe.selected"],
+                        universes=frames,
+                        cancel_check=lambda: _raise_if_cancelled(cancel_event),
+                        match_callback=publish_match,
+                        progress_callback=publish_progress,
+                    )
+                    return frames, shown_lists
+                finally:
+                    if worker_db is not db:
+                        worker_db.close()
+
+            frames_by_source, shown = await asyncio.to_thread(run_program)
+            matches = [
+                build_match_payload(match)
                 for match_list in shown.values()
                 for match in match_list
             ]
@@ -3686,12 +3995,15 @@ async def screen(
             in inspect.signature(bt.run_parallel_backtest).parameters
         ):
             run_kwargs["progress_callback"] = _update_job_progress
+        if "cancel_event" in inspect.signature(bt.run_parallel_backtest).parameters:
+            run_kwargs["cancel_event"] = cancel_event
         results = await asyncio.to_thread(
             bt.run_parallel_backtest,
             tickers,
             bt.scripted_strategy,
             **run_kwargs,
         )
+        _raise_if_cancelled(cancel_event)
         logger.info(
             "Backtest complete, processing %d results", len(results) if results else 0
         )
@@ -3857,7 +4169,29 @@ async def screen(
         _save_cached_screen_result(cache_key, payload)
         return payload
 
+    except DashboardJobCancelled:
+        screen_event_status = "cancelled"
+        logger.info("Screen run %s cancelled by user", screen_request_id)
+        _set_job_progress(
+            "screen",
+            "cancelled",
+            pct=_finite_number(_JOB_PROGRESS_STATE.get("pct"), 0.0),
+            label="Screen",
+            detail="Screen run stopped",
+            active=False,
+        )
+        return JSONResponse(
+            status_code=409,
+            content={
+                "cancelled": True,
+                "matches": [],
+                "errors": [],
+                "total_errors": 0,
+                "total_candidates": 0,
+            },
+        )
     except KeyboardInterrupt:
+        screen_event_status = "failed"
         logger.warning("Screen run interrupted by KeyboardInterrupt", exc_info=True)
         _set_job_progress(
             "screen",
@@ -3878,6 +4212,7 @@ async def screen(
             },
         )
     except DSLXError as e:
+        screen_event_status = "failed"
         detail = f"Invalid DSLX strategy: {e}"
         logger.warning("Screen DSLX validation failed: %s", e)
         _set_job_progress(
@@ -3900,6 +4235,7 @@ async def screen(
             },
         )
     except Exception as e:
+        screen_event_status = "failed"
         logger.error("Screen endpoint failed: %s", str(e), exc_info=True)
         _set_job_progress(
             "screen",
@@ -3919,6 +4255,11 @@ async def screen(
                 "total_candidates": 0,
             },
         )
+    finally:
+        _finish_screen_event_run(screen_request_id, screen_event_status)
+        _finish_cancellable_job("screen", screen_request_id)
+        if hasattr(db, "close"):
+            db.close()
 
 
 @app.post("/api/screen/export")
@@ -5352,27 +5693,47 @@ async def get_chart(
         strategy_content = load_strategy_content(strategy)
 
     if strategy_content:
-        entry_script, exit_script = parse_strategy_scripts(strategy_content)
-        if entry_script:
-            bt = Backtester()
+        is_structural_dslx = bool(
+            re.match(r"^\s*(?:universe|strategy)\b", strategy_content, re.IGNORECASE)
+        )
+        if is_structural_dslx:
             try:
-                strat_res = bt.scripted_strategy(
+                # Structural DSLX is not a legacy entry expression. Evaluate it
+                # with the DSLX interpreter so charts receive genuine historical
+                # entry/exit masks without noisy legacy-parser errors.
+                df = dslx_backtest_signals(
+                    strategy_content,
                     df.copy(),
                     ticker=ticker,
-                    entry_script=entry_script,
-                    exit_script=exit_script,
                 )
-                if (
-                    isinstance(strat_res, dict)
-                    and strat_res.get("df") is not None
-                    and not strat_res["df"].empty
-                ):
-                    df = strat_res["df"]
-            except Exception:
+            except DSLXError:
                 logger.debug(
-                    "Could not enrich chart data with strategy indicators for %s",
+                    "Could not enrich chart data with structural DSLX for %s",
                     ticker,
+                    exc_info=True,
                 )
+        else:
+            entry_script, exit_script = parse_strategy_scripts(strategy_content)
+            if entry_script:
+                bt = Backtester()
+                try:
+                    strat_res = bt.scripted_strategy(
+                        df.copy(),
+                        ticker=ticker,
+                        entry_script=entry_script,
+                        exit_script=exit_script,
+                    )
+                    if (
+                        isinstance(strat_res, dict)
+                        and strat_res.get("df") is not None
+                        and not strat_res["df"].empty
+                    ):
+                        df = strat_res["df"]
+                except Exception:
+                    logger.debug(
+                        "Could not enrich chart data with strategy indicators for %s",
+                        ticker,
+                    )
 
     overlay_periods = [ema_slope_period_1, ema_slope_period_2, ema_slope_period_3]
     if ema_overlay_periods:

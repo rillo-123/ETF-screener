@@ -32,25 +32,9 @@ if ($portProcess) {
 }
 
 if (Test-Path $python) {
-    # Do not make the dashboard wait for a potentially long first-run refresh.
-    # SQLite WAL mode lets the server read the existing data while this process
-    # adds fresh rows in the background.
-    $logDir = Join-Path $root "logs"
-    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-    $refreshScript = Join-Path $root "src\ETF_screener\main.py"
-    $refreshOutLog = Join-Path $logDir "dashboard-refresh.out.log"
-    $refreshErrLog = Join-Path $logDir "dashboard-refresh.err.log"
-    $refreshProcess = Start-Process `
-        -FilePath $python `
-        -ArgumentList @($refreshScript, "refresh", "--depth", "365") `
-        -WorkingDirectory $root `
-        -RedirectStandardOutput $refreshOutLog `
-        -RedirectStandardError $refreshErrLog `
-        -WindowStyle Hidden `
-        -PassThru
-    Write-Host "Refreshing ETF data in the background (PID: $($refreshProcess.Id))." -ForegroundColor Green
-    Write-Host "The dashboard is available immediately; refresh logs are in logs\dashboard-refresh.*.log." -ForegroundColor Gray
-
+    # Market refreshes are started through the dashboard API so they share its
+    # progress and cancellation token. Do not launch an uncancellable second
+    # refresh process here.
     Write-Host "Starting server with auto-reload on port 5000..." -ForegroundColor Gray
     & $python -m uvicorn "ETF_screener.dashboard.app_fast:app" `
         --host 127.0.0.1 `

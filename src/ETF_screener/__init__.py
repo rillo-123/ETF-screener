@@ -16,6 +16,10 @@ from ETF_screener.indicators import (
     calculate_ema,
     calculate_supertrend,
 )
+from ETF_screener.market_data_provider import (
+    MarketDataProvider,
+    create_market_data_provider,
+)
 from ETF_screener.screener import ETFScreener
 from ETF_screener.screener_api import Screener
 from ETF_screener.storage import ParquetStorage
@@ -38,6 +42,8 @@ if _InteractivePlotter is not None:
 __all__ = [
     "FinnhubFetcher",
     "YFinanceFetcher",
+    "MarketDataProvider",
+    "create_market_data_provider",
     "ETFDatabase",
     "AssetFilterService",
     "ETFDiscovery",
