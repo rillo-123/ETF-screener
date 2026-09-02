@@ -1370,32 +1370,41 @@ def _cached_screen_universe(
     with ETFDatabase(db_path=db_path) as db:
         conn = db._get_connection()
         universe_query = """
-            WITH ranked AS (
-                SELECT
-                    ticker,
-                    date,
-                    volume,
-                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
-                FROM etf_data
-            ),
-            agg AS (
+            WITH agg AS (
                 SELECT
                     ticker,
                     MAX(date) AS last_date,
                     COUNT(*) AS total_rows,
-                    SUM(CASE WHEN volume > 0 THEN 1 ELSE 0 END) AS nonzero_volume_rows,
-                    SUM(CASE WHEN rn <= 30 THEN 1 ELSE 0 END) AS recent_rows,
-                    SUM(CASE WHEN rn <= 30 AND volume = 0 THEN 1 ELSE 0 END) AS recent_zero_volume_rows
-                FROM ranked
+                    SUM(CASE WHEN volume > 0 THEN 1 ELSE 0 END) AS nonzero_volume_rows
+                FROM etf_data
                 GROUP BY ticker
             )
             SELECT ticker
             FROM agg
             WHERE total_rows >= 50
               AND nonzero_volume_rows >= 10
-              AND recent_rows >= 10
-              AND recent_zero_volume_rows < 2
               AND last_date >= date('now', '-180 day')
+              AND (
+                  SELECT COUNT(*)
+                  FROM (
+                      SELECT volume
+                      FROM etf_data AS recent
+                      WHERE recent.ticker = agg.ticker
+                      ORDER BY date DESC
+                      LIMIT 30
+                  )
+              ) >= 10
+              AND (
+                  SELECT COUNT(*)
+                  FROM (
+                      SELECT volume
+                      FROM etf_data AS recent
+                      WHERE recent.ticker = agg.ticker
+                      ORDER BY date DESC
+                      LIMIT 30
+                  ) AS recent_30
+                  WHERE recent_30.volume = 0
+              ) < 2
         """
         universe_df = pd.read_sql_query(universe_query, conn)
         return tuple(
@@ -3762,12 +3771,17 @@ async def screen(
                 tickers_to_load: list[str],
             ) -> dict[str, pd.DataFrame]:
                 nonlocal loaded_frame_count
-                loaded: dict[str, pd.DataFrame] = {}
+                bulk_loader = getattr(database, "get_ohlcv_frames", None)
+                if callable(bulk_loader) and len(tickers_to_load) > 1:
+                    loaded = bulk_loader(tickers_to_load)
+                else:
+                    loaded = {}
                 for ticker in tickers_to_load:
                     _raise_if_cancelled(cancel_event)
-                    frame = database.get_etf_data(ticker)
-                    if not frame.empty:
-                        loaded[ticker] = frame
+                    if ticker not in loaded:
+                        frame = database.get_etf_data(ticker)
+                        if not frame.empty:
+                            loaded[ticker] = frame
                     loaded_frame_count += 1
                     if loaded_frame_count == 1 or loaded_frame_count % 25 == 0:
                         pct = 5.0 + (
@@ -3849,11 +3863,28 @@ async def screen(
                             name: [] for name in program.program.shows
                         }
                         selected_items = source_tickers["universe.selected"]
-                        for completed, ticker in enumerate(selected_items, start=1):
+                        completed = 0
+                        stream_chunk_size = (
+                            50
+                            if callable(getattr(worker_db, "get_ohlcv_frames", None))
+                            else 1
+                        )
+                        for offset in range(0, len(selected_items), stream_chunk_size):
                             _raise_if_cancelled(cancel_event)
-                            one_frame = load_frames(worker_db, [ticker])
-                            if one_frame:
-                                selected_frames.update(one_frame)
+                            chunk = selected_items[offset : offset + stream_chunk_size]
+                            chunk_frames = load_frames(worker_db, chunk)
+                            for ticker in chunk:
+                                _raise_if_cancelled(cancel_event)
+                                completed += 1
+                                frame = chunk_frames.get(ticker)
+                                if frame is not None:
+                                    one_frame = {ticker: frame}
+                                    selected_frames[ticker] = frame
+                                else:
+                                    one_frame = {}
+                                if not one_frame:
+                                    publish_progress(ticker, completed, len(selected_items))
+                                    continue
                                 ticker_lists = program.run(
                                     selected=one_frame,
                                     universes={"universe.selected": one_frame},
@@ -3866,7 +3897,7 @@ async def screen(
                                     streamed_lists.setdefault(name, []).extend(
                                         match_list
                                     )
-                            publish_progress(ticker, completed, len(selected_items))
+                                publish_progress(ticker, completed, len(selected_items))
                         return {"universe.selected": selected_frames}, streamed_lists
 
                     frames = {

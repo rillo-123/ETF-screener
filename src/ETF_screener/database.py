@@ -363,6 +363,47 @@ class ETFDatabase:
 
         return df
 
+    def get_ohlcv_frames(
+        self,
+        tickers: list[str] | tuple[str, ...],
+        *,
+        chunk_size: int = 400,
+    ) -> dict[str, pd.DataFrame]:
+        """Load screening columns for many tickers with a bounded query count.
+
+        DSLX evaluation only needs ticker, date, OHLC, and volume. Fetching
+        those columns in SQLite-safe chunks avoids one query per instrument and
+        does not materialize the persisted legacy indicator columns.
+        """
+        normalized = list(dict.fromkeys(str(ticker).upper() for ticker in tickers))
+        if not normalized:
+            return {}
+
+        safe_chunk_size = max(1, min(int(chunk_size), 900))
+        conn = self._get_connection()
+        batches: list[pd.DataFrame] = []
+        for offset in range(0, len(normalized), safe_chunk_size):
+            chunk = normalized[offset : offset + safe_chunk_size]
+            placeholders = ",".join("?" for _ in chunk)
+            query = f"""
+                SELECT ticker, date, open, high, low, close, volume
+                FROM etf_data
+                WHERE ticker IN ({placeholders})
+                ORDER BY ticker, date
+            """
+            batches.append(pd.read_sql_query(query, conn, params=chunk))
+
+        populated_batches = [batch for batch in batches if not batch.empty]
+        if not populated_batches:
+            return {}
+        combined = pd.concat(populated_batches, ignore_index=True)
+        combined["Date"] = pd.to_datetime(combined["date"])
+        combined = combined.drop(columns=["date"])
+        return {
+            str(ticker).upper(): frame.reset_index(drop=True)
+            for ticker, frame in combined.groupby("ticker", sort=False)
+        }
+
     def get_tickers(self) -> list[str]:
         """
         Get all tickers in database.

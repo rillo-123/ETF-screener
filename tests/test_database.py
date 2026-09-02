@@ -68,6 +68,28 @@ class TestETFDatabase:
         assert "ETFB" in tickers
         assert len(tickers) == 2
 
+    def test_get_ohlcv_frames_batches_tickers_and_omits_legacy_columns(
+        self, temp_db, sample_data
+    ):
+        temp_db.insert_dataframe(sample_data, "ETFA")
+        temp_db.insert_dataframe(sample_data.iloc[:10], "ETFB")
+
+        frames = temp_db.get_ohlcv_frames(["etfa", "ETFB", "MISSING"], chunk_size=2)
+
+        assert set(frames) == {"ETFA", "ETFB"}
+        assert len(frames["ETFA"]) == 60
+        assert len(frames["ETFB"]) == 10
+        assert list(frames["ETFA"].columns) == [
+            "ticker",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "Date",
+        ]
+        assert frames["ETFA"]["Date"].is_monotonic_increasing
+
     def test_get_latest_date(self, temp_db, sample_data):
         """Test getting latest date."""
         temp_db.insert_dataframe(sample_data, "TEST")

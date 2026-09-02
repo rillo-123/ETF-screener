@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from ETF_screener import screener_controls
 from ETF_screener.dashboard import app_fast
 from ETF_screener.dashboard.app_fast import app
+from ETF_screener.database import ETFDatabase
 from ETF_screener.google_drive_exports import build_screen_google_sheet_title
 from ETF_screener.indicators import add_indicators
 from ETF_screener.storage import ParquetStorage
@@ -991,6 +992,39 @@ def test_cached_screen_universe_uses_db_backed_tickers_only(monkeypatch):
     result = app_fast._cached_screen_universe("fake-db", "2026-04-01")
 
     assert result == ("AAA.DE", "CCC.ST")
+
+
+def test_cached_screen_universe_checks_zero_volume_only_in_latest_30_rows(
+    monkeypatch, tmp_path
+):
+    db_path = tmp_path / "screen-universe.db"
+    dates = pd.date_range(end="2026-09-01", periods=60, freq="D")
+
+    def frame_with_volumes(volumes):
+        return pd.DataFrame(
+            {
+                "Date": dates,
+                "Open": [100.0] * 60,
+                "High": [101.0] * 60,
+                "Low": [99.0] * 60,
+                "Close": [100.5] * 60,
+                "Volume": volumes,
+            }
+        )
+
+    with ETFDatabase(db_path=str(db_path)) as database:
+        database.insert_dataframe(frame_with_volumes([0.0] * 2 + [1_000.0] * 58), "OLDZERO")
+        database.insert_dataframe(frame_with_volumes([1_000.0] * 58 + [0.0] * 2), "NEWZERO")
+
+    monkeypatch.setattr(app_fast, "_cached_blacklist_tickers", lambda: set())
+    app_fast._cached_screen_universe.cache_clear()
+    try:
+        result = app_fast._cached_screen_universe(str(db_path), "2026-09-01")
+    finally:
+        app_fast._cached_screen_universe.cache_clear()
+
+    assert "OLDZERO" in result
+    assert "NEWZERO" not in result
 
 
 def test_screen_endpoint_honors_scan_scope_list(monkeypatch, tmp_path):

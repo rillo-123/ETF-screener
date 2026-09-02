@@ -975,11 +975,13 @@ class CandleSeries:
         low = pd.to_numeric(self.frame[self.columns["low"]], errors="coerce")
         close = pd.to_numeric(self.frame[self.columns["close"]], errors="coerce")
         ha_close = (open_ + high + low + close) / 4
-        ha_open = ha_close.copy()
-        if len(ha_open):
-            ha_open.iloc[0] = (open_.iloc[0] + close.iloc[0]) / 2
-            for row in range(1, len(ha_open)):
-                ha_open.iloc[row] = (ha_open.iloc[row - 1] + ha_close.iloc[row - 1]) / 2
+        # HA open follows y[t] = 0.5*y[t-1] + 0.5*ha_close[t-1].
+        # ``ewm(adjust=False)`` evaluates that recurrence in compiled code and
+        # avoids a Python-level row loop for every ticker in a large screen.
+        ha_open_seed = ha_close.shift(1)
+        if len(ha_open_seed):
+            ha_open_seed.iloc[0] = (open_.iloc[0] + close.iloc[0]) / 2
+        ha_open = ha_open_seed.ewm(alpha=0.5, adjust=False).mean()
         self.frame[self.columns["open"]] = ha_open
         self.frame[self.columns["close"]] = ha_close
         self.frame[self.columns["high"]] = pd.concat([high, ha_open, ha_close], axis=1).max(axis=1)
