@@ -1700,6 +1700,13 @@ def test_dashboard_js_terminal_inactive_backtest_progress_stops_polling():
           if (document.getElementById("page-phase-progress-bar").style.width !== "5%") {{
             throw new Error("A newly named phase did not restart its progress");
           }}
+          window.setNavScanProgress({{ show: false }});
+          if (document.getElementById("page-progress-bar").style.width !== "0%") {{
+            throw new Error("Overall progress did not reset after the run");
+          }}
+          if (document.getElementById("page-phase-progress-bar").style.width !== "0%") {{
+            throw new Error("Current phase progress did not reset after the run");
+          }}
         }})().catch((err) => {{
           console.error(err);
           process.exit(1);

@@ -7860,6 +7860,8 @@
         pageOverallProgressPct = 0;
         pagePhaseProgressPct = 0;
         pagePhaseProgressKey = "";
+        if (nodes.pageBar) nodes.pageBar.style.width = "0%";
+        if (nodes.pagePhaseBar) nodes.pagePhaseBar.style.width = "0%";
       }
       if (show === true && nodes.pageScanProgress) {
         nodes.pageScanProgress.hidden = false;
@@ -7947,7 +7949,7 @@
       if (panel) panel.hidden = !show;
       if (text && show) {
         const count = Math.max(0, Number(missingCount) || 0);
-        text.textContent = `${count} missing symbol${count === 1 ? "" : "s"} queued`;
+        text.textContent = `${count} missing symbol${count === 1 ? "" : "s"} queued · active`;
       }
       if (banner) {
         const scanVisible = !document.getElementById("page-scan-progress")?.hidden;
