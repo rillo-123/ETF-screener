@@ -99,7 +99,9 @@
       display: none !important;
     }
 
-    #page-progress-meta {
+    #page-progress-meta,
+    #page-phase-progress-meta,
+    #page-background-progress-meta {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -107,7 +109,9 @@
       margin-bottom: 0.45rem;
     }
 
-    #page-progress-label {
+    #page-progress-label,
+    #page-phase-progress-label,
+    #page-background-progress-label {
       font-size: 11px;
       font-weight: 800;
       letter-spacing: 0.16em;
@@ -115,14 +119,18 @@
       color: #bfdbfe;
     }
 
-    #page-progress-text {
+    #page-progress-text,
+    #page-phase-progress-text,
+    #page-background-progress-text {
       font-size: 12px;
       font-weight: 700;
       color: #e0f2fe;
       text-align: right;
     }
 
-    #page-progress-track {
+    #page-progress-track,
+    #page-phase-progress-track,
+    #page-background-progress-track {
       width: 100%;
       height: 0.55rem;
       border-radius: 999px;
@@ -131,12 +139,49 @@
       border: 1px solid rgba(148, 163, 184, 0.24);
     }
 
-    #page-progress-bar {
+    #page-progress-bar,
+    #page-phase-progress-bar,
+    #page-background-progress-bar {
       height: 100%;
       width: 0%;
       border-radius: 999px;
       background: linear-gradient(90deg, #38bdf8, #818cf8, #22c55e);
       transition: width 220ms ease;
+    }
+
+    #page-phase-progress {
+      margin-top: 0.55rem;
+    }
+
+    #page-background-progress {
+      margin-top: 0.55rem;
+    }
+
+    #page-phase-progress-meta,
+    #page-background-progress-meta {
+      margin-bottom: 0.3rem;
+    }
+
+    #page-phase-progress-label,
+    #page-phase-progress-text,
+    #page-background-progress-label,
+    #page-background-progress-text {
+      color: #a5f3fc;
+      font-size: 10px;
+    }
+
+    #page-phase-progress-track,
+    #page-background-progress-track {
+      height: 0.38rem;
+    }
+
+    #page-phase-progress-bar {
+      background: linear-gradient(90deg, #22d3ee, #60a5fa);
+    }
+
+    #page-background-progress-bar {
+      width: 100%;
+      background: linear-gradient(90deg, #f59e0b, #f97316);
     }
 
     #plotly-tools-label {
@@ -900,12 +945,32 @@
 </nav>
 
   <div id="page-progress-banner" hidden>
-    <div id="page-progress-meta">
-      <div id="page-progress-label">Working</div>
-      <div id="page-progress-text">0%</div>
+    <div id="page-scan-progress">
+      <div id="page-progress-meta">
+        <div id="page-progress-label">Overall</div>
+        <div id="page-progress-text">0%</div>
+      </div>
+      <div id="page-progress-track">
+        <div id="page-progress-bar"></div>
+      </div>
+      <div id="page-phase-progress">
+        <div id="page-phase-progress-meta">
+          <div id="page-phase-progress-label">Current phase</div>
+          <div id="page-phase-progress-text">Starting…</div>
+        </div>
+        <div id="page-phase-progress-track">
+          <div id="page-phase-progress-bar"></div>
+        </div>
+      </div>
     </div>
-    <div id="page-progress-track">
-      <div id="page-progress-bar"></div>
+    <div id="page-background-progress" hidden>
+      <div id="page-background-progress-meta">
+        <div id="page-background-progress-label">Background data</div>
+        <div id="page-background-progress-text">Waiting…</div>
+      </div>
+      <div id="page-background-progress-track">
+        <div id="page-background-progress-bar" class="animate-pulse"></div>
+      </div>
     </div>
   </div>
 

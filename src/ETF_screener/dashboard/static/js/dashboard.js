@@ -7,6 +7,9 @@
     let marketDataMissingBackfillPromise = null;
     let marketDataMissingBackfillAbortController = null;
     let marketDataMissingBackfillRequestId = null;
+    let pageOverallProgressPct = 0;
+    let pagePhaseProgressPct = 0;
+    let pagePhaseProgressKey = "";
     let tickerSelectUniverse = [];
     let tickerUniverseLoadPromise = null;
     let tickerSelectLastValue = "";
@@ -5109,6 +5112,7 @@
       if (marketStatus) {
         marketStatus.textContent += " · filling missing symbols in background";
       }
+      setBackgroundDataProgress(true, Number(status?.missing_tickers || 0));
       marketDataMissingBackfillPromise = fetch(
         `/api/market-data/refresh?${params.toString()}`,
         { method: "POST", signal: abortController.signal },
@@ -5136,6 +5140,7 @@
           marketDataMissingBackfillPromise = null;
           marketDataMissingBackfillAbortController = null;
           marketDataMissingBackfillRequestId = null;
+          setBackgroundDataProgress(false);
           syncScreenerRunButtonState(Boolean(scanAbortController));
         });
       syncScreenerRunButtonState(Boolean(scanAbortController));
@@ -7830,9 +7835,13 @@
         globalText: document.getElementById("nav-scan-global-text"),
         globalLabel: document.getElementById("nav-scan-global-label"),
         pagePanel: document.getElementById("page-progress-banner"),
+        pageScanProgress: document.getElementById("page-scan-progress"),
         pageBar: document.getElementById("page-progress-bar"),
         pageText: document.getElementById("page-progress-text"),
         pageLabel: document.getElementById("page-progress-label"),
+        pagePhaseBar: document.getElementById("page-phase-progress-bar"),
+        pagePhaseText: document.getElementById("page-phase-progress-text"),
+        pagePhaseLabel: document.getElementById("page-phase-progress-label"),
       };
     }
 
@@ -7847,7 +7856,15 @@
       if (show === true && nodes.pagePanel) {
         nodes.pagePanel.hidden = false;
       } else if (show === false && nodes.pagePanel) {
-        nodes.pagePanel.hidden = true;
+        nodes.pagePanel.hidden = !marketDataMissingBackfillPromise;
+        pageOverallProgressPct = 0;
+        pagePhaseProgressPct = 0;
+        pagePhaseProgressKey = "";
+      }
+      if (show === true && nodes.pageScanProgress) {
+        nodes.pageScanProgress.hidden = false;
+      } else if (show === false && nodes.pageScanProgress) {
+        nodes.pageScanProgress.hidden = true;
       }
 
       if (state.contextLabel && nodes.contextLabel) {
@@ -7879,27 +7896,62 @@
       }
 
       if (nodes.pageLabel) {
-        const nextLabel = state.contextLabel || state.globalLabel || nodes.contextLabel?.textContent || nodes.globalLabel?.textContent || "Working";
+        const nextLabel = state.globalLabel || nodes.globalLabel?.textContent || "Overall";
         nodes.pageLabel.textContent = nextLabel;
       }
       if (nodes.pageText) {
-        const nextText = state.globalText || state.contextText || nodes.globalText?.textContent || nodes.contextText?.textContent || "Working...";
+        const nextText = state.globalText || nodes.globalText?.textContent || "Waiting…";
         nodes.pageText.textContent = nextText;
       }
       if (nodes.pageBar) {
-        const rawPct = state.globalPct !== undefined
-          ? state.globalPct
-          : state.contextPct !== undefined
-            ? state.contextPct
-            : parseFloat(String(nodes.globalBar?.style.width || nodes.pageBar.style.width || "0").replace("%", ""));
-        const pct = Math.max(0, Math.min(100, Number(rawPct) || 0));
-        nodes.pageBar.style.width = `${pct}%`;
-        const working = state.globalWorking !== undefined
-          ? Boolean(state.globalWorking)
-          : state.contextWorking !== undefined
-            ? Boolean(state.contextWorking)
-            : false;
-        nodes.pageBar.classList.toggle("animate-pulse", working);
+        if (state.globalPct !== undefined) {
+          const pct = Math.max(0, Math.min(100, Number(state.globalPct) || 0));
+          pageOverallProgressPct = Math.max(pageOverallProgressPct, pct);
+          nodes.pageBar.style.width = `${pageOverallProgressPct}%`;
+        }
+        nodes.pageBar.classList.toggle(
+          "animate-pulse",
+          Boolean(state.globalWorking),
+        );
+      }
+      if (nodes.pagePhaseLabel) {
+        const nextLabel = state.contextLabel || nodes.contextLabel?.textContent || "Current phase";
+        if (nextLabel !== pagePhaseProgressKey) {
+          pagePhaseProgressKey = nextLabel;
+          pagePhaseProgressPct = 0;
+          if (nodes.pagePhaseBar) nodes.pagePhaseBar.style.width = "0%";
+        }
+        nodes.pagePhaseLabel.textContent = nextLabel;
+      }
+      if (nodes.pagePhaseText) {
+        const nextText = state.contextText || nodes.contextText?.textContent || "Working…";
+        nodes.pagePhaseText.textContent = nextText;
+      }
+      if (nodes.pagePhaseBar) {
+        if (state.contextPct !== undefined) {
+          const pct = Math.max(0, Math.min(100, Number(state.contextPct) || 0));
+          pagePhaseProgressPct = Math.max(pagePhaseProgressPct, pct);
+          nodes.pagePhaseBar.style.width = `${pagePhaseProgressPct}%`;
+        }
+        nodes.pagePhaseBar.classList.toggle(
+          "animate-pulse",
+          Boolean(state.contextWorking),
+        );
+      }
+    }
+
+    function setBackgroundDataProgress(show, missingCount = 0) {
+      const banner = document.getElementById("page-progress-banner");
+      const panel = document.getElementById("page-background-progress");
+      const text = document.getElementById("page-background-progress-text");
+      if (panel) panel.hidden = !show;
+      if (text && show) {
+        const count = Math.max(0, Number(missingCount) || 0);
+        text.textContent = `${count} missing symbol${count === 1 ? "" : "s"} queued`;
+      }
+      if (banner) {
+        const scanVisible = !document.getElementById("page-scan-progress")?.hidden;
+        banner.hidden = !show && !scanVisible;
       }
     }
 
@@ -8266,55 +8318,21 @@
         console.log("Screen scan starting with URL:", url);
         console.log("Current strategy:", currentStrategy);
 
-        // Fake progress only for the early part of the wait. Once the bar
-        // reaches 90%, hold it steady and mark it as working so the UI stays
-        // calm while the backend finishes.
-        let fakeProg = 0;
-        let isWorkingPhase = false;
-        let progInterval = null;
-        const startProgress = () => {
-          progInterval = setInterval(() => {
-            const nodes = getNavScanProgressNodes();
-            if (!nodes.contextBar || !nodes.contextText) return;
-
-            if (fakeProg < 90) {
-              fakeProg = Math.min(90, fakeProg + Math.max(0.5, (90 - fakeProg) * 0.12));
-              setNavScanProgress({
-                contextLabel: "Screen",
-                contextText: `${Math.round(fakeProg)}%`,
-                contextPct: fakeProg,
-              });
-              return;
-            }
-
-            if (!isWorkingPhase) {
-              isWorkingPhase = true;
-              setNavScanProgress({
-                contextLabel: "Screen",
-                contextText: "WORKING",
-                contextPct: 90,
-                contextWorking: true,
-              });
-            }
-            setNavScanProgress({
-              contextLabel: "Screen",
-              contextText: "WORKING",
-              contextPct: 90,
-              contextWorking: true,
-            });
-          }, 300);
-        };
-        startProgress();
         if (list) {
           list.innerHTML = '<div class="text-sm text-slate-400 italic p-4 text-center">Scanning… matches will appear here as they are found.</div>';
         }
         startScreenEventPolling(scanRunId, (payload) => {
-          const pct = Number(payload.pct || 0);
-          if (Number.isFinite(pct)) fakeProg = Math.max(fakeProg, pct);
+          const phase = String(payload.phase || "screen");
+          const phaseLabels = {
+            loading: "Loading cache",
+            evaluating: "Evaluating strategy",
+            screen: "Screen",
+          };
+          const pct = Number(payload.phase_pct ?? payload.pct ?? 0);
           setNavScanProgress({
-            contextLabel: "Screen",
-            contextText: String(payload.detail || `${Math.round(fakeProg)}%`),
-            contextPct: fakeProg,
+            contextLabel: phaseLabels[phase] || phase,
+            contextText: String(payload.detail || `${Math.round(pct)}%`),
+            contextPct: Number.isFinite(pct) ? pct : 0,
             contextWorking: true,
           });
         });
@@ -8442,8 +8460,7 @@
           });
           console.log("All cards processed successfully");
         } finally {
-          if (progInterval) clearInterval(progInterval);
-          progInterval = null;
+          // The real backend and event-stream progress own both bars.
         }
       } catch (err) {
         if (err && (err.name === "AbortError" || abortController.signal.aborted)) {
@@ -8896,6 +8913,7 @@
       saveAsStrategy,
       saveFromModal,
       saveStrategy,
+      setNavScanProgress,
       activateCustomTickerList,
       setActiveCustomTickerList,
       setBacktestSourceMode,

@@ -3802,7 +3802,16 @@ async def screen(
                         _append_screen_event(
                             screen_request_id,
                             "progress",
-                            {"pct": pct, "detail": detail},
+                            {
+                                "pct": pct,
+                                "phase": "loading",
+                                "phase_pct": (
+                                    loaded_frame_count
+                                    / max(1, total_frames_to_load)
+                                    * 100.0
+                                ),
+                                "detail": detail,
+                            },
                         )
                 return loaded
 
@@ -3844,7 +3853,12 @@ async def screen(
                 _append_screen_event(
                     screen_request_id,
                     "progress",
-                    {"pct": pct, "detail": detail},
+                    {
+                        "pct": pct,
+                        "phase": "evaluating",
+                        "phase_pct": completed / max(1, total) * 100.0,
+                        "detail": detail,
+                    },
                 )
 
             def run_program():

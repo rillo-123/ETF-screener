@@ -1673,6 +1673,33 @@ def test_dashboard_js_terminal_inactive_backtest_progress_stops_polling():
           if (document.getElementById("backtest-global-bar").style.width !== "100%") {{
             throw new Error("Backtest progress did not land at 100%");
           }}
+          window.setNavScanProgress({{ show: false }});
+          window.setNavScanProgress({{
+            show: true,
+            globalLabel: "Overall scan",
+            globalPct: 60,
+            contextLabel: "Loading cache",
+            contextPct: 80,
+          }});
+          window.setNavScanProgress({{
+            globalPct: 40,
+            contextLabel: "Loading cache",
+            contextPct: 20,
+          }});
+          if (document.getElementById("page-progress-bar").style.width !== "60%") {{
+            throw new Error("Overall progress moved backwards");
+          }}
+          if (document.getElementById("page-phase-progress-bar").style.width !== "80%") {{
+            throw new Error("Current phase progress moved backwards");
+          }}
+          window.setNavScanProgress({{
+            globalPct: 61,
+            contextLabel: "Evaluating strategy",
+            contextPct: 5,
+          }});
+          if (document.getElementById("page-phase-progress-bar").style.width !== "5%") {{
+            throw new Error("A newly named phase did not restart its progress");
+          }}
         }})().catch((err) => {{
           console.error(err);
           process.exit(1);

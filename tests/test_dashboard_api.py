@@ -68,6 +68,9 @@ def test_tab_bar_visible():
     assert "SwedeBig (8)" in html
     assert "Sweden Finance (42)" in html
     assert 'id="list-edit-btn"' in html
+    assert 'id="page-progress-bar"' in html
+    assert 'id="page-phase-progress-bar"' in html
+    assert 'id="page-background-progress-bar"' in html
     assert ">Screener<" in html
     assert ">DSLX Editor<" in html
     assert "StratFinder" not in html
