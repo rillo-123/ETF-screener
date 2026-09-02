@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from ETF_screener.plotter_plotly import InteractivePlotter
-from ETF_screener.indicators import add_indicators
+from ETF_screener.indicators import add_indicators, calculate_stoch_rsi
 
 
 def _trace_y(trace_dict):
@@ -22,6 +22,38 @@ def test_dslx_source_aware_ema_calls_are_extracted_for_chart_overlays():
     )
 
     assert specs == [(20, "low"), (20, "high"), (200, "close")]
+
+
+def test_dslx_stoch_rsi_chart_uses_displayed_heikin_ashi_close():
+    count = 80
+    close = 100.0 + np.sin(np.arange(count) / 3.0) * 4.0 + np.arange(count) * 0.05
+    df = pd.DataFrame(
+        {
+            "Date": pd.date_range(start="2024-01-01", periods=count),
+            "Open": close - 0.2,
+            "High": close + 0.8,
+            "Low": close - 0.7,
+            "Close": close,
+            "Volume": np.full(count, 10_000.0),
+        }
+    )
+    plotter = InteractivePlotter()
+    _ha_open, _ha_high, _ha_low, ha_close = plotter._heikin_ashi_ohlc(df)
+    expected_k, expected_d = calculate_stoch_rsi(ha_close)
+
+    figure = plotter.create_plot(
+        df,
+        "TEST",
+        strategy_content="candle turn { when => stoch_rsi(14).k > stoch_rsi(14).d }",
+    )
+    traces = {
+        str(trace.name): _trace_y(trace.to_plotly_json())
+        for trace in figure.data
+        if str(getattr(trace, "name", "")) in {"StochRSI K", "StochRSI D"}
+    }
+
+    assert np.allclose(traces["StochRSI K"], expected_k, equal_nan=True)
+    assert np.allclose(traces["StochRSI D"], expected_d, equal_nan=True)
 
 
 def test_high_low_ema_ribbon_uses_heikin_ashi_wicks():

@@ -1121,7 +1121,11 @@ class InteractivePlotter:
         return max(0.0, min(100.0, parsed))
 
     def _apply_chart_indicator_params(
-        self, df: pd.DataFrame, params: dict | None = None
+        self,
+        df: pd.DataFrame,
+        params: dict | None = None,
+        *,
+        oscillator_close: pd.Series | None = None,
     ) -> None:
         """Add the editable chart TA series using bounded user parameters."""
         raw = params if isinstance(params, dict) else {}
@@ -1147,15 +1151,16 @@ class InteractivePlotter:
         self._active_chart_stoch_trigger = stoch_trigger
 
         close = df["Close"] if "Close" in df.columns else df["close"]
+        oscillator_values = oscillator_close if oscillator_close is not None else close
         macd, macd_signal, macd_hist = calculate_macd(
             close, fast=fast, slow=slow, signal=signal
         )
         df["MACD"] = macd
         df["MACD_Signal"] = macd_signal
         df["MACD_Hist"] = macd_hist
-        df["RSI"] = calculate_rsi(close, period=rsi_period)
+        df["RSI"] = calculate_rsi(oscillator_values, period=rsi_period)
         stoch_k_series, stoch_d_series = calculate_stoch_rsi(
-            close,
+            oscillator_values,
             rsi_period=rsi_period,
             stoch_period=stoch_period,
             k_period=stoch_k,
@@ -1192,7 +1197,6 @@ class InteractivePlotter:
         if "Date" in df.columns:
             df["Date"] = pd.to_datetime(df["Date"])
 
-        self._apply_chart_indicator_params(df, indicator_params)
         chart_params = indicator_params if isinstance(indicator_params, dict) else {}
         candle_mode = str(chart_params.get("candle_mode", "heikin_ashi")).lower()
         # Every EMA source must use the same candle basis as the visible
@@ -1207,6 +1211,11 @@ class InteractivePlotter:
                 "low": ha_low,
                 "close": ha_close,
             }
+        self._apply_chart_indicator_params(
+            df,
+            indicator_params,
+            oscillator_close=heikin_ashi_ema_sources.get("close"),
+        )
 
         def ema_source_series(source: str, fallback: pd.Series) -> pd.Series:
             return heikin_ashi_ema_sources.get(source, fallback)

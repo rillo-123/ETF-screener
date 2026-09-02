@@ -222,6 +222,7 @@ _ROLLING_CALL_COSTS = {
     "sma": 20,
     "volume_ema": 20,
     "rsi": 30,
+    "stoch_rsi": 60,
     "atr": 35,
 }
 
@@ -301,7 +302,7 @@ _IMPLICIT_CANDLE_NAMES = {
     "total_length", "range", "body_length",
     "upper_wick_length", "lower_wick_length",
     "body_ratio", "upper_wick_ratio", "lower_wick_ratio",
-    "previous", "window", "within_ema_band", "ema", "sma", "rsi", "atr",
+    "previous", "window", "within_ema_band", "ema", "sma", "rsi", "stoch_rsi", "atr",
     "volume_ema",
 }
 
@@ -902,6 +903,14 @@ class IndicatorValue(float):
         return self._within(candle.low, min(candle.open, candle.close), include_upper=False)
 
 
+@dataclass(frozen=True)
+class StochRSIValue:
+    """The smoothed K and D lines from one Stochastic RSI calculation."""
+
+    k: IndicatorValue
+    d: IndicatorValue
+
+
 class EMABand:
     """A two-EMA channel anchored to one focal candle."""
 
@@ -967,6 +976,9 @@ class CandleSeries:
             self.columns = {str(column).lower(): str(column) for column in self.frame.columns}
         self._source_series_cache: dict[str, pd.Series] = {}
         self._indicator_series_cache: dict[tuple[str, str, int], pd.Series] = {}
+        self._stoch_rsi_series_cache: dict[
+            tuple[int, int, int, int], tuple[pd.Series, pd.Series]
+        ] = {}
 
     def _apply_heikin_ashi(self) -> None:
         """Replace OHLC with the Heikin-Ashi candle series, preserving volume."""
@@ -1074,6 +1086,46 @@ class CandleSeries:
         slope = float(value - prior) if pd.notna(prior) else 0.0
         candle = Candle(self, index) if name in {"ema", "sma"} else None
         return IndicatorValue(float(value), slope, candle)
+
+    def stoch_rsi(self, index: int, *args: object) -> StochRSIValue:
+        """Return Stochastic RSI K/D at one candle using standard smoothing."""
+        if len(args) == 1:
+            rsi_period = stoch_period = args[0]
+            k_period = d_period = 3
+        elif len(args) == 4:
+            rsi_period, stoch_period, k_period, d_period = args
+        else:
+            raise DSLXEvaluationError(
+                "stoch_rsi requires (period) or "
+                "(rsi_period, stoch_period, k_period, d_period)"
+            )
+        periods = (rsi_period, stoch_period, k_period, d_period)
+        if any(not isinstance(period, int) or period <= 0 for period in periods):
+            raise DSLXEvaluationError("stoch_rsi periods must be positive integers")
+        key = tuple(int(period) for period in periods)
+        cached = self._stoch_rsi_series_cache.get(key)
+        if cached is None:
+            rsi = self._indicator_series("rsi", "close", key[0])
+            rsi_low = rsi.rolling(key[1], min_periods=key[1]).min()
+            rsi_high = rsi.rolling(key[1], min_periods=key[1]).max()
+            raw = 100.0 * (rsi - rsi_low) / (rsi_high - rsi_low).replace(0, np.nan)
+            k_line = raw.rolling(key[2], min_periods=key[2]).mean().clip(0, 100)
+            d_line = k_line.rolling(key[3], min_periods=key[3]).mean().clip(0, 100)
+            cached = (k_line, d_line)
+            self._stoch_rsi_series_cache[key] = cached
+
+        values: list[IndicatorValue] = []
+        for label, line in zip(("K", "D"), cached):
+            value = line.iloc[index]
+            if pd.isna(value):
+                raise InsufficientHistory(
+                    f"stoch_rsi({', '.join(str(period) for period in key)}) "
+                    f"{label} is unavailable at this candle"
+                )
+            prior = line.iloc[index - 1] if index else np.nan
+            slope = float(value - prior) if pd.notna(prior) else 0.0
+            values.append(IndicatorValue(float(value), slope))
+        return StochRSIValue(k=values[0], d=values[1])
 
 
 class Candle:
@@ -1228,6 +1280,9 @@ class Candle:
     def rsi(self, period: int) -> IndicatorValue:
         return self.series.indicator("rsi", self.index, period)
 
+    def stoch_rsi(self, *args: object) -> StochRSIValue:
+        return self.series.stoch_rsi(self.index, *args)
+
     def atr(self, period: int) -> IndicatorValue:
         return self.series.indicator("atr", self.index, period)
 
@@ -1263,7 +1318,7 @@ def _attribute(value: object, name: str) -> object:
             "total_length", "range", "body_length",
             "upper_wick_length", "lower_wick_length",
             "body_ratio", "upper_wick_ratio", "lower_wick_ratio",
-            "previous", "window", "within_ema_band", "ema", "sma", "rsi", "atr", "volume_ema",
+            "previous", "window", "within_ema_band", "ema", "sma", "rsi", "stoch_rsi", "atr", "volume_ema",
         },
         Position: {"entry_price"},
         CandleWindow: {"all", "any", "count", "high", "low", "close", "volume"},
@@ -1272,6 +1327,7 @@ def _attribute(value: object, name: str) -> object:
             "slope", "body_intersects", "upper_wick_intersects",
             "lower_wick_intersects",
         },
+        StochRSIValue: {"k", "d"},
         EMABand: {"body_within", "candle_within"},
     }
     for value_type, names in allowed.items():

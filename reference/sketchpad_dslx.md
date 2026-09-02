@@ -148,6 +148,26 @@ stops at the first false term. Indicator series are cached per ticker, candle
 style, source, and period and reused by later conditions and historical
 endpoints.
 
+### Stochastic RSI
+
+`stoch_rsi(14)` uses the standard 14-period RSI, 14-period stochastic window,
+and 3/3 smoothing. It exposes the `%K` and `%D` lines as `.k` and `.d`; both
+also expose `.slope`:
+
+```dsl
+candle momentum_turn {
+  when =>
+    stoch_rsi(14).k > stoch_rsi(14).d
+    && previous.stoch_rsi(14).k <= previous.stoch_rsi(14).d
+    && stoch_rsi(14).k < 30
+}
+```
+
+For nonstandard settings, supply all four periods in RSI, stochastic, K, D
+order: `stoch_rsi(14, 14, 3, 3)`. Stochastic RSI is deliberately sensitive;
+combining a K/D turn with a region, trend, or candle condition is usually more
+useful than testing K alone.
+
 ### Adjacent candle patterns
 
 Define named candle objects independently, then place them in an

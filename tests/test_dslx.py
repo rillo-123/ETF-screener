@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -40,6 +41,43 @@ def test_dslx_uses_structural_candle_patterns_only():
     assert interpreter.strategy.exit_execution == "close"
     assert interpreter.matches_entry(_candles()) is True
     assert interpreter.matches_exit(_candles()) is False
+
+
+def test_dslx_stoch_rsi_exposes_cached_k_d_lines_and_slopes():
+    close = [100.0 + np.sin(index / 2.0) * 4.0 + index * 0.03 for index in range(100)]
+    frame = pd.DataFrame(
+        {
+            "Open": [value - 0.2 for value in close],
+            "High": [value + 0.7 for value in close],
+            "Low": [value - 0.8 for value in close],
+            "Close": close,
+            "Volume": [10_000.0] * len(close),
+        }
+    )
+    series = CandleSeries(frame)
+
+    oscillator = series.last.stoch_rsi(14)
+    explicit = series.last.stoch_rsi(14, 14, 3, 3)
+
+    assert 0.0 <= oscillator.k <= 100.0
+    assert 0.0 <= oscillator.d <= 100.0
+    assert oscillator.k == pytest.approx(explicit.k)
+    assert oscillator.d == pytest.approx(explicit.d)
+    assert np.isfinite(oscillator.k.slope)
+    assert np.isfinite(oscillator.d.slope)
+    assert len(series._stoch_rsi_series_cache) == 1
+    assert DSLXInterpreter(
+        _strategy(
+            "stoch_turn",
+            "stoch_rsi(14).k >= 0 && stoch_rsi(14).d <= 100",
+        )
+    ).matches_entry(frame)
+
+
+@pytest.mark.parametrize("arguments", [(), (14, 3), (0,), (14, 14, 3, 0)])
+def test_dslx_stoch_rsi_rejects_invalid_period_arguments(arguments):
+    with pytest.raises(DSLXEvaluationError, match="stoch_rsi"):
+        CandleSeries(_candles()).last.stoch_rsi(*arguments)
 
 
 @pytest.mark.parametrize("keyword", ["entry", "exit", "match"])
