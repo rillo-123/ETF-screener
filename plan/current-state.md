@@ -2,6 +2,8 @@
 
 - -Summary
 
+- -Summary
+
 - Completed cautious, cancellable Yahoo access with process-wide pacing, cooldown, and streamed DSLX matches from SQLite.
 - Added provider-neutral market-data adapters while retaining Yahoo as the default, plus automatic background discovery and fetching of cache-missing symbols only.
 - Fixed threaded SQLite ownership, Heikin-Ashi EMA chart alignment, logarithmic volume scaling, DSLX catalogue reload, and removal of the legacy Aggregated lane.

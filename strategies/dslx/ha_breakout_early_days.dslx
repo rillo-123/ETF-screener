@@ -12,17 +12,19 @@ strategy ha_breakout_loose {
   candles timeframe "1d" as heikin_ashi
   scan latest
 
-  candle setup {
+  candle candle_1 {
     when =>      
-   #     ema("high", 20,"low",20).body_within
-
-           (
-            ema("low", 20).body_intersects
-          || ema("low", 20).lower_wick_intersects
-          )
+      candle_1.high < ema("low", 20)
           && is_green
-
   }
+
+
+  candle candle_2 {
+    when =>      
+      ema("low", 20).upper_wick_intersects          
+        && is_green
+  }
+
 
   candle any_green {
     when =>  is_green
@@ -47,8 +49,8 @@ strategy ha_breakout_loose {
   }
 
   entrystruct {
-    setup
-    any_green
+    candle_1
+    candle_2
     breakout
     at breakout.close
   }

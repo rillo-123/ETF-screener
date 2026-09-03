@@ -3,10 +3,10 @@
     let playbookSourceSignature = "";
     let playbookRows = [];
     let marketDataAutoRefreshAttempted = false;
-    let marketDataMissingBackfillAttempted = false;
-    let marketDataMissingBackfillPromise = null;
-    let marketDataMissingBackfillAbortController = null;
-    let marketDataMissingBackfillRequestId = null;
+    let marketDataBackgroundRefreshAttempted = false;
+    let marketDataBackgroundRefreshPromise = null;
+    let marketDataBackgroundRefreshAbortController = null;
+    let marketDataBackgroundRefreshRequestId = null;
     let pageOverallProgressPct = 0;
     let pagePhaseProgressPct = 0;
     let pagePhaseProgressKey = "";
@@ -911,7 +911,7 @@
       const listUniverseBadge = document.getElementById("list-select-universe-badge");
       tickerScanScope = normalized;
       marketDataAutoRefreshAttempted = false;
-      marketDataMissingBackfillAttempted = false;
+      marketDataBackgroundRefreshAttempted = false;
       scopeButtons.forEach((button) => {
         if (!button) {
           return;
@@ -5071,38 +5071,47 @@
         refreshed = true;
       }
       if (
-        options.backfillMissing === true
+        options.refreshStaleInBackground === true
         && status
-        && Number(status.missing_tickers || 0) > 0
+        && (
+          Number(status.missing_tickers || 0)
+          + Number(status.stale_tickers || 0)
+        ) > 0
       ) {
-        startMissingMarketDataBackfill(status, options);
+        startBackgroundMarketDataRefresh(status, options);
       }
       return { status, refreshed };
     }
 
-    function startMissingMarketDataBackfill(status, options = {}) {
+    function startBackgroundMarketDataRefresh(status, options = {}) {
+      const queuedCount = (
+        Number(status?.missing_tickers || 0)
+        + Number(status?.stale_tickers || 0)
+      );
       if (
-        marketDataMissingBackfillPromise
+        marketDataBackgroundRefreshPromise
         ||
-        marketDataMissingBackfillAttempted
-        || Number(status?.missing_tickers || 0) <= 0
+        marketDataBackgroundRefreshAttempted
+        || queuedCount <= 0
       ) {
-        return marketDataMissingBackfillPromise;
+        return marketDataBackgroundRefreshPromise;
       }
-      marketDataMissingBackfillAttempted = true;
+      marketDataBackgroundRefreshAttempted = true;
       const source = normalizeScanScope(tickerScanScope);
       const params = new URLSearchParams({
         depth: "180",
         max_workers: "2",
         force: "false",
         stale_after_days: "0",
-        missing_only: "true",
+        // Include stale cached symbols as well as never-cached symbols. The
+        // screen continues against the local cache while this request runs.
+        missing_only: "false",
         source,
       });
       const requestId = createRunRequestId();
       const abortController = new AbortController();
-      marketDataMissingBackfillRequestId = requestId;
-      marketDataMissingBackfillAbortController = abortController;
+      marketDataBackgroundRefreshRequestId = requestId;
+      marketDataBackgroundRefreshAbortController = abortController;
       params.set("request_id", requestId);
       if (source === "list") {
         const tickerList = getUniverseFilterParams().get("ticker_list");
@@ -5110,10 +5119,10 @@
       }
       const marketStatus = document.getElementById("shortlist-market-status");
       if (marketStatus) {
-        marketStatus.textContent += " · filling missing symbols in background";
+        marketStatus.textContent += " · updating stale market data in background";
       }
-      setBackgroundDataProgress(true, Number(status?.missing_tickers || 0));
-      marketDataMissingBackfillPromise = fetch(
+      setBackgroundDataProgress(true, queuedCount);
+      marketDataBackgroundRefreshPromise = fetch(
         `/api/market-data/refresh?${params.toString()}`,
         { method: "POST", signal: abortController.signal },
       )
@@ -5124,27 +5133,27 @@
           }
           if (Number(payload.refreshed || 0) > 0) {
             showToast(
-              `Cached ${Number(payload.refreshed)} previously missing symbol${Number(payload.refreshed) === 1 ? "" : "s"}.`,
+              `Updated ${Number(payload.refreshed)} market symbol${Number(payload.refreshed) === 1 ? "" : "s"}.`,
             );
           }
           return loadMarketStatus(source);
         })
         .catch((error) => {
-          marketDataMissingBackfillAttempted = false;
+          marketDataBackgroundRefreshAttempted = false;
           if (error?.name !== "AbortError") {
-            console.warn("Automatic missing-data backfill failed", error);
+            console.warn("Automatic market-data refresh failed", error);
           }
           return null;
         })
         .finally(() => {
-          marketDataMissingBackfillPromise = null;
-          marketDataMissingBackfillAbortController = null;
-          marketDataMissingBackfillRequestId = null;
+          marketDataBackgroundRefreshPromise = null;
+          marketDataBackgroundRefreshAbortController = null;
+          marketDataBackgroundRefreshRequestId = null;
           setBackgroundDataProgress(false);
           syncScreenerRunButtonState(Boolean(scanAbortController));
         });
       syncScreenerRunButtonState(Boolean(scanAbortController));
-      return marketDataMissingBackfillPromise;
+      return marketDataBackgroundRefreshPromise;
     }
 
     async function ensureFreshMarketData() {
@@ -7578,11 +7587,11 @@
     }
 
     async function cancelScan() {
-      if (scanAbortController || marketDataMissingBackfillPromise) {
+      if (scanAbortController || marketDataBackgroundRefreshPromise) {
         const screenAbortController = scanAbortController;
         const screenRequestId = scanRunId;
-        const backfillAbortController = marketDataMissingBackfillAbortController;
-        const backfillRequestId = marketDataMissingBackfillRequestId;
+        const backfillAbortController = marketDataBackgroundRefreshAbortController;
+        const backfillRequestId = marketDataBackgroundRefreshRequestId;
         const stopButton = document.getElementById("stop-run-btn");
         if (stopButton) {
           stopButton.disabled = true;
@@ -7856,7 +7865,7 @@
       if (show === true && nodes.pagePanel) {
         nodes.pagePanel.hidden = false;
       } else if (show === false && nodes.pagePanel) {
-        nodes.pagePanel.hidden = !marketDataMissingBackfillPromise;
+        nodes.pagePanel.hidden = !marketDataBackgroundRefreshPromise;
         pageOverallProgressPct = 0;
         pagePhaseProgressPct = 0;
         pagePhaseProgressKey = "";
@@ -7942,14 +7951,14 @@
       }
     }
 
-    function setBackgroundDataProgress(show, missingCount = 0) {
+    function setBackgroundDataProgress(show, queuedCount = 0) {
       const banner = document.getElementById("page-progress-banner");
       const panel = document.getElementById("page-background-progress");
       const text = document.getElementById("page-background-progress-text");
       if (panel) panel.hidden = !show;
       if (text && show) {
-        const count = Math.max(0, Number(missingCount) || 0);
-        text.textContent = `${count} missing symbol${count === 1 ? "" : "s"} queued · active`;
+        const count = Math.max(0, Number(queuedCount) || 0);
+        text.textContent = `${count} stale or missing symbol${count === 1 ? "" : "s"} queued · active`;
       }
       if (banner) {
         const scanVisible = !document.getElementById("page-scan-progress")?.hidden;
@@ -7960,15 +7969,15 @@
     function syncScreenerRunButtonState(running = false) {
       const runBtn = document.getElementById("run-btn");
       const stopBtn = document.getElementById("stop-run-btn");
-      const fillingMissingData = Boolean(marketDataMissingBackfillPromise);
+      const refreshingMarketData = Boolean(marketDataBackgroundRefreshPromise);
       if (!runBtn) {
         return;
       }
       runBtn.dataset.running = running ? "1" : "0";
       if (stopBtn) {
-        stopBtn.classList.toggle("hidden", !running && !fillingMissingData);
-        stopBtn.disabled = !running && !fillingMissingData;
-        stopBtn.textContent = running ? "Stop Run" : "Stop Data Fill";
+        stopBtn.classList.toggle("hidden", !running && !refreshingMarketData);
+        stopBtn.disabled = !running && !refreshingMarketData;
+        stopBtn.textContent = running ? "Stop Run" : "Stop Data Update";
       }
       if (running) {
         runBtn.innerHTML = `
@@ -8267,7 +8276,7 @@
         // the first visible matches or the rest of the dashboard.
         await ensureGuiMarketBackbone({
           allowRefresh: false,
-          backfillMissing: true,
+          refreshStaleInBackground: true,
           requestId: scanRunId,
           signal: abortController.signal,
         });

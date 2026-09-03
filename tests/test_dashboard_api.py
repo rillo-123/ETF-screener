@@ -108,9 +108,9 @@ def test_tab_bar_visible():
     assert "DSLX file list refreshed." in dashboard_source
     assert "setLoadedDslxScript" in dashboard_source
     assert "cancelScan" in dashboard_source
-    assert "startMissingMarketDataBackfill" in dashboard_source
-    assert "backfillMissing: true" in dashboard_source
-    assert 'missing_only: "true"' in dashboard_source
+    assert "startBackgroundMarketDataRefresh" in dashboard_source
+    assert "refreshStaleInBackground: true" in dashboard_source
+    assert 'missing_only: "false"' in dashboard_source
     assert 'fetch("/api/jobs/screen/cancel"' in dashboard_source
     assert 'fetch("/api/jobs/market-refresh/cancel"' in dashboard_source
     assert 'id="tab-query"' not in html
