@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from ETF_screener.cache_policy import cache_is_fresh, trim_cache
 from ETF_screener.config_loader import get_paths
 from ETF_screener.database import ETFDatabase
 from ETF_screener.dslx import backtest_signals
@@ -88,12 +89,12 @@ def profit_target_outcomes(
     return {
         "target_entries": eligible_count,
         "target_hits": hit_count,
-        "target_hit_rate_pct": round((hit_count / eligible_count) * 100, 2)
-        if eligible_count
-        else 0.0,
-        "target_median_days": round(float(np.median(days_to_target)), 2)
-        if days_to_target
-        else 0.0,
+        "target_hit_rate_pct": (
+            round((hit_count / eligible_count) * 100, 2) if eligible_count else 0.0
+        ),
+        "target_median_days": (
+            round(float(np.median(days_to_target)), 2) if days_to_target else 0.0
+        ),
         "target_unresolved_entries": int(len(entry_indexes) - eligible_count),
     }
 
@@ -215,16 +216,20 @@ class Backtester:
 
         # Determine if we should look for or save to a parquet cache
         # Cache key is based on ticker and strategy name if scripted
-        cache_dir = Path(get_paths()["data"]["cache"])
+        cache_dir = Path(get_paths()["data"]["cache"]) / "backtests"
         cache_path = None
         result_cache_path = None
         strategy_name = "unknown"
-        if strategy_kwargs and ("entry_script" in strategy_kwargs or "dslx_source" in strategy_kwargs):
+        if strategy_kwargs and (
+            "entry_script" in strategy_kwargs or "dslx_source" in strategy_kwargs
+        ):
             # Create a unique hash for the strategy logic
             strategy_source = strategy_kwargs.get("dslx_source") or (
                 f"{strategy_kwargs.get('entry_script')}_{strategy_kwargs.get('exit_script')}"
             )
-            strat_hash = hashlib.sha256(str(strategy_source).encode("utf-8")).hexdigest()[:8]
+            strat_hash = hashlib.sha256(
+                str(strategy_source).encode("utf-8")
+            ).hexdigest()[:8]
             strategy_name = f"dsl_{strat_hash}"
             cache_dir.mkdir(parents=True, exist_ok=True)
             latest_date = db.get_latest_date(ticker) or "no_date"
@@ -236,15 +241,15 @@ class Backtester:
                 f"{ticker}_{strategy_name}_{days}_{latest_date}_"
                 f"{db_revision}_{self.RESULT_CACHE_VERSION}"
             )
-            cache_path = Path(get_paths()["data"]["parquet"]) / f"{cache_key}.parquet"
+            cache_path = cache_dir / f"{cache_key}.parquet"
             result_cache_path = cache_dir / f"{cache_key}.pkl"
 
         # Try loading from cache first
         if (
             cache_path
             and result_cache_path
-            and cache_path.exists()
-            and result_cache_path.exists()
+            and cache_is_fresh(cache_path)
+            and cache_is_fresh(result_cache_path)
         ):
             try:
                 with result_cache_path.open("rb") as handle:
@@ -277,15 +282,17 @@ class Backtester:
             kwargs = strategy_kwargs or {}
 
             is_scripted = False
-            if (
-                hasattr(strategy_func, "__name__")
-                and strategy_func.__name__ in {"scripted_strategy", "dslx_strategy"}
-            ):
+            if hasattr(strategy_func, "__name__") and strategy_func.__name__ in {
+                "scripted_strategy",
+                "dslx_strategy",
+            }:
                 is_scripted = True
-            elif (
-                hasattr(strategy_func, "__func__")
-                and strategy_func.__func__.__name__ in {"scripted_strategy", "dslx_strategy"}
-            ):
+            elif hasattr(
+                strategy_func, "__func__"
+            ) and strategy_func.__func__.__name__ in {
+                "scripted_strategy",
+                "dslx_strategy",
+            }:
                 is_scripted = True
 
             if is_scripted:
@@ -314,13 +321,6 @@ class Backtester:
                 df = res
                 strategy_result_meta = {"df": df}
 
-            # If we calculated signals, save them to parquet for next time
-            if cache_path and not df.empty:
-                try:
-                    df.to_parquet(cache_path, compression="snappy")
-                except Exception as e:
-                    logger.warning("Failed to save cache %s: %s", cache_path, e)
-
         if "Signal" in df.columns and "signal" not in df:
             df["signal"] = df["Signal"]
         if "signal" not in df.columns:
@@ -336,12 +336,16 @@ class Backtester:
         price_series = df["Close"] if "Close" in df.columns else df["close"]
         prices = pd.to_numeric(price_series, errors="coerce").to_numpy(dtype="float64")
         exit_fill_prices = (
-            pd.to_numeric(df["exit_fill_price"], errors="coerce").to_numpy(dtype="float64")
+            pd.to_numeric(df["exit_fill_price"], errors="coerce").to_numpy(
+                dtype="float64"
+            )
             if "exit_fill_price" in df.columns
             else np.full(len(df), np.nan)
         )
         entry_fill_prices = (
-            pd.to_numeric(df["entry_fill_price"], errors="coerce").to_numpy(dtype="float64")
+            pd.to_numeric(df["entry_fill_price"], errors="coerce").to_numpy(
+                dtype="float64"
+            )
             if "entry_fill_price" in df.columns
             else np.full(len(df), np.nan)
         )
@@ -373,7 +377,9 @@ class Backtester:
                 mdd = dd
 
             if signal == 1 and position == 0:
-                entry_price = entry_fill_prices[i] if np.isfinite(entry_fill_prices[i]) else price
+                entry_price = (
+                    entry_fill_prices[i] if np.isfinite(entry_fill_prices[i]) else price
+                )
                 buy_price = entry_price * (1 + self.slippage_pct / 100)
                 capital -= self.commission
                 position = capital / buy_price
@@ -382,7 +388,9 @@ class Backtester:
                 executed_signals[i] = 1
             elif signal == -1 and position > 0:
                 buy_trade = trades[-1]
-                exit_price = exit_fill_prices[i] if np.isfinite(exit_fill_prices[i]) else price
+                exit_price = (
+                    exit_fill_prices[i] if np.isfinite(exit_fill_prices[i]) else price
+                )
                 sell_price = exit_price * (1 - self.slippage_pct / 100)
                 capital = (position * sell_price) - self.commission
                 position = 0
@@ -485,6 +493,7 @@ class Backtester:
                 cached_results = {k: v for k, v in results.items() if k != "df"}
                 with result_cache_path.open("wb") as handle:
                     pd.to_pickle(cached_results, handle)
+                trim_cache()
             except Exception as e:
                 logger.warning(
                     "Failed to save result cache %s: %s", result_cache_path, e
@@ -1131,6 +1140,7 @@ class Backtester:
 
         def is_cancelled() -> bool:
             return bool(cancel_event is not None and cancel_event.is_set())
+
         tickers = list(tickers)
         total = len(tickers)
         desc = progress_label or getattr(base_strategy, "__name__", "Backtest")

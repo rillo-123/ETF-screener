@@ -50,9 +50,11 @@ class MarketDataProvider(Protocol):
 
 def normalize_market_data_provider_name(provider: str | None) -> str:
     """Return the canonical provider name or reject an unknown adapter."""
-    value = str(
-        provider or os.getenv("ETF_SCREENER_MARKET_DATA_PROVIDER", "yahoo")
-    ).strip().lower()
+    value = (
+        str(provider or os.getenv("ETF_SCREENER_MARKET_DATA_PROVIDER", "yahoo"))
+        .strip()
+        .lower()
+    )
     aliases = {
         "yahoo": "yahoo",
         "yfinance": "yahoo",

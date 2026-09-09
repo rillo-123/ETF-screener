@@ -13,12 +13,18 @@ import pandas as pd
 import yfinance as yf
 from tqdm import tqdm
 
-try:
-    from yfinance.exceptions import YFRateLimitError
-except ImportError:  # pragma: no cover - compatibility with older supported yfinance
-    class YFRateLimitError(RuntimeError):
-        def __init__(self):
-            super().__init__("Too Many Requests. Rate limited. Try after a while.")
+
+class _FallbackYFRateLimitError(RuntimeError):
+    def __init__(self):
+        super().__init__("Too Many Requests. Rate limited. Try after a while.")
+
+
+YFRateLimitError: type[Exception] = getattr(
+    getattr(yf, "exceptions", None),
+    "YFRateLimitError",
+    _FallbackYFRateLimitError,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +57,7 @@ class _YahooRequestGate:
                 now = time.monotonic()
                 ready_at = max(cls._next_request_at, cls._blocked_until)
                 if ready_at <= now:
-                    cls._next_request_at = (
-                        now + YAHOO_MIN_REQUEST_INTERVAL_SECONDS
-                    )
+                    cls._next_request_at = now + YAHOO_MIN_REQUEST_INTERVAL_SECONDS
                     return
                 delay = min(ready_at - now, 1.0)
             if cancel_event is not None:
@@ -76,7 +80,7 @@ class _YahooRequestGate:
                 YAHOO_RATE_LIMIT_MAX_BACKOFF_SECONDS,
             )
             cls._blocked_until = max(cls._blocked_until, time.monotonic() + delay)
-            return delay
+            return float(delay)
 
     @classmethod
     def record_success(cls) -> None:

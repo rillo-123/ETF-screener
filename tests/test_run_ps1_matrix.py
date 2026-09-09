@@ -101,6 +101,7 @@ def _read_json_lines(path: Path) -> list[dict]:
         (["-Screener"], "run_dashboard.ps1", []),
         (["-Dashboard", "-Screener"], "run_dashboard.ps1", []),
         (["-Tests"], "run_all_tests.ps1", []),
+        (["-Tests", "-Optimization"], "run_all_tests.ps1", ["-Optimization"]),
         (["-Tests", "-All"], "run_all_tests.ps1", ["-Full"]),
         (["-Tests", "-QualityGate"], "run_all_tests.ps1", ["-Full"]),
         (

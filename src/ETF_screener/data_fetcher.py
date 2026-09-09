@@ -39,9 +39,7 @@ class _FinnhubRequestGate:
                 now = time.monotonic()
                 ready_at = max(cls._next_request_at, cls._blocked_until)
                 if ready_at <= now:
-                    cls._next_request_at = (
-                        now + FINNHUB_MIN_REQUEST_INTERVAL_SECONDS
-                    )
+                    cls._next_request_at = now + FINNHUB_MIN_REQUEST_INTERVAL_SECONDS
                     return
                 delay = min(ready_at - now, 1.0)
             if cancel_event is not None:
@@ -132,7 +130,7 @@ class FinnhubFetcher:
         end_time = self._timestamp(resolved_end)
         start_time = self._timestamp(resolved_start)
 
-        params = {
+        params: dict[str, str | int] = {
             "symbol": symbol,
             "resolution": resolution,
             "from": start_time,

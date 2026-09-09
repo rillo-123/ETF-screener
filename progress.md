@@ -1,6 +1,92 @@
 
 # Progress
 
+## 2026-09-09 21:28:05 +02:00
+
+- -Summary
+- Next resume point: Review the latest commit and pick up the next implementation task.
+
+## 2026-09-09 21:20:00 +0200
+
+- Cleaned the quality gate after the optimization pass: formatted `src` and
+  `tests`, resolved the reported mypy errors, removed the lone Vulture finding,
+  and removed redundant Bandit suppressions that produced parser warnings.
+- Added `./run.ps1 -Tests -Optimization`, a focused structural-screening gate.
+  It runs 26 optimization/launcher regressions plus targeted Ruff, mypy, and
+  Black checks; the latest clean run completed in about 17 seconds.
+- Fixed the pandas empty-frame concat warning. All 21 market-data service tests
+  pass with `FutureWarning` promoted to an error.
+- Hardened the full runner with absolute repository targets so Ruff, mypy,
+  Black, Bandit, and coverage cannot wander into machine-wide paths. Coverage
+  now instruments the first unit pass instead of rerunning all 410 tests.
+- Verification: 408 unit tests passed / 2 intentional skips without warnings;
+  7 Playwright tests passed / 2 intentional skips. Full-source Ruff, mypy,
+  Black, Bandit, and Vulture checks pass independently and silently where
+  applicable. PowerShell parsing and `git diff --check` pass.
+- No commit or push was performed.
+
+## 2026-09-09 20:21:20 +0200
+
+- Finished the remaining structural DSLX dashboard screening optimization.
+  Focused Nasdaq scans now apply the same focus/vitality gate as control scans,
+  reducing the live candidate set from 4,260 generic undotted symbols to 399.
+- Added request-result caching for structural DSLX and consolidated the
+  selected-universe evaluator from one program run per ticker to one per
+  50-ticker chunk while preserving match streaming, progress, and cancellation.
+- Limited Nasdaq vitality SQL to the focused candidate list when it fits the
+  SQLite bind limit. Live cold timing for `ha_red_to_green` improved from 52.8
+  seconds to 18.0 seconds while the startup refresh was running.
+- Added regressions for structural cache reuse, focused Nasdaq scope, and
+  candidate-bounded vitality queries. Repaired a migrated optional historical
+  Parquet fixture test so the default suite remains independent of the USB.
+- Final `./run.ps1 -Tests` gate: 407 unit tests passed / 2 intentional skips;
+  7 Playwright tests passed / 2 intentional skips. Ruff, Black formatting, and
+  whitespace checks passed for the changed implementation and tests.
+- No commit or push was performed.
+
+## 2026-09-06 23:20:15 +0200
+
+- Completed the Kingston USB storage refactor and migration. Verified all 9,952
+  canonical files by SHA-256 before activating USB paths and deleting originals.
+  Preserved strategies/code and the 823 MB local database; backed up SQLite on USB.
+- Removed obsolete generated caches; C: free space rose from ~19 GB to ~51 GB.
+  New caches share a 1 GiB / 5,000-file / 14-day eviction policy on the USB.
+- Downloaded and activated 400 Nasdaq histories (469,413 rows), with 349 full
+  five-year histories and 51 shorter available histories. Routine refresh and
+  nightly/startup pruning retain 1,830 days. Added resumable backfill command.
+- Fixed legacy metadata misclassifying Nasdaq stocks in the picker. Verified
+  400 picker entries and 399 eligible query entries (BSP needs 3 more sessions).
+- Validation: 101 passed / 3 pre-existing skips; 8 focused follow-up tests
+  passed; live USB-backed page/query smoke checks and SQLite integrity passed.
+  Ruff and whitespace checks passed. Setup: `reference/storage-setup.md`.
+- No commit or push was performed.
+
+## 2026-09-06 22:38:03 +0200
+
+- Completed a read-only historical review of 12 DSLX files on the saved Sweden
+  Finance list. Saved findings in `reference/dslx-performance-review.md` and
+  reproducible local observations/evaluator under `data/backtests/`.
+- All files parsed; two duplicate pairs; all 42 tickers had local history.
+  Used 200-candle warm-up, next-open market fills, explicit costs, and
+  point-in-time liquidity. Compared 20-session outcomes and written exits.
+- No validated winner: the small warmed-up sample is exploratory. Existing
+  backtester execution/liquidity issues were documented, not changed.
+- Verified coverage, outcome counts, and strategy hashes against the artifacts.
+
+## 2026-09-06 22:07:04 +0200
+
+- Split dashboard JavaScript into named feature files; reduced the entrypoint
+  from about 9,000 lines / 404 KB to 162 lines / 5.3 KB.
+- Added a shared asset manifest, per-file cache versions, and a beginner-facing
+  feature guide. Updated Node and Playwright loaders to execute separate scripts.
+- Preserved all 331 named function bodies, including existing chart edits;
+  initialized shared filter metadata without a dependency on later scripts.
+- Validation: 15 Node checks, 7 Chromium checks, and the page/asset-serving
+  regression passed; 3 pre-existing skipped tests. Python formatting and Ruff
+  checks passed. A broader API run was stopped after a long-running test;
+  the full API suite is not claimed as verified.
+- Next resume point: isolate feature state or plan the Python API split.
+
 ## 2026-09-03 20:10:41 +02:00
 
 - -Summary

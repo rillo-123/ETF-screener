@@ -1,9 +1,15 @@
+import json
 import shutil
 import subprocess
 import textwrap
-from pathlib import Path
 
 import pytest
+
+from ETF_screener.dashboard.assets import DASHBOARD_SCRIPTS, JAVASCRIPT_DIR
+
+DASHBOARD_SCRIPT_PATHS = json.dumps(
+    [str(JAVASCRIPT_DIR / name) for name in DASHBOARD_SCRIPTS]
+)
 
 
 def test_dashboard_js_exposes_core_tabs_and_helpers():
@@ -11,15 +17,6 @@ def test_dashboard_js_exposes_core_tabs_and_helpers():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -137,8 +134,10 @@ def test_dashboard_js_exposes_core_tabs_and_helpers():
         global.alert = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -192,15 +191,6 @@ def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -475,8 +465,10 @@ def test_dashboard_js_query_tab_loads_catalog_and_renders_rows():
           downloadImage: () => {{}},
         }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           await window.dashboardReadyPromise;
@@ -544,15 +536,6 @@ def test_dashboard_js_playbook_tab_loads_rows_and_renders_table():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -754,8 +737,10 @@ def test_dashboard_js_playbook_tab_loads_rows_and_renders_table():
           downloadImage: () => {{}},
         }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           await window.dashboardReadyPromise;
@@ -809,15 +794,6 @@ def obsolete_dashboard_js_renders_backtest_race_lanes():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -931,8 +907,10 @@ def obsolete_dashboard_js_renders_backtest_race_lanes():
         global.alert = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -1039,15 +1017,6 @@ def obsolete_dashboard_js_restart_backtest_race_resets_to_start():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -1162,8 +1131,10 @@ def obsolete_dashboard_js_restart_backtest_race_resets_to_start():
         global.alert = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -1211,15 +1182,6 @@ def obsolete_dashboard_js_race_lanes_follow_selected_strategies():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -1325,8 +1287,10 @@ def obsolete_dashboard_js_race_lanes_follow_selected_strategies():
         global.alert = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -1382,15 +1346,6 @@ def test_dashboard_js_restores_last_strategy_without_checking_backtest_lane():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -1499,8 +1454,10 @@ def test_dashboard_js_restores_last_strategy_without_checking_backtest_lane():
         global.alert = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -1535,15 +1492,6 @@ def test_dashboard_js_terminal_inactive_backtest_progress_stops_polling():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -1640,8 +1588,10 @@ def test_dashboard_js_terminal_inactive_backtest_progress_stops_polling():
         global.alert = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -1727,15 +1677,6 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -1866,8 +1807,10 @@ def test_dashboard_js_disables_backtest_controls_without_ticker_universe():
         global.alert = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -1900,15 +1843,6 @@ def test_dashboard_js_restores_screener_run_after_startup_universe_selection():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -2037,8 +1971,10 @@ def test_dashboard_js_restores_screener_run_after_startup_universe_selection():
         global.alert = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -2071,15 +2007,6 @@ def test_dashboard_js_backtest_row_click_loads_chart_for_row_strategy():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -2255,8 +2182,10 @@ def test_dashboard_js_backtest_row_click_loads_chart_for_row_strategy():
           downloadImage: () => {{}},
         }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -2306,15 +2235,6 @@ def test_dashboard_js_backtest_table_keeps_zero_trade_rows_visible():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -2454,8 +2374,10 @@ def test_dashboard_js_backtest_table_keeps_zero_trade_rows_visible():
         global.alert = () => {{}};
         global.Plotly = {{ newPlot: async () => {{}}, purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -2514,15 +2436,6 @@ def test_dashboard_js_backtest_table_headers_sort_rows():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -2656,8 +2569,10 @@ def test_dashboard_js_backtest_table_headers_sort_rows():
           downloadImage: () => {{}},
         }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         window.mergeBacktestScatterRows([
           {{
@@ -2725,15 +2640,6 @@ def obsolete_dashboard_js_restores_backtest_race_after_reload():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -2865,8 +2771,10 @@ def obsolete_dashboard_js_restores_backtest_race_after_reload():
         global.alert = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -2904,15 +2812,6 @@ def test_dashboard_js_run_screen_does_not_auto_refresh_market_data():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -3090,8 +2989,10 @@ def test_dashboard_js_run_screen_does_not_auto_refresh_market_data():
         global.showToast = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -3128,15 +3029,6 @@ def test_dashboard_js_run_screen_includes_disqualifier_params():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -3321,8 +3213,10 @@ def test_dashboard_js_run_screen_includes_disqualifier_params():
         global.showToast = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -3393,15 +3287,6 @@ def test_dashboard_js_run_screen_auto_exports_to_google_drive():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -3600,8 +3485,10 @@ def test_dashboard_js_run_screen_auto_exports_to_google_drive():
         global.showToast = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -3646,15 +3533,6 @@ def test_dashboard_js_modify_strategy_bumps_existing_version():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -3783,8 +3661,10 @@ def test_dashboard_js_modify_strategy_bumps_existing_version():
         global.showToast = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -3816,15 +3696,6 @@ def test_dashboard_js_persists_chart_range():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -3914,8 +3785,10 @@ def test_dashboard_js_persists_chart_range():
         global.alert = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -3951,15 +3824,6 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
     if not node:
         pytest.skip("Node is required for dashboard JavaScript smoke tests")
 
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
     script = textwrap.dedent(f"""
         const fs = require("fs");
 
@@ -4138,8 +4002,10 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
         global.showToast = () => {{}};
         global.Plotly = {{ purge: () => {{}}, relayout: () => {{}}, downloadImage: () => {{}} }};
 
-        const source = fs.readFileSync({str(dashboard_js)!r}, "utf8");
-        Function(source)();
+        const vm = require("vm");
+        for (const scriptPath of {DASHBOARD_SCRIPT_PATHS}) {{
+          vm.runInThisContext(fs.readFileSync(scriptPath, "utf8"), {{ filename: scriptPath }});
+        }}
 
         (async () => {{
           if (window.dashboardReadyPromise) {{
@@ -4168,3 +4034,70 @@ def test_dashboard_js_auto_refreshes_stale_market_data():
         text=True,
     )
     assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_market_refresh_snapshot_updates_both_progress_bars():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required")
+    script = """
+const fs = require('fs');
+const vm = require('vm');
+let navScanProgressJob = 'market-refresh';
+const updates = [];
+vm.runInThisContext(fs.readFileSync(process.argv[1], 'utf8'));
+setNavScanProgress = state => updates.push(state);
+applyJobProgressSnapshot({job:'market-refresh', phase:'refreshing', active:true,
+  pct:42.5, detail:'5/10 tickers processed'});
+if (updates[0].globalPct !== 42.5 || updates[1].contextPct !== 50)
+  throw new Error(JSON.stringify(updates));
+if (updates[1].contextText !== '5/10 tickers processed') throw new Error('Missing count');
+"""
+    result = subprocess.run(
+        [node, "-e", script, str(JAVASCRIPT_DIR / "dashboard/progress.js")],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_history_selector_enables_fresh_universe_and_sends_selected_period():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required")
+    script = """
+const fs = require('fs');
+const vm = require('vm');
+const nodes = {};
+const document = {getElementById: id => nodes[id] ||= {
+  value: id === 'refresh-history-years' ? '10' : '',
+  classList: {contains: () => true}
+}};
+let tickerScanScope = 'nasdaq';
+let playbookLoaded = false, playbookSourceSignature = '';
+const normalizeScanScope = x => x;
+const getActiveSourceLabel = x => x;
+const setNavScanProgress = () => {};
+const startJobProgressPolling = () => {};
+const stopJobProgressPolling = () => {};
+const showToast = () => {};
+const requests = [];
+const fetch = async url => {
+  requests.push(url);
+  return {ok: true, json: async () => ({is_stale: false, refreshed: 1})};
+};
+vm.runInThisContext(fs.readFileSync(process.argv[1], 'utf8'));
+(async () => {
+  await loadMarketStatus();
+  if (nodes['shortlist-refresh-btn'].disabled) throw new Error('Fresh history disabled');
+  await refreshMarketData({historyYears: 10});
+  if (!requests.some(url => url.includes('history_years=10'))) throw new Error('Missing period');
+  if (nodes['refresh-history-years'].disabled) throw new Error('Selector still disabled');
+})().catch(err => {console.error(err); process.exit(1)});
+"""
+    result = subprocess.run(
+        [node, "-e", script, str(JAVASCRIPT_DIR / "dashboard/market-data.js")],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr

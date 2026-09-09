@@ -19,9 +19,7 @@ def test_profit_target_outcomes_uses_future_highs_and_excludes_incomplete_window
         }
     )
 
-    outcomes = profit_target_outcomes(
-        frame, target_return_pct=5.0, horizon_days=2
-    )
+    outcomes = profit_target_outcomes(frame, target_return_pct=5.0, horizon_days=2)
 
     assert outcomes == {
         "target_entries": 2,

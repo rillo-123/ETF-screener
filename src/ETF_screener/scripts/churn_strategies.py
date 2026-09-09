@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 
+from ETF_screener.cache_policy import cache_is_fresh, trim_cache
 from ETF_screener.config_loader import get_paths
 from ETF_screener.dslx import DSLXError, parse_program
 from ETF_screener.backtester import (
@@ -121,7 +122,7 @@ def _load_cached_strategy_eval(
     cache_key: str, _cache_mtime_ns: int
 ) -> pd.DataFrame | None:
     cache_path = _strategy_eval_cache_dir() / f"{cache_key}.pkl"
-    if not cache_path.exists():
+    if not cache_is_fresh(cache_path):
         return None
     try:
         cached = pd.read_pickle(cache_path)
@@ -136,6 +137,7 @@ def _save_cached_strategy_eval(cache_key: str, df: pd.DataFrame) -> None:
     cache_path = _strategy_eval_cache_dir() / f"{cache_key}.pkl"
     try:
         df.to_pickle(cache_path)
+        trim_cache()
     except Exception:
         try:
             if cache_path.exists():
@@ -657,12 +659,25 @@ def find_recent_entry_days(
         return None
 
     if strategy_spec.get("dslx"):
-        entry_mask = df.get("entry_condition", pd.Series(False, index=df.index)).fillna(False).astype(bool)
-        exit_mask = df.get("exit_condition", pd.Series(False, index=df.index)).fillna(False).astype(bool)
+        entry_mask = (
+            df.get("entry_condition", pd.Series(False, index=df.index))
+            .fillna(False)
+            .astype(bool)
+        )
+        exit_mask = (
+            df.get("exit_condition", pd.Series(False, index=df.index))
+            .fillna(False)
+            .astype(bool)
+        )
         scan_limit = len(df) if max_days is None else min(int(max_days) + 1, len(df))
         for age in range(scan_limit):
             idx = len(df) - 1 - age
-            if idx >= 0 and bool(entry_mask.iloc[idx]) and not bool(exit_mask.iloc[idx]) and not bool(exit_mask.iloc[idx + 1 :].any()):
+            if (
+                idx >= 0
+                and bool(entry_mask.iloc[idx])
+                and not bool(exit_mask.iloc[idx])
+                and not bool(exit_mask.iloc[idx + 1 :].any())
+            ):
                 return age
         return None
 

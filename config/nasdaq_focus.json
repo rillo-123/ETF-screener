@@ -1,0 +1,2011 @@
+{
+  "name": "Nasdaq Liquid 400",
+  "as_of": "2026-09-04",
+  "history_years": 5,
+  "selection": "400 official Nasdaq common-share listings with highest local 20-session average dollar turnover, price >= $3, average volume >= 150000, 20 active sessions; latest common market date",
+  "source": "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt",
+  "tickers": [
+    "NVDA",
+    "MU",
+    "SNDK",
+    "TSLA",
+    "SPCX",
+    "AAPL",
+    "MSFT",
+    "INTC",
+    "META",
+    "AVGO",
+    "AMD",
+    "AMZN",
+    "GOOGL",
+    "PLTR",
+    "MRVL",
+    "NBIS",
+    "MRNA",
+    "LITE",
+    "AMAT",
+    "MSTR",
+    "STX",
+    "WDC",
+    "WMT",
+    "CRWV",
+    "LRCX",
+    "HOOD",
+    "NFLX",
+    "CSCO",
+    "PANW",
+    "CRWD",
+    "SMCI",
+    "CBRS",
+    "IREN",
+    "COIN",
+    "KLAC",
+    "APP",
+    "COST",
+    "INTU",
+    "QCOM",
+    "CRDO",
+    "TXN",
+    "AAOI",
+    "ADI",
+    "RKLB",
+    "ADBE",
+    "ALAB",
+    "DDOG",
+    "BKNG",
+    "WDAY",
+    "AMGN",
+    "ABNB",
+    "DASH",
+    "PEP",
+    "ISRG",
+    "LIN",
+    "TER",
+    "AAL",
+    "MDB",
+    "MELI",
+    "SOFI",
+    "TEAM",
+    "GILD",
+    "AXTI",
+    "MPWR",
+    "SNPS",
+    "CDNS",
+    "PYPL",
+    "TMUS",
+    "CEG",
+    "ASTS",
+    "FTNT",
+    "LULU",
+    "ONDS",
+    "HONA",
+    "NXPI",
+    "OKTA",
+    "HON",
+    "MCHP",
+    "VRTX",
+    "ROST",
+    "TTWO",
+    "CIFR",
+    "ADP",
+    "EQIX",
+    "MARA",
+    "SBUX",
+    "ON",
+    "CMCSA",
+    "REGN",
+    "ZS",
+    "CME",
+    "TEM",
+    "WULF",
+    "WBD",
+    "ADSK",
+    "NTAP",
+    "MAR",
+    "AXON",
+    "CSX",
+    "MNST",
+    "APLD",
+    "EXPE",
+    "RIOT",
+    "SMTC",
+    "MDLZ",
+    "HUT",
+    "NTRA",
+    "EBAY",
+    "ALNY",
+    "FSLR",
+    "ORLY",
+    "CHTR",
+    "CTSH",
+    "AFRM",
+    "AEP",
+    "BKR",
+    "KHC",
+    "ULTA",
+    "RVMD",
+    "IBKR",
+    "DXCM",
+    "ILMN",
+    "TSCO",
+    "HBAN",
+    "XEL",
+    "MKSI",
+    "FOXA",
+    "GH",
+    "AKAM",
+    "FANG",
+    "CTAS",
+    "ZM",
+    "FLEX",
+    "ODFL",
+    "SWKS",
+    "TSEM",
+    "RIVN",
+    "MTSI",
+    "CPRT",
+    "FISV",
+    "KMB",
+    "TTD",
+    "FAST",
+    "ROKU",
+    "KDP",
+    "FIVE",
+    "TTMI",
+    "PCAR",
+    "CELH",
+    "ENTG",
+    "AEHR",
+    "GTLB",
+    "DLTR",
+    "STLD",
+    "EXC",
+    "QBTS",
+    "STRL",
+    "IDXX",
+    "TLN",
+    "RGTI",
+    "ROP",
+    "PAYX",
+    "CASY",
+    "USAR",
+    "PURR",
+    "ECHO",
+    "JAZZ",
+    "CHYM",
+    "DPZ",
+    "FTAI",
+    "NDAQ",
+    "DKNG",
+    "MDLN",
+    "INSM",
+    "CLSK",
+    "EXE",
+    "SITM",
+    "VRSK",
+    "CDW",
+    "APA",
+    "ACGL",
+    "ZBRA",
+    "TWST",
+    "DOCU",
+    "ROIV",
+    "AMKR",
+    "LPLA",
+    "CORZ",
+    "JBHT",
+    "HALO",
+    "AVAV",
+    "FROG",
+    "VRSN",
+    "PODD",
+    "AUR",
+    "KTOS",
+    "HST",
+    "SOLS",
+    "CART",
+    "ASST",
+    "CAKE",
+    "GFS",
+    "CHRW",
+    "WWD",
+    "NTRS",
+    "FWONK",
+    "CG",
+    "GEHC",
+    "NTNX",
+    "CPB",
+    "TECH",
+    "TXG",
+    "TRMB",
+    "FFIV",
+    "RGLD",
+    "LYFT",
+    "SOUN",
+    "DUOL",
+    "VICR",
+    "FIGR",
+    "NXT",
+    "NBIX",
+    "TRI",
+    "MKTX",
+    "BULL",
+    "LSCC",
+    "BBIO",
+    "CSGP",
+    "LUNR",
+    "RGEN",
+    "PTC",
+    "BTDR",
+    "NVMI",
+    "CCEP",
+    "NVTS",
+    "RMBS",
+    "AGNC",
+    "LNT",
+    "WTW",
+    "FCEL",
+    "EVRG",
+    "GEN",
+    "VIAV",
+    "MANH",
+    "JKHY",
+    "BIIB",
+    "RPRX",
+    "MXL",
+    "SAIA",
+    "TPG",
+    "INCY",
+    "BMRN",
+    "LNTH",
+    "AEIS",
+    "WYNN",
+    "ASND",
+    "TXRH",
+    "VTRS",
+    "DAVE",
+    "GLXY",
+    "WIX",
+    "TENB",
+    "AXSM",
+    "ENPH",
+    "KEEL",
+    "NDSN",
+    "FSLY",
+    "IONS",
+    "FRVO",
+    "HAS",
+    "CYTK",
+    "SBAC",
+    "GLPI",
+    "PRAX",
+    "LECO",
+    "MDGL",
+    "TROW",
+    "AMLX",
+    "WETO",
+    "OPEN",
+    "OLLI",
+    "MNDY",
+    "ALGN",
+    "CGNX",
+    "WING",
+    "UPST",
+    "VSAT",
+    "CAI",
+    "DBX",
+    "IOVA",
+    "LQDA",
+    "FRMI",
+    "FORM",
+    "COO",
+    "PFG",
+    "SFM",
+    "MTCH",
+    "CHKP",
+    "MEDP",
+    "TW",
+    "EXEL",
+    "ABCL",
+    "GRAB",
+    "SSNC",
+    "CROX",
+    "QLYS",
+    "ALM",
+    "POOL",
+    "SANM",
+    "HTFL",
+    "BRKR",
+    "JBLU",
+    "SYRE",
+    "SHAZ",
+    "TTAN",
+    "XE",
+    "PSKY",
+    "SIRI",
+    "NWSA",
+    "OUST",
+    "CZR",
+    "IESC",
+    "URBN",
+    "AAON",
+    "TGTX",
+    "AVT",
+    "XP",
+    "SLS",
+    "QNT",
+    "CRUS",
+    "SSRM",
+    "PCTY",
+    "POWL",
+    "QS",
+    "VISN",
+    "SMMT",
+    "CENX",
+    "CORT",
+    "DFTX",
+    "ARWR",
+    "TIGO",
+    "EOSE",
+    "BSP",
+    "TTEK",
+    "COLB",
+    "CHRD",
+    "ICLR",
+    "AMBA",
+    "CAPR",
+    "PTEN",
+    "LFUS",
+    "MYRG",
+    "QRVO",
+    "WEN",
+    "ZION",
+    "KYMR",
+    "SEDG",
+    "ORKA",
+    "HQY",
+    "EWBC",
+    "CRSP",
+    "RARE",
+    "VLY",
+    "RELY",
+    "PENG",
+    "HSIC",
+    "RCAT",
+    "INIO",
+    "POET",
+    "AUGO",
+    "TVTX",
+    "FCFS",
+    "MRCY",
+    "ONB",
+    "WFRD",
+    "COKE",
+    "APPF",
+    "NTSK",
+    "LAMR",
+    "CHEF",
+    "FRPT",
+    "BSY",
+    "GTX",
+    "BRZE",
+    "LKQ",
+    "VSEC",
+    "CHDN",
+    "BPOP",
+    "ASO",
+    "ALGM",
+    "UCTT",
+    "KRYS",
+    "MIDD",
+    "WTFC",
+    "CELC",
+    "WSC",
+    "WYFI",
+    "CINF",
+    "INDV",
+    "SEZL"
+  ],
+  "ranking": [
+    {
+      "ticker": "NVDA",
+      "avg_dollar_turnover_20": 26207180473.435688
+    },
+    {
+      "ticker": "MU",
+      "avg_dollar_turnover_20": 24746837584.339367
+    },
+    {
+      "ticker": "SNDK",
+      "avg_dollar_turnover_20": 18170582060.152172
+    },
+    {
+      "ticker": "TSLA",
+      "avg_dollar_turnover_20": 12467892640.301674
+    },
+    {
+      "ticker": "SPCX",
+      "avg_dollar_turnover_20": 11914009814.094828
+    },
+    {
+      "ticker": "AAPL",
+      "avg_dollar_turnover_20": 11464100239.84631
+    },
+    {
+      "ticker": "MSFT",
+      "avg_dollar_turnover_20": 10376794920.293688
+    },
+    {
+      "ticker": "INTC",
+      "avg_dollar_turnover_20": 8785515760.27029
+    },
+    {
+      "ticker": "META",
+      "avg_dollar_turnover_20": 8673166818.975393
+    },
+    {
+      "ticker": "AVGO",
+      "avg_dollar_turnover_20": 8110402802.575519
+    },
+    {
+      "ticker": "AMD",
+      "avg_dollar_turnover_20": 7891261867.566259
+    },
+    {
+      "ticker": "AMZN",
+      "avg_dollar_turnover_20": 7829437787.119009
+    },
+    {
+      "ticker": "GOOGL",
+      "avg_dollar_turnover_20": 6821766634.005699
+    },
+    {
+      "ticker": "PLTR",
+      "avg_dollar_turnover_20": 5567458017.987337
+    },
+    {
+      "ticker": "MRVL",
+      "avg_dollar_turnover_20": 5061372832.970359
+    },
+    {
+      "ticker": "NBIS",
+      "avg_dollar_turnover_20": 4914042452.708311
+    },
+    {
+      "ticker": "MRNA",
+      "avg_dollar_turnover_20": 4781957794.920105
+    },
+    {
+      "ticker": "LITE",
+      "avg_dollar_turnover_20": 3921786647.1544433
+    },
+    {
+      "ticker": "AMAT",
+      "avg_dollar_turnover_20": 3406193278.438876
+    },
+    {
+      "ticker": "MSTR",
+      "avg_dollar_turnover_20": 3083451577.2630453
+    },
+    {
+      "ticker": "STX",
+      "avg_dollar_turnover_20": 2917726728.115323
+    },
+    {
+      "ticker": "WDC",
+      "avg_dollar_turnover_20": 2818073550.382692
+    },
+    {
+      "ticker": "WMT",
+      "avg_dollar_turnover_20": 2722509077.000556
+    },
+    {
+      "ticker": "CRWV",
+      "avg_dollar_turnover_20": 2492129111.561458
+    },
+    {
+      "ticker": "LRCX",
+      "avg_dollar_turnover_20": 2132194453.4996917
+    },
+    {
+      "ticker": "HOOD",
+      "avg_dollar_turnover_20": 2105689216.3837433
+    },
+    {
+      "ticker": "NFLX",
+      "avg_dollar_turnover_20": 2040827734.022306
+    },
+    {
+      "ticker": "CSCO",
+      "avg_dollar_turnover_20": 2037616617.8700097
+    },
+    {
+      "ticker": "PANW",
+      "avg_dollar_turnover_20": 1974776069.1258454
+    },
+    {
+      "ticker": "CRWD",
+      "avg_dollar_turnover_20": 1969752956.264321
+    },
+    {
+      "ticker": "SMCI",
+      "avg_dollar_turnover_20": 1913096576.4493604
+    },
+    {
+      "ticker": "CBRS",
+      "avg_dollar_turnover_20": 1782738092.2864823
+    },
+    {
+      "ticker": "IREN",
+      "avg_dollar_turnover_20": 1767871990.3683572
+    },
+    {
+      "ticker": "COIN",
+      "avg_dollar_turnover_20": 1584904320.457377
+    },
+    {
+      "ticker": "KLAC",
+      "avg_dollar_turnover_20": 1572186818.9311798
+    },
+    {
+      "ticker": "APP",
+      "avg_dollar_turnover_20": 1557375149.167807
+    },
+    {
+      "ticker": "COST",
+      "avg_dollar_turnover_20": 1449937084.6578217
+    },
+    {
+      "ticker": "INTU",
+      "avg_dollar_turnover_20": 1326777523.852719
+    },
+    {
+      "ticker": "QCOM",
+      "avg_dollar_turnover_20": 1296429678.7768235
+    },
+    {
+      "ticker": "CRDO",
+      "avg_dollar_turnover_20": 1283274606.102031
+    },
+    {
+      "ticker": "TXN",
+      "avg_dollar_turnover_20": 1280708101.9963791
+    },
+    {
+      "ticker": "AAOI",
+      "avg_dollar_turnover_20": 1186972359.7538192
+    },
+    {
+      "ticker": "ADI",
+      "avg_dollar_turnover_20": 1168857342.1546142
+    },
+    {
+      "ticker": "RKLB",
+      "avg_dollar_turnover_20": 1153334640.9140146
+    },
+    {
+      "ticker": "ADBE",
+      "avg_dollar_turnover_20": 1096802924.4445603
+    },
+    {
+      "ticker": "ALAB",
+      "avg_dollar_turnover_20": 951045815.3982437
+    },
+    {
+      "ticker": "DDOG",
+      "avg_dollar_turnover_20": 906149767.7389457
+    },
+    {
+      "ticker": "BKNG",
+      "avg_dollar_turnover_20": 895630680.6467407
+    },
+    {
+      "ticker": "WDAY",
+      "avg_dollar_turnover_20": 882908453.5599205
+    },
+    {
+      "ticker": "AMGN",
+      "avg_dollar_turnover_20": 864308862.7264786
+    },
+    {
+      "ticker": "ABNB",
+      "avg_dollar_turnover_20": 861045500.5302986
+    },
+    {
+      "ticker": "DASH",
+      "avg_dollar_turnover_20": 847720225.5313431
+    },
+    {
+      "ticker": "PEP",
+      "avg_dollar_turnover_20": 825308232.2861595
+    },
+    {
+      "ticker": "ISRG",
+      "avg_dollar_turnover_20": 820503083.3355148
+    },
+    {
+      "ticker": "LIN",
+      "avg_dollar_turnover_20": 818379914.580156
+    },
+    {
+      "ticker": "TER",
+      "avg_dollar_turnover_20": 796517358.5126877
+    },
+    {
+      "ticker": "AAL",
+      "avg_dollar_turnover_20": 766632499.7146841
+    },
+    {
+      "ticker": "MDB",
+      "avg_dollar_turnover_20": 759468974.4962524
+    },
+    {
+      "ticker": "MELI",
+      "avg_dollar_turnover_20": 756389807.2949402
+    },
+    {
+      "ticker": "SOFI",
+      "avg_dollar_turnover_20": 725852292.2721665
+    },
+    {
+      "ticker": "TEAM",
+      "avg_dollar_turnover_20": 710724856.8132141
+    },
+    {
+      "ticker": "GILD",
+      "avg_dollar_turnover_20": 679557920.9637039
+    },
+    {
+      "ticker": "AXTI",
+      "avg_dollar_turnover_20": 667765618.4558712
+    },
+    {
+      "ticker": "MPWR",
+      "avg_dollar_turnover_20": 664090012.2211365
+    },
+    {
+      "ticker": "SNPS",
+      "avg_dollar_turnover_20": 658322292.3989105
+    },
+    {
+      "ticker": "CDNS",
+      "avg_dollar_turnover_20": 652488502.8887116
+    },
+    {
+      "ticker": "PYPL",
+      "avg_dollar_turnover_20": 647530333.740703
+    },
+    {
+      "ticker": "TMUS",
+      "avg_dollar_turnover_20": 629486801.5879929
+    },
+    {
+      "ticker": "CEG",
+      "avg_dollar_turnover_20": 626116368.8109391
+    },
+    {
+      "ticker": "ASTS",
+      "avg_dollar_turnover_20": 618022410.6747822
+    },
+    {
+      "ticker": "FTNT",
+      "avg_dollar_turnover_20": 603492662.95084
+    },
+    {
+      "ticker": "LULU",
+      "avg_dollar_turnover_20": 600537133.651326
+    },
+    {
+      "ticker": "ONDS",
+      "avg_dollar_turnover_20": 580172650.1901672
+    },
+    {
+      "ticker": "HONA",
+      "avg_dollar_turnover_20": 563667187.3987548
+    },
+    {
+      "ticker": "NXPI",
+      "avg_dollar_turnover_20": 562624050.5448647
+    },
+    {
+      "ticker": "OKTA",
+      "avg_dollar_turnover_20": 558860161.5693359
+    },
+    {
+      "ticker": "HON",
+      "avg_dollar_turnover_20": 557106967.3551209
+    },
+    {
+      "ticker": "MCHP",
+      "avg_dollar_turnover_20": 548488474.0163101
+    },
+    {
+      "ticker": "VRTX",
+      "avg_dollar_turnover_20": 546335926.8365082
+    },
+    {
+      "ticker": "ROST",
+      "avg_dollar_turnover_20": 539893740.8044777
+    },
+    {
+      "ticker": "TTWO",
+      "avg_dollar_turnover_20": 534991246.3663513
+    },
+    {
+      "ticker": "CIFR",
+      "avg_dollar_turnover_20": 521600453.9818014
+    },
+    {
+      "ticker": "ADP",
+      "avg_dollar_turnover_20": 510194165.1697693
+    },
+    {
+      "ticker": "EQIX",
+      "avg_dollar_turnover_20": 504470265.3674866
+    },
+    {
+      "ticker": "MARA",
+      "avg_dollar_turnover_20": 496080037.27548105
+    },
+    {
+      "ticker": "SBUX",
+      "avg_dollar_turnover_20": 493010547.6248428
+    },
+    {
+      "ticker": "ON",
+      "avg_dollar_turnover_20": 488672156.6984955
+    },
+    {
+      "ticker": "CMCSA",
+      "avg_dollar_turnover_20": 486793186.304749
+    },
+    {
+      "ticker": "REGN",
+      "avg_dollar_turnover_20": 479841560.53236085
+    },
+    {
+      "ticker": "ZS",
+      "avg_dollar_turnover_20": 479817383.22969055
+    },
+    {
+      "ticker": "CME",
+      "avg_dollar_turnover_20": 475047903.36107635
+    },
+    {
+      "ticker": "TEM",
+      "avg_dollar_turnover_20": 464945947.5746954
+    },
+    {
+      "ticker": "WULF",
+      "avg_dollar_turnover_20": 464199725.40057486
+    },
+    {
+      "ticker": "WBD",
+      "avg_dollar_turnover_20": 464100229.8468218
+    },
+    {
+      "ticker": "ADSK",
+      "avg_dollar_turnover_20": 460521059.73169404
+    },
+    {
+      "ticker": "NTAP",
+      "avg_dollar_turnover_20": 449531036.3428696
+    },
+    {
+      "ticker": "MAR",
+      "avg_dollar_turnover_20": 444977338.05520475
+    },
+    {
+      "ticker": "AXON",
+      "avg_dollar_turnover_20": 443064717.0260407
+    },
+    {
+      "ticker": "CSX",
+      "avg_dollar_turnover_20": 415554535.716601
+    },
+    {
+      "ticker": "MNST",
+      "avg_dollar_turnover_20": 412914760.51695806
+    },
+    {
+      "ticker": "APLD",
+      "avg_dollar_turnover_20": 411319996.74845135
+    },
+    {
+      "ticker": "EXPE",
+      "avg_dollar_turnover_20": 406811716.5084488
+    },
+    {
+      "ticker": "RIOT",
+      "avg_dollar_turnover_20": 402620996.29072887
+    },
+    {
+      "ticker": "SMTC",
+      "avg_dollar_turnover_20": 391728520.7943672
+    },
+    {
+      "ticker": "MDLZ",
+      "avg_dollar_turnover_20": 387312369.2563902
+    },
+    {
+      "ticker": "HUT",
+      "avg_dollar_turnover_20": 384406548.1821392
+    },
+    {
+      "ticker": "NTRA",
+      "avg_dollar_turnover_20": 379213881.17628324
+    },
+    {
+      "ticker": "EBAY",
+      "avg_dollar_turnover_20": 377993539.70457155
+    },
+    {
+      "ticker": "ALNY",
+      "avg_dollar_turnover_20": 374360682.08051836
+    },
+    {
+      "ticker": "FSLR",
+      "avg_dollar_turnover_20": 374213733.9739624
+    },
+    {
+      "ticker": "ORLY",
+      "avg_dollar_turnover_20": 369199346.0296291
+    },
+    {
+      "ticker": "CHTR",
+      "avg_dollar_turnover_20": 363244513.65144956
+    },
+    {
+      "ticker": "CTSH",
+      "avg_dollar_turnover_20": 359423640.78557146
+    },
+    {
+      "ticker": "AFRM",
+      "avg_dollar_turnover_20": 357805986.03895456
+    },
+    {
+      "ticker": "AEP",
+      "avg_dollar_turnover_20": 349745248.12991637
+    },
+    {
+      "ticker": "BKR",
+      "avg_dollar_turnover_20": 349257973.6757904
+    },
+    {
+      "ticker": "KHC",
+      "avg_dollar_turnover_20": 348884847.3256825
+    },
+    {
+      "ticker": "ULTA",
+      "avg_dollar_turnover_20": 340682836.5717224
+    },
+    {
+      "ticker": "RVMD",
+      "avg_dollar_turnover_20": 338126127.25722504
+    },
+    {
+      "ticker": "IBKR",
+      "avg_dollar_turnover_20": 338099028.5748886
+    },
+    {
+      "ticker": "DXCM",
+      "avg_dollar_turnover_20": 332653308.2402374
+    },
+    {
+      "ticker": "ILMN",
+      "avg_dollar_turnover_20": 327212089.43458784
+    },
+    {
+      "ticker": "TSCO",
+      "avg_dollar_turnover_20": 324817875.8152506
+    },
+    {
+      "ticker": "HBAN",
+      "avg_dollar_turnover_20": 322300813.53153896
+    },
+    {
+      "ticker": "XEL",
+      "avg_dollar_turnover_20": 321600605.20454633
+    },
+    {
+      "ticker": "MKSI",
+      "avg_dollar_turnover_20": 317391797.6210693
+    },
+    {
+      "ticker": "FOXA",
+      "avg_dollar_turnover_20": 317164417.618766
+    },
+    {
+      "ticker": "GH",
+      "avg_dollar_turnover_20": 310221865.8774956
+    },
+    {
+      "ticker": "AKAM",
+      "avg_dollar_turnover_20": 307352394.54900473
+    },
+    {
+      "ticker": "FANG",
+      "avg_dollar_turnover_20": 306585679.89044416
+    },
+    {
+      "ticker": "CTAS",
+      "avg_dollar_turnover_20": 305784285.82555234
+    },
+    {
+      "ticker": "ZM",
+      "avg_dollar_turnover_20": 305412180.6062492
+    },
+    {
+      "ticker": "FLEX",
+      "avg_dollar_turnover_20": 304077935.0665566
+    },
+    {
+      "ticker": "ODFL",
+      "avg_dollar_turnover_20": 301834290.29825974
+    },
+    {
+      "ticker": "SWKS",
+      "avg_dollar_turnover_20": 301002638.6319019
+    },
+    {
+      "ticker": "TSEM",
+      "avg_dollar_turnover_20": 300564243.27081835
+    },
+    {
+      "ticker": "RIVN",
+      "avg_dollar_turnover_20": 300453986.02192295
+    },
+    {
+      "ticker": "MTSI",
+      "avg_dollar_turnover_20": 297211036.5595352
+    },
+    {
+      "ticker": "CPRT",
+      "avg_dollar_turnover_20": 294167092.13929844
+    },
+    {
+      "ticker": "FISV",
+      "avg_dollar_turnover_20": 293415327.07777274
+    },
+    {
+      "ticker": "KMB",
+      "avg_dollar_turnover_20": 293221988.19653016
+    },
+    {
+      "ticker": "TTD",
+      "avg_dollar_turnover_20": 285850692.6418761
+    },
+    {
+      "ticker": "FAST",
+      "avg_dollar_turnover_20": 283487114.3757526
+    },
+    {
+      "ticker": "ROKU",
+      "avg_dollar_turnover_20": 283047732.1145584
+    },
+    {
+      "ticker": "KDP",
+      "avg_dollar_turnover_20": 281917531.32008535
+    },
+    {
+      "ticker": "FIVE",
+      "avg_dollar_turnover_20": 281324922.63815767
+    },
+    {
+      "ticker": "TTMI",
+      "avg_dollar_turnover_20": 277975712.10976255
+    },
+    {
+      "ticker": "PCAR",
+      "avg_dollar_turnover_20": 275225143.16072005
+    },
+    {
+      "ticker": "CELH",
+      "avg_dollar_turnover_20": 271606284.7445898
+    },
+    {
+      "ticker": "ENTG",
+      "avg_dollar_turnover_20": 268025811.1571762
+    },
+    {
+      "ticker": "AEHR",
+      "avg_dollar_turnover_20": 266579206.90273133
+    },
+    {
+      "ticker": "GTLB",
+      "avg_dollar_turnover_20": 259579898.63498172
+    },
+    {
+      "ticker": "DLTR",
+      "avg_dollar_turnover_20": 259220852.3728447
+    },
+    {
+      "ticker": "STLD",
+      "avg_dollar_turnover_20": 258242684.75277787
+    },
+    {
+      "ticker": "EXC",
+      "avg_dollar_turnover_20": 257614625.95678177
+    },
+    {
+      "ticker": "QBTS",
+      "avg_dollar_turnover_20": 257272735.2592948
+    },
+    {
+      "ticker": "STRL",
+      "avg_dollar_turnover_20": 255985736.91838837
+    },
+    {
+      "ticker": "IDXX",
+      "avg_dollar_turnover_20": 249063658.87296754
+    },
+    {
+      "ticker": "TLN",
+      "avg_dollar_turnover_20": 248090636.33428955
+    },
+    {
+      "ticker": "RGTI",
+      "avg_dollar_turnover_20": 245758510.08869672
+    },
+    {
+      "ticker": "ROP",
+      "avg_dollar_turnover_20": 239666086.0083313
+    },
+    {
+      "ticker": "PAYX",
+      "avg_dollar_turnover_20": 237144448.3528099
+    },
+    {
+      "ticker": "CASY",
+      "avg_dollar_turnover_20": 235605145.22730407
+    },
+    {
+      "ticker": "USAR",
+      "avg_dollar_turnover_20": 230504112.6840124
+    },
+    {
+      "ticker": "PURR",
+      "avg_dollar_turnover_20": 230493171.14568248
+    },
+    {
+      "ticker": "ECHO",
+      "avg_dollar_turnover_20": 230214288.3789734
+    },
+    {
+      "ticker": "JAZZ",
+      "avg_dollar_turnover_20": 229062626.99792632
+    },
+    {
+      "ticker": "CHYM",
+      "avg_dollar_turnover_20": 228079956.35816193
+    },
+    {
+      "ticker": "DPZ",
+      "avg_dollar_turnover_20": 226477351.49980623
+    },
+    {
+      "ticker": "FTAI",
+      "avg_dollar_turnover_20": 226306638.99506837
+    },
+    {
+      "ticker": "NDAQ",
+      "avg_dollar_turnover_20": 223966915.71934015
+    },
+    {
+      "ticker": "DKNG",
+      "avg_dollar_turnover_20": 223777540.2683838
+    },
+    {
+      "ticker": "MDLN",
+      "avg_dollar_turnover_20": 222276170.602211
+    },
+    {
+      "ticker": "INSM",
+      "avg_dollar_turnover_20": 221561332.53510207
+    },
+    {
+      "ticker": "CLSK",
+      "avg_dollar_turnover_20": 217926359.26716813
+    },
+    {
+      "ticker": "EXE",
+      "avg_dollar_turnover_20": 211005140.4789711
+    },
+    {
+      "ticker": "SITM",
+      "avg_dollar_turnover_20": 206803246.220224
+    },
+    {
+      "ticker": "VRSK",
+      "avg_dollar_turnover_20": 204715616.2180786
+    },
+    {
+      "ticker": "CDW",
+      "avg_dollar_turnover_20": 204157386.51136094
+    },
+    {
+      "ticker": "APA",
+      "avg_dollar_turnover_20": 202666751.74784335
+    },
+    {
+      "ticker": "ACGL",
+      "avg_dollar_turnover_20": 199819121.72710648
+    },
+    {
+      "ticker": "ZBRA",
+      "avg_dollar_turnover_20": 199047771.53756255
+    },
+    {
+      "ticker": "TWST",
+      "avg_dollar_turnover_20": 198871449.81110612
+    },
+    {
+      "ticker": "DOCU",
+      "avg_dollar_turnover_20": 197332728.94843596
+    },
+    {
+      "ticker": "ROIV",
+      "avg_dollar_turnover_20": 197327861.28904915
+    },
+    {
+      "ticker": "AMKR",
+      "avg_dollar_turnover_20": 196967961.8031908
+    },
+    {
+      "ticker": "LPLA",
+      "avg_dollar_turnover_20": 194513147.44003907
+    },
+    {
+      "ticker": "CORZ",
+      "avg_dollar_turnover_20": 194094124.75589865
+    },
+    {
+      "ticker": "JBHT",
+      "avg_dollar_turnover_20": 192845164.157489
+    },
+    {
+      "ticker": "HALO",
+      "avg_dollar_turnover_20": 191038439.23622018
+    },
+    {
+      "ticker": "AVAV",
+      "avg_dollar_turnover_20": 190433244.5302933
+    },
+    {
+      "ticker": "FROG",
+      "avg_dollar_turnover_20": 181973552.8649292
+    },
+    {
+      "ticker": "VRSN",
+      "avg_dollar_turnover_20": 175978986.3083435
+    },
+    {
+      "ticker": "PODD",
+      "avg_dollar_turnover_20": 175755998.82840347
+    },
+    {
+      "ticker": "AUR",
+      "avg_dollar_turnover_20": 173990318.81425056
+    },
+    {
+      "ticker": "KTOS",
+      "avg_dollar_turnover_20": 172216117.45425493
+    },
+    {
+      "ticker": "HST",
+      "avg_dollar_turnover_20": 170813668.0092063
+    },
+    {
+      "ticker": "SOLS",
+      "avg_dollar_turnover_20": 170123304.64657363
+    },
+    {
+      "ticker": "CART",
+      "avg_dollar_turnover_20": 169584576.79913083
+    },
+    {
+      "ticker": "ASST",
+      "avg_dollar_turnover_20": 168736249.30646715
+    },
+    {
+      "ticker": "CAKE",
+      "avg_dollar_turnover_20": 168420853.13658255
+    },
+    {
+      "ticker": "GFS",
+      "avg_dollar_turnover_20": 168303251.59592667
+    },
+    {
+      "ticker": "CHRW",
+      "avg_dollar_turnover_20": 167406039.32781523
+    },
+    {
+      "ticker": "WWD",
+      "avg_dollar_turnover_20": 166491042.39035645
+    },
+    {
+      "ticker": "NTRS",
+      "avg_dollar_turnover_20": 165869112.733078
+    },
+    {
+      "ticker": "FWONK",
+      "avg_dollar_turnover_20": 165721573.44889945
+    },
+    {
+      "ticker": "CG",
+      "avg_dollar_turnover_20": 165154982.56949997
+    },
+    {
+      "ticker": "GEHC",
+      "avg_dollar_turnover_20": 164809604.37435913
+    },
+    {
+      "ticker": "NTNX",
+      "avg_dollar_turnover_20": 164687832.2885948
+    },
+    {
+      "ticker": "CPB",
+      "avg_dollar_turnover_20": 163791778.96225244
+    },
+    {
+      "ticker": "TECH",
+      "avg_dollar_turnover_20": 163769398.76294976
+    },
+    {
+      "ticker": "TXG",
+      "avg_dollar_turnover_20": 163518149.83000985
+    },
+    {
+      "ticker": "TRMB",
+      "avg_dollar_turnover_20": 163062081.895504
+    },
+    {
+      "ticker": "FFIV",
+      "avg_dollar_turnover_20": 162989758.802507
+    },
+    {
+      "ticker": "RGLD",
+      "avg_dollar_turnover_20": 162235888.01887816
+    },
+    {
+      "ticker": "LYFT",
+      "avg_dollar_turnover_20": 162216941.52305955
+    },
+    {
+      "ticker": "SOUN",
+      "avg_dollar_turnover_20": 161607863.42865336
+    },
+    {
+      "ticker": "DUOL",
+      "avg_dollar_turnover_20": 159956756.4836319
+    },
+    {
+      "ticker": "VICR",
+      "avg_dollar_turnover_20": 159613858.56173706
+    },
+    {
+      "ticker": "FIGR",
+      "avg_dollar_turnover_20": 159565053.17273027
+    },
+    {
+      "ticker": "NXT",
+      "avg_dollar_turnover_20": 159485421.27066842
+    },
+    {
+      "ticker": "NBIX",
+      "avg_dollar_turnover_20": 158360997.9186577
+    },
+    {
+      "ticker": "TRI",
+      "avg_dollar_turnover_20": 157919154.4031132
+    },
+    {
+      "ticker": "MKTX",
+      "avg_dollar_turnover_20": 157385781.13567352
+    },
+    {
+      "ticker": "BULL",
+      "avg_dollar_turnover_20": 155136534.12719473
+    },
+    {
+      "ticker": "LSCC",
+      "avg_dollar_turnover_20": 154894067.85664064
+    },
+    {
+      "ticker": "BBIO",
+      "avg_dollar_turnover_20": 153961835.35489655
+    },
+    {
+      "ticker": "CSGP",
+      "avg_dollar_turnover_20": 153634398.28249234
+    },
+    {
+      "ticker": "LUNR",
+      "avg_dollar_turnover_20": 152277964.15822625
+    },
+    {
+      "ticker": "RGEN",
+      "avg_dollar_turnover_20": 151951040.75829086
+    },
+    {
+      "ticker": "PTC",
+      "avg_dollar_turnover_20": 151365777.45134658
+    },
+    {
+      "ticker": "BTDR",
+      "avg_dollar_turnover_20": 151178945.75562745
+    },
+    {
+      "ticker": "NVMI",
+      "avg_dollar_turnover_20": 151135235.06639558
+    },
+    {
+      "ticker": "CCEP",
+      "avg_dollar_turnover_20": 150816845.3744034
+    },
+    {
+      "ticker": "NVTS",
+      "avg_dollar_turnover_20": 149166600.0250501
+    },
+    {
+      "ticker": "RMBS",
+      "avg_dollar_turnover_20": 148328439.6230465
+    },
+    {
+      "ticker": "AGNC",
+      "avg_dollar_turnover_20": 146875803.2220455
+    },
+    {
+      "ticker": "LNT",
+      "avg_dollar_turnover_20": 146754316.67017442
+    },
+    {
+      "ticker": "WTW",
+      "avg_dollar_turnover_20": 146405036.10385132
+    },
+    {
+      "ticker": "FCEL",
+      "avg_dollar_turnover_20": 145393246.54526004
+    },
+    {
+      "ticker": "EVRG",
+      "avg_dollar_turnover_20": 144278700.88984567
+    },
+    {
+      "ticker": "GEN",
+      "avg_dollar_turnover_20": 143908230.79860228
+    },
+    {
+      "ticker": "VIAV",
+      "avg_dollar_turnover_20": 142171689.52705917
+    },
+    {
+      "ticker": "MANH",
+      "avg_dollar_turnover_20": 140853256.4248329
+    },
+    {
+      "ticker": "JKHY",
+      "avg_dollar_turnover_20": 140009798.8321945
+    },
+    {
+      "ticker": "BIIB",
+      "avg_dollar_turnover_20": 139263571.1595436
+    },
+    {
+      "ticker": "RPRX",
+      "avg_dollar_turnover_20": 138801544.50097808
+    },
+    {
+      "ticker": "MXL",
+      "avg_dollar_turnover_20": 137777351.75453264
+    },
+    {
+      "ticker": "SAIA",
+      "avg_dollar_turnover_20": 136724586.13138884
+    },
+    {
+      "ticker": "TPG",
+      "avg_dollar_turnover_20": 136237311.49908295
+    },
+    {
+      "ticker": "INCY",
+      "avg_dollar_turnover_20": 132926950.87798461
+    },
+    {
+      "ticker": "BMRN",
+      "avg_dollar_turnover_20": 132641258.37954521
+    },
+    {
+      "ticker": "LNTH",
+      "avg_dollar_turnover_20": 131573228.93748665
+    },
+    {
+      "ticker": "AEIS",
+      "avg_dollar_turnover_20": 130286555.1068039
+    },
+    {
+      "ticker": "WYNN",
+      "avg_dollar_turnover_20": 128886653.22726135
+    },
+    {
+      "ticker": "ASND",
+      "avg_dollar_turnover_20": 128547097.2388939
+    },
+    {
+      "ticker": "TXRH",
+      "avg_dollar_turnover_20": 128409400.48718567
+    },
+    {
+      "ticker": "VTRS",
+      "avg_dollar_turnover_20": 127609208.61757307
+    },
+    {
+      "ticker": "DAVE",
+      "avg_dollar_turnover_20": 127138784.97516175
+    },
+    {
+      "ticker": "GLXY",
+      "avg_dollar_turnover_20": 126612990.4412078
+    },
+    {
+      "ticker": "WIX",
+      "avg_dollar_turnover_20": 126494290.0535328
+    },
+    {
+      "ticker": "TENB",
+      "avg_dollar_turnover_20": 126192628.00181332
+    },
+    {
+      "ticker": "AXSM",
+      "avg_dollar_turnover_20": 126134506.05520706
+    },
+    {
+      "ticker": "ENPH",
+      "avg_dollar_turnover_20": 125980675.51278324
+    },
+    {
+      "ticker": "KEEL",
+      "avg_dollar_turnover_20": 124898458.79562378
+    },
+    {
+      "ticker": "NDSN",
+      "avg_dollar_turnover_20": 124559106.24114838
+    },
+    {
+      "ticker": "FSLY",
+      "avg_dollar_turnover_20": 124428413.39163485
+    },
+    {
+      "ticker": "IONS",
+      "avg_dollar_turnover_20": 123926752.49456081
+    },
+    {
+      "ticker": "FRVO",
+      "avg_dollar_turnover_20": 123732629.00723696
+    },
+    {
+      "ticker": "HAS",
+      "avg_dollar_turnover_20": 123265098.59455109
+    },
+    {
+      "ticker": "CYTK",
+      "avg_dollar_turnover_20": 121368892.46206474
+    },
+    {
+      "ticker": "SBAC",
+      "avg_dollar_turnover_20": 121364664.08538513
+    },
+    {
+      "ticker": "GLPI",
+      "avg_dollar_turnover_20": 120715881.75309868
+    },
+    {
+      "ticker": "PRAX",
+      "avg_dollar_turnover_20": 120497013.90673217
+    },
+    {
+      "ticker": "LECO",
+      "avg_dollar_turnover_20": 120270736.51554108
+    },
+    {
+      "ticker": "MDGL",
+      "avg_dollar_turnover_20": 120230581.48605347
+    },
+    {
+      "ticker": "TROW",
+      "avg_dollar_turnover_20": 119657650.8269558
+    },
+    {
+      "ticker": "AMLX",
+      "avg_dollar_turnover_20": 119420971.00048943
+    },
+    {
+      "ticker": "WETO",
+      "avg_dollar_turnover_20": 119189139.94719124
+    },
+    {
+      "ticker": "OPEN",
+      "avg_dollar_turnover_20": 119177722.25272842
+    },
+    {
+      "ticker": "OLLI",
+      "avg_dollar_turnover_20": 117885421.38407898
+    },
+    {
+      "ticker": "MNDY",
+      "avg_dollar_turnover_20": 117081812.73696136
+    },
+    {
+      "ticker": "ALGN",
+      "avg_dollar_turnover_20": 116813421.05850753
+    },
+    {
+      "ticker": "CGNX",
+      "avg_dollar_turnover_20": 116748433.25695953
+    },
+    {
+      "ticker": "WING",
+      "avg_dollar_turnover_20": 116033952.89618607
+    },
+    {
+      "ticker": "UPST",
+      "avg_dollar_turnover_20": 115011524.3170909
+    },
+    {
+      "ticker": "VSAT",
+      "avg_dollar_turnover_20": 114892018.79899558
+    },
+    {
+      "ticker": "CAI",
+      "avg_dollar_turnover_20": 113802762.64510307
+    },
+    {
+      "ticker": "DBX",
+      "avg_dollar_turnover_20": 113661509.92738017
+    },
+    {
+      "ticker": "IOVA",
+      "avg_dollar_turnover_20": 113567192.71126242
+    },
+    {
+      "ticker": "LQDA",
+      "avg_dollar_turnover_20": 112902935.00079155
+    },
+    {
+      "ticker": "FRMI",
+      "avg_dollar_turnover_20": 112784708.61160764
+    },
+    {
+      "ticker": "FORM",
+      "avg_dollar_turnover_20": 110331875.83168563
+    },
+    {
+      "ticker": "COO",
+      "avg_dollar_turnover_20": 109834162.64424057
+    },
+    {
+      "ticker": "PFG",
+      "avg_dollar_turnover_20": 109453733.83901063
+    },
+    {
+      "ticker": "SFM",
+      "avg_dollar_turnover_20": 109097684.10485534
+    },
+    {
+      "ticker": "MTCH",
+      "avg_dollar_turnover_20": 108959063.5582716
+    },
+    {
+      "ticker": "CHKP",
+      "avg_dollar_turnover_20": 107752536.48453979
+    },
+    {
+      "ticker": "MEDP",
+      "avg_dollar_turnover_20": 106696263.20609131
+    },
+    {
+      "ticker": "TW",
+      "avg_dollar_turnover_20": 106492152.55857353
+    },
+    {
+      "ticker": "EXEL",
+      "avg_dollar_turnover_20": 105337638.17285958
+    },
+    {
+      "ticker": "ABCL",
+      "avg_dollar_turnover_20": 104178096.52081756
+    },
+    {
+      "ticker": "GRAB",
+      "avg_dollar_turnover_20": 103966818.44899616
+    },
+    {
+      "ticker": "SSNC",
+      "avg_dollar_turnover_20": 103713713.2940445
+    },
+    {
+      "ticker": "CROX",
+      "avg_dollar_turnover_20": 102977732.74711266
+    },
+    {
+      "ticker": "QLYS",
+      "avg_dollar_turnover_20": 102144374.7469017
+    },
+    {
+      "ticker": "ALM",
+      "avg_dollar_turnover_20": 101729229.6294361
+    },
+    {
+      "ticker": "POOL",
+      "avg_dollar_turnover_20": 101464438.58999634
+    },
+    {
+      "ticker": "SANM",
+      "avg_dollar_turnover_20": 101227280.3960884
+    },
+    {
+      "ticker": "HTFL",
+      "avg_dollar_turnover_20": 99919420.62193051
+    },
+    {
+      "ticker": "BRKR",
+      "avg_dollar_turnover_20": 99698072.87340832
+    },
+    {
+      "ticker": "JBLU",
+      "avg_dollar_turnover_20": 99134159.65459685
+    },
+    {
+      "ticker": "SYRE",
+      "avg_dollar_turnover_20": 98980870.03030662
+    },
+    {
+      "ticker": "SHAZ",
+      "avg_dollar_turnover_20": 97906329.27484226
+    },
+    {
+      "ticker": "TTAN",
+      "avg_dollar_turnover_20": 97309689.23398857
+    },
+    {
+      "ticker": "XE",
+      "avg_dollar_turnover_20": 97192610.25732842
+    },
+    {
+      "ticker": "PSKY",
+      "avg_dollar_turnover_20": 96299662.38147664
+    },
+    {
+      "ticker": "SIRI",
+      "avg_dollar_turnover_20": 95504251.37494278
+    },
+    {
+      "ticker": "NWSA",
+      "avg_dollar_turnover_20": 95421342.29860516
+    },
+    {
+      "ticker": "OUST",
+      "avg_dollar_turnover_20": 94705682.81968078
+    },
+    {
+      "ticker": "CZR",
+      "avg_dollar_turnover_20": 94004952.54126358
+    },
+    {
+      "ticker": "IESC",
+      "avg_dollar_turnover_20": 93895909.79397583
+    },
+    {
+      "ticker": "URBN",
+      "avg_dollar_turnover_20": 93513411.8128788
+    },
+    {
+      "ticker": "AAON",
+      "avg_dollar_turnover_20": 93224724.46971627
+    },
+    {
+      "ticker": "TGTX",
+      "avg_dollar_turnover_20": 92877951.69621697
+    },
+    {
+      "ticker": "AVT",
+      "avg_dollar_turnover_20": 91592697.06220932
+    },
+    {
+      "ticker": "XP",
+      "avg_dollar_turnover_20": 90448190.30147704
+    },
+    {
+      "ticker": "SLS",
+      "avg_dollar_turnover_20": 90431259.28298816
+    },
+    {
+      "ticker": "QNT",
+      "avg_dollar_turnover_20": 90028602.57304534
+    },
+    {
+      "ticker": "CRUS",
+      "avg_dollar_turnover_20": 87358486.05780983
+    },
+    {
+      "ticker": "SSRM",
+      "avg_dollar_turnover_20": 87275775.1730198
+    },
+    {
+      "ticker": "PCTY",
+      "avg_dollar_turnover_20": 87022163.29026946
+    },
+    {
+      "ticker": "POWL",
+      "avg_dollar_turnover_20": 86362139.77294692
+    },
+    {
+      "ticker": "QS",
+      "avg_dollar_turnover_20": 85663944.07350978
+    },
+    {
+      "ticker": "VISN",
+      "avg_dollar_turnover_20": 85356421.63245931
+    },
+    {
+      "ticker": "SMMT",
+      "avg_dollar_turnover_20": 85321694.94387046
+    },
+    {
+      "ticker": "CENX",
+      "avg_dollar_turnover_20": 85018197.54023743
+    },
+    {
+      "ticker": "CORT",
+      "avg_dollar_turnover_20": 84908833.69776383
+    },
+    {
+      "ticker": "DFTX",
+      "avg_dollar_turnover_20": 84871410.48369065
+    },
+    {
+      "ticker": "ARWR",
+      "avg_dollar_turnover_20": 84798211.82854195
+    },
+    {
+      "ticker": "TIGO",
+      "avg_dollar_turnover_20": 84464833.79029465
+    },
+    {
+      "ticker": "EOSE",
+      "avg_dollar_turnover_20": 84113691.83127274
+    },
+    {
+      "ticker": "BSP",
+      "avg_dollar_turnover_20": 83681208.63077259
+    },
+    {
+      "ticker": "TTEK",
+      "avg_dollar_turnover_20": 83524231.76602077
+    },
+    {
+      "ticker": "COLB",
+      "avg_dollar_turnover_20": 82817165.40778294
+    },
+    {
+      "ticker": "CHRD",
+      "avg_dollar_turnover_20": 82112994.08125305
+    },
+    {
+      "ticker": "ICLR",
+      "avg_dollar_turnover_20": 81865323.40466614
+    },
+    {
+      "ticker": "AMBA",
+      "avg_dollar_turnover_20": 81724367.95046501
+    },
+    {
+      "ticker": "CAPR",
+      "avg_dollar_turnover_20": 81644970.71903405
+    },
+    {
+      "ticker": "PTEN",
+      "avg_dollar_turnover_20": 81602713.10267606
+    },
+    {
+      "ticker": "LFUS",
+      "avg_dollar_turnover_20": 81124145.36839752
+    },
+    {
+      "ticker": "MYRG",
+      "avg_dollar_turnover_20": 80827617.00588378
+    },
+    {
+      "ticker": "QRVO",
+      "avg_dollar_turnover_20": 80419813.77663422
+    },
+    {
+      "ticker": "WEN",
+      "avg_dollar_turnover_20": 77858409.51997545
+    },
+    {
+      "ticker": "ZION",
+      "avg_dollar_turnover_20": 77553689.7014904
+    },
+    {
+      "ticker": "KYMR",
+      "avg_dollar_turnover_20": 77433011.91924056
+    },
+    {
+      "ticker": "SEDG",
+      "avg_dollar_turnover_20": 77381358.67895107
+    },
+    {
+      "ticker": "ORKA",
+      "avg_dollar_turnover_20": 77075364.36869316
+    },
+    {
+      "ticker": "HQY",
+      "avg_dollar_turnover_20": 76949596.80799866
+    },
+    {
+      "ticker": "EWBC",
+      "avg_dollar_turnover_20": 76676778.19930115
+    },
+    {
+      "ticker": "CRSP",
+      "avg_dollar_turnover_20": 76639660.55019493
+    },
+    {
+      "ticker": "RARE",
+      "avg_dollar_turnover_20": 76252302.61492929
+    },
+    {
+      "ticker": "VLY",
+      "avg_dollar_turnover_20": 76014327.4140636
+    },
+    {
+      "ticker": "RELY",
+      "avg_dollar_turnover_20": 75806621.14670095
+    },
+    {
+      "ticker": "PENG",
+      "avg_dollar_turnover_20": 75332071.53011322
+    },
+    {
+      "ticker": "HSIC",
+      "avg_dollar_turnover_20": 75188359.65492591
+    },
+    {
+      "ticker": "RCAT",
+      "avg_dollar_turnover_20": 74869637.41424212
+    },
+    {
+      "ticker": "INIO",
+      "avg_dollar_turnover_20": 74790563.51250258
+    },
+    {
+      "ticker": "POET",
+      "avg_dollar_turnover_20": 74734883.86358109
+    },
+    {
+      "ticker": "AUGO",
+      "avg_dollar_turnover_20": 74493697.63136902
+    },
+    {
+      "ticker": "TVTX",
+      "avg_dollar_turnover_20": 74119108.35639
+    },
+    {
+      "ticker": "FCFS",
+      "avg_dollar_turnover_20": 73433480.02318497
+    },
+    {
+      "ticker": "MRCY",
+      "avg_dollar_turnover_20": 73383760.1470333
+    },
+    {
+      "ticker": "ONB",
+      "avg_dollar_turnover_20": 73210655.33626918
+    },
+    {
+      "ticker": "WFRD",
+      "avg_dollar_turnover_20": 72958206.22366562
+    },
+    {
+      "ticker": "COKE",
+      "avg_dollar_turnover_20": 72912037.69527054
+    },
+    {
+      "ticker": "APPF",
+      "avg_dollar_turnover_20": 72745078.52294692
+    },
+    {
+      "ticker": "NTSK",
+      "avg_dollar_turnover_20": 72577522.60617284
+    },
+    {
+      "ticker": "LAMR",
+      "avg_dollar_turnover_20": 72364013.51486817
+    },
+    {
+      "ticker": "CHEF",
+      "avg_dollar_turnover_20": 72096224.61145286
+    },
+    {
+      "ticker": "FRPT",
+      "avg_dollar_turnover_20": 70883490.04886779
+    },
+    {
+      "ticker": "BSY",
+      "avg_dollar_turnover_20": 70476876.33745536
+    },
+    {
+      "ticker": "GTX",
+      "avg_dollar_turnover_20": 69654795.28319502
+    },
+    {
+      "ticker": "BRZE",
+      "avg_dollar_turnover_20": 69587951.18302326
+    },
+    {
+      "ticker": "LKQ",
+      "avg_dollar_turnover_20": 69146753.41211653
+    },
+    {
+      "ticker": "VSEC",
+      "avg_dollar_turnover_20": 69026848.39152527
+    },
+    {
+      "ticker": "CHDN",
+      "avg_dollar_turnover_20": 69009169.5154541
+    },
+    {
+      "ticker": "BPOP",
+      "avg_dollar_turnover_20": 68691213.90060043
+    },
+    {
+      "ticker": "ASO",
+      "avg_dollar_turnover_20": 68253450.08283767
+    },
+    {
+      "ticker": "ALGM",
+      "avg_dollar_turnover_20": 68214100.39429513
+    },
+    {
+      "ticker": "UCTT",
+      "avg_dollar_turnover_20": 67491221.22395019
+    },
+    {
+      "ticker": "KRYS",
+      "avg_dollar_turnover_20": 67267791.66211852
+    },
+    {
+      "ticker": "MIDD",
+      "avg_dollar_turnover_20": 67215758.03470078
+    },
+    {
+      "ticker": "WTFC",
+      "avg_dollar_turnover_20": 67157897.62796478
+    },
+    {
+      "ticker": "CELC",
+      "avg_dollar_turnover_20": 66939199.46152191
+    },
+    {
+      "ticker": "WSC",
+      "avg_dollar_turnover_20": 66938566.7695507
+    },
+    {
+      "ticker": "WYFI",
+      "avg_dollar_turnover_20": 65661566.75737353
+    },
+    {
+      "ticker": "CINF",
+      "avg_dollar_turnover_20": 65440046.04248504
+    },
+    {
+      "ticker": "INDV",
+      "avg_dollar_turnover_20": 65253451.30148468
+    },
+    {
+      "ticker": "SEZL",
+      "avg_dollar_turnover_20": 65135360.92908211
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import hashlib
 import json
 from collections import OrderedDict
 from pathlib import Path
@@ -5,6 +6,8 @@ from typing import Any, Callable, ClassVar, Dict, List
 
 import pandas as pd
 from ETF_screener.database import ETFDatabase
+from ETF_screener.config_loader import get_paths
+from ETF_screener.cache_policy import cache_is_fresh, trim_cache
 
 
 class CachedStrategyManager:
@@ -13,10 +16,10 @@ class CachedStrategyManager:
     _memory_cache: ClassVar[OrderedDict[str, Any]] = OrderedDict()
     _memory_cache_limit: ClassVar[int] = 4096
 
-    def __init__(self, db: ETFDatabase, cache_dir: str = "data/cache"):
+    def __init__(self, db: ETFDatabase, cache_dir: str | None = None):
         self.db = db
-        # We keep cache_dir for backward compatibility but won't use it for primary reads/writes
-        self.cache_dir = Path(cache_dir)
+        # All derived files live under the bounded cache root, separate from prices.
+        self.cache_dir = Path(cache_dir or get_paths()["data"]["cache"]) / "indicators"
 
     def _get_cache_key(
         self, ticker: str, indicator_name: str, params: dict[str, Any], df_len: int
@@ -67,10 +70,17 @@ class CachedStrategyManager:
             return cached_value
 
         # 2. Check Disk Cache
-        disk_cache_file = Path("data/parquet") / f"{cache_key}.parquet"
-        if disk_cache_file.exists():
+        disk_cache_file = self.cache_dir / (
+            hashlib.sha256(cache_key.encode()).hexdigest() + ".parquet"
+        )
+        if cache_is_fresh(disk_cache_file):
             try:
-                result = pd.read_parquet(disk_cache_file).iloc[:, 0]
+                cached_frame = pd.read_parquet(disk_cache_file)
+                result = (
+                    tuple(cached_frame[column] for column in cached_frame)
+                    if len(cached_frame.columns) > 1
+                    else cached_frame.iloc[:, 0]
+                )
                 self._store_cached_value(cache_key, result)
                 return result
             except Exception:
@@ -115,6 +125,10 @@ class CachedStrategyManager:
                 pd.DataFrame({f"col_{i}": s for i, s in enumerate(result)}).to_parquet(
                     disk_cache_file
                 )
+            if self.cache_dir.resolve().is_relative_to(
+                Path(get_paths()["data"]["cache"]).resolve()
+            ):
+                trim_cache()
         except Exception:
             pass  # Continue even if disk write fails
 

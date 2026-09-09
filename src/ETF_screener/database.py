@@ -623,7 +623,7 @@ class ETFDatabase:
             "    MAX(CASE WHEN d.date = (SELECT MAX(date) FROM etf_data WHERE ticker = d.ticker) THEN d.ema_50 END) as ema_50,\n"
             "    MAX(CASE WHEN d.date = (SELECT MAX(date) FROM etf_data WHERE ticker = d.ticker) THEN d.supertrend END) as supertrend\n"
             "FROM etf_data d\n"
-            f"WHERE d.date >= date('now', '-{int(min_days)} days')\n"  # nosec: safe from SQL injection
+            f"WHERE d.date >= date('now', '-{int(min_days)} days')\n"
             "GROUP BY d.ticker\n"
             "HAVING AVG(d.volume) >= ?\n"
             "ORDER BY avg_volume DESC"
@@ -789,15 +789,13 @@ class ETFDatabase:
         """Delete candles without a complete OHLC body."""
         conn = self._get_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            """
+        cursor.execute("""
             DELETE FROM etf_data
             WHERE open IS NULL
                OR high IS NULL
                OR low IS NULL
                OR close IS NULL
-            """
-        )
+            """)
         deleted_count = cursor.rowcount
         conn.commit()
         return deleted_count

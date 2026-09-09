@@ -27,6 +27,8 @@ from fastapi.responses import HTMLResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from ETF_screener.cache_policy import cache_is_fresh, trim_cache
+from ETF_screener.dashboard.assets import dashboard_script_urls
 from ETF_screener.database import ETFDatabase
 from ETF_screener.dslx import (
     DSLXError,
@@ -50,6 +52,7 @@ from ETF_screener.logging_setup import setup_logging, get_log_file
 from ETF_screener.market_data_service import (
     MarketDataRefresher,
     filter_low_vitality_nasdaq_tickers,
+    load_nasdaq_focus,
 )
 from ETF_screener.query_service import ETFQueryService
 from ETF_screener.shortlist_engine import ETFShortlistEngine
@@ -183,14 +186,18 @@ class DashboardJobCancelled(Exception):
     """Raised when a dashboard job observes a cooperative stop request."""
 
 
-def _begin_cancellable_job(job: str, request_id: str | None = None) -> tuple[str, Event]:
+def _begin_cancellable_job(
+    job: str, request_id: str | None = None
+) -> tuple[str, Event]:
     """Register one active cancellable job and reject overlapping work."""
     safe_request_id = str(request_id or uuid.uuid4().hex).strip() or uuid.uuid4().hex
     cancel_event = Event()
     with _JOB_CANCELLATION_LOCK:
         existing = _JOB_CANCELLATION_EVENTS.get(job)
         if existing is not None and not existing[1].is_set():
-            raise HTTPException(status_code=409, detail=f"A {job} job is already running")
+            raise HTTPException(
+                status_code=409, detail=f"A {job} job is already running"
+            )
         _JOB_CANCELLATION_EVENTS[job] = (safe_request_id, cancel_event)
     return safe_request_id, cancel_event
 
@@ -720,9 +727,7 @@ app.mount(
     StaticFiles(directory="src/ETF_screener/dashboard/static"),
     name="static",
 )
-DSLX_STRATEGY_DIRECTORY = (
-    Path(__file__).resolve().parents[3] / "strategies" / "dslx"
-)
+DSLX_STRATEGY_DIRECTORY = Path(__file__).resolve().parents[3] / "strategies" / "dslx"
 
 
 def get_strategies():
@@ -1285,6 +1290,10 @@ def _cached_dashboard_universe(
             if str(row.get("ticker", "")).strip()
         }
 
+    nasdaq_focus = load_nasdaq_focus()
+    nasdaq_symbols = set(_load_metadata_file_map(NASDAQ_METADATA_PATH)) | (
+        nasdaq_focus or set()
+    )
     items: list[dict[str, object]] = []
     for ticker in tickers:
         upper_ticker = str(ticker).upper()
@@ -1296,6 +1305,8 @@ def _cached_dashboard_universe(
         exchange = _backtest_ticker_exchange_bucket(upper_ticker)
         if upper_ticker.endswith((".ST", ".SS")):
             exchange = "sweden"
+        elif upper_ticker in nasdaq_symbols:
+            exchange = "nasdaq"
         elif "sweden" in source_hint:
             exchange = "sweden"
         elif "nasdaq" in source_hint or "nasdaqlisted.txt" in source_hint:
@@ -1309,6 +1320,12 @@ def _cached_dashboard_universe(
             ).strip()
             or upper_ticker
         )
+        if (
+            exchange == "nasdaq"
+            and nasdaq_focus is not None
+            and upper_ticker not in nasdaq_focus
+        ):
+            continue
         items.append(
             {
                 "ticker": upper_ticker,
@@ -2078,7 +2095,7 @@ def _is_stale_date(raw_date: object, threshold_days: int = 0) -> bool:
     return (date.today() - latest_day).days > max(0, int(threshold_days))
 
 
-SCREEN_RESULT_CACHE_VERSION = "screen_result_v5"
+SCREEN_RESULT_CACHE_VERSION = "screen_result_v6"
 
 
 def _screen_cache_dir() -> Path:
@@ -2125,7 +2142,7 @@ def _screen_request_signature(
 @lru_cache(maxsize=16)
 def _load_cached_screen_result(cache_key: str, _cache_mtime_ns: int) -> dict | None:
     cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
-    if not cache_path.exists():
+    if not cache_is_fresh(cache_path):
         return None
     try:
         cached = pd.read_pickle(cache_path)
@@ -2138,6 +2155,7 @@ def _save_cached_screen_result(cache_key: str, payload: dict) -> None:
     cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
     try:
         pd.to_pickle(payload, cache_path)
+        trim_cache()
     except Exception:
         try:
             if cache_path.exists():
@@ -2470,8 +2488,7 @@ async def cancel_dashboard_job(job: str, request: Request):
         with _JOB_PROGRESS_LOCK:
             progress_pct = _finite_number(_JOB_PROGRESS_STATE.get("pct"), 0.0)
             progress_label = str(
-                _JOB_PROGRESS_STATE.get("label")
-                or job.replace("-", " ").title()
+                _JOB_PROGRESS_STATE.get("label") or job.replace("-", " ").title()
             )
         _set_job_progress(
             job,
@@ -2524,18 +2541,7 @@ async def index(request: Request):
 
     strategies = get_strategies()
     custom_ticker_lists = _load_custom_ticker_list_payload()
-    dashboard_js_version = "dev"
     browser_log_relay_version = "dev"
-    try:
-        dashboard_js_version = str(
-            int(
-                (Path(__file__).parent / "static" / "js" / "dashboard.js")
-                .stat()
-                .st_mtime_ns
-            )
-        )
-    except Exception:
-        pass
     try:
         browser_log_relay_version = str(
             int(
@@ -2553,7 +2559,7 @@ async def index(request: Request):
             "tickers": tickers,
             "strategies": strategies,
             "custom_ticker_lists": custom_ticker_lists,
-            "dashboard_js_version": dashboard_js_version,
+            "dashboard_scripts": dashboard_script_urls(),
             "browser_log_relay_version": browser_log_relay_version,
         },
     )
@@ -2585,8 +2591,12 @@ async def get_dslx_strategy(name: str):
     try:
         parse_program(content)
     except DSLXError as exc:
-        logger.warning("DSLX strategy load validation failed for %s: %s", path.name, exc)
-        raise HTTPException(status_code=422, detail=f"Invalid DSLX strategy: {exc}") from exc
+        logger.warning(
+            "DSLX strategy load validation failed for %s: %s", path.name, exc
+        )
+        raise HTTPException(
+            status_code=422, detail=f"Invalid DSLX strategy: {exc}"
+        ) from exc
     return {"name": path.stem, "content": content}
 
 
@@ -2602,8 +2612,12 @@ async def save_dslx_strategy(request: Request):
     try:
         parse_program(content)
     except DSLXError as exc:
-        logger.warning("DSLX strategy save validation failed for %s: %s", path.name, exc)
-        raise HTTPException(status_code=422, detail=f"Invalid DSLX strategy: {exc}") from exc
+        logger.warning(
+            "DSLX strategy save validation failed for %s: %s", path.name, exc
+        )
+        raise HTTPException(
+            status_code=422, detail=f"Invalid DSLX strategy: {exc}"
+        ) from exc
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
     return {"status": "success", "name": path.stem, "message": f"Saved {path.name}"}
@@ -2827,8 +2841,17 @@ def refresh_market_data(
     ticker_list: Optional[str] = None,
     request_id: Optional[str] = None,
     missing_only: bool = False,
+    history_years: int = 0,
 ):
     """Refresh stale market data, then rebuild shortlist artifacts."""
+    if history_years not in (0, 1, 3, 5, 10):
+        raise HTTPException(
+            status_code=422, detail="Choose 1, 3, 5 or 10 years, or 0 for latest prices"
+        )
+    if history_years and missing_only:
+        raise HTTPException(
+            status_code=422, detail="History download cannot use missing_only"
+        )
     safe_depth = max(60, min(int(depth), 1500))
     safe_workers = max(1, min(int(max_workers), 16))
     safe_stale_after_days = max(0, min(int(stale_after_days), 30))
@@ -2863,18 +2886,23 @@ def refresh_market_data(
             "max_workers": safe_workers,
             "rebuild_shortlist": not missing_only,
         }
-        if "missing_only" in inspect.signature(
-            refresher.refresh_market_data
-        ).parameters:
+        if history_years:
+            refresh_kwargs["history_years"] = history_years
+        if (
+            "missing_only"
+            in inspect.signature(refresher.refresh_market_data).parameters
+        ):
             refresh_kwargs["missing_only"] = missing_only
         if (
             not missing_only
-            and
-            "progress_callback"
+            and "progress_callback"
             in inspect.signature(refresher.refresh_market_data).parameters
         ):
             refresh_kwargs["progress_callback"] = _update_job_progress
-        if "cancel_event" in inspect.signature(refresher.refresh_market_data).parameters:
+        if (
+            "cancel_event"
+            in inspect.signature(refresher.refresh_market_data).parameters
+        ):
             refresh_kwargs["cancel_event"] = cancel_event
         if not missing_only:
             _set_job_progress(
@@ -2976,7 +3004,8 @@ def _refresh_market_data_for_gui(
             refresh_kwargs["progress_callback"] = _update_job_progress
         if (
             cancel_event is not None
-            and "cancel_event" in inspect.signature(refresher.refresh_market_data).parameters
+            and "cancel_event"
+            in inspect.signature(refresher.refresh_market_data).parameters
         ):
             refresh_kwargs["cancel_event"] = cancel_event
         _set_job_progress(
@@ -3735,6 +3764,12 @@ async def screen(
                 ticker_list=ticker_list,
                 scan_scope=scan_scope,
             )
+            if _normalize_market_source(scan_scope or exchange or "xetra") == "nasdaq":
+                selected_tickers = filter_low_vitality_nasdaq_tickers(
+                    db_path=db_path,
+                    latest_market_date=latest_market_date,
+                    tickers=selected_tickers,
+                )
             source_tickers: dict[str, list[str]] = {
                 "universe.selected": selected_tickers,
             }
@@ -3752,7 +3787,7 @@ async def screen(
                     continue
                 if source_name not in {"etfs", "xetra", "nasdaq", "sweden"}:
                     raise DSLXError(f"Unsupported dashboard source '{source}'")
-                source_tickers[source] = (
+                source_items = (
                     list(_cached_screen_universe(db_path, latest_market_date))
                     if source_name == "etfs"
                     else filter_tickers_by_exchange_and_list(
@@ -3762,6 +3797,53 @@ async def screen(
                         scan_scope=source_name,
                     )
                 )
+                if source_name == "nasdaq":
+                    source_items = filter_low_vitality_nasdaq_tickers(
+                        db_path=db_path,
+                        latest_market_date=latest_market_date,
+                        tickers=source_items,
+                    )
+                source_tickers[source] = source_items
+
+            cache_tickers = sorted(
+                {
+                    str(ticker).upper()
+                    for source_items in source_tickers.values()
+                    for ticker in source_items
+                }
+            )
+            database_path = Path(db_path)
+            cache_key = _screen_request_signature(
+                strategy_name=",".join(
+                    definition.name for definition in program.program.strategies
+                ),
+                strategy_text=content,
+                latest_market_date=latest_market_date,
+                scan_scope=scan_scope,
+                exchange=exchange,
+                ticker_list=ticker_list,
+                tickers=cache_tickers,
+                fallback_mode=False,
+                disqualifiers=disqualifiers,
+                database_mtime_ns=(
+                    database_path.stat().st_mtime_ns if database_path.exists() else 0
+                ),
+            )
+            cache_path = _screen_cache_dir() / f"{cache_key}.pkl"
+            if not refresh and cache_path.exists():
+                cached_payload = _load_cached_screen_result(
+                    cache_key, cache_path.stat().st_mtime_ns
+                )
+                if cached_payload is not None:
+                    _set_job_progress(
+                        "screen",
+                        "done",
+                        pct=100.0,
+                        label="Screen",
+                        detail="Loaded cached DSLX results",
+                        active=False,
+                    )
+                    return _json_safe_value(cached_payload)
 
             total_frames_to_load = sum(len(items) for items in source_tickers.values())
             loaded_frame_count = 0
@@ -3784,9 +3866,10 @@ async def screen(
                             loaded[ticker] = frame
                     loaded_frame_count += 1
                     if loaded_frame_count == 1 or loaded_frame_count % 25 == 0:
-                        pct = 5.0 + (
-                            loaded_frame_count / max(1, total_frames_to_load)
-                        ) * 35.0
+                        pct = (
+                            5.0
+                            + (loaded_frame_count / max(1, total_frames_to_load)) * 35.0
+                        )
                         detail = (
                             f"Loading cached data {loaded_frame_count}/"
                             f"{total_frames_to_load}"
@@ -3887,31 +3970,46 @@ async def screen(
                             _raise_if_cancelled(cancel_event)
                             chunk = selected_items[offset : offset + stream_chunk_size]
                             chunk_frames = load_frames(worker_db, chunk)
-                            for ticker in chunk:
-                                _raise_if_cancelled(cancel_event)
-                                completed += 1
-                                frame = chunk_frames.get(ticker)
-                                if frame is not None:
-                                    one_frame = {ticker: frame}
-                                    selected_frames[ticker] = frame
-                                else:
-                                    one_frame = {}
-                                if not one_frame:
-                                    publish_progress(ticker, completed, len(selected_items))
-                                    continue
+                            selected_frames.update(chunk_frames)
+                            chunk_start = completed
+                            highest_reported = chunk_start
+
+                            def publish_chunk_progress(
+                                ticker: str,
+                                chunk_completed: int,
+                                _chunk_total: int,
+                            ) -> None:
+                                nonlocal highest_reported
+                                global_completed = min(
+                                    chunk_start + chunk_completed,
+                                    chunk_start + len(chunk),
+                                )
+                                if global_completed <= highest_reported:
+                                    return
+                                highest_reported = global_completed
+                                publish_progress(
+                                    ticker, global_completed, len(selected_items)
+                                )
+
+                            if chunk_frames:
                                 ticker_lists = program.run(
-                                    selected=one_frame,
-                                    universes={"universe.selected": one_frame},
+                                    selected=chunk_frames,
+                                    universes={"universe.selected": chunk_frames},
                                     cancel_check=lambda: _raise_if_cancelled(
                                         cancel_event
                                     ),
                                     match_callback=publish_match,
+                                    progress_callback=publish_chunk_progress,
                                 )
                                 for name, match_list in ticker_lists.items():
                                     streamed_lists.setdefault(name, []).extend(
                                         match_list
                                     )
-                                publish_progress(ticker, completed, len(selected_items))
+                            completed += len(chunk)
+                            if completed > highest_reported:
+                                publish_progress(
+                                    chunk[-1], completed, len(selected_items)
+                                )
                         return {"universe.selected": selected_frames}, streamed_lists
 
                     frames = {
@@ -3940,21 +4038,28 @@ async def screen(
                 "matches": matches,
                 "errors": [],
                 "total_errors": 0,
-                "total_candidates": sum(len(frames) for frames in frames_by_source.values()),
-                "strategy_name": ", ".join(match["strategy"] for match in matches[:1]) or "DSLX",
+                "total_candidates": sum(
+                    len(frames) for frames in frames_by_source.values()
+                ),
+                "strategy_name": ", ".join(match["strategy"] for match in matches[:1])
+                or "DSLX",
             }
+            payload = _json_safe_value(payload)
+            _save_cached_screen_result(cache_key, payload)
             _set_job_progress(
-                "screen", "done", pct=100.0, label="Screen",
-                detail=f"{len(matches)} DSLX matches found", active=False,
+                "screen",
+                "done",
+                pct=100.0,
+                label="Screen",
+                detail=f"{len(matches)} DSLX matches found",
+                active=False,
             )
-            return _json_safe_value(payload)
+            return payload
 
         strategy_spec = parse_dsl_content(content)
         final_entry = strategy_spec["entry"]
         final_exit = strategy_spec["exit"]
-        match_strategy_name = (
-            str(strategy or "Editor Draft").strip() or "Editor Draft"
-        )
+        match_strategy_name = str(strategy or "Editor Draft").strip() or "Editor Draft"
         logger.info(
             "Strategy parsed. Entry script length: %d, Exit script length: %d, max_days=%s",
             len(final_entry),
@@ -4679,8 +4784,16 @@ async def backtest_view(
         detail=f"{len(df)} rows scored",
         structure_profile=structure_profile,
     )
-    target_entries = int(pd.to_numeric(df.get("Target Entries"), errors="coerce").fillna(0).sum()) if "Target Entries" in df else 0
-    target_hits = int(pd.to_numeric(df.get("Target Hits"), errors="coerce").fillna(0).sum()) if "Target Hits" in df else 0
+    target_entries = (
+        int(pd.to_numeric(df.get("Target Entries"), errors="coerce").fillna(0).sum())
+        if "Target Entries" in df
+        else 0
+    )
+    target_hits = (
+        int(pd.to_numeric(df.get("Target Hits"), errors="coerce").fillna(0).sum())
+        if "Target Hits" in df
+        else 0
+    )
 
     return {
         "strategy_name": profile_strategy_name,
@@ -4700,9 +4813,9 @@ async def backtest_view(
             ),
             "avg_sharpe": round(float(_trade_rows_for_summary(df)["Sharpe"].mean()), 2),
             "trades": _trade_count_for_summary(df),
-            "target_hit_rate_pct": round(target_hits * 100 / target_entries, 2)
-            if target_entries
-            else None,
+            "target_hit_rate_pct": (
+                round(target_hits * 100 / target_entries, 2) if target_entries else None
+            ),
             "target_entries": target_entries,
             "target_hits": target_hits,
             "target_return_pct": target_return_pct,
@@ -5464,8 +5577,16 @@ async def backtest_matrix_view(
     safe_limit = max(1, min(int(limit), 5000))
     view = df.head(safe_limit).copy() if not df.empty else df
     rows = [_backtest_row_from_series(row) for _, row in view.iterrows()]
-    target_entries = int(pd.to_numeric(df.get("Target Entries"), errors="coerce").fillna(0).sum()) if "Target Entries" in df else 0
-    target_hits = int(pd.to_numeric(df.get("Target Hits"), errors="coerce").fillna(0).sum()) if "Target Hits" in df else 0
+    target_entries = (
+        int(pd.to_numeric(df.get("Target Entries"), errors="coerce").fillna(0).sum())
+        if "Target Entries" in df
+        else 0
+    )
+    target_hits = (
+        int(pd.to_numeric(df.get("Target Hits"), errors="coerce").fillna(0).sum())
+        if "Target Hits" in df
+        else 0
+    )
     csv_label = (
         "backtest_matrix_"
         + "_".join(strategy_names[:3])
@@ -5569,9 +5690,9 @@ async def backtest_matrix_view(
                 ),
                 2,
             ),
-            "target_hit_rate_pct": round(target_hits * 100 / target_entries, 2)
-            if target_entries
-            else None,
+            "target_hit_rate_pct": (
+                round(target_hits * 100 / target_entries, 2) if target_entries else None
+            ),
             "target_entries": target_entries,
             "target_hits": target_hits,
             "target_return_pct": target_return_pct,
@@ -5622,7 +5743,7 @@ async def get_chart(
     # Load a warm-up window for long indicators (especially EMA 200), then
     # constrain the displayed x-axis back to the requested chart window.
     indicator_warmup_days = max(safe_days, 420)
-    query = f"SELECT * FROM etf_data WHERE ticker = ? ORDER BY date DESC LIMIT {indicator_warmup_days}"  # nosec B608 - indicator_warmup_days is int-clamped
+    query = f"SELECT * FROM etf_data WHERE ticker = ? ORDER BY date DESC LIMIT {indicator_warmup_days}"
     df = pd.read_sql_query(query, conn, params=(ticker,))
 
     latest_cached_day = None
@@ -5829,8 +5950,7 @@ async def get_chart(
     if strategy_ema_specs:
         overlay_specs = list(
             {
-                (item["period"], item["source"]): item
-                for item in strategy_ema_specs
+                (item["period"], item["source"]): item for item in strategy_ema_specs
             }.values()
         )
         overlay_periods = sorted({int(item["period"]) for item in overlay_specs})

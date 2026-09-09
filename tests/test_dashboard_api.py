@@ -1,5 +1,6 @@
 ﻿import json
 import os
+import re
 import logging
 import threading
 import time
@@ -14,6 +15,7 @@ from fastapi.testclient import TestClient
 from ETF_screener import screener_controls
 from ETF_screener.dashboard import app_fast
 from ETF_screener.dashboard.app_fast import app
+from ETF_screener.dashboard.assets import DASHBOARD_SCRIPTS
 from ETF_screener.database import ETFDatabase
 from ETF_screener.google_drive_exports import build_screen_google_sheet_title
 from ETF_screener.indicators import add_indicators
@@ -49,11 +51,19 @@ def test_tab_bar_visible():
     response = client.get("/")
     assert response.status_code == 200
     html = response.text
-    dashboard_js = client.get("/static/js/dashboard.js")
+    script_urls = re.findall(r'<script src="(/static/js/[^\"]+)"', html)
+    assert [url.split("?", 1)[0] for url in script_urls] == [
+        *(f"/static/js/{name}" for name in DASHBOARD_SCRIPTS),
+        "/static/js/browser-log-relay.js",
+    ]
+    assert all(re.search(r"\?v=\d+$", url) for url in script_urls)
+    dashboard_scripts = [client.get(url) for url in script_urls[:-1]]
     log_relay_js = client.get("/static/js/browser-log-relay.js")
-    assert dashboard_js.status_code == 200
+    assert all(script.status_code == 200 for script in dashboard_scripts)
     assert log_relay_js.status_code == 200
-    dashboard_source = html + dashboard_js.text + log_relay_js.text
+    dashboard_source = (
+        html + "".join(script.text for script in dashboard_scripts) + log_relay_js.text
+    )
     assert 'id="dashboard-tabs"' in html
     assert 'id="stratfinder-btn"' not in html
     assert 'id="scan-source-toggle"' in html
@@ -530,11 +540,114 @@ def test_screen_endpoint_applies_dslx_named_liquidity_universe(monkeypatch):
         params={"run_id": "dslx-live-events"},
     ).json()["events"]
     live_matches = [
-        event["payload"]["match"]
-        for event in events
-        if event["type"] == "match"
+        event["payload"]["match"] for event in events if event["type"] == "match"
     ]
     assert [item["ticker"] for item in live_matches] == ["LIQ.DE"]
+
+
+def test_structural_dslx_screen_reuses_cached_result(monkeypatch, tmp_path):
+    frame = _make_fake_ohlcv("AAA", n=30)
+    frame["Open"] = frame["Close"] - 1.0
+    calls = []
+
+    class _FakeDb:
+        db_path = "fake.db"
+
+        def get_etf_data(self, ticker):
+            calls.append(ticker)
+            return frame
+
+    cache_dir = tmp_path / "screen-cache"
+    cache_dir.mkdir()
+    monkeypatch.setattr(app_fast, "get_db", lambda: _FakeDb())
+    monkeypatch.setattr(app_fast, "_latest_market_date_for", lambda _db: "2026-09-04")
+    monkeypatch.setattr(app_fast, "_cached_screen_universe", lambda *_args: ("AAA",))
+    monkeypatch.setattr(
+        app_fast,
+        "filter_tickers_by_exchange_and_list",
+        lambda tickers, **_kwargs: list(tickers),
+    )
+    monkeypatch.setattr(app_fast, "_cached_etf_metadata_map", lambda: {})
+    monkeypatch.setattr(app_fast, "_screen_cache_dir", lambda: cache_dir)
+    app_fast._load_cached_screen_result.cache_clear()
+    source = """
+      strategy cached {
+        candle green { when => is_green }
+        entrystruct { green }
+        exitstruct { pass }
+      }
+      let matches = cached.run()
+      matches.show()
+    """
+
+    first = client.get(
+        "/api/screen",
+        params={"request_id": "structural-cache-1", "dsl_content": source},
+    )
+    second = client.get(
+        "/api/screen",
+        params={"request_id": "structural-cache-2", "dsl_content": source},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json() == first.json()
+    assert calls == ["AAA"]
+
+
+def test_structural_dslx_screen_applies_focused_nasdaq_gate(monkeypatch, tmp_path):
+    frame = _make_fake_ohlcv("FOCUS", n=30)
+    loaded = []
+
+    class _FakeDb:
+        db_path = "fake.db"
+
+        def get_etf_data(self, ticker):
+            loaded.append(ticker)
+            return frame
+
+    cache_dir = tmp_path / "screen-cache"
+    cache_dir.mkdir()
+    monkeypatch.setattr(app_fast, "get_db", lambda: _FakeDb())
+    monkeypatch.setattr(app_fast, "_latest_market_date_for", lambda _db: "2026-09-04")
+    monkeypatch.setattr(
+        app_fast, "_cached_screen_universe", lambda *_args: ("FOCUS", "OUTSIDE")
+    )
+    monkeypatch.setattr(
+        app_fast,
+        "filter_tickers_by_exchange_and_list",
+        lambda tickers, **_kwargs: list(tickers),
+    )
+    monkeypatch.setattr(
+        app_fast,
+        "filter_low_vitality_nasdaq_tickers",
+        lambda **kwargs: [ticker for ticker in kwargs["tickers"] if ticker == "FOCUS"],
+    )
+    monkeypatch.setattr(app_fast, "_cached_etf_metadata_map", lambda: {})
+    monkeypatch.setattr(app_fast, "_screen_cache_dir", lambda: cache_dir)
+    app_fast._load_cached_screen_result.cache_clear()
+    source = """
+      strategy focused {
+        candle positive { when => close > 0 }
+        entrystruct { positive }
+        exitstruct { pass }
+      }
+      let matches = focused.run()
+      matches.show()
+    """
+
+    response = client.get(
+        "/api/screen",
+        params={
+            "request_id": "focused-nasdaq",
+            "scan_scope": "nasdaq",
+            "dsl_content": source,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total_candidates"] == 1
+    assert loaded == ["FOCUS"]
 
 
 def test_screen_reports_dslx_validation_errors_without_a_generic_server_error():
@@ -716,9 +829,7 @@ def test_dslx_worker_uses_its_own_sqlite_connection(monkeypatch, tmp_path):
         "get_db",
         lambda: app_fast.ETFDatabase(db_path=str(db_path)),
     )
-    monkeypatch.setattr(
-        app_fast, "_cached_screen_universe", lambda *_args: ("THREAD",)
-    )
+    monkeypatch.setattr(app_fast, "_cached_screen_universe", lambda *_args: ("THREAD",))
     monkeypatch.setattr(
         app_fast,
         "filter_tickers_by_exchange_and_list",
@@ -763,9 +874,7 @@ def test_dslx_editor_lists_and_loads_file_backed_scripts():
     assert "entrystruct" in script.json()["content"]
     assert "exitstruct { pass }" in script.json()["content"]
 
-    structural = client.get(
-        "/api/dslx-strategy/ha_breakout_liquid_filtered_struct"
-    )
+    structural = client.get("/api/dslx-strategy/ha_breakout_liquid_filtered_struct")
     assert structural.status_code == 200
     assert "entrystruct" in structural.json()["content"]
 
@@ -776,9 +885,7 @@ def test_dslx_editor_lists_and_loads_file_backed_scripts():
     assert 'ema("low", 20).lower_wick_intersects' in dipfinder.json()["content"]
     assert "close > dip_red_2.high" in dipfinder.json()["content"]
     assert "at recovery.close" in dipfinder.json()["content"]
-    assert dipfinder.json()["content"].count(
-        'ema("close", 200).slope > 0'
-    ) == 6
+    assert dipfinder.json()["content"].count('ema("close", 200).slope > 0') == 6
 
 
 def test_dslx_catalogue_discovers_new_file_without_backend_restart(
@@ -808,7 +915,9 @@ def test_dslx_catalogue_discovers_new_file_without_backend_restart(
 
 def test_dslx_editor_logs_validation_details(monkeypatch, tmp_path, caplog):
     path = tmp_path / "invalid.dslx"
-    path.write_text("strategy invalid { candle nope { when => true } }", encoding="utf-8")
+    path.write_text(
+        "strategy invalid { candle nope { when => true } }", encoding="utf-8"
+    )
     monkeypatch.setattr(app_fast, "_dslx_strategy_path", lambda _name: path)
 
     with caplog.at_level(logging.WARNING):
@@ -842,7 +951,10 @@ def test_dslx_editor_saves_only_a_valid_complete_script(monkeypatch, tmp_path):
 
     invalid = client.post(
         "/api/dslx-strategy/save",
-        json={"name": "incomplete", "content": "strategy x { candle green { when => true } }"},
+        json={
+            "name": "incomplete",
+            "content": "strategy x { candle green { when => true } }",
+        },
     )
 
     assert invalid.status_code == 422
@@ -1016,8 +1128,12 @@ def test_cached_screen_universe_checks_zero_volume_only_in_latest_30_rows(
         )
 
     with ETFDatabase(db_path=str(db_path)) as database:
-        database.insert_dataframe(frame_with_volumes([0.0] * 2 + [1_000.0] * 58), "OLDZERO")
-        database.insert_dataframe(frame_with_volumes([1_000.0] * 58 + [0.0] * 2), "NEWZERO")
+        database.insert_dataframe(
+            frame_with_volumes([0.0] * 2 + [1_000.0] * 58), "OLDZERO"
+        )
+        database.insert_dataframe(
+            frame_with_volumes([1_000.0] * 58 + [0.0] * 2), "NEWZERO"
+        )
 
     monkeypatch.setattr(app_fast, "_cached_blacklist_tickers", lambda: set())
     app_fast._cached_screen_universe.cache_clear()
@@ -3214,3 +3330,32 @@ def test_playbook_endpoint_builds_trade_rows_with_risk_capped_stops(monkeypatch)
     assert data["rows"][2]["ticker"] == "CCC.DE"
     assert data["rows"][2]["decision"] == "Watch"
     assert data["rows"][2]["final_score"] == 5.0
+
+
+def test_market_history_endpoint_passes_period_and_progress(monkeypatch):
+    captured = {}
+
+    class FakeRefresher:
+        def __init__(self, **kwargs):
+            pass
+
+        def refresh_market_data(
+            self, history_years=0, progress_callback=None, **kwargs
+        ):
+            captured["years"] = history_years
+            captured["progress"] = callable(progress_callback)
+            return {"refreshed": 1, "failed": 0}
+
+    monkeypatch.setattr(app_fast, "MarketDataRefresher", FakeRefresher)
+    response = client.post(
+        "/api/market-data/refresh?source=nasdaq&history_years=10&force=false"
+    )
+    assert response.status_code == 200
+    assert captured == {"years": 10, "progress": True}
+    assert client.post("/api/market-data/refresh?history_years=2").status_code == 422
+    assert (
+        client.post(
+            "/api/market-data/refresh?history_years=5&missing_only=true"
+        ).status_code
+        == 422
+    )

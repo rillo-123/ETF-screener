@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from ETF_screener.dashboard.assets import DASHBOARD_SCRIPTS, JAVASCRIPT_DIR
+
 
 @contextmanager
 def _run_dashboard_server():
@@ -73,15 +75,6 @@ def _run_dashboard_server():
 
 
 def test_backtest_scatter_updates_from_streamed_events_with_strategy_colors(page):
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
 
     page.set_content(
         """
@@ -136,7 +129,8 @@ def test_backtest_scatter_updates_from_streamed_events_with_strategy_colors(page
           };
         }
         """)
-    page.add_script_tag(path=str(dashboard_js))
+    for script_name in DASHBOARD_SCRIPTS:
+        page.add_script_tag(path=str(JAVASCRIPT_DIR / script_name))
     page.evaluate("""
         async () => {
           await window.dashboardReadyPromise;
@@ -182,15 +176,6 @@ def test_backtest_scatter_updates_from_streamed_events_with_strategy_colors(page
 
 
 def test_backtest_scatter_excludes_checked_ticker_from_plot_only(page):
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
 
     page.set_content(
         """
@@ -245,7 +230,8 @@ def test_backtest_scatter_excludes_checked_ticker_from_plot_only(page):
           };
         }
         """)
-    page.add_script_tag(path=str(dashboard_js))
+    for script_name in DASHBOARD_SCRIPTS:
+        page.add_script_tag(path=str(JAVASCRIPT_DIR / script_name))
     page.evaluate("""
         async () => {
           await window.dashboardReadyPromise;
@@ -328,15 +314,6 @@ def test_backtest_scatter_excludes_checked_ticker_from_plot_only(page):
 
 
 def test_backtest_structure_radar_renders_selected_saved_strategies(page):
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
 
     page.set_content(
         """
@@ -576,7 +553,8 @@ def test_backtest_structure_radar_renders_selected_saved_strategies(page):
           };
         }
         """)
-    page.add_script_tag(path=str(dashboard_js))
+    for script_name in DASHBOARD_SCRIPTS:
+        page.add_script_tag(path=str(JAVASCRIPT_DIR / script_name))
     page.evaluate("""
         async () => {
           await window.dashboardReadyPromise;
@@ -607,15 +585,6 @@ def test_backtest_structure_radar_renders_selected_saved_strategies(page):
 
 
 def test_backtest_structure_radar_renders_editor_draft_profile(page):
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
 
     page.set_content(
         """
@@ -818,7 +787,8 @@ EXIT: close < ema_20</textarea>
           };
         }
         """)
-    page.add_script_tag(path=str(dashboard_js))
+    for script_name in DASHBOARD_SCRIPTS:
+        page.add_script_tag(path=str(JAVASCRIPT_DIR / script_name))
     page.evaluate("""
         async () => {
           await window.dashboardReadyPromise;
@@ -842,6 +812,8 @@ EXIT: close < ema_20</textarea>
 
 
 def test_live_dashboard_shell_omits_removed_backtest_surface(page):
+    page_errors = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
     with _run_dashboard_server() as base_url:
         page.route(
             "**/api/**",
@@ -866,6 +838,9 @@ def test_live_dashboard_shell_omits_removed_backtest_surface(page):
             """)
         assert page.locator("#backtest-table-body").count() == 1
         assert page.locator("#tab-btn-backtest").count() == 1
+        assert page.evaluate("typeof window.runScreen") == "function"
+        assert page.evaluate("typeof window.loadChart") == "function"
+        assert page_errors == []
 
 
 def test_playbook_trade_ideas_render_target_and_watch_context(page):
@@ -1084,15 +1059,6 @@ def test_saved_price_ema_event_missing_from_old_order_is_restored_to_stack(page)
 
 
 def test_backtest_all_strategies_requests_all_strategies_flag(page):
-    dashboard_js = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "ETF_screener"
-        / "dashboard"
-        / "static"
-        / "js"
-        / "dashboard.js"
-    )
 
     page.set_content(
         """
@@ -1208,7 +1174,8 @@ def test_backtest_all_strategies_requests_all_strategies_flag(page):
           };
         }
         """)
-    page.add_script_tag(path=str(dashboard_js))
+    for script_name in DASHBOARD_SCRIPTS:
+        page.add_script_tag(path=str(JAVASCRIPT_DIR / script_name))
     page.evaluate("""
         async () => {
           await window.dashboardReadyPromise;

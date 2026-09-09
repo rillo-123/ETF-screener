@@ -2,6 +2,66 @@
 
 - -Summary
 
+- Quality cleanup is complete. The fast optimization command is
+  `./run.ps1 -Tests -Optimization`; it currently runs 26 focused regressions
+  plus targeted Ruff, mypy, and Black checks in about 17 seconds.
+- The warning-free unit checkpoint is 408 passed / 2 intentional skips, and
+  the browser checkpoint is 7 passed / 2 intentional skips. Full-source Ruff,
+  mypy, Black, Bandit, and Vulture checks are clean.
+- The full runner uses absolute repository targets and collects coverage during
+  its first unit pass, preventing machine-wide scans and eliminating the former
+  duplicate 410-test coverage run.
+
+- Structural DSLX dashboard scans now apply the focused Nasdaq vitality gate
+  before loading or evaluating candles. The live `ha_red_to_green` candidate
+  set fell from 4,260 generic undotted symbols to the intended 399 eligible
+  focused Nasdaq stocks.
+- Completed structural DSLX responses now use the existing request cache keyed
+  by strategy text, scoped universe, market date, and database state. The
+  selected-universe streaming path evaluates one 50-ticker chunk per program
+  run instead of rebuilding program execution once per ticker.
+- Live cold timing fell from 52.8 seconds for the erroneous 4,260-symbol run to
+  18.0 seconds for the correct 399-symbol run. A scheduled startup refresh was
+  actively changing the database during timing, so warm-cache latency is
+  covered deterministically by regression rather than claimed from that run.
+- Nasdaq vitality SQL is bounded to focused candidates when the list fits
+  SQLite's bind limit. The repository checkpoint passes with 408 unit tests and
+  7 Playwright tests; 2 tests in each group are intentionally skipped. The
+  optional local-Parquet regression is skipped when its migrated fixture is absent.
+
+- Kingston storage is active via ignored `config/paths.local.json`: canonical
+  Parquet history and bounded caches use `F:/ETF-screener-data`; SQLite stays
+  local at 823 MB. Verified 9,952 price copies and removed old local copies and
+  derived caches, increasing C: free space from about 19 GB to 51 GB.
+- All 400 focused Nasdaq histories are active (469,413 daily rows): 349 have
+  five years; 51 have shorter provider history. Nasdaq picker has 400 stocks;
+  normal query vitality checks currently allow 399 (BSP has 47 of 50 required
+  sessions). Dashboard metadata now respects Nasdaq catalogue membership.
+- Cache policy: 1 GiB logical bytes, 5,000 files, 14 days. Reads expire and
+  writes trigger eviction. Price writes replace files atomically; missing USB
+  storage produces a clear error. Startup/nightly refresh honors 1,830 days.
+- Regression run: 101 passed, 3 existing skips; final catalogue/storage checks
+  also passed (8 focused tests plus live configured dashboard/query checks).
+  Details and operation instructions: `reference/storage-setup.md`.
+
+- Reviewed all 12 DSLX files and compared historical setups on the 42-ticker
+  Sweden Finance list using actual next-open fills and point-in-time liquidity.
+  Found two exact duplicate pairs. The short warmed-up history supports only
+  exploratory assessments; see `reference/dslx-performance-review.md`.
+- Identified existing synthetic same-row entry pricing and end-of-history
+  liquidity filtering in the application backtester; no execution code changed.
+
+- Split the dashboard JavaScript into 19 feature/support files and a 162-line
+  startup entrypoint (previously about 9,000 lines). The template and tests use
+  `dashboard/assets.py` for script order, with independent cache versions.
+- Kept plain browser scripts and shared state for this first refactor; no build
+  tooling was added. The feature map is in `static/js/dashboard/README.md`.
+- Preserved all 331 named JavaScript function bodies, including pre-existing
+  chart autoscale changes. Focused validation: 23 passed, 3 existing skips
+  across Node, Chromium, and dashboard asset-serving checks.
+
+- -Summary
+
 - -Summary
 
 - Completed cautious, cancellable Yahoo access with process-wide pacing, cooldown, and streamed DSLX matches from SQLite.

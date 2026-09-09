@@ -1,0 +1,65 @@
+universe loose_liquid_selected {
+  from universe.selected
+  require liquidity {
+    avg_turnover(20) >= 500_000
+    median_turnover(20) >= 250_000
+    active_sessions(20) >= 18
+  }
+}
+
+strategy ha_strategy_three_strong_men {
+  source universe.loose_liquid_selected
+  candles timeframe "1d" as heikin_ashi
+  scan latest
+
+  candle c1 {
+    when =>      
+      ema("low", 20).body_over
+      && is_green
+  }
+
+  candle c2 {
+    when =>      
+      c2.open > c1.open
+      && c2.body_length > c1.body_length
+      && is_green
+  }
+
+  candle c3 {
+    when =>      
+      c3.open > c2.open
+      && c3.body_length > c2.body_length
+      && rsi(14).slope > 0
+      && ema("close", 200).slope >= 0
+      && is_green
+  }
+
+  # candle breakout {
+  #   when =>
+  #     (
+  #       ema("high", 20).body_intersects
+  #         || ema("high", 20).upper_wick_intersects
+  #     )
+  #     && is_green
+  #     && atr(14) / close >= 0.0075
+  #     && volume >= volume_ema(20) 
+  # }
+
+  candle breakdown {
+    when => close < ema("low", 20)
+  }
+
+  entrystruct {
+    c1
+    c2
+    c3
+    at c3.close
+  }
+
+  exitstruct {
+    breakdown
+  }
+}
+
+let matches = ha_strategy_three_strong_men.run()
+matches.show()

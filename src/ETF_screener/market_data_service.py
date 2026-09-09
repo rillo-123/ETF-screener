@@ -15,6 +15,7 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from ETF_screener.config_loader import get_paths
 from ETF_screener.database import ETFDatabase
 from ETF_screener.delisting_tracker import DelistingTracker
 from ETF_screener.indicators import add_indicators
@@ -32,15 +33,38 @@ NASDAQ_VITALITY_MIN_RECENT_AVG_DOLLAR_VOLUME = 1_500_000.0
 NASDAQ_VITALITY_MIN_RECENT_AVG_CLOSE = 3.0
 
 
+def load_nasdaq_focus() -> set[str] | None:
+    """Return the optional, explicitly selected Nasdaq maintenance universe."""
+    path = get_paths().get("nasdaq_focus_file")
+    if not path:
+        return None
+    with open(path, encoding="utf-8") as handle:
+        payload = json.load(handle)
+    return {str(ticker).upper() for ticker in payload["tickers"]}
+
+
 @lru_cache(maxsize=8)
 def _cached_nasdaq_vitality_tickers(
-    db_path: str, latest_market_date: str | None
+    db_path: str,
+    latest_market_date: str | None,
+    candidate_tickers: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """Return Nasdaq-style symbols with enough recent trading vitality."""
     del latest_market_date
-    db = ETFDatabase(db_path=db_path)
-    conn = db._get_connection()
-    query = """
+    normalized_candidates = tuple(
+        dict.fromkeys(
+            str(ticker).upper()
+            for ticker in candidate_tickers
+            if str(ticker).strip() and "." not in str(ticker)
+        )
+    )
+    candidate_filter = ""
+    query_params: list[object] = []
+    if normalized_candidates:
+        placeholders = ",".join("?" for _ in normalized_candidates)
+        candidate_filter = f" AND ticker IN ({placeholders})"
+        query_params.extend(normalized_candidates)
+    query = f"""
         WITH ranked AS (
             SELECT
                 ticker,
@@ -50,6 +74,7 @@ def _cached_nasdaq_vitality_tickers(
                 ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
             FROM etf_data
             WHERE ticker NOT LIKE '%.%'
+              {candidate_filter}
         ),
         agg AS (
             SELECT
@@ -77,15 +102,19 @@ def _cached_nasdaq_vitality_tickers(
           AND last_date >= date('now', '-45 day')
         ORDER BY ticker
     """
-    frame = pd.read_sql_query(
-        query,
-        conn,
-        params=[
+    query_params.extend(
+        [
             NASDAQ_VITALITY_MIN_RECENT_AVG_VOLUME,
             NASDAQ_VITALITY_MIN_RECENT_AVG_CLOSE,
             NASDAQ_VITALITY_MIN_RECENT_AVG_DOLLAR_VOLUME,
-        ],
+        ]
     )
+    with ETFDatabase(db_path=db_path) as db:
+        frame = pd.read_sql_query(
+            query,
+            db._get_connection(),
+            params=query_params,
+        )
     return tuple(str(ticker).upper() for ticker in frame.get("ticker", []).tolist())
 
 
@@ -95,12 +124,25 @@ def filter_low_vitality_nasdaq_tickers(
     tickers: list[str] | tuple[str, ...],
 ) -> list[str]:
     """Filter Nasdaq-style symbols down to more actionable names."""
+    focus = load_nasdaq_focus()
+    if focus is not None:
+        tickers = [ticker for ticker in tickers if str(ticker).upper() in focus]
+    normalized = [str(ticker).upper() for ticker in tickers if str(ticker).strip()]
     if not db_path:
-        return [str(ticker).upper() for ticker in tickers]
-    eligible = set(_cached_nasdaq_vitality_tickers(str(db_path), latest_market_date))
+        return normalized
+    undotted_candidates = tuple(
+        dict.fromkeys(ticker for ticker in normalized if "." not in ticker)
+    )
+    # SQLite's default bind limit is commonly 999. Focused Nasdaq universes fit
+    # comfortably below it; fall back to the all-Nasdaq query for larger lists.
+    bounded_candidates = undotted_candidates if len(undotted_candidates) <= 900 else ()
+    eligible = set(
+        _cached_nasdaq_vitality_tickers(
+            str(db_path), latest_market_date, bounded_candidates
+        )
+    )
     filtered: list[str] = []
-    for ticker in tickers:
-        upper = str(ticker or "").upper()
+    for upper in normalized:
         if not upper:
             continue
         if "." in upper or upper in eligible:
@@ -112,7 +154,7 @@ class MarketDataRefresher:
     """Track and refresh the underlying ETF market data cache."""
 
     INDICATOR_WARMUP_DAYS = 90
-    DEFAULT_RETENTION_DAYS = 365
+    DEFAULT_RETENTION_DAYS = int(get_paths().get("history_retention_days", 365))
 
     def __init__(
         self,
@@ -202,6 +244,15 @@ class MarketDataRefresher:
                     self.tracked_tickers_override
                 )
                 if ticker not in blacklist
+            )
+        focus_path = get_paths().get("nasdaq_focus_file")
+        if self.etfs_file.name == "nasdaq.json" and focus_path:
+            with open(focus_path, encoding="utf-8") as handle:
+                focus = json.load(handle)
+            return sorted(
+                t
+                for t in self._normalize_ticker_values(focus["tickers"])
+                if t not in blacklist
             )
         tickers: set[str] = set()
         if self.etfs_file.exists():
@@ -311,9 +362,7 @@ class MarketDataRefresher:
             ["Date", "Open", "High", "Low", "Close", "Volume", "Dividends"]
         ]
         for column in ["Open", "High", "Low", "Close"]:
-            normalized[column] = pd.to_numeric(
-                normalized[column], errors="coerce"
-            )
+            normalized[column] = pd.to_numeric(normalized[column], errors="coerce")
         # Providers sometimes expose an unfinished session with volume but no
         # price body. It is not a finalized candle and must never become the
         # latest bar used by liquidity or TA predicates.
@@ -343,9 +392,10 @@ class MarketDataRefresher:
         warmup_days: int,
         min_existing_rows: int = 100,
         cancel_event=None,
+        backfill: bool = False,
     ) -> tuple[str, pd.DataFrame]:
-        # Populated caches are always extended from their latest date. These
-        # legacy tuning inputs remain accepted for caller compatibility only.
+        # Normal refreshes extend the latest date; explicit history requests
+        # merge a longer provider window into the existing canonical history.
         del warmup_days, min_existing_rows
         existing = self._load_existing_price_frame(ticker)
         latest_day = None
@@ -356,13 +406,22 @@ class MarketDataRefresher:
             "cancel_event"
             in inspect.signature(self.fetcher.fetch_historical_data).parameters
         )
+        fetch_kwargs: dict[str, Any]
 
-        if existing.empty:
+        if existing.empty or backfill:
             fetch_kwargs = {"days": depth}
             if fetch_supports_cancel:
                 fetch_kwargs["cancel_event"] = cancel_event
             fetched = self.fetcher.fetch_historical_data(ticker, **fetch_kwargs)
-            merged = self._normalize_price_frame(fetched)
+            fresh_slice = self._normalize_price_frame(fetched)
+            if fresh_slice.empty:
+                raise ValueError(f"No rows returned for {ticker}")
+            if existing.empty:
+                merged = fresh_slice
+            else:
+                merged = self._normalize_price_frame(
+                    pd.concat([existing, fresh_slice], ignore_index=True)
+                )
         else:
             if latest_day is None:
                 raise RuntimeError("Expected a latest market date when refreshing")
@@ -502,11 +561,21 @@ class MarketDataRefresher:
         progress_callback=None,
         cancel_event=None,
         missing_only: bool = False,
+        history_years: int = 0,
     ) -> dict[str, Any]:
+        if history_years not in (0, 1, 3, 5, 10):
+            raise ValueError("History must be 0, 1, 3, 5 or 10 years")
+        backfill = history_years > 0
+        if backfill:
+            depth = history_years * 366
+            force = True
+            missing_only = False
+            retention_days = max(retention_days, depth)
         job = "market-refresh"
 
         def is_cancelled() -> bool:
             return bool(cancel_event is not None and cancel_event.is_set())
+
         source_name = self.etfs_file.name.lower()
         logger.info(
             "Market refresh started: source=%s force=%s stale_after_days=%s depth=%s max_workers=%s rebuild_shortlist=%s missing_only=%s",
@@ -656,7 +725,11 @@ class MarketDataRefresher:
             job=job,
             phase="refreshing",
             pct=5.0,
-            detail=f"Refreshing {total} tickers",
+            detail=(
+                f"Downloading {history_years}-year history for {total} tickers"
+                if backfill
+                else f"Refreshing {total} tickers"
+            ),
             label="Market Refresh",
             active=True,
         )
@@ -673,6 +746,7 @@ class MarketDataRefresher:
                         depth,
                         warmup_days,
                         cancel_event=cancel_event,
+                        **({"backfill": True} if backfill else {}),
                     )
                     if df is None or df.empty:
                         raise ValueError("No rows returned")
@@ -697,7 +771,7 @@ class MarketDataRefresher:
                         job=job,
                         phase="refreshing",
                         pct=progress_pct,
-                        detail=f"{completed}/{total} tickers processed",
+                        detail=f"{completed}/{total} tickers processed · {ticker} · {failed} failed",
                         label="Market Refresh",
                         active=True,
                     )
@@ -720,6 +794,7 @@ class MarketDataRefresher:
                         warmup_days,
                         100,
                         cancel_event,
+                        **({"backfill": True} if backfill else {}),
                     )
                     futures[future] = ticker
                 pending = set(futures)
@@ -742,8 +817,13 @@ class MarketDataRefresher:
                         except Exception as exc:
                             failed += 1
                             message = str(exc)
-                            if "No data found" in message or "No rows returned" in message:
-                                self.delisting_tracker.mark_missing(ticker, reason=message)
+                            if (
+                                "No data found" in message
+                                or "No rows returned" in message
+                            ):
+                                self.delisting_tracker.mark_missing(
+                                    ticker, reason=message
+                                )
                                 # Empty provider responses enter the missing queue;
                                 # only persistent misses become blacklist entries.
                                 self.delisting_tracker.promote_aged_missing(
@@ -758,7 +838,7 @@ class MarketDataRefresher:
                                 job=job,
                                 phase="refreshing",
                                 pct=progress_pct,
-                                detail=f"{completed}/{total} tickers processed",
+                                detail=f"{completed}/{total} tickers processed · {ticker} · {failed} failed",
                                 label="Market Refresh",
                                 active=True,
                             )

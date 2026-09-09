@@ -1,5 +1,6 @@
 """Data storage utilities for parquet files."""
 
+import uuid
 from pathlib import Path
 
 import pandas as pd
@@ -19,8 +20,11 @@ class ParquetStorage:
         """
         if data_dir is None:
             data_dir = get_paths()["data"]["parquet"]
+            self._configured_storage = True
+        else:
+            self._configured_storage = False
         self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(exist_ok=True)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
 
     def save_etf_data(self, df: pd.DataFrame, symbol: str) -> Path:
         """
@@ -33,8 +37,15 @@ class ParquetStorage:
         Returns:
             Path to saved parquet file
         """
+        if self._configured_storage:
+            get_paths()  # Recheck the removable drive after startup as well.
         file_path = self.data_dir / f"{symbol.lower()}_data.parquet"
-        df.to_parquet(file_path, compression="snappy", index=False)
+        temporary = file_path.with_suffix(f".{uuid.uuid4().hex}.tmp")
+        try:
+            df.to_parquet(temporary, compression="snappy", index=False)
+            temporary.replace(file_path)
+        finally:
+            temporary.unlink(missing_ok=True)
         return file_path
 
     def load_etf_data(self, symbol: str) -> pd.DataFrame:
@@ -47,6 +58,8 @@ class ParquetStorage:
         Returns:
             DataFrame with ETF data or empty DataFrame if file not found
         """
+        if self._configured_storage:
+            get_paths()
         file_path = self.data_dir / f"{symbol.lower()}_data.parquet"
         if file_path.exists():
             df = pd.read_parquet(file_path)
@@ -77,6 +90,8 @@ class ParquetStorage:
             List of ETF symbols
         """
         symbols = []
+        if self._configured_storage:
+            get_paths()
         for parquet_file in self.data_dir.glob("*_data.parquet"):
             symbol = parquet_file.stem.replace("_data", "").upper()
             symbols.append(symbol)

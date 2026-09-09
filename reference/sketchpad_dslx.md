@@ -148,6 +148,58 @@ stops at the first false term. Indicator series are cached per ticker, candle
 style, source, and period and reused by later conditions and historical
 endpoints.
 
+### Normalized indicator slope
+
+Use `slope(fn(a, b, ...), window)` or `slope(expression, window)` for relative change in **percent per candle**:
+
+```dsl
+candle rising_trend {
+  when => slope(ema(200).close, 20) > 0.05
+}
+```
+
+EMA and SMA support dot notation to choose the input price:
+`ema(200).close`, `ema(20).high`, `ema(20).low`, and `sma(50).open`.
+The selector chooses the source for the moving average; it is not the candle's
+raw price. For example, `ema(20).high` equals `ema("high", 20)`.
+Bare `ema(200)` still defaults to close, and the string-source form remains
+supported. Source-selected values also retain `.slope` and candle-region
+predicates such as `ema(20).high.body_intersects`.
+
+The formula is `100 * (I[t] / I[t-window] - 1) / window`. EMA period and
+slope window are independent. A rise from 100 to 102 over 20 candles gives
+`0.10`, meaning 0.10% per candle, not a 10% change. This is arithmetic endpoint
+change averaged over the window, not regression or a compounded growth rate.
+
+The expression can use any supported numeric DSL function, including
+`ema`, `sma`, `rsi`, `atr`, `volume_ema`, and scalar
+`stoch_rsi(...).k` / `.d` values. Examples include `slope(ema("high", 50), 5)`
+and `slope(sma(20), 10)`. In an explicit candle scope, use
+`setup.slope(setup.ema(200), 20)`. The indicator's own focal candle anchors the
+lookback, including when it comes from `previous(...)` or a named pattern member.
+Arithmetic expressions are also supported: `slope(ema(20) / ema(50), 10)`,
+`slope(ema(20) - sma(50), 5)`, `slope(close, 20)`, or
+`slope(window(5).close.average(), 10)`. The entire expression is evaluated at
+both endpoints, with candle references shifted together and constants unchanged.
+Boolean predicates and EMA bands are not numeric expressions and are rejected.
+This supports functions available in DSLX, not arbitrary Python function calls.
+
+The window must be a positive integer. Both endpoint expression values must be
+available and finite, and the older value must be nonzero; otherwise that
+pattern evaluation produces no match. EMA/SMA with period `p` and window `w`
+require at least `p + w` candles. Indicator series are reused from the existing
+per-ticker cache, with no extra download or stored slope files.
+
+Daily candles give % per trading session; weekly candles give % per week.
+The chosen regular or Heikin-Ashi candle style also applies to the indicator.
+Normalization removes constant price/currency scaling; it does not normalize
+volatility. For RSI and other oscillators, this is relative percent change in
+the oscillator value, not an absolute change in oscillator points.
+
+The legacy `indicator.slope` property still returns its one-candle absolute
+change. Existing strategies are not automatically converted. Scheduling and
+refresh frequency are unchanged.
+
 ### Stochastic RSI
 
 `stoch_rsi(14)` uses the standard 14-period RSI, 14-period stochastic window,
@@ -334,16 +386,22 @@ remaining centered on the candle the trader sees.
 - Exact indicator API: source-aware `candle.ema("high", 20)` is clearer than
   names such as `ema_high(20)`, because it retains the focal candle as the
   owner of the value.
-- A single indicator line uses entity-first intersection predicates:
+- A single indicator line uses entity-first geometry predicates.
   `.body_intersects`, `.upper_wick_intersects`, and
-  `.lower_wick_intersects`. Negate a predicate with `!` when the line must not
-  intersect that region.
+  `.lower_wick_intersects` test intersection. `.body_over`, `.body_under`,
+  `.candle_over`, and `.candle_under` test whether the complete body or candle
+  (including wicks) lies strictly on one side of the line. Negate a predicate
+  with `!` when the relationship must not hold.
+- Candle wick geometry can be read directly with `.has_upper_wick`,
+  `.has_lower_wick`, `.has_both_wicks`, `.has_only_upper_wick`,
+  `.has_only_lower_wick`, and `.is_wickless`. These predicates ignore
+  negligible floating-point differences that would not form a visible wick.
 - A two-EMA channel can use independent sources and periods. The inclusive
   `.body_within` predicate requires both `open` and `close` to lie inside the
   channel, while `.candle_within` also requires both wicks to lie inside it:
   `ema("high", 20, "low", 20).body_within` and
   `ema("high", 20, "low", 20).candle_within`.
-- Whether `.slope` means one-bar absolute change, percentage change, or a
-  configurable regression slope. It should be defined once and used uniformly.
+- `.slope` is one-bar absolute change; `slope(indicator, window)` is normalized
+  percent change per candle, as defined above.
 - How matches are ranked and de-duplicated when a screener needs one result per
   ticker.

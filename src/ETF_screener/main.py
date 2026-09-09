@@ -51,6 +51,7 @@ from ETF_screener.storage import ParquetStorage
 
 from ETF_screener.xetra_extractor import XETRETFExtractor
 
+
 def parse_volume(volume_str: str) -> int:
     """
 

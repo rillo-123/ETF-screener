@@ -14,6 +14,14 @@ Technical analysis tool for identifying swing trading opportunities in large XET
 - 🔍 **Swing Trading Focus** - Designed for analyzing large-cap ETFs
 - ⚡ **CLI Interface** - Simple command-line tools for data fetching and analysis
 
+## External storage
+
+See the [Kingston storage guide](reference/storage-setup.md) for USB paths, cache limits, and the focused Nasdaq history setup.
+
+## Dashboard development
+
+For JavaScript changes, see the [dashboard feature guide](src/ETF_screener/dashboard/static/js/dashboard/README.md). It maps each feature to its file and explains how to check changes without a JavaScript build step.
+
 ## Quick Start
 
 ### Setup

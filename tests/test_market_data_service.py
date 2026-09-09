@@ -10,6 +10,7 @@ from ETF_screener.delisting_tracker import DelistingTracker
 from ETF_screener.indicators import add_indicators
 from ETF_screener.market_data_service import (
     MarketDataRefresher,
+    _cached_nasdaq_vitality_tickers,
     filter_low_vitality_nasdaq_tickers,
 )
 from ETF_screener.storage import ParquetStorage
@@ -404,9 +405,7 @@ def test_market_data_refresher_respects_cautious_worker_limit_for_sweden(
     assert result["failed"] == 0
 
 
-def test_market_data_refresher_prioritizes_newest_cached_tickers(
-    tmp_path, monkeypatch
-):
+def test_market_data_refresher_prioritizes_newest_cached_tickers(tmp_path, monkeypatch):
     db_path = tmp_path / "etfs.db"
     etfs_path = tmp_path / "xetra.json"
     blacklist_path = tmp_path / "blacklist.json"
@@ -779,6 +778,31 @@ def test_filter_low_vitality_nasdaq_tickers_keeps_only_actionable_symbols(tmp_pa
     assert filtered == ["LIVN", "AAA.DE"]
 
 
+def test_nasdaq_vitality_query_is_limited_to_candidate_symbols(tmp_path):
+    db_path = tmp_path / "etfs.db"
+    db = ETFDatabase(db_path=str(db_path))
+    dates = pd.date_range(end=pd.Timestamp(date.today()), periods=60, freq="B")
+    lively = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": [14.8] * len(dates),
+            "High": [15.4] * len(dates),
+            "Low": [14.5] * len(dates),
+            "Close": [15.0] * len(dates),
+            "Volume": [400_000] * len(dates),
+        }
+    )
+    db.insert_dataframe(lively, "FOCUS")
+    db.insert_dataframe(lively, "OUTSIDE")
+    _cached_nasdaq_vitality_tickers.cache_clear()
+
+    eligible = _cached_nasdaq_vitality_tickers(
+        str(db_path), db.get_latest_market_date(), ("FOCUS",)
+    )
+
+    assert eligible == ("FOCUS",)
+
+
 def test_market_data_refresher_quarantines_empty_responses_before_blacklisting(
     tmp_path,
 ):
@@ -904,16 +928,65 @@ def test_market_data_normalization_discards_incomplete_candles():
 def test_database_prunes_incomplete_candles(tmp_path):
     db = ETFDatabase(db_path=str(tmp_path / "etfs.db"))
     conn = db._get_connection()
-    conn.execute(
-        """
+    conn.execute("""
         INSERT INTO etf_data (ticker, date, open, high, low, close, volume)
         VALUES ('AAA.DE', '2026-08-27', 100, 101, 99, 100.5, 100000),
                ('AAA.DE', '2026-08-28', NULL, NULL, NULL, NULL, 120000)
-        """
-    )
+        """)
     conn.commit()
 
     deleted = db.prune_incomplete_data()
 
     assert deleted == 1
     assert db.get_latest_date("AAA.DE") == "2026-08-27"
+
+
+def test_history_download_refreshes_fresh_ticker_and_preserves_older_prices(tmp_path):
+    today = pd.Timestamp(MarketDataRefresher._expected_market_day())
+
+    def frame(dates):
+        return pd.DataFrame(
+            {
+                "Date": dates,
+                "Open": 100.0,
+                "High": 101.0,
+                "Low": 99.0,
+                "Close": 100.0,
+                "Volume": 100000,
+            }
+        )
+
+    existing = frame([today - pd.Timedelta(days=4400), today])
+    calls = []
+
+    class Fetcher:
+        def fetch_historical_data(self, ticker, days=365):
+            calls.append(days)
+            return frame([today - pd.Timedelta(days=3000), today])
+
+    storage = ParquetStorage(data_dir=str(tmp_path / "parquet"))
+    storage.save_etf_data(existing, "AAA.DE")
+    refresher = MarketDataRefresher(
+        db_path=str(tmp_path / "prices.db"),
+        fetcher=Fetcher(),
+        storage=storage,
+        blacklist_file=str(tmp_path / "blacklist.json"),
+        tracked_tickers_override=["AAA.DE"],
+    )
+    refresher.db.insert_dataframe(add_indicators(existing), "AAA.DE")
+    progress = []
+    result = refresher.refresh_market_data(
+        force=False,
+        history_years=10,
+        rebuild_shortlist=False,
+        progress_callback=progress.append,
+    )
+    assert calls == [3660]
+    assert result["refreshed"] == 1
+    assert result["failed"] == 0
+    stored = storage.load_etf_data("AAA.DE")
+    assert len(stored) == 3
+    assert stored.Date.min() == existing.Date.min()
+    assert any("1/1 tickers processed" in item["detail"] for item in progress)
+    assert progress[-1]["pct"] == 100
+    assert progress[-1]["active"] is False

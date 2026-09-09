@@ -591,7 +591,9 @@ def test_volume_colors_follow_displayed_heikin_ashi_candles():
     )
 
     fig = InteractivePlotter().create_plot(df, "TEST")
-    volume = next(trace for trace in fig.data if trace.type == "bar" and trace.name == "Volume")
+    volume = next(
+        trace for trace in fig.data if trace.type == "bar" and trace.name == "Volume"
+    )
 
     # The second raw candle is red (19 < 20), but its HA close (19.5) is
     # above its HA open (10), so its volume spike must be green too.

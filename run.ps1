@@ -3,6 +3,7 @@ param(
     [switch]$Dashboard,
     [switch]$Screener,
     [switch]$Tests,
+    [switch]$Optimization,
     [Alias('StratFinder')]
     [switch]$Discovery,
     [switch]$MovieScan,
@@ -84,6 +85,7 @@ Usage:
   .\run.ps1                 # Start the dashboard server
   .\run.ps1 -Screener       # Start the dashboard server; open /?tab=screener manually
   .\run.ps1 -Tests -Parallel
+  .\run.ps1 -Tests -Optimization # Fast DSLX screening optimization gate
   .\run.ps1 -Discovery -StrategyPath strategies/ -Plot 1
   .\run.ps1 -StratFinder -StrategyPath strategies/ -Plot 1
   .\run.ps1 -MovieScan -TickerFilter '%ETF%'
@@ -126,6 +128,7 @@ switch ($launcherModes[0]) {
         $args = @()
         if ($Full) { $args += '-Full' }
         if ($QualityGate) { $args += '-Full' }
+        if ($Optimization) { $args += '-Optimization' }
         if ($Parallel) { $args += '-Parallel' }
         if ($RandomOrder) { $args += '-RandomOrder' }
         if ($TimeoutSec -gt 0) { $args += @('-TimeoutSec', "$TimeoutSec") }

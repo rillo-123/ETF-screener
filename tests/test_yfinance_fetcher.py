@@ -45,7 +45,11 @@ def test_yahoo_request_gate_spaces_concurrent_history_calls(monkeypatch):
     monkeypatch.setattr(yfinance_fetcher.yf, "Ticker", FakeTicker)
     fetcher = YFinanceFetcher()
     with ThreadPoolExecutor(max_workers=2) as executor:
-        list(executor.map(lambda symbol: fetcher.fetch_historical_data(symbol), ["AAA", "BBB"]))
+        list(
+            executor.map(
+                lambda symbol: fetcher.fetch_historical_data(symbol), ["AAA", "BBB"]
+            )
+        )
 
     assert len(call_times) == 2
     assert abs(call_times[1] - call_times[0]) >= 0.025

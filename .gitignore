@@ -1,4 +1,5 @@
 env/
+config/paths.local.json
 # -------------------------------------------
 # Python / PyScript build artifacts
 # -------------------------------------------

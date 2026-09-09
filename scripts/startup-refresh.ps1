@@ -75,7 +75,7 @@ try {
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Write-LogLine "[$timestamp] Preparing market refresh"
-    Write-LogLine "[$timestamp] Refresh parameters: depth=365 stale_after_days=0 force=False max_workers=2 rebuild_shortlist=False retention_days=365"
+    Write-LogLine "[$timestamp] Refresh parameters: depth=365 stale_after_days=0 force=False max_workers=2 rebuild_shortlist=False retention_days=configured"
 
     $refreshExitCode = Invoke-LoggedCommand -Command {
         $env:PYTHONPATH = "src"
@@ -100,8 +100,8 @@ for source in sources:
         rebuild_shortlist=False,
     )
 with ETFDatabase(db_path=db_path) as db:
-    deleted = db.prune_old_data(days_to_keep=365)
-print(f"[PYTHON] Pruned {deleted} rows older than 365 days")
+    deleted = db.prune_old_data(days_to_keep=MarketDataRefresher.DEFAULT_RETENTION_DAYS)
+print(f"[PYTHON] Pruned {deleted} rows outside the configured retention window")
 print("[PYTHON] Refresh complete")
 print(json.dumps({"sources": statuses, "pruned": deleted}, sort_keys=True))
 '@ | python -

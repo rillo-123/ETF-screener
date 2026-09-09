@@ -2,6 +2,16 @@
 
 - -NextResumePoint
 
+- Keep machine-specific USB paths in ignored `config/paths.local.json`. Do not
+  silently create replacement storage when the configured USB is unavailable.
+- Keep canonical price files separate from bounded regenerable caches; default
+  test runs must not use the developer's removable-drive storage configuration.
+- Structural DSLX scans must honor the same focused Nasdaq vitality universe as
+  control scans before loading candles. Completed results may be reused only
+  while the strategy, scope, ticker set, market date, and database state match.
+
+- -NextResumePoint
+
 - -NextResumePoint
 
 - Strategy changes over the same universe must reuse SQLite; automatic Yahoo work is limited to genuinely absent symbols and remains independently cancellable.

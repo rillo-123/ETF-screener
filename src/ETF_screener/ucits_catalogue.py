@@ -12,7 +12,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
-
 DEFAULT_CATALOGUE_PATH = Path("config") / "ucits_catalogue.json"
 FILTER_FIELDS = {
     "asset_class",
@@ -41,16 +40,19 @@ def _normalise_fund(raw: object) -> dict[str, Any]:
     fund["name"] = name
     fund["isin"] = isin
     try:
-        fund["ter_pct"] = float(raw["ter_pct"])
+        ter_pct = float(raw["ter_pct"])
     except (KeyError, TypeError, ValueError) as exc:
         raise CatalogueError(f"{ticker} requires a numeric ter_pct") from exc
-    if fund["ter_pct"] < 0:
+    if ter_pct < 0:
         raise CatalogueError(f"{ticker} has a negative ter_pct")
+    fund["ter_pct"] = ter_pct
     return fund
 
 
 @lru_cache(maxsize=4)
-def load_catalogue(path: str = str(DEFAULT_CATALOGUE_PATH)) -> tuple[dict[str, Any], ...]:
+def load_catalogue(
+    path: str = str(DEFAULT_CATALOGUE_PATH),
+) -> tuple[dict[str, Any], ...]:
     """Load and validate the curated catalogue once per source file."""
     try:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -97,10 +99,14 @@ def filter_catalogue(
     return sorted(result, key=lambda fund: (float(fund["ter_pct"]), fund["ticker"]))
 
 
-def compare_catalogue(funds: Iterable[dict[str, Any]], tickers: Iterable[str]) -> list[dict[str, Any]]:
+def compare_catalogue(
+    funds: Iterable[dict[str, Any]], tickers: Iterable[str]
+) -> list[dict[str, Any]]:
     """Return selected funds in requested order, rejecting unknown tickers."""
     by_ticker = {str(fund["ticker"]).upper(): fund for fund in funds}
-    selected = [str(ticker).strip().upper() for ticker in tickers if str(ticker).strip()]
+    selected = [
+        str(ticker).strip().upper() for ticker in tickers if str(ticker).strip()
+    ]
     if not selected:
         raise CatalogueError("Select at least one ticker to compare")
     unknown = [ticker for ticker in selected if ticker not in by_ticker]

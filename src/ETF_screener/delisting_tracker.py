@@ -105,9 +105,7 @@ class DelistingTracker:
                     or _parse_day(entry.get("promoted_on"))
                     or date.today()
                 )
-                last_missing = (
-                    _parse_day(entry.get("promoted_on")) or first_missing
-                )
+                last_missing = _parse_day(entry.get("promoted_on")) or first_missing
                 missing_state[ticker] = {
                     "status": "missing",
                     "reason": reason or "No data found during refresh",

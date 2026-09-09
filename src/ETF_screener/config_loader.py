@@ -1,8 +1,19 @@
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, cast
 
 _paths_cache: Dict[str, Any] | None = None
+CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
+
+
+def _check_external_storage(paths: Dict[str, Any]) -> None:
+    root = paths.get("external_storage_root")
+    if root and not (Path(root) / ".etf-screener-storage").is_file():
+        raise RuntimeError(
+            f"ETF Screener storage is unavailable at {root}. Connect the Kingston "
+            "SSD or update config/paths.local.json. No replacement store was created."
+        )
 
 
 def get_paths() -> Dict[str, Any]:
@@ -11,11 +22,22 @@ def get_paths() -> Dict[str, Any]:
     """
     global _paths_cache
     if _paths_cache is not None:
+        _check_external_storage(_paths_cache)
         return _paths_cache
-    config_dir = Path(__file__).parent.parent.parent / "config"
+    config_dir = CONFIG_DIR
     path_file = config_dir / "paths.json"
     with open(path_file, "r", encoding="utf-8") as f:
         _paths_cache = cast(Dict[str, Any], json.load(f))
+    local_file = config_dir / "paths.local.json"
+    if local_file.exists() and os.getenv("ETF_SCREENER_IGNORE_LOCAL_PATHS") != "1":
+        with local_file.open(encoding="utf-8") as handle:
+            overrides = json.load(handle)
+        for key, value in overrides.items():
+            if isinstance(value, dict) and isinstance(_paths_cache.get(key), dict):
+                _paths_cache[key].update(value)
+            else:
+                _paths_cache[key] = value
+    _check_external_storage(_paths_cache)
     return _paths_cache
 
 

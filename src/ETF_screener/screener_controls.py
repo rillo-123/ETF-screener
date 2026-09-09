@@ -13,11 +13,14 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from threading import Lock
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Iterable
 
 import pandas as pd
 
+from ETF_screener.cache_policy import cache_is_fresh, trim_cache
+from ETF_screener.config_loader import get_paths
 from ETF_screener.indicators import (
     calculate_macd,
     calculate_rsi,
@@ -91,7 +94,9 @@ TIMELINE_RULE_KEYS = [
     "ha_ema_volume",
 ]
 INDICATOR_HISTORY_CACHE_MAXSIZE = 6
-INDICATOR_HISTORY_DISK_CACHE = os.path.join("data", "cache", "screen-indicators")
+INDICATOR_HISTORY_DISK_CACHE = os.path.join(
+    get_paths()["data"]["cache"], "screen-indicators"
+)
 
 DEFAULT_SCREEN_FILTERS: dict[str, Any] = {
     "lookback_days": DEFAULT_LOOKBACK_DAYS,
@@ -1086,6 +1091,8 @@ def _get_cached_indicator_history(
             _INDICATOR_HISTORY_CACHE.move_to_end(cache_key)
             return cached
     cache_name = hashlib.sha256(repr(cache_key).encode("utf-8")).hexdigest() + ".pkl"
+    if not cache_is_fresh(Path(INDICATOR_HISTORY_DISK_CACHE) / cache_name):
+        return None
     try:
         with open(
             os.path.join(INDICATOR_HISTORY_DISK_CACHE, cache_name), "rb"
@@ -1197,6 +1204,7 @@ def load_recent_indicator_history(
             with open(temp_path, "wb") as handle:  # noqa: PTH123
                 pickle.dump(enriched_history, handle, protocol=pickle.HIGHEST_PROTOCOL)
             os.replace(temp_path, final_path)
+            trim_cache()
         except OSError:
             pass
     return enriched_history, False

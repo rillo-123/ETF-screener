@@ -450,7 +450,7 @@ class InteractivePlotter:
         try:
             result = eval(
                 normalized_expr, {"__builtins__": {}}, lane_masks
-            )  # nosec B307 - sandboxed: empty builtins, only numpy arrays in namespace
+            )
         except Exception:
             return None
 
@@ -1220,14 +1220,18 @@ class InteractivePlotter:
         def ema_source_series(source: str, fallback: pd.Series) -> pd.Series:
             return heikin_ashi_ema_sources.get(source, fallback)
 
-        def calculate_chart_ema(source: str, values: pd.Series, period: int) -> pd.Series:
+        def calculate_chart_ema(
+            source: str, values: pd.Series, period: int
+        ) -> pd.Series:
             # High/Low channels must retain genuine price gaps.  The generic
             # EMA helper smooths apparent spikes, which can incorrectly pin
             # one side of a channel after a valid repricing (as with MVIR.ST).
             if source in {"high", "low"}:
-                return pd.to_numeric(values, errors="coerce").ewm(
-                    span=period, adjust=False
-                ).mean()
+                return (
+                    pd.to_numeric(values, errors="coerce")
+                    .ewm(span=period, adjust=False)
+                    .mean()
+                )
             return calculate_ema(values, period=period)
 
         rsi_trigger = getattr(self, "_active_chart_rsi_trigger", 50.0)
@@ -1676,7 +1680,11 @@ class InteractivePlotter:
                     y=df[ema_col],
                     name=f"EMA {period} {source.title()}",
                     line=dict(color=ema_colors[idx % len(ema_colors)], width=1.2),
-                    fill="tonexty" if source == "low" and (period, "high") in ema_spec_set else None,
+                    fill=(
+                        "tonexty"
+                        if source == "low" and (period, "high") in ema_spec_set
+                        else None
+                    ),
                     fillcolor=(
                         "rgba(96, 165, 250, 0.18)"
                         if source == "low" and (period, "high") in ema_spec_set

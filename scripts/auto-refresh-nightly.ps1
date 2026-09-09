@@ -39,7 +39,7 @@ for source in ("config/xetra.json", "config/sweden.json", "config/nasdaq.json"):
         rebuild_shortlist=True,
     )
 with ETFDatabase(db_path=db_path) as db:
-    deleted = db.prune_old_data(days_to_keep=365)
+    deleted = db.prune_old_data(days_to_keep=MarketDataRefresher.DEFAULT_RETENTION_DAYS)
 print({"sources": statuses, "pruned": deleted})
 '@ | python -
 }

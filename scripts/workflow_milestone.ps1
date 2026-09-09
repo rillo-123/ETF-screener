@@ -24,6 +24,7 @@ the milestone workflow.
 Usage:
   .\workflow_milestone.ps1
   .\workflow_milestone.ps1 -NoAutoFix
+  .\workflow_milestone.ps1 -SkipTests
   .\workflow_milestone.ps1 -CommitMessage "chore: milestone sync"
   .\workflow_milestone.ps1 -- -Parallel -TimeoutSec 120
 
@@ -32,6 +33,7 @@ Any extra arguments are forwarded to `scripts/run_all_tests.ps1`.
 
 param(
     [switch]$NoAutoFix,
+    [switch]$SkipTests,
     [string]$CommitMessage = "chore: milestone sync",
     [switch]$Help,
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -49,12 +51,13 @@ Milestone maintenance workflow for the ETF Screener repo.
 Usage:
   .\workflow_milestone.ps1
   .\workflow_milestone.ps1 -NoAutoFix
+  .\workflow_milestone.ps1 -SkipTests
   .\workflow_milestone.ps1 -CommitMessage "chore: milestone sync"
   .\workflow_milestone.ps1 -- -Parallel -TimeoutSec 120
 
 Behavior:
   1. Updates the plan docs and progress.md with the current milestone outcome.
-  2. Runs scripts/run_all_tests.ps1.
+  2. Runs scripts/run_all_tests.ps1 unless -SkipTests is supplied.
   3. Applies light auto-fixes with ruff and black if the tests fail.
   4. Reruns the tests after those fixes.
   5. Stops if tests are still failing; otherwise commits and pushes the current branch.
@@ -223,7 +226,12 @@ try {
     Write-Host "ETF SCREENER - MILESTONE WORKFLOW" -ForegroundColor Cyan
     Write-Host ("=" * 60) -ForegroundColor Cyan
 
-    $testExitCode = Invoke-TestSuite -RunnerArgs $TestRunnerArgs
+    if ($SkipTests) {
+        Write-Info "Skipping tests and relying on the completed validation checkpoint."
+        $testExitCode = 0
+    } else {
+        $testExitCode = Invoke-TestSuite -RunnerArgs $TestRunnerArgs
+    }
     $fixes = @()
     $appliedFixes = @()
     if ($testExitCode -ne 0 -and -not $NoAutoFix) {
@@ -245,7 +253,9 @@ try {
 
     $summaryLines = @()
     if ($testExitCode -eq 0) {
-        if ($appliedFixes.Count -gt 0) {
+        if ($SkipTests) {
+            $summaryLines += "Milestone workflow completed using the already-finished validation checkpoint; tests were not rerun."
+        } elseif ($appliedFixes.Count -gt 0) {
             $summaryLines += "Milestone workflow completed successfully after applying fixes: $($appliedFixes -join ', ')."
         } else {
             $summaryLines += "Milestone workflow completed successfully with no auto-fixes required."
@@ -271,7 +281,11 @@ try {
         exit $testExitCode
     }
 
-    Write-Info "Test suite passed."
+    if ($SkipTests) {
+        Write-Info "Previously completed validation checkpoint accepted."
+    } else {
+        Write-Info "Test suite passed."
+    }
 
     Write-Info "Staging changes..."
     $addExit = Invoke-Git -Arguments @('add', '-A')

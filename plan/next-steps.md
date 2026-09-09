@@ -1,10 +1,19 @@
 # Next steps
 
+- Use `./run.ps1 -Tests -Optimization` during the next optimization iteration;
+  reserve `-Full` for milestone validation now that it no longer repeats the
+  complete unit suite for coverage.
+
+- Before trusting DSLX performance rankings, honor actual execution timing/prices
+  and point-in-time liquidity in historical evaluation. Five-year Nasdaq data
+  is now available; assess frozen rules on separate chronological periods.
+
 - Measure the next Nasdaq daily top-up with adaptive missing-tail fetching and
   compare refresh duration and transferred rows with the previous fixed-overlap
   run.
-- Bulk-load or SQL-prefilter DSLX screen universes so large Nasdaq scans do not
-  fetch every ticker history sequentially before applying liquidity rules.
+- After the scheduled startup refresh is idle, record a stable warm-cache live
+  timing for an identical focused Nasdaq DSLX request. The deterministic cache
+  regression already proves that evaluation is skipped when DB state is stable.
 - Route structural DSLX chart enrichment through the native DSLX path so chart
   requests no longer emit errors from the legacy expression parser.
 - Consider adding editor syntax highlighting and richer MatchList rendering for
@@ -17,7 +26,9 @@
 - Live-test and tune the charged-sphere prototype: charge caps, velocity damping, zoom range, activity-centering, ticker ball sizes, and virus-agent visibility.
 - Watch whether the new anchored camera still shows enough ticker density during active runs; if it remains sparse, add a density-aware viewport target instead of pure activity centering.
 - Improve sphere projection polish: add drag or pan later if auto-centering feels too jumpy, and add a clearer legend for full-globe versus projected-map modes.
-- Split `dashboard.js` into smaller domain files next, with Swarm simulation and rendering as the highest-value candidate for a module or Web Worker.
+- Dashboard JavaScript feature split is complete. Future maintenance work can
+  isolate feature state and explicit public interfaces incrementally, and split
+  `app_fast.py` routers/services by feature in a separate change.
 - Tune large-population grid performance before raising default density again; the current browser-safe path caps default agents dynamically, trims trails, limits drawn agents, and limits loaded history records.
 - Add a compact Swarm legend for ticker colors, virus-like agents, energy bars, sense radius, and selected-agent highlighting.
 - Add fuller browser-level verification for Swarm canvas interaction if Playwright becomes part of the dashboard test flow; the current Node smoke test covers basic tab switching without a real browser.

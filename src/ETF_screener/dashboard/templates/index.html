@@ -288,7 +288,8 @@
       background: linear-gradient(180deg, rgba(76, 29, 149, 0.98), rgba(91, 33, 182, 0.94));
       color: #faf5ff;
       box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.15);
-    }
+    }
+
 
     #scan-source-list-picker {
       display: flex;
@@ -917,7 +918,16 @@
             <div id="scan-source-list-preview-body"></div>
           </div>
           <div class="mt-2 flex items-center gap-2">
-            <button id="shortlist-refresh-btn" type="button" onclick="refreshMarketData()"
+            <label for="refresh-history-years" class="text-xs text-slate-300">History</label>
+            <select id="refresh-history-years" class="scan-source-btn" onchange="loadMarketStatus()"
+              title="Download available daily history for the selected universe; existing older prices are kept">
+              <option value="0">Latest prices</option>
+              <option value="1">1 year</option>
+              <option value="3">3 years</option>
+              <option value="5">5 years</option>
+              <option value="10">10 years</option>
+            </select>
+            <button id="shortlist-refresh-btn" type="button" onclick="refreshMarketData({ historyYears: Number(document.getElementById('refresh-history-years').value) })"
               class="scan-source-btn" style="min-width:124px"
               title="Refresh the selected market data before scanning">
               Refresh Universe
@@ -1803,7 +1813,9 @@ matches.show()</textarea>
 
   <section id="global-workspace" class="w-full px-6 pb-12" aria-label="Persistent market workspace"></section>
 
-  <script src="/static/js/dashboard.js?v={{ dashboard_js_version }}"></script>
+  {% for script_url in dashboard_scripts %}
+  <script src="{{ script_url }}"></script>
+  {% endfor %}
   <script src="/static/js/browser-log-relay.js?v={{ browser_log_relay_version }}"></script>
 
   <div id="list-modal"

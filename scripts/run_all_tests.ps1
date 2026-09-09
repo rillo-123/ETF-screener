@@ -9,6 +9,7 @@ Usage:
     .\run_all_tests.ps1 -RandomOrder       # Randomize pytest order (pytest-randomly)
     .\run_all_tests.ps1 -TimeoutSec 120    # Per-test timeout in seconds
     .\run_all_tests.ps1 -SkipPlaywright    # Skip browser regression tests
+    .\run_all_tests.ps1 -Optimization      # Fast DSLX screening optimization gate
     .\run_all_tests.ps1 -Full              # Run all checks (pytest, ruff, mypy, coverage, vulture)
       .\run_all_tests.ps1 -All               # Alias for -Full
       .\run_all_tests.ps1 -QualityGate       # Alias for -Full
@@ -28,6 +29,7 @@ param(
     [switch]$Full,
     [switch]$Parallel,
     [switch]$RandomOrder,
+    [switch]$Optimization,
     [int]$TimeoutSec = 0,
     [int]$LogRetentionDays = 7,
     [int]$LogRetentionMaxFiles = 20,
@@ -54,6 +56,7 @@ Usage:
   .\scripts\run_all_tests.ps1 -RandomOrder
   .\scripts\run_all_tests.ps1 -TimeoutSec 120
   .\scripts\run_all_tests.ps1 -SkipPlaywright
+  .\scripts\run_all_tests.ps1 -Optimization
   .\scripts\run_all_tests.ps1 -Full
   .\scripts\run_all_tests.ps1 -Ruff
   .\scripts\run_all_tests.ps1 -Mypy
@@ -70,16 +73,19 @@ Playwright browser regression section. If Chromium is missing, install it once:
 }
 
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-$root = Split-Path -Parent $scriptPath
-Push-Location $root
+$repoRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $scriptPath))
+$srcRoot = Join-Path $repoRoot 'src'
+$packageRoot = Join-Path $srcRoot 'ETF_screener'
+$testsRoot = Join-Path $repoRoot 'tests'
+Push-Location $repoRoot
 
 # Get venv python or fall back to system
-$python = Join-Path $root '.venv\Scripts\python.exe'
+$python = Join-Path $repoRoot '.venv\Scripts\python.exe'
 if (-not (Test-Path $python)) { $python = 'python' }
 
 # Logging
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$logDir = Join-Path $root "logs"
+$logDir = Join-Path $repoRoot "logs"
 if (-not (Test-Path $logDir)) {
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 }
@@ -91,13 +97,40 @@ $progressActivity = "run_all_tests progress"
 $progressCurrent = 0
 $progressTotal = 1
 
-$playwrightTest = Join-Path $root 'tests\test_dashboard_playwright.py'
-if ((-not $SkipPlaywright) -and (Test-Path $playwrightTest)) { $progressTotal++ }
-if ($Full -or $Ruff) { $progressTotal++ }
-if ($Full -or $Mypy) { $progressTotal++ }
+$playwrightTest = Join-Path $testsRoot 'test_dashboard_playwright.py'
+$optimizationTests = @(
+    'tests/test_database.py::TestETFDatabase::test_get_ohlcv_frames_batches_tickers_and_omits_legacy_columns',
+    'tests/test_market_data_service.py::test_nasdaq_vitality_query_is_limited_to_candidate_symbols',
+    'tests/test_dashboard_api.py::test_screen_endpoint_applies_dslx_named_liquidity_universe',
+    'tests/test_dashboard_api.py::test_structural_dslx_screen_reuses_cached_result',
+    'tests/test_dashboard_api.py::test_structural_dslx_screen_applies_focused_nasdaq_gate',
+    'tests/test_dashboard_api.py::test_stop_request_interrupts_server_side_dslx_loading',
+    'tests/test_dashboard_api.py::test_dslx_match_event_is_visible_before_screen_finishes',
+    'tests/test_dashboard_api.py::test_dslx_worker_uses_its_own_sqlite_connection',
+    'tests/test_dslx.py::test_dslx_program_checks_for_cancellation_between_tickers',
+    'tests/test_dslx.py::test_dslx_program_publishes_matches_and_ticker_progress_incrementally',
+    'tests/test_dslx.py::test_dslx_caches_source_and_indicator_series_per_ticker',
+    'tests/test_run_ps1_matrix.py::test_run_ps1_launcher_modes_forward_expected_arguments'
+)
+$optimizationSourceTargets = @(
+    'src/ETF_screener/database.py',
+    'src/ETF_screener/market_data_service.py',
+    'src/ETF_screener/dashboard/app_fast.py',
+    'src/ETF_screener/dslx.py'
+)
+$optimizationQualityTargets = $optimizationSourceTargets + @(
+    'tests/test_database.py',
+    'tests/test_market_data_service.py',
+    'tests/test_dashboard_api.py',
+    'tests/test_dslx.py',
+    'tests/test_run_ps1_matrix.py'
+)
+if ((-not $Optimization) -and (-not $SkipPlaywright) -and (Test-Path $playwrightTest)) { $progressTotal++ }
+if ($Full -or $Ruff -or $Optimization) { $progressTotal++ }
+if ($Full -or $Mypy -or $Optimization) { $progressTotal++ }
 if ($Full -or $Coverage) { $progressTotal++ }
 if ($Full -or $Vulture) { $progressTotal++ }
-if ($Full -or $Black) { $progressTotal++ }
+if ($Full -or $Black -or $Optimization) { $progressTotal++ }
 if ($Full -or $Bandit) { $progressTotal++ }
 
 function Start-Section {
@@ -106,6 +139,10 @@ function Start-Section {
         [string]$Label
     )
 
+    # Tests and third-party tools can alter process-level working-directory
+    # state. Re-anchor every section so relative quality targets never escape
+    # the repository.
+    Set-Location -LiteralPath $repoRoot
     $script:progressCurrent++
     $percentComplete = [Math]::Round(($script:progressCurrent / $script:progressTotal) * 100, 0)
     Write-Progress -Activity $script:progressActivity -Status "[$($script:progressCurrent)/$($script:progressTotal)] $Name" -PercentComplete $percentComplete
@@ -157,8 +194,14 @@ try {
     # ===================== PYTEST =====================
     Start-Section -Name "Running Unit Tests (pytest)" -Label "Running Unit Tests (pytest)..."
 
-    $pytestArgs = @('-m', 'pytest', 'tests/', '-v')
-    if (Test-Path $playwrightTest) {
+    $pytestTargets = if ($Optimization) { $optimizationTests } else { @($testsRoot) }
+    $pytestRunner = if ($Full -or $Coverage) {
+        @('-m', 'coverage', 'run', '-m', 'pytest')
+    } else {
+        @('-m', 'pytest')
+    }
+    $pytestArgs = $pytestRunner + $pytestTargets + @('-v')
+    if ((-not $Optimization) -and (Test-Path $playwrightTest)) {
         $pytestArgs += @('--ignore', $playwrightTest)
     }
     if ($Parallel) {
@@ -181,7 +224,7 @@ try {
     }
 
     # ===================== PLAYWRIGHT =====================
-    if ((-not $SkipPlaywright) -and (Test-Path $playwrightTest)) {
+    if ((-not $Optimization) -and (-not $SkipPlaywright) -and (Test-Path $playwrightTest)) {
         Start-Section -Name "Running Playwright Browser Tests" -Label "Running Playwright Browser Tests..."
 
         & $python -c "import playwright, pytest_playwright" 2>$null
@@ -207,12 +250,13 @@ try {
     }
 
     # ===================== RUFF (optional) =====================
-    if ($Full -or $Ruff) {
+    if ($Full -or $Ruff -or $Optimization) {
         Start-Section -Name "Running Ruff Linter" -Label "Running Ruff Linter..."
         
-        $pythonFiles = Get-ChildItem -Path "src" -Recurse -Filter "*.py" | Select-Object -ExpandProperty FullName
+        $pythonFiles = Get-ChildItem -LiteralPath $srcRoot -Recurse -Filter "*.py" | Select-Object -ExpandProperty FullName
         if ($pythonFiles) {
-            & $python -m ruff check src/ --statistics
+            $ruffTargets = if ($Optimization) { $optimizationQualityTargets } else { @($srcRoot) }
+            & $python -m ruff check @ruffTargets --statistics
             if ($LASTEXITCODE -ne 0) {
                 $failedTests += "ruff"
                 Write-Host "[WARN] Ruff found issues" -ForegroundColor $Yellow
@@ -225,10 +269,11 @@ try {
     }
 
     # ===================== MYPY (optional) =====================
-    if ($Full -or $Mypy) {
+    if ($Full -or $Mypy -or $Optimization) {
         Start-Section -Name "Running Mypy Type Checker" -Label "Running Mypy Type Checker..."
         
-        & $python -m mypy src/ETF_screener/ --ignore-missing-imports --no-error-summary 2>&1
+        $mypyTargets = if ($Optimization) { $optimizationSourceTargets } else { @($packageRoot) }
+        & $python -m mypy @mypyTargets --ignore-missing-imports --no-error-summary 2>&1
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] No type errors found" -ForegroundColor $Green
         } else {
@@ -241,11 +286,6 @@ try {
     if ($Full -or $Coverage) {
         Start-Section -Name "Running Test Coverage Analysis" -Label "Running Test Coverage Analysis..."
         
-        $coverageArgs = @('-m', 'coverage', 'run', '-m', 'pytest', 'tests/', '-q')
-        if (Test-Path $playwrightTest) {
-            $coverageArgs += @('--ignore', $playwrightTest)
-        }
-        & $python @coverageArgs
         & $python -m coverage report --include="src/*" --omit="*/__init__.py"
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] Coverage report generated" -ForegroundColor $Green
@@ -258,8 +298,9 @@ try {
     if ($Full -or $Vulture) {
         Start-Section -Name "Running Vulture Dead Code Scanner" -Label "Running Vulture Dead Code Scanner..."
         
-        & (Join-Path $root 'scripts\run_vulture.ps1')
+        & (Join-Path $repoRoot 'scripts\run_vulture.ps1')
         if ($LASTEXITCODE -ne 0) {
+            $failedTests += "vulture"
             Write-Host "[WARN] Vulture found potential dead code" -ForegroundColor $Yellow
         } else {
             Write-Host "[OK] No dead code detected" -ForegroundColor $Green
@@ -267,13 +308,15 @@ try {
     }
 
     # ===================== BLACK (optional) =====================
-    if ($Full -or $Black) {
+    if ($Full -or $Black -or $Optimization) {
         Start-Section -Name "Running Black Code Formatter (check mode)" -Label "Running Black Code Formatter (check mode)..."
         
-        & $python -m black --check src/ tests/ 2>&1
+        $blackTargets = if ($Optimization) { $optimizationQualityTargets } else { @($srcRoot, $testsRoot) }
+        & $python -m black --check --quiet @blackTargets
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] Code formatting is correct" -ForegroundColor $Green
         } else {
+            $failedTests += "black"
             Write-Host "[WARN] Code formatting issues detected" -ForegroundColor $Yellow
             Write-Host "       Run: black src/ tests/" -ForegroundColor $Cyan
         }
@@ -283,7 +326,7 @@ try {
     if ($Full -or $Bandit) {
         Start-Section -Name "Running Bandit Security Scanner" -Label "Running Bandit Security Scanner..."
         
-        & $python -m bandit -c .bandit -r src/ -q -f screen 2>&1
+        & $python -m bandit -c (Join-Path $repoRoot '.bandit') -r $srcRoot -q -f screen 2>&1
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] No security issues found" -ForegroundColor $Green
         } else {
